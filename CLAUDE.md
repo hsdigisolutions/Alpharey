@@ -8,9 +8,24 @@ Development Phase 0 (Foundations) from `docs/DEVELOPMENT_PLAN.md` is built and v
 **55 Pest tests / 182 assertions passing · Pint clean · Larastan level 6 clean ·
 `composer audit` clean · production Vite build working · migrations + seed run on MySQL.**
 
-Next up: **Development Phase 1** (identity, companies, access control) — see "Ready for
-Phase 1" at the bottom. Design phases D1–D3 (tokens, components, shell) should land
-before Phase 1 screens are styled for real.
+**Design phases D1–D3 built in code (2026-07-13), pending client sign-off:**
+warm Claude.ai-inspired token system (coral accent `#D4956A`, warm cream surfaces,
+Inter self-hosted), ~30-component library in `resources/js/Components/ui/`, dark
+sidebar shell with collapse. Review at **`/styleguide`** (non-production route):
+`composer run dev` → http://localhost:8000/styleguide. Light/dark + mobile verified.
+
+Next up: **Development Phase 1** (identity, companies, access control) — **gated on
+client sign-off of D1–D3** (client instruction 2026-07-13). See "Ready for Phase 1"
+at the bottom.
+
+## Project skills — read them first
+
+Two mandatory skills live in `.claude/skills/` (committed to the repo):
+
+- **`verto5-design`** — read before touching ANY UI file: tokens, typography,
+  component rules, dark mode, mobile rules, the "what not to do" list.
+- **`verto5-development`** — read before writing ANY PHP/Vue: tenancy, gates,
+  audit, VAT enum, bilingual system, form requests, testing requirements.
 
 ## What this is
 

@@ -20,6 +20,6 @@ createInertiaApp({
             .mount(el);
     },
     progress: {
-        color: '#4f46e5',
+        color: '#d4956a',
     },
 });

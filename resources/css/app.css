@@ -1,3 +1,6 @@
+/* Self-hosted via npm — external font CDNs are blocked by CSP (SECURITY.md §7) */
+@import '@fontsource-variable/inter';
+
 @import 'tailwindcss';
 
 @source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
@@ -9,45 +12,144 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 /*
- * Phase 0 design tokens — placeholder palette in the agreed direction
- * (clean, minimal, Claude.ai/Notion feel). Design phase D1 replaces these
- * values; components must only ever reference the semantic names below.
+ * ============================================================================
+ * VERTO5 DESIGN TOKENS — warm Claude.ai-inspired palette
+ * ============================================================================
+ * Single source of truth: .claude/skills/verto5-design/SKILL.md
+ * Warm cream surfaces, warm coral accent (#D4956A), warm near-black ink.
+ * No blue accent. No pure white backgrounds. No harsh colors.
+ *
+ * RULE: components reference ONLY these semantic names (bg-surface, text-ink,
+ * border-line, bg-accent, text-status-ok…). Raw hex never appears in
+ * components — retheming is a token edit, not a refactor.
  */
 @theme {
-    --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
-        'Segoe UI Symbol', 'Noto Color Emoji';
+    --font-sans: 'Inter Variable', Inter, ui-sans-serif, system-ui, sans-serif,
+        'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
 
-    /* Surfaces & ink */
+    /* ---- Surfaces (warm cream page → warm off-white card → sunken well) ---- */
     --color-surface: #faf9f7;
-    --color-surface-raised: #ffffff;
-    --color-surface-sunken: #f1efec;
-    --color-ink: #1c1c1a;
-    --color-ink-soft: #52514d;
-    --color-muted: #8a887f;
-    --color-line: #e4e2dc;
+    --color-surface-raised: #f5f4f0;
+    --color-surface-sunken: #eceae5;
+    --color-surface-hover: #f0eee9;
 
-    /* Accent */
-    --color-accent: #4f46e5;
-    --color-accent-soft: #eef2ff;
+    /* ---- Ink (warm near-black text) ---- */
+    --color-ink: #1a1a17;
+    --color-ink-soft: #5c5c56;
+    --color-muted: #9c9a92;
+    --color-faint: #b8b5ac;
+
+    /* ---- Lines & focus ---- */
+    --color-line: #e2ded8;
+    --color-line-strong: #c8c4bc;
+    --color-focus: #c4845a;
+
+    /* ---- Accent: warm coral (interactive) ---- */
+    --color-accent: #d4956a;
+    --color-accent-hover: #c4845a;
+    --color-accent-soft: #f5e6d8;
     --color-on-accent: #ffffff;
 
-    /* Status (traffic-light system used across compliance, attendance, payroll) */
-    --color-status-ok: #16a34a;
-    --color-status-warn: #d97706;
-    --color-status-danger: #dc2626;
-    --color-status-info: #2563eb;
-    --color-status-neutral: #9ca3af;
+    /* ---- Sidebar (always dark — both modes, per design skill) ---- */
+    --color-sidebar: #1f1e1b;
+    --color-sidebar-ink: #b8b4ac;
+    --color-sidebar-hover: rgb(255 255 255 / 0.08);
+
+    /* ---- Status: warm traffic-light system ---- */
+    --color-status-ok: #2d6a4f;
+    --color-status-ok-soft: #d8f0e4;
+    --color-status-warn: #92620a;
+    --color-status-warn-soft: #fef3cd;
+    --color-status-danger: #8b2020;
+    --color-status-danger-soft: #fdeaea;
+    --color-status-info: #1a4e6b;
+    --color-status-info-soft: #d8eaf5;
+    --color-status-neutral: #6b6963;
+    --color-status-neutral-soft: #eceae5;
+
+    /* ---- Chart palette (Chart.js reads these at runtime) ---- */
+    --color-chart-1: #c4845a;
+    --color-chart-2: #2d6a4f;
+    --color-chart-3: #92620a;
+    --color-chart-4: #a64d6d;
+    --color-chart-5: #1a4e6b;
+    --color-chart-6: #6b5b95;
+
+    /* ---- Radii (design skill: 6 / 8 / 12 / 16) ---- */
+    --radius-sm: 0.375rem;   /* 6px  — badges, chips, small buttons */
+    --radius-md: 0.5rem;     /* 8px  — inputs, dropdowns, buttons   */
+    --radius-lg: 0.75rem;    /* 12px — cards, modals, slide panels  */
+    --radius-xl: 1rem;       /* 16px — company cards on Welcome     */
+
+    /* ---- Elevation (minimal, never dramatic) ---- */
+    --shadow-card: 0 1px 2px rgb(0 0 0 / 0.06);
+    --shadow-raised: 0 2px 8px rgb(0 0 0 / 0.08);
+    --shadow-overlay: 0 4px 24px rgb(0 0 0 / 0.10);
+
+    /* ---- Motion ---- */
+    --ease-out-soft: cubic-bezier(0.22, 1, 0.36, 1);
+    --duration-fast: 120ms;
+    --duration-base: 200ms;
+    --duration-slow: 320ms;
 }
 
-/* Dark theme surfaces — same semantic names, flipped values */
+/*
+ * Dark theme — warm dark browns/greys (never pure black), same semantic
+ * names. Accent stays coral; soft backgrounds deepen for badge legibility.
+ */
 .dark {
-    --color-surface: #191918;
-    --color-surface-raised: #222220;
-    --color-surface-sunken: #131312;
-    --color-ink: #ececea;
-    --color-ink-soft: #b8b6b0;
-    --color-muted: #83817a;
-    --color-line: #33322f;
-    --color-accent: #6366f1;
-    --color-accent-soft: #26264a;
+    --color-surface: #1a1916;
+    --color-surface-raised: #242320;
+    --color-surface-sunken: #141412;
+    --color-surface-hover: #2c2b27;
+
+    --color-ink: #f0ede8;
+    --color-ink-soft: #b8b4ac;
+    --color-muted: #6b6963;
+    --color-faint: #55534c;
+
+    --color-line: #2e2c28;
+    --color-line-strong: #3e3c38;
+    --color-focus: #e4a57a;
+
+    --color-accent: #d4956a;
+    --color-accent-hover: #e4a57a;
+    --color-accent-soft: #3a2a1e;
+    --color-on-accent: #ffffff;
+
+    --color-status-ok: #7fc8a0;
+    --color-status-ok-soft: #1c3226;
+    --color-status-warn: #e3b34e;
+    --color-status-warn-soft: #322a12;
+    --color-status-danger: #e38c8c;
+    --color-status-danger-soft: #381a1a;
+    --color-status-info: #85b7da;
+    --color-status-info-soft: #17293a;
+    --color-status-neutral: #9c9a92;
+    --color-status-neutral-soft: #262521;
+
+    --color-chart-1: #d4956a;
+    --color-chart-2: #7fc8a0;
+    --color-chart-3: #e3b34e;
+    --color-chart-4: #d98ba5;
+    --color-chart-5: #85b7da;
+    --color-chart-6: #a597c9;
+}
+
+/* Base */
+body {
+    background-color: var(--color-surface);
+    color: var(--color-ink);
+}
+
+/* Consistent focus treatment for every interactive element */
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+    outline: 2px solid var(--color-focus);
+    outline-offset: 2px;
+    border-radius: var(--radius-sm);
+}
+
+/* Number-heavy cells (money, hours) align in tables */
+.tabular-nums {
+    font-variant-numeric: tabular-nums;
 }

@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\VatRate;
 use App\Http\Controllers\LocaleController;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
@@ -15,6 +16,15 @@ Route::get('/login', function () {
 })->name('login');
 
 Route::post('/locale', [LocaleController::class, 'update'])->name('locale.update');
+
+// Living styleguide — the D1–D3 design-system review page. Never in production.
+if (! app()->isProduction()) {
+    Route::get('/styleguide', function () {
+        return Inertia::render('Styleguide', [
+            'vatOptions' => VatRate::options(),
+        ]);
+    })->name('styleguide');
+}
 
 Route::middleware('auth')->group(function () {
     Route::get('/dashboard', function () {

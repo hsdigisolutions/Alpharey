@@ -30,6 +30,7 @@ return [
         'inventory' => 'Inventario',
         'measurements' => 'Mediciones',
         'compliance' => 'Cumplimiento',
+        'documents' => 'Documentos',
         'audit_logs' => 'Registro de Actividad',
         'settings' => 'Configuración',
         'apps' => 'Más módulos',
@@ -47,12 +48,30 @@ return [
 
     'common' => [
         'search' => 'Buscar',
+        'search_everything' => 'Buscar en todo el sistema',
         'language' => 'Idioma',
         'theme' => 'Tema',
         'dark_mode' => 'Modo oscuro',
         'light_mode' => 'Modo claro',
         'logout' => 'Cerrar sesión',
         'coming_soon' => 'Disponible en una fase posterior',
+        'save' => 'Guardar',
+        'cancel' => 'Cancelar',
+        'close' => 'Cerrar',
+        'actions' => 'Acciones',
+        'notifications' => 'Notificaciones',
+        'no_notifications' => 'No hay notificaciones',
+        'upload_browse' => 'Seleccionar archivo',
+        'upload_drop' => 'o arrastra y suelta aquí',
+        'upload_camera' => 'Usar cámara',
+        'empty_title' => 'Sin registros',
+        'empty_message' => 'No hay datos que mostrar todavía.',
+    ],
+
+    'table' => [
+        'per_page' => 'Por página',
+        'records' => 'registros',
+        'selected' => 'seleccionados',
     ],
 
     'dashboard' => [
@@ -67,6 +86,24 @@ return [
         'reducido' => 'IVA Reducido 10%',
         'superreducido' => 'IVA Superreducido 4%',
         'exento' => 'Exento 0%',
+    ],
+
+    'styleguide' => [
+        'tokens' => 'Fundamentos: color, tipografía, radios, sombras',
+        'icons' => 'Iconografía',
+        'buttons' => 'Botones',
+        'forms' => 'Controles de formulario',
+        'vat' => 'Desplegable de IVA',
+        'status' => 'Estados y semáforos',
+        'cards' => 'Tarjetas KPI y avatares',
+        'tabs' => 'Pestañas',
+        'table' => 'Sistema de tablas',
+        'calendar' => 'Celdas de asistencia',
+        'permissions' => 'Matriz de permisos',
+        'timeline' => 'Cronología de notas',
+        'overlays' => 'Ventanas y paneles',
+        'modal_title' => 'Ventana modal de ejemplo',
+        'slideover_title' => 'Panel lateral de ejemplo',
     ],
 
     'errors' => [
