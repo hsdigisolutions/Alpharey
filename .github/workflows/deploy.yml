@@ -1,0 +1,83 @@
+# Deploys to Mukhost (cPanel VPS) over SSH — GitHub → SSH → Mukhost per
+# DECISIONS.md. Assets and vendor/ are built on the runner and rsynced, so the
+# server needs neither Node nor Composer (STACK.md).
+#
+# Manual trigger only until the staging/production targets are provisioned.
+# Required repository secrets (Settings → Secrets → Actions):
+#   DEPLOY_SSH_HOST   e.g. alpharey.com
+#   DEPLOY_SSH_USER   cPanel account user
+#   DEPLOY_SSH_KEY    private key authorized on the server
+#   DEPLOY_PATH       absolute path of the app root on the server
+#                     (document root must point at ${DEPLOY_PATH}/public)
+#
+# The server keeps its own .env and storage/ — both are excluded from sync.
+# One-time server setup: create .env, `php artisan key:generate`, storage
+# directories, the two cron entries (see CLAUDE.md), and AutoSSL.
+
+name: Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: 'Deploy target'
+        required: true
+        default: 'staging'
+        type: choice
+        options: [staging, production]
+
+concurrency:
+  group: deploy-${{ inputs.target }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy to ${{ inputs.target }}
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.target }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup PHP 8.3
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: mbstring, intl, gd, zip, pdo_mysql
+          coverage: none
+
+      - name: Install production Composer dependencies
+        run: composer install --no-dev --prefer-dist --optimize-autoloader --no-interaction
+
+      - name: Build assets
+        run: |
+          npm ci
+          npm run build
+
+      - name: Start SSH agent
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.DEPLOY_SSH_KEY }}
+
+      - name: Sync release
+        run: |
+          rsync -az --delete \
+            --exclude '.env' \
+            --exclude '.git' \
+            --exclude '.github' \
+            --exclude 'node_modules' \
+            --exclude 'storage' \
+            --exclude 'tests' \
+            -e "ssh -o StrictHostKeyChecking=accept-new" \
+            ./ "${{ secrets.DEPLOY_SSH_USER }}@${{ secrets.DEPLOY_SSH_HOST }}:${{ secrets.DEPLOY_PATH }}/"
+
+      - name: Migrate and warm caches
+        run: |
+          ssh -o StrictHostKeyChecking=accept-new \
+            "${{ secrets.DEPLOY_SSH_USER }}@${{ secrets.DEPLOY_SSH_HOST }}" \
+            "cd '${{ secrets.DEPLOY_PATH }}' \
+              && php artisan migrate --force \
+              && php artisan config:cache \
+              && php artisan route:cache \
+              && php artisan view:cache \
+              && php artisan event:cache"

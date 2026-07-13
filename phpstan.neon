@@ -1,0 +1,10 @@
+includes:
+    - vendor/larastan/larastan/extension.neon
+
+parameters:
+    paths:
+        - app
+        - database
+        # Analysed so the tenancy/audit traits have a consumer until Phase 1 models land
+        - tests/Fixtures
+    level: 6

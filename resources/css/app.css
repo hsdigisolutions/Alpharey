@@ -1,0 +1,53 @@
+@import 'tailwindcss';
+
+@source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
+@source '../**/*.blade.php';
+@source '../**/*.js';
+@source '../**/*.vue';
+
+/* Class-based dark mode — the header toggle adds/removes `.dark` on <html> */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/*
+ * Phase 0 design tokens — placeholder palette in the agreed direction
+ * (clean, minimal, Claude.ai/Notion feel). Design phase D1 replaces these
+ * values; components must only ever reference the semantic names below.
+ */
+@theme {
+    --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
+        'Segoe UI Symbol', 'Noto Color Emoji';
+
+    /* Surfaces & ink */
+    --color-surface: #faf9f7;
+    --color-surface-raised: #ffffff;
+    --color-surface-sunken: #f1efec;
+    --color-ink: #1c1c1a;
+    --color-ink-soft: #52514d;
+    --color-muted: #8a887f;
+    --color-line: #e4e2dc;
+
+    /* Accent */
+    --color-accent: #4f46e5;
+    --color-accent-soft: #eef2ff;
+    --color-on-accent: #ffffff;
+
+    /* Status (traffic-light system used across compliance, attendance, payroll) */
+    --color-status-ok: #16a34a;
+    --color-status-warn: #d97706;
+    --color-status-danger: #dc2626;
+    --color-status-info: #2563eb;
+    --color-status-neutral: #9ca3af;
+}
+
+/* Dark theme surfaces — same semantic names, flipped values */
+.dark {
+    --color-surface: #191918;
+    --color-surface-raised: #222220;
+    --color-surface-sunken: #131312;
+    --color-ink: #ececea;
+    --color-ink-soft: #b8b6b0;
+    --color-muted: #83817a;
+    --color-line: #33322f;
+    --color-accent: #6366f1;
+    --color-accent-soft: #26264a;
+}
