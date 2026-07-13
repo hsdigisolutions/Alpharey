@@ -212,7 +212,9 @@ Active item:  bg-accent text-on-accent rounded-md
 Inactive:     text-sidebar-ink, hover: white text on white/8
 Brand logo:   top, 16px padding · User area: header (top-right)
 Width:        240px expanded, 56px collapsed (icons only)
-Mobile:       bottom nav bar, 5 primary items
+Position:     FIXED — the sidebar never scrolls with content; only the
+              right content area scrolls (content column gets ps-60/ps-14)
+Mobile:       bottom nav bar, 5 primary items — no sidebar
 ```
 
 ---

@@ -175,8 +175,10 @@ const calendarStates = ['present', 'late', 'absent', 'leave', 'weekend', 'empty'
             <!-- ============ D2: FORMS ============ -->
             <VCard title-key="styleguide.forms">
                 <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                    <FormField k="auth.email" required for-id="sg-input">
-                        <VInput id="sg-input" v-model="text" type="email" placeholder="nombre@empresa.es" />
+                    <!-- Error state demo lives on email (genuinely required in real
+                         forms). NEVER on VAT — VAT is optional everywhere (DECISIONS.md). -->
+                    <FormField k="auth.email" required for-id="sg-input" error="Campo obligatorio / Required field">
+                        <VInput id="sg-input" v-model="text" type="email" placeholder="nombre@empresa.es" invalid />
                     </FormField>
                     <FormField k="common.search" for-id="sg-search">
                         <VSearchInput id="sg-search" v-model="search" />
@@ -193,8 +195,8 @@ const calendarStates = ['present', 'late', 'absent', 'leave', 'weekend', 'empty'
                             <option value="2">Empresa Dos — Barcelona</option>
                         </VSelect>
                     </FormField>
-                    <FormField k="vat.label" error="Campo obligatorio / Required field">
-                        <VVatSelect v-model="vat" :options="vatOptions" invalid />
+                    <FormField k="vat.label">
+                        <VVatSelect v-model="vat" :options="vatOptions" />
                     </FormField>
                     <FormField k="common.notifications">
                         <VTextarea v-model="text" :rows="2" placeholder="Notas… / Notes…" />

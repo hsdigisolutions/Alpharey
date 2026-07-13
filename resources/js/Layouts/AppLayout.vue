@@ -70,8 +70,9 @@ const roleLabels = {
     <div class="flex min-h-screen">
         <VToastHost />
 
-        <!-- Sidebar (desktop) — always dark, both themes -->
-        <aside class="hidden shrink-0 flex-col bg-sidebar transition-[width] duration-200 md:flex"
+        <!-- Sidebar (desktop) — always dark, both themes. FIXED: never scrolls
+             with the content; only the right side scrolls (design skill). -->
+        <aside class="fixed inset-y-0 start-0 z-30 hidden h-screen flex-col bg-sidebar transition-[width] duration-200 md:flex"
             :class="collapsed ? 'w-14' : 'w-60'">
             <div class="flex items-center gap-2.5 px-3 py-4" :class="collapsed ? 'justify-center px-0' : 'px-4'">
                 <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-accent text-sm font-bold text-on-accent">V5</span>
@@ -130,7 +131,9 @@ const roleLabels = {
             </div>
         </aside>
 
-        <div class="flex min-w-0 flex-1 flex-col">
+        <!-- Content column — offset by the fixed sidebar width on desktop -->
+        <div class="flex min-w-0 flex-1 flex-col transition-[padding] duration-200"
+            :class="collapsed ? 'md:ps-14' : 'md:ps-60'">
             <!-- Header -->
             <header class="sticky top-0 z-20 flex items-center gap-3 border-b border-line bg-surface/95 px-4 py-2.5 backdrop-blur md:px-6">
                 <!-- Global search (visual — wired in Phase 8) -->

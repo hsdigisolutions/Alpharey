@@ -9,7 +9,7 @@ defineProps({
 </script>
 
 <template>
-    <div class="flex flex-col items-center px-6 py-12 text-center">
+    <div class="flex flex-col items-center px-6 py-8 text-center">
         <span class="rounded-lg bg-surface-sunken p-3 text-muted">
             <AppIcon :name="icon" class="h-6 w-6" />
         </span>
