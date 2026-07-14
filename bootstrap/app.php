@@ -1,5 +1,9 @@
 <?php
 
+use App\Http\Middleware\ApplySessionTimeout;
+use App\Http\Middleware\EnsureAdmin;
+use App\Http\Middleware\EnsureSuperAdmin;
+use App\Http\Middleware\EnsureUserIsActive;
 use App\Http\Middleware\HandleInertiaRequests;
 use App\Http\Middleware\SecurityHeaders;
 use App\Http\Middleware\SetLocale;
@@ -17,10 +21,20 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        $middleware->web(prepend: [
+            ApplySessionTimeout::class,
+        ]);
+
         $middleware->web(append: [
             SetLocale::class,
             HandleInertiaRequests::class,
             SecurityHeaders::class,
+        ]);
+
+        $middleware->alias([
+            'active' => EnsureUserIsActive::class,
+            'admin' => EnsureAdmin::class,
+            'super_admin' => EnsureSuperAdmin::class,
         ]);
 
         $middleware->redirectGuestsTo(fn () => route('login'));

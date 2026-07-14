@@ -2,21 +2,24 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Status: Phase 0 complete (2026-07-13)
+## Status: Phase 1 complete (2026-07-14)
 
-Development Phase 0 (Foundations) from `docs/DEVELOPMENT_PLAN.md` is built and verified:
-**55 Pest tests / 182 assertions passing · Pint clean · Larastan level 6 clean ·
-`composer audit` clean · production Vite build working · migrations + seed run on MySQL.**
+Development Phase 1 (identity, companies, access control) is built and verified:
+**115 Pest tests / 429 assertions passing · Pint clean · Larastan level 6 clean ·
+`composer audit` clean · production Vite build working · full login→welcome→matrix
+flow verified in the browser against seeded MySQL.**
 
-**Design phases D1–D3 built in code (2026-07-13), pending client sign-off:**
-warm Claude.ai-inspired token system (coral accent `#D4956A`, warm cream surfaces,
-Inter self-hosted), ~30-component library in `resources/js/Components/ui/`, dark
-sidebar shell with collapse. Review at **`/styleguide`** (non-production route):
-`composer run dev` → http://localhost:8000/styleguide. Light/dark + mobile verified.
+Live screens: **01 Login** (throttled, remember-me 30d, password reset, inactive
+lockout, routing by role) · **02 Welcome/Company Selector** (SA) · **04 Companies**
+(CRUD + typed-name removal with safety checks) · **17 Permission Matrix** (presets,
+copy-from, user management, immediate effect) · **25 Audit Logs** (filters, stats,
+CSV export) · **26 Settings** (General + SMTP with encrypted password + mail test).
+Legacy importers registered: users, settings (validated against an in-memory legacy
+stand-in — the live dump is still pending, DATA_MIGRATION.md §1).
 
-Next up: **Development Phase 1** (identity, companies, access control) — **gated on
-client sign-off of D1–D3** (client instruction 2026-07-13). See "Ready for Phase 1"
-at the bottom.
+Design D1–D3 were approved by the client 2026-07-14 (styleguide at `/styleguide`,
+non-production). Next up: **Development Phase 2** (employees & document management) —
+see "Ready for Phase 2" at the bottom.
 
 ## Project skills — read them first
 
@@ -207,23 +210,64 @@ Admin), `empresa1.admin@verto5.local` (Company Admin), `empresa1.user@verto5.loc
 - Every module ships with Pest tests including tenancy-isolation and permission tests
   (`tests/Feature/TenancyTest.php` is the template).
 
-## Ready for Phase 1
+## Phase 1 additions (map for future phases)
 
-Phase 1 (screens 01, 02, 04, 17, 25, 26 — see DEVELOPMENT_PLAN.md) builds directly on:
+- **Auth**: `Auth\*` controllers + `LoginRequest` (5/min throttle, `active` credential
+  check), `BilingualResetPassword` notification, `EnsureUserIsActive` (mid-session
+  lockout), remember-me duration set to 30 days in `AppServiceProvider`
+- **Middleware aliases**: `active`, `admin` (SA|CA), `super_admin`;
+  `ApplySessionTimeout` is prepended to `web` so Settings-driven session lifetime
+  applies before StartSession
+- **Company context**: `HandleInertiaRequests` shares `company` (id+name); admin
+  screens resolve context via `Admin\Concerns\ResolvesCompanyContext` (SA without a
+  selection is redirected to Welcome)
+- **Permission matrix**: `Module::actions()` defines the applicable-action map
+  (the "—" cells); non-applicable actions are forced off server-side on save;
+  matrix rows apply to role `user` only — admins bypass via `Gate::before`
+- **Settings**: `MailSettings` service — SMTP config stored in settings, password
+  Crypt-encrypted (`mail.password`), never echoed to the client (`has_password` flag),
+  applied to the runtime mailer at boot and before test sends
+- **Company removal**: `Services\Companies\CompanyRemovalGuard` returns blocker keys;
+  Phase 1 blocks on attached users — future phases append employees/projects/invoices
+  checks there
+- **Importers**: `Importers\UsersImporter` (role mapping, hash carry-over via
+  base-query update because the `hashed` cast rejects foreign-cost hashes),
+  `Importers\SettingsImporter` (whitelist remap, secrets never imported)
+- **Audit actions** now include `login`, `logout`, `exported`, `viewed` alongside
+  created/updated/deleted
 
-- **Auth flow**: session guard + `/login` placeholder exist; build login POST, remember
-  me (30 days), password reset, rate limiting, session timeout from Settings, post-login
-  routing by role
-- **Companies**: model/table/factory ready; build CRUD + safety-checked removal +
-  Welcome screen using `CurrentCompany::select()`
-- **Permission Matrix**: engine and gates done — the screen only writes
-  `user_module_permissions` rows (presets: full/read-only/none/copy-from-user)
-- **Audit Logs screen**: data already flows; build filters/statistics/CSV export
-  (read-only, no delete routes)
-- **Settings screen**: `SettingsService` ready (general + SMTP sections + mail test)
-- **Legacy importers**: register users/companies/settings importers in
-  `config/legacy-import.php` (DATA_MIGRATION.md §3.1–3.2)
+## Scaffolding decisions made in Phase 1 (not in DECISIONS.md)
 
-External blockers: legacy DB dump + `storage/app` copy from the live server
-(DATA_MIGRATION.md §1) — needed for importer validation, not for Phase 1 UI; Figma
-D1–D3 tokens/components for final styling.
+11. The spec's RBAC tables (roles/permissions/role_permission/user_role) and teams
+    tables were **not** created — the 3-level `UserRole` enum + `user_module_permissions`
+    implements the spec's access model exactly; teams arrive with the Settings→Teams
+    section in a later phase.
+12. Users cannot edit themselves through `/admin/users` (lockout/escalation guard);
+    Company Admins cannot modify other admins — Super Admin only.
+13. Password reset responses are enumeration-safe (same message either way);
+    reset + forgot endpoints throttled 6/min.
+14. General settings keys: `general.app_name`, `general.default_locale`,
+    `general.timezone`, `general.session_timeout_minutes`; mail keys under `mail.*`.
+
+## Ready for Phase 2
+
+Phase 2 (screens 05, 06, 16 + documents engine — see DEVELOPMENT_PLAN.md) builds on:
+
+- **Employees table**: use `BelongsToCompany` + `Auditable`; encrypted casts + blind
+  index for NIF/IBAN/salary land here (dev skill Rule 8); `TenancyTest` is the template
+- **Standard table framework**: VTable/VTableToolbar/VPagination/VBulkBar are
+  presentational — Phase 2 adds server-driven sort/filter/live-search/column
+  visibility (`user_column_settings`), bulk actions, Excel/PDF export (install
+  maatwebsite/excel + dompdf here)
+- **Documents engine**: polymorphic `documents` table, private storage +
+  permission-checked downloads (dev skill Rule 10), versioning, expiry traffic lights;
+  `VFileDrop` supports camera capture already
+- **Compliance Center** feeds off document statuses; 13 company doc types seeded
+- **Notifications core**: bell UI placeholder exists in the shell; build storage +
+  email channel + the confirmed alert schedules (DECISIONS.md: monthly 5/2 days before
+  EOM + overdue on the 1st; annual 90/60/30 + expiry-day)
+- **Importers**: register employees/wage/documents importers following the
+  UsersImporter pattern
+
+External blocker: legacy DB dump + `storage/app` copy from the live server
+(DATA_MIGRATION.md §1) — needed to validate Phase 2 importers against real data.

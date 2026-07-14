@@ -1,12 +1,27 @@
 <script setup>
 /**
- * Screen 01 placeholder. The visual structure matches REQUIREMENTS.md §7
- * (Screen 01); the actual authentication flow is Phase 1 work, so the form
- * is intentionally inert.
+ * Screen 01 — Login (REQUIREMENTS.md §7). Session auth, remember me
+ * (30 days), rate-limited server-side. Routing after login is by role.
  */
-import { Head, router, usePage } from '@inertiajs/vue3';
+import { Head, router, useForm, usePage } from '@inertiajs/vue3';
+import FormField from '@/Components/ui/FormField.vue';
+import VButton from '@/Components/ui/VButton.vue';
+import VCheckbox from '@/Components/ui/VCheckbox.vue';
+import VInput from '@/Components/ui/VInput.vue';
 
 const page = usePage();
+
+const form = useForm({
+    email: '',
+    password: '',
+    remember: false,
+});
+
+function submit() {
+    form.post('/login', {
+        onFinish: () => form.reset('password'),
+    });
+}
 
 function switchLocale() {
     const next = page.props.locale.primary === 'es' ? 'en' : 'es';
@@ -19,41 +34,42 @@ function switchLocale() {
 
     <div class="flex min-h-screen flex-col items-center justify-center px-4">
         <button type="button"
-            class="absolute end-4 top-4 rounded-lg border border-line px-2.5 py-1.5 text-xs font-semibold text-ink-soft hover:bg-surface-sunken"
+            class="absolute end-4 top-4 rounded-md border border-line px-2.5 py-1.5 text-xs font-semibold text-ink-soft hover:bg-surface-hover"
             @click="switchLocale">
             {{ page.props.locale.primary.toUpperCase() }} / {{ page.props.locale.secondary.toUpperCase() }}
         </button>
 
         <div class="w-full max-w-sm">
             <div class="mb-8 flex flex-col items-center gap-3">
-                <span class="flex h-12 w-12 items-center justify-center rounded-xl bg-accent text-lg font-bold text-on-accent">V5</span>
+                <span class="flex h-12 w-12 items-center justify-center rounded-lg bg-accent text-lg font-bold text-on-accent">V5</span>
                 <h1 class="text-center text-xl font-semibold">
                     <Bilingual k="auth.welcome_back" class="items-center" />
                 </h1>
             </div>
 
-            <form class="space-y-4 rounded-2xl border border-line bg-surface-raised p-6 shadow-sm" @submit.prevent>
-                <label class="block">
-                    <Bilingual k="auth.email" class="mb-1 text-sm font-medium" />
-                    <input type="email" disabled autocomplete="username"
-                        class="w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm opacity-60" />
-                </label>
-                <label class="block">
-                    <Bilingual k="auth.password" class="mb-1 text-sm font-medium" />
-                    <input type="password" disabled autocomplete="current-password"
-                        class="w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm opacity-60" />
-                </label>
-                <label class="flex items-center gap-2 text-sm text-ink-soft">
-                    <input type="checkbox" disabled class="rounded border-line opacity-60" />
-                    <Bilingual k="auth.remember_me" inline />
-                </label>
-                <button type="submit" disabled
-                    class="w-full cursor-not-allowed rounded-lg bg-accent py-2.5 text-sm font-semibold text-on-accent opacity-50">
+            <form class="space-y-4 rounded-lg border border-line bg-surface-raised p-6 shadow-card" @submit.prevent="submit">
+                <FormField k="auth.email" for-id="email" :error="form.errors.email" required>
+                    <VInput id="email" v-model="form.email" type="email" autocomplete="username"
+                        :invalid="Boolean(form.errors.email)" />
+                </FormField>
+
+                <FormField k="auth.password" for-id="password" :error="form.errors.password" required>
+                    <VInput id="password" v-model="form.password" type="password" autocomplete="current-password"
+                        :invalid="Boolean(form.errors.password)" />
+                </FormField>
+
+                <div class="flex items-center justify-between gap-2">
+                    <VCheckbox v-model="form.remember">
+                        <Bilingual k="auth.remember_me" inline class="text-sm" />
+                    </VCheckbox>
+                    <a href="/forgot-password" class="text-sm text-accent-hover hover:underline">
+                        <Bilingual k="auth.forgot_password" inline class="text-[13px]" />
+                    </a>
+                </div>
+
+                <VButton type="submit" class="w-full" :loading="form.processing">
                     <Bilingual k="auth.login" inline />
-                </button>
-                <p class="text-center text-xs text-muted">
-                    <Bilingual k="auth.phase1_note" class="items-center" />
-                </p>
+                </VButton>
             </form>
         </div>
     </div>

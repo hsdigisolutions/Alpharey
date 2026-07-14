@@ -9,7 +9,7 @@
  * Non-dashboard destinations activate in their build phases — until then
  * they render as muted, disabled rows.
  */
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import { router, usePage } from '@inertiajs/vue3';
 import AppIcon from '@/Components/AppIcon.vue';
 import VAvatar from '@/Components/ui/VAvatar.vue';
@@ -20,7 +20,7 @@ const page = usePage();
 
 const primaryNav = [
     { key: 'dashboard', icon: 'dashboard', href: '/dashboard' },
-    { key: 'companies', icon: 'companies', href: null, superAdminOnly: true },
+    { key: 'companies', icon: 'companies', href: '/companies', superAdminOnly: true },
     { key: 'employees', icon: 'employees', href: null },
     { key: 'clients', icon: 'clients', href: null },
     { key: 'projects', icon: 'projects', href: null },
@@ -31,10 +31,25 @@ const primaryNav = [
     { key: 'reports', icon: 'reports', href: null },
 ];
 
-const secondaryNav = [
-    'vendors', 'vehicles', 'proposals', 'commissions', 'leave',
-    'inventory', 'measurements', 'compliance', 'audit_logs', 'settings',
-];
+const isAdmin = computed(() => ['super_admin', 'company_admin'].includes(page.props.auth.user?.role));
+
+const secondaryNav = computed(() => [
+    { key: 'vendors', labelKey: 'nav.vendors', href: null },
+    { key: 'vehicles', labelKey: 'nav.vehicles', href: null },
+    { key: 'proposals', labelKey: 'nav.proposals', href: null },
+    { key: 'commissions', labelKey: 'nav.commissions', href: null },
+    { key: 'leave', labelKey: 'nav.leave', href: null },
+    { key: 'inventory', labelKey: 'nav.inventory', href: null },
+    { key: 'measurements', labelKey: 'nav.measurements', href: null },
+    { key: 'compliance', labelKey: 'nav.compliance', href: null },
+    { key: 'permissions', labelKey: 'permissions.title', href: isAdmin.value ? '/admin/permissions' : null },
+    { key: 'audit_logs', labelKey: 'nav.audit_logs', href: isAdmin.value ? '/admin/audit-logs' : null },
+    { key: 'settings', labelKey: 'nav.settings', href: isAdmin.value ? '/admin/settings' : null },
+]);
+
+function logout() {
+    router.post('/logout');
+}
 
 const mobileNav = primaryNav.filter((item) =>
     ['dashboard', 'employees', 'attendance', 'payroll', 'reports'].includes(item.key),
@@ -113,11 +128,14 @@ const roleLabels = {
                         </button>
                     </template>
                     <div class="grid grid-cols-2 gap-0.5">
-                        <div v-for="key in secondaryNav" :key="key"
-                            class="cursor-default rounded-md px-2.5 py-2 text-muted opacity-70"
-                            :title="page.props.lang.es.common.coming_soon">
-                            <Bilingual :k="`nav.${key}`" class="text-xs" />
-                        </div>
+                        <component v-for="item in secondaryNav" :key="item.key"
+                            :is="item.href ? 'a' : 'div'"
+                            :href="item.href ?? undefined"
+                            class="rounded-md px-2.5 py-2"
+                            :class="item.href ? 'text-ink hover:bg-surface-sunken' : 'cursor-default text-muted opacity-70'"
+                            :title="item.href ? undefined : page.props.lang.es.common.coming_soon">
+                            <Bilingual :k="item.labelKey" class="text-xs" />
+                        </component>
                     </div>
                 </VDropdown>
 
@@ -146,6 +164,20 @@ const roleLabels = {
                 </div>
 
                 <div class="ms-auto flex items-center gap-1.5">
+                    <!-- Active company context: SA gets a switch link to Welcome -->
+                    <a v-if="page.props.auth.user?.role === 'super_admin'" href="/welcome"
+                        class="hidden items-center gap-1.5 rounded-md border border-line px-2 py-1.5 text-xs font-medium text-ink-soft hover:bg-surface-hover sm:flex"
+                        :title="page.props.lang.es.welcome.switch_company">
+                        <AppIcon name="companies" class="h-3.5 w-3.5" />
+                        <span v-if="page.props.company" class="max-w-36 truncate">{{ page.props.company.name }}</span>
+                        <Bilingual v-else k="welcome.browsing_all" inline class="text-xs" />
+                    </a>
+                    <span v-else-if="page.props.company"
+                        class="hidden items-center gap-1.5 rounded-md border border-line px-2 py-1.5 text-xs font-medium text-ink-soft sm:flex">
+                        <AppIcon name="companies" class="h-3.5 w-3.5" />
+                        <span class="max-w-36 truncate">{{ page.props.company.name }}</span>
+                    </span>
+
                     <!-- Notifications (visual — wired in Phase 2) -->
                     <VDropdown width="w-80">
                         <template #trigger="{ toggle }">
@@ -190,13 +222,12 @@ const roleLabels = {
                             <p class="truncate text-sm font-medium">{{ page.props.auth.user.name }}</p>
                             <p class="truncate text-xs text-muted">{{ page.props.auth.user.email }}</p>
                         </div>
-                        <div class="cursor-default rounded-md px-3 py-2 text-muted opacity-70"
-                            :title="page.props.lang.es.common.coming_soon">
-                            <span class="flex items-center gap-2">
-                                <AppIcon name="logout" class="h-4 w-4" />
-                                <Bilingual k="common.logout" inline class="text-sm" />
-                            </span>
-                        </div>
+                        <button type="button"
+                            class="flex w-full items-center gap-2 rounded-md px-3 py-2 text-start text-ink hover:bg-surface-sunken"
+                            @click="logout">
+                            <AppIcon name="logout" class="h-4 w-4" />
+                            <Bilingual k="common.logout" inline class="text-sm" />
+                        </button>
                     </VDropdown>
                 </div>
             </header>

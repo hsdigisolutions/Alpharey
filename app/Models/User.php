@@ -3,6 +3,8 @@
 namespace App\Models;
 
 use App\Enums\UserRole;
+use App\Models\Concerns\Auditable;
+use App\Notifications\BilingualResetPassword;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -21,8 +23,12 @@ use Illuminate\Notifications\Notifiable;
  */
 class User extends Authenticatable
 {
+    use Auditable;
+
     /** @use HasFactory<UserFactory> */
     use HasFactory, Notifiable;
+
+    public string $auditModule = 'users';
 
     /**
      * The attributes that are mass assignable.
@@ -83,6 +89,11 @@ class User extends Authenticatable
     public function isSuperAdmin(): bool
     {
         return $this->role === UserRole::SuperAdmin;
+    }
+
+    public function sendPasswordResetNotification($token): void
+    {
+        $this->notify(new BilingualResetPassword($token));
     }
 
     public function isCompanyAdmin(): bool

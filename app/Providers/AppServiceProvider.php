@@ -6,8 +6,11 @@ use App\Enums\Module;
 use App\Enums\PermissionAction;
 use App\Models\User;
 use App\Services\Permissions\ModulePermissions;
+use App\Services\Settings\MailSettings;
 use App\Services\Settings\SettingsService;
 use App\Support\CurrentCompany;
+use Illuminate\Auth\SessionGuard;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\ServiceProvider;
@@ -32,6 +35,17 @@ class AppServiceProvider extends ServiceProvider
         // HTTPS is enforced at all times outside local dev (SECURITY.md §7).
         if (! $this->app->environment('local', 'testing')) {
             URL::forceScheme('https');
+        }
+
+        // "Remember me" lasts 30 days (DECISIONS.md / REQUIREMENTS.md §13).
+        $guard = Auth::guard('web');
+        if ($guard instanceof SessionGuard) {
+            $guard->setRememberDuration(60 * 24 * 30);
+        }
+
+        // Admin-configured SMTP applies at runtime (Settings → Email).
+        if (! $this->app->environment('testing')) {
+            rescue(fn () => $this->app->make(MailSettings::class)->applyIfConfigured(), report: false);
         }
 
         $this->registerModuleGates();

@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Models\User;
+use App\Services\Settings\SettingsService;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -19,9 +20,15 @@ class SetLocale
     {
         $user = $request->user();
 
+        $default = rescue(
+            fn () => app(SettingsService::class)->get('general.default_locale'),
+            null,
+            false,
+        );
+
         $locale = $user instanceof User
             ? $user->locale
-            : $request->session()->get('locale', config('app.locale'));
+            : $request->session()->get('locale', is_string($default) ? $default : config('app.locale'));
 
         if (in_array($locale, ['es', 'en'], true)) {
             app()->setLocale($locale);

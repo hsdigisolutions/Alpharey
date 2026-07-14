@@ -2,11 +2,16 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\Auditable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class UserModulePermission extends Model
 {
+    use Auditable;
+
+    public string $auditModule = 'permissions';
+
     protected $fillable = [
         'user_id',
         'company_id',

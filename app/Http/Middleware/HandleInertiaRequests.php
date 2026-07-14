@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Models\User;
+use App\Support\CurrentCompany;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
 
@@ -48,6 +49,13 @@ class HandleInertiaRequests extends Middleware
                 'primary' => app()->getLocale(),
                 'secondary' => app()->getLocale() === 'es' ? 'en' : 'es',
             ],
+            // Active company context (id + name only): the user's company, or
+            // the Super Admin's session selection (null while browsing all).
+            'company' => $user === null ? null : (function () {
+                $company = app(CurrentCompany::class)->get();
+
+                return $company === null ? null : ['id' => $company->id, 'name' => $company->name];
+            })(),
             // Full bilingual UI dictionary — both languages always ship because
             // every label renders Spanish + English (REQUIREMENTS.md §9).
             'lang' => [

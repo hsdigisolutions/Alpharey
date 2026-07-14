@@ -1,5 +1,8 @@
 <?php
 
+use App\Services\LegacyImport\Importers\SettingsImporter;
+use App\Services\LegacyImport\Importers\UsersImporter;
+
 /**
  * Registry for verto:import-legacy. Importers run in the order listed —
  * dependency order matters (users before employees, projects before
@@ -9,7 +12,10 @@
 return [
 
     'importers' => [
-        // Phase 1: users, companies, settings
+        // Phase 1 (companies need no importer: the legacy system was
+        // single-company; all data maps to Company 1 — DATA_MIGRATION.md §3.1)
+        UsersImporter::class,
+        SettingsImporter::class,
         // Phase 2: employees, wage data, documents, notes, call logs
         // Phase 3: clients, vendors, projects, proposals
         // Phase 4: attendance, measurements, production tasks

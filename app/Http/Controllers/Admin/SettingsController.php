@@ -1,0 +1,83 @@
+<?php
+
+namespace App\Http\Controllers\Admin;
+
+use App\Http\Controllers\Controller;
+use App\Http\Requests\Admin\TestMailRequest;
+use App\Http\Requests\Admin\UpdateGeneralSettingsRequest;
+use App\Http\Requests\Admin\UpdateMailSettingsRequest;
+use App\Services\Settings\MailSettings;
+use App\Services\Settings\SettingsService;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Mail;
+use Inertia\Inertia;
+use Inertia\Response;
+
+/**
+ * Screen 26 — Settings, Phase 1 sections: General + Email. Further
+ * sections (document alerts, overtime policies, categories, teams…)
+ * land with their owning phases.
+ */
+class SettingsController extends Controller
+{
+    public function index(Request $request, SettingsService $settings, MailSettings $mail): Response
+    {
+        $user = $request->user();
+        $isSuperAdmin = $user !== null && $user->isSuperAdmin();
+
+        return Inertia::render('Admin/Settings', [
+            'general' => [
+                'app_name' => $settings->get('general.app_name', 'Verto5'),
+                'default_locale' => $settings->get('general.default_locale', 'es'),
+                'timezone' => $settings->get('general.timezone', 'Europe/Madrid'),
+                'session_timeout_minutes' => $settings->get('general.session_timeout_minutes', 120),
+            ],
+            // SMTP configuration is Super Admin-only — never shipped to others
+            'mail' => $isSuperAdmin ? $mail->current() : null,
+            'canManageMail' => $isSuperAdmin,
+        ]);
+    }
+
+    public function updateGeneral(UpdateGeneralSettingsRequest $request, SettingsService $settings): RedirectResponse
+    {
+        $settings->set('general.app_name', $request->validated('app_name'));
+        $settings->set('general.default_locale', $request->validated('default_locale'));
+        $settings->set('general.timezone', $request->validated('timezone'));
+        $settings->set('general.session_timeout_minutes', (int) $request->validated('session_timeout_minutes'));
+
+        return back()->with('success', __('ui.settings.saved'));
+    }
+
+    public function updateMail(UpdateMailSettingsRequest $request, MailSettings $mail): RedirectResponse
+    {
+        /** @var array{host: string, port: int, username: ?string, password: ?string, encryption: string, from_name: string, from_address: string} $values */
+        $values = $request->validated();
+
+        $mail->save($values);
+
+        return back()->with('success', __('ui.settings.saved'));
+    }
+
+    public function testMail(TestMailRequest $request, MailSettings $mail): RedirectResponse
+    {
+        try {
+            $mail->applyIfConfigured();
+
+            Mail::raw(
+                "Correo de prueba de Verto5 — la configuración SMTP funciona.\n"
+                .'Verto5 test email — the SMTP configuration works.',
+                function ($message) use ($request): void {
+                    $message->to($request->validated('to'))
+                        ->subject('Prueba de correo / Mail test — Verto5');
+                },
+            );
+        } catch (\Throwable $e) {
+            report($e);
+
+            return back()->with('error', __('ui.settings.test_failed'));
+        }
+
+        return back()->with('success', __('ui.settings.test_sent'));
+    }
+}

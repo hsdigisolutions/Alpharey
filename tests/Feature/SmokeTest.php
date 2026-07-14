@@ -45,8 +45,8 @@ it('fails the legacy import command until the legacy connection is configured', 
     $this->artisan('verto:import-legacy')->assertFailed();
 });
 
-it('runs the legacy import command with no importers registered yet', function (): void {
+it('runs the legacy import command when --only matches no importer', function (): void {
     config(['database.connections.legacy.database' => 'legacy_restored']);
 
-    $this->artisan('verto:import-legacy --dry-run')->assertSuccessful();
+    $this->artisan('verto:import-legacy --dry-run --only=nonexistent')->assertSuccessful();
 });

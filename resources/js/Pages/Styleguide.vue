@@ -244,7 +244,7 @@ const calendarStates = ['present', 'late', 'absent', 'leave', 'weekend', 'empty'
                         <span class="flex items-center gap-1.5 text-sm"><VStatusDot status="danger" pulse /> Atrasado / Overdue</span>
                     </div>
                     <VAlert status="warn">
-                        <Bilingual k="auth.phase1_note" />
+                        <Bilingual k="common.coming_soon" />
                     </VAlert>
                     <div class="space-y-2.5">
                         <VStatBar label="Empresa Uno" sublabel="Madrid" :percent="97" />

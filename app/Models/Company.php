@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\Auditable;
 use Database\Factories\CompanyFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -11,10 +12,14 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Company extends Model
 {
+    use Auditable;
+
     /** @use HasFactory<CompanyFactory> */
     use HasFactory;
 
     use SoftDeletes;
+
+    public string $auditModule = 'companies';
 
     protected $fillable = [
         'brand_id',
