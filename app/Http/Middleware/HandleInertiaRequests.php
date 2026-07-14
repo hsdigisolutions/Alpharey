@@ -66,6 +66,17 @@ class HandleInertiaRequests extends Middleware
                 'success' => $request->session()->get('success'),
                 'error' => $request->session()->get('error'),
             ],
+            // Bell: unread count + the latest few (REQUIREMENTS.md §12)
+            'notifications' => $user === null ? null : [
+                'unread' => $user->unreadNotifications()->count(),
+                'items' => $user->notifications()->latest()->limit(8)->get()
+                    ->map(fn ($notification) => [
+                        'id' => $notification->id,
+                        'read' => $notification->read_at !== null,
+                        'created_at' => $notification->created_at?->diffForHumans(),
+                        'data' => $notification->data,
+                    ]),
+            ],
         ]);
     }
 }

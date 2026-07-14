@@ -7,6 +7,7 @@
 import { computed, ref, watch } from 'vue';
 import { Head, useForm } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
+import DocumentsPanel from '@/Components/Documents/DocumentsPanel.vue';
 import FormField from '@/Components/ui/FormField.vue';
 import VAlert from '@/Components/ui/VAlert.vue';
 import VAvatar from '@/Components/ui/VAvatar.vue';
@@ -23,6 +24,7 @@ import VTextarea from '@/Components/ui/VTextarea.vue';
 
 const props = defineProps({
     companies: { type: Array, required: true },
+    companyDocTypes: { type: Object, default: () => ({}) },
 });
 
 const showCreate = ref(false);
@@ -121,6 +123,7 @@ const fieldRows = [
             <template v-if="selected">
                 <VTabs v-model="tab" :tabs="[
                     { key: 'info', labelKey: 'companies.tab_info' },
+                    { key: 'docs', labelKey: 'employees.tab_docs' },
                     { key: 'stats', labelKey: 'companies.tab_stats' },
                 ]" />
 
@@ -160,6 +163,13 @@ const fieldRows = [
                         </VButton>
                     </div>
                 </form>
+
+                <!-- Documentos: the 13 official company document types -->
+                <div v-else-if="tab === 'docs'" class="mt-4">
+                    <DocumentsPanel entity-type="company" :entity-id="selected.id"
+                        :documents="selected.documents ?? []" :sets="companyDocTypes"
+                        :can="{ upload: true, download: true, deleteDocs: true }" />
+                </div>
 
                 <div v-else class="mt-4 grid grid-cols-2 gap-4">
                     <VKpiCard k="welcome.employees" :value="selected.employees_count ?? '—'" icon="employees" />

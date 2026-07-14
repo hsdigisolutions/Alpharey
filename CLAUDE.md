@@ -2,24 +2,27 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Status: Phase 1 complete (2026-07-14)
+## Status: Phase 2 complete (2026-07-14)
 
-Development Phase 1 (identity, companies, access control) is built and verified:
-**115 Pest tests / 429 assertions passing · Pint clean · Larastan level 6 clean ·
-`composer audit` clean · production Vite build working · full login→welcome→matrix
-flow verified in the browser against seeded MySQL.**
+Development Phase 2 (employees & document management) is built and verified:
+**160 Pest tests / 571 assertions passing · Pint clean · Larastan level 6 clean ·
+`composer audit` clean · production Vite build working · employee list/detail +
+encrypted-field round-trip + compliance verified in the browser against seeded MySQL.**
 
-Live screens: **01 Login** (throttled, remember-me 30d, password reset, inactive
-lockout, routing by role) · **02 Welcome/Company Selector** (SA) · **04 Companies**
-(CRUD + typed-name removal with safety checks) · **17 Permission Matrix** (presets,
-copy-from, user management, immediate effect) · **25 Audit Logs** (filters, stats,
-CSV export) · **26 Settings** (General + SMTP with encrypted password + mail test).
-Legacy importers registered: users, settings (validated against an in-memory legacy
-stand-in — the live dump is still pending, DATA_MIGRATION.md §1).
+Live screens: **05 Employees List** (server sort/filter/live-search, column visibility
+per user, bulk activate, 25/50/100 pagination, Excel+PDF export of the filtered view,
+Excel import w/ template) · **06 Employee Detail** (Información, Documentos, Notas,
+Llamadas tabs — Asistencia/Nómina are Phase 4/6 placeholders) · **04 Companies
+Documentos tab** (the 13 official types) · **16 Compliance Center** (traffic-light
+rollup, per-company scores, mark-exempt). Documents engine (polymorphic, versioned,
+private storage, permission-checked downloads, all audited), notification bell wired,
+and `verto:scan-documents` implements the confirmed alert schedules. Legacy employees
+importer registered (validated against an in-memory stand-in — live dump still pending,
+DATA_MIGRATION.md §1).
 
-Design D1–D3 were approved by the client 2026-07-14 (styleguide at `/styleguide`,
-non-production). Next up: **Development Phase 2** (employees & document management) —
-see "Ready for Phase 2" at the bottom.
+Next up: **Development Phase 3** (clients, projects, vendors, proposals) — see "Ready
+for Phase 3" at the bottom. Earlier phases: Phase 0 (foundations), Phase 1 (identity,
+companies, access control), design D1–D3 (approved 2026-07-14).
 
 ## Project skills — read them first
 
@@ -249,25 +252,65 @@ Admin), `empresa1.admin@verto5.local` (Company Admin), `empresa1.user@verto5.loc
 14. General settings keys: `general.app_name`, `general.default_locale`,
     `general.timezone`, `general.session_timeout_minutes`; mail keys under `mail.*`.
 
-## Ready for Phase 2
+## Phase 2 additions (map for future phases)
 
-Phase 2 (screens 05, 06, 16 + documents engine — see DEVELOPMENT_PLAN.md) builds on:
+- **Employees**: `Employee` uses `BelongsToCompany` + `Auditable`; NIF/IBAN/bank/salary
+  are `encrypted` casts + in `$hidden` (never audited/serialized); `nif_hash` blind
+  index (HMAC over APP_KEY) keeps NIF searchable — set in a `saving` hook, searched in
+  the list query. Codes generated `E{companyId}-{seq}` via `Employee::nextCode()`.
+- **EmployeeService**: create/update pipeline — code generation, append-only encrypted
+  `employee_salary_history` on wage-field changes, effective-dated `employee_wage_rates`
+  (consumed by attendance/payroll later).
+- **Wage/bank visibility**: gated server-side by `payroll.view || employees.edit` — the
+  controllers null out wage/bank fields in props for users without it (not UI hiding).
+- **Table framework (server-driven)**: `EmployeeQueryFilter` is shared by the list and
+  the Excel/PDF exports (so "export the filtered view" is literal); column visibility in
+  `user_column_settings` via `PUT /column-settings`; sort whitelist in the controller.
+- **Documents engine**: `DocumentController` handles both employee + company entities;
+  files on the **`local` disk** under `storage/app/private/{type}s/{id}/documents`,
+  randomized names, original kept as metadata; re-upload of a type creates a new
+  **version** (prior row `is_current=false` — note `is_current`/`file_path` are NOT
+  fillable, set them directly); every upload/download/delete audited. `Company` is not
+  tenancy-scoped, so `DocumentController::resolveEntity` guards company docs explicitly.
+- **DocumentStatus service**: the single traffic-light authority (ok/warn/danger/
+  neutral/exempt) + compliance scoring; monthly company types get month-end logic.
+  `App\Support\DocumentTypes` is the registry (13 company types + employee sets);
+  labels in `lang/*/ui.php` under `doc_types.*`.
+- **Notifications**: DB + mail via `DocumentAlertNotification`; bell shares unread count
+  + latest 8 through `HandleInertiaRequests`; `verto:scan-documents` (scheduled daily
+  07:00 Madrid in `routes/console.php`) implements the confirmed schedules — annual
+  90/60/30 + expiry-day to Company Admins; monthly 5/2-days-before + 1st-of-month
+  overdue, with a cross-company summary to Super Admins. **WhereBetween date bounds use
+  `toDateString()`** so same-day rows match under both MySQL and SQLite.
+- **Excel/PDF**: `maatwebsite/excel` + `barryvdh/laravel-dompdf` installed;
+  `EmployeesExport`/`EmployeesImport` (bilingual headers, per-row validation with a
+  failure report), PDF via `resources/views/exports/employees-pdf.blade.php`.
 
-- **Employees table**: use `BelongsToCompany` + `Auditable`; encrypted casts + blind
-  index for NIF/IBAN/salary land here (dev skill Rule 8); `TenancyTest` is the template
-- **Standard table framework**: VTable/VTableToolbar/VPagination/VBulkBar are
-  presentational — Phase 2 adds server-driven sort/filter/live-search/column
-  visibility (`user_column_settings`), bulk actions, Excel/PDF export (install
-  maatwebsite/excel + dompdf here)
-- **Documents engine**: polymorphic `documents` table, private storage +
-  permission-checked downloads (dev skill Rule 10), versioning, expiry traffic lights;
-  `VFileDrop` supports camera capture already
-- **Compliance Center** feeds off document statuses; 13 company doc types seeded
-- **Notifications core**: bell UI placeholder exists in the shell; build storage +
-  email channel + the confirmed alert schedules (DECISIONS.md: monthly 5/2 days before
-  EOM + overdue on the 1st; annual 90/60/30 + expiry-day)
-- **Importers**: register employees/wage/documents importers following the
-  UsersImporter pattern
+## Scaffolding decisions made in Phase 2 (not in DECISIONS.md)
 
-External blocker: legacy DB dump + `storage/app` copy from the live server
-(DATA_MIGRATION.md §1) — needed to validate Phase 2 importers against real data.
+15. Models carry `@property` PHPDoc for enum + date casts so Larastan level 6 resolves
+    `?->value` / `?->toDateString()` on cast attributes.
+16. Employee notes are editable/deletable (per spec); project notes will be immutable
+    (Phase 3) — different rule, don't copy this pattern there.
+17. `documents.warn_days` setting (default `[90,60,30]`) drives both the warn window in
+    `DocumentStatus` and the milestone days in the scan command.
+18. The queue runs on the database driver, processed by the scheduler
+    (`queue:work --stop-when-empty` every minute) — no daemon on cPanel.
+
+## Ready for Phase 3
+
+Phase 3 (screens 07 Clients, 08 Projects, 09 Project Detail, 18 Proposals, 20 Vendors —
+see DEVELOPMENT_PLAN.md) builds on:
+
+- **Shared models**: Clients, Vendors, Proposals do NOT use `BelongsToCompany` (shared
+  across companies by design — dev skill Rule 1); Projects DO belong to one company.
+- **Table framework + documents engine + modals** are all reusable — Projects get a
+  Documentos tab via the same `DocumentsPanel`/`DocumentController` (add a `project`
+  entity type + `DocumentTypes::project()`).
+- **Project notes are immutable once saved** (audit requirement) — unlike employee notes.
+- **Importers**: register clients/vendors/projects/proposals importers next
+  (DATA_MIGRATION.md §3.11) following `EmployeesImporter`.
+
+External blocker (unchanged): legacy DB dump + `storage/app` copy from the live server
+(DATA_MIGRATION.md §1) — needed to validate importers (users/settings/employees and the
+Phase 3 set) against real data. Not blocking Phase 3 UI.

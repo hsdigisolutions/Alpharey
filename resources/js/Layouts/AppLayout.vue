@@ -21,7 +21,7 @@ const page = usePage();
 const primaryNav = [
     { key: 'dashboard', icon: 'dashboard', href: '/dashboard' },
     { key: 'companies', icon: 'companies', href: '/companies', superAdminOnly: true },
-    { key: 'employees', icon: 'employees', href: null },
+    { key: 'employees', icon: 'employees', href: '/employees' },
     { key: 'clients', icon: 'clients', href: null },
     { key: 'projects', icon: 'projects', href: null },
     { key: 'invoices', icon: 'invoices', href: null },
@@ -41,7 +41,7 @@ const secondaryNav = computed(() => [
     { key: 'leave', labelKey: 'nav.leave', href: null },
     { key: 'inventory', labelKey: 'nav.inventory', href: null },
     { key: 'measurements', labelKey: 'nav.measurements', href: null },
-    { key: 'compliance', labelKey: 'nav.compliance', href: null },
+    { key: 'compliance', labelKey: 'nav.compliance', href: '/compliance' },
     { key: 'permissions', labelKey: 'permissions.title', href: isAdmin.value ? '/admin/permissions' : null },
     { key: 'audit_logs', labelKey: 'nav.audit_logs', href: isAdmin.value ? '/admin/audit-logs' : null },
     { key: 'settings', labelKey: 'nav.settings', href: isAdmin.value ? '/admin/settings' : null },
@@ -49,6 +49,17 @@ const secondaryNav = computed(() => [
 
 function logout() {
     router.post('/logout');
+}
+
+const unreadCount = computed(() => page.props.notifications?.unread ?? 0);
+const notificationItems = computed(() => page.props.notifications?.items ?? []);
+
+function markAllRead() {
+    router.post('/notifications/read-all', {}, { preserveScroll: true, preserveState: false });
+}
+
+function markRead(id) {
+    router.post(`/notifications/${id}/read`, {}, { preserveScroll: true, preserveState: false });
 }
 
 const mobileNav = primaryNav.filter((item) =>
@@ -185,10 +196,35 @@ const roleLabels = {
                                 :aria-label="`${page.props.lang.es.common.notifications} / ${page.props.lang.en.common.notifications}`"
                                 @click="toggle">
                                 <AppIcon name="bell" class="h-4.5 w-4.5" />
+                                <span v-if="unreadCount > 0"
+                                    class="tabular-nums absolute -end-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-status-danger px-1 text-[10px] font-semibold text-white">
+                                    {{ unreadCount > 9 ? '9+' : unreadCount }}
+                                </span>
                             </button>
                         </template>
-                        <div class="px-3 py-6 text-center">
-                            <Bilingual k="common.no_notifications" class="items-center text-sm text-muted" />
+                        <div class="flex items-center justify-between border-b border-line px-3 py-2">
+                            <Bilingual k="common.notifications" class="text-sm font-semibold" />
+                            <button v-if="unreadCount > 0" type="button" class="text-xs text-accent-hover hover:underline"
+                                @click="markAllRead">
+                                <Bilingual k="common.mark_all_read" inline class="text-xs" />
+                            </button>
+                        </div>
+                        <div class="max-h-96 overflow-y-auto">
+                            <div v-if="!notificationItems.length" class="px-3 py-6 text-center">
+                                <Bilingual k="common.no_notifications" class="items-center text-sm text-muted" />
+                            </div>
+                            <button v-for="item in notificationItems" :key="item.id" type="button"
+                                class="flex w-full items-start gap-2 border-b border-line px-3 py-2.5 text-start last:border-0 hover:bg-surface-sunken"
+                                :class="{ 'bg-accent-soft/40': !item.read }"
+                                @click="markRead(item.id)">
+                                <span class="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full"
+                                    :class="item.read ? 'bg-transparent' : 'bg-accent'" />
+                                <span class="min-w-0 flex-1">
+                                    <span class="block text-xs font-medium leading-snug">{{ item.data.title_es }}</span>
+                                    <span class="block text-[11px] leading-snug text-muted">{{ item.data.title_en }}</span>
+                                    <span class="mt-0.5 block text-[10px] text-faint">{{ item.created_at }}</span>
+                                </span>
+                            </button>
                         </div>
                     </VDropdown>
 
