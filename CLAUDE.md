@@ -2,27 +2,25 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Status: Phase 2 complete (2026-07-14)
+## Status: Phase 3 complete (2026-07-15)
 
-Development Phase 2 (employees & document management) is built and verified:
-**160 Pest tests / 571 assertions passing · Pint clean · Larastan level 6 clean ·
-`composer audit` clean · production Vite build working · employee list/detail +
-encrypted-field round-trip + compliance verified in the browser against seeded MySQL.**
+Development Phase 3 (clients, projects, vendors, proposals) is built and verified:
+**192 Pest tests / 683 assertions passing · Pint clean · Larastan level 6 clean ·
+`composer audit` clean · production Vite build working · projects table+kanban, project
+detail, proposals, clients, vendors verified in the browser against seeded MySQL.**
 
-Live screens: **05 Employees List** (server sort/filter/live-search, column visibility
-per user, bulk activate, 25/50/100 pagination, Excel+PDF export of the filtered view,
-Excel import w/ template) · **06 Employee Detail** (Información, Documentos, Notas,
-Llamadas tabs — Asistencia/Nómina are Phase 4/6 placeholders) · **04 Companies
-Documentos tab** (the 13 official types) · **16 Compliance Center** (traffic-light
-rollup, per-company scores, mark-exempt). Documents engine (polymorphic, versioned,
-private storage, permission-checked downloads, all audited), notification bell wired,
-and `verto:scan-documents` implements the confirmed alert schedules. Legacy employees
-importer registered (validated against an in-memory stand-in — live dump still pending,
-DATA_MIGRATION.md §1).
+Live screens: **07 Clients** (shared pool, 6 tabs — Info/Contactos/Proyectos/Propuestas/
+Comunicación live, Facturas is Phase 6) · **08 Projects List** (Table + Kanban toggle) ·
+**09 Project Detail** (Resumen/Trabajadores/Documentos/Notas — immutable notes;
+Asistencia/Mediciones/Facturas/Gastos are Phase 4/6 placeholders) · **18 Proposals**
+(optional VAT dropdown, line items, server-computed totals, PDF) · **20 Vendors**
+(4 tabs — Info/Contactos/Condiciones live, Gastos Phase 6). Shared documents engine
+extended with a `project` entity type. Legacy importers registered: clients, vendors,
+projects (client-id remap). Live dump still pending (DATA_MIGRATION.md §1).
 
-Next up: **Development Phase 3** (clients, projects, vendors, proposals) — see "Ready
-for Phase 3" at the bottom. Earlier phases: Phase 0 (foundations), Phase 1 (identity,
-companies, access control), design D1–D3 (approved 2026-07-14).
+Next up: **Development Phase 4** (attendance & measurements). Earlier phases: Phase 0
+(foundations), Phase 1 (identity/access), Phase 2 (employees/documents), design D1–D3
+(approved 2026-07-14). Review findings 1–2 hardened in commit 31ede45.
 
 ## Project skills — read them first
 
@@ -297,20 +295,48 @@ Admin), `empresa1.admin@verto5.local` (Company Admin), `empresa1.user@verto5.loc
 18. The queue runs on the database driver, processed by the scheduler
     (`queue:work --stop-when-empty` every minute) — no daemon on cPanel.
 
-## Ready for Phase 3
+## Phase 3 additions (map for future phases)
 
-Phase 3 (screens 07 Clients, 08 Projects, 09 Project Detail, 18 Proposals, 20 Vendors —
-see DEVELOPMENT_PLAN.md) builds on:
+- **Shared models** (Client, Vendor, Proposal): NO `BelongsToCompany` — every company
+  sees the same rows; still `Auditable` + permission-gated. Clients soft-delete; vendors
+  and proposals do not. `client_communications` and `client_contacts` are editable
+  (CRM data), unlike immutable project notes.
+- **Projects** (company-owned): `BelongsToCompany`; codes `P{companyId}-{seq}` via
+  `Project::nextCode()`. `ProjectController::row()` is the shared list-row shape used by
+  both the paginated table and the kanban grouping. Per-project wage overrides in
+  `project_employee_rates` (encrypted `project_rate`, hidden, wage-gated in props).
+- **Immutable project notes** (`ReportRemark`): blocks update AND delete at the model
+  layer (like `AuditLog`); `const UPDATED_AT = null`. Alerts (`alerts`) are the
+  scheduled project email alerts (sending wired in Phase 8).
+- **Proposals**: totals are computed server-side in `ProposalController::withTotals()`
+  from line items — never trust client-sent totals; `number` is server-generated
+  (`Proposal::nextNumber()`, in `$fillable` but never in the Form Request). Optional VAT
+  via `VatRate`; blank = no VAT line. PDF via `resources/views/exports/proposal-pdf`.
+- **Documents engine** now accepts `entity_type=project` (+ `DocumentTypes::project()`);
+  `DocumentController::resolveEntity` scopes projects via the global scope.
 
-- **Shared models**: Clients, Vendors, Proposals do NOT use `BelongsToCompany` (shared
-  across companies by design — dev skill Rule 1); Projects DO belong to one company.
-- **Table framework + documents engine + modals** are all reusable — Projects get a
-  Documentos tab via the same `DocumentsPanel`/`DocumentController` (add a `project`
-  entity type + `DocumentTypes::project()`).
-- **Project notes are immutable once saved** (audit requirement) — unlike employee notes.
-- **Importers**: register clients/vendors/projects/proposals importers next
-  (DATA_MIGRATION.md §3.11) following `EmployeesImporter`.
+## Scaffolding decisions made in Phase 3 (not in DECISIONS.md)
 
-External blocker (unchanged): legacy DB dump + `storage/app` copy from the live server
-(DATA_MIGRATION.md §1) — needed to validate importers (users/settings/employees and the
-Phase 3 set) against real data. Not blocking Phase 3 UI.
+19. Shared models carry no `company_id`; a `ClientsTest` asserts the column's absence so
+    the "shared pool" contract can't silently regress.
+20. Projects are NOT soft-deleted (not in the REQUIREMENTS soft-delete list — only
+    employees + clients are); a test pins this.
+21. Client communication types: call/meeting/email/note; project note types:
+    internal/client_call/client_email/meeting/message.
+
+## Ready for Phase 4
+
+Phase 4 (screens 11 Attendance, 24 Measurements + project Tab 3/4 — see
+DEVELOPMENT_PLAN.md) builds on:
+
+- **Attendance** is company-owned (`BelongsToCompany`); wage/rate snapshots freeze at
+  entry time (don't recompute from the employee's current rate). Overtime policies table
+  already exists (Phase 2) — wire the Settings section + calculation here.
+- **Measurements** feed project billing; approve/reject workflow. Both surface on the
+  Project detail's Asistencia/Mediciones placeholder tabs and the Employee Asistencia tab.
+- **Deployed employees** show a home-company badge in the attendance grid — but the
+  deployment feature itself is Phase 5, so Phase 4 handles own-company attendance only.
+- **Importers**: register attendance/measurements next (DATA_MIGRATION.md §3, Phase 4 row).
+
+External blocker (unchanged): legacy DB dump + `storage/app` from the live server
+(DATA_MIGRATION.md §1) — needed to validate importers against real data. Not blocking UI.

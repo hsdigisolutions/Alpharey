@@ -1,8 +1,11 @@
 <?php
 
+use App\Services\LegacyImport\Importers\ClientsImporter;
 use App\Services\LegacyImport\Importers\EmployeesImporter;
+use App\Services\LegacyImport\Importers\ProjectsImporter;
 use App\Services\LegacyImport\Importers\SettingsImporter;
 use App\Services\LegacyImport\Importers\UsersImporter;
+use App\Services\LegacyImport\Importers\VendorsImporter;
 
 /**
  * Registry for verto:import-legacy. Importers run in the order listed —
@@ -20,7 +23,10 @@ return [
         // Phase 2: employees (documents/notes/calls follow once the live dump
         // arrives — the schema mapping is in DATA_MIGRATION.md §3.3/§3.6)
         EmployeesImporter::class,
-        // Phase 3: clients, vendors, projects, proposals
+        // Phase 3: clients/vendors before projects (projects remap client ids)
+        ClientsImporter::class,
+        VendorsImporter::class,
+        ProjectsImporter::class,
         // Phase 4: attendance, measurements, production tasks
         // Phase 6: expenses, invoices, payments, payrolls, advances, commissions
         // Phase 7: leaves, vehicles, inventory

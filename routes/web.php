@@ -8,6 +8,8 @@ use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Auth\NewPasswordController;
 use App\Http\Controllers\Auth\PasswordResetLinkController;
+use App\Http\Controllers\ClientContactController;
+use App\Http\Controllers\ClientController;
 use App\Http\Controllers\ColumnSettingsController;
 use App\Http\Controllers\CompanyController;
 use App\Http\Controllers\ComplianceController;
@@ -18,6 +20,10 @@ use App\Http\Controllers\EmployeeImportExportController;
 use App\Http\Controllers\EmployeeNoteController;
 use App\Http\Controllers\LocaleController;
 use App\Http\Controllers\NotificationController;
+use App\Http\Controllers\ProjectController;
+use App\Http\Controllers\ProjectWorkerController;
+use App\Http\Controllers\ProposalController;
+use App\Http\Controllers\VendorController;
 use App\Http\Controllers\WelcomeController;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
@@ -95,6 +101,44 @@ Route::middleware(['auth', 'active'])->group(function (): void {
 
     // Screen 16 — Compliance Center
     Route::get('/compliance', [ComplianceController::class, 'index'])->name('compliance.index');
+
+    // Screen 07 — Clients (shared pool; module-permission gated in controllers)
+    Route::get('/clients', [ClientController::class, 'index'])->name('clients.index');
+    Route::post('/clients', [ClientController::class, 'store'])->name('clients.store');
+    Route::get('/clients/{client}', [ClientController::class, 'show'])->name('clients.show');
+    Route::put('/clients/{client}', [ClientController::class, 'update'])->name('clients.update');
+    Route::delete('/clients/{client}', [ClientController::class, 'destroy'])->name('clients.destroy');
+    Route::post('/clients/{client}/contacts', [ClientContactController::class, 'storeContact'])->name('clients.contacts.store');
+    Route::delete('/clients/{client}/contacts/{contact}', [ClientContactController::class, 'destroyContact'])->name('clients.contacts.destroy');
+    Route::post('/clients/{client}/communications', [ClientContactController::class, 'storeCommunication'])->name('clients.communications.store');
+
+    // Screen 20 — Vendors (shared pool)
+    Route::get('/vendors', [VendorController::class, 'index'])->name('vendors.index');
+    Route::post('/vendors', [VendorController::class, 'store'])->name('vendors.store');
+    Route::get('/vendors/{vendor}', [VendorController::class, 'show'])->name('vendors.show');
+    Route::put('/vendors/{vendor}', [VendorController::class, 'update'])->name('vendors.update');
+    Route::delete('/vendors/{vendor}', [VendorController::class, 'destroy'])->name('vendors.destroy');
+    Route::post('/vendors/{vendor}/contacts', [VendorController::class, 'storeContact'])->name('vendors.contacts.store');
+    Route::post('/vendors/{vendor}/payment-terms', [VendorController::class, 'storePaymentTerm'])->name('vendors.terms.store');
+
+    // Screens 08/09 — Projects (company-owned)
+    Route::get('/projects', [ProjectController::class, 'index'])->name('projects.index');
+    Route::post('/projects', [ProjectController::class, 'store'])->name('projects.store');
+    Route::get('/projects/{project}', [ProjectController::class, 'show'])->name('projects.show');
+    Route::put('/projects/{project}', [ProjectController::class, 'update'])->name('projects.update');
+    Route::put('/projects/{project}/status', [ProjectController::class, 'updateStatus'])->name('projects.status');
+    Route::delete('/projects/{project}', [ProjectController::class, 'destroy'])->name('projects.destroy');
+    Route::post('/projects/{project}/workers', [ProjectWorkerController::class, 'store'])->name('projects.workers.store');
+    Route::delete('/projects/{project}/workers/{rate}', [ProjectWorkerController::class, 'destroy'])->name('projects.workers.destroy');
+    Route::post('/projects/{project}/remarks', [ProjectWorkerController::class, 'storeRemark'])->name('projects.remarks.store');
+    Route::post('/projects/{project}/alerts', [ProjectWorkerController::class, 'storeAlert'])->name('projects.alerts.store');
+
+    // Screen 18 — Proposals (shared pool)
+    Route::get('/proposals', [ProposalController::class, 'index'])->name('proposals.index');
+    Route::post('/proposals', [ProposalController::class, 'store'])->name('proposals.store');
+    Route::put('/proposals/{proposal}', [ProposalController::class, 'update'])->name('proposals.update');
+    Route::delete('/proposals/{proposal}', [ProposalController::class, 'destroy'])->name('proposals.destroy');
+    Route::get('/proposals/{proposal}/pdf', [ProposalController::class, 'pdf'])->name('proposals.pdf');
 
     // Per-user table column visibility (§10)
     Route::put('/column-settings', [ColumnSettingsController::class, 'update'])->name('column-settings.update');

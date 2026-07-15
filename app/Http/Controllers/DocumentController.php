@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Company;
 use App\Models\Document;
 use App\Models\Employee;
+use App\Models\Project;
 use App\Services\Audit\AuditLogger;
 use App\Support\DocumentTypes;
 use Illuminate\Database\Eloquent\Model;
@@ -31,10 +32,10 @@ class DocumentController extends Controller
         Gate::authorize('documents.upload');
 
         $validated = $request->validate([
-            'entity_type' => ['required', 'in:employee,company'],
+            'entity_type' => ['required', 'in:employee,company,project'],
             'entity_id' => ['required', 'integer'],
             'type_key' => ['required', 'string', 'max:60'],
-            'category' => ['required', 'in:personal,employment,training,medical,custom,company'],
+            'category' => ['required', 'in:personal,employment,training,medical,custom,company,project'],
             'name' => ['nullable', 'string', 'max:150'],
             'file' => ['nullable', 'file', 'max:'.self::MAX_KB, 'mimes:pdf,jpg,jpeg,png,webp,doc,docx,xls,xlsx'],
             'has_flag' => ['nullable', 'boolean'],
@@ -152,6 +153,11 @@ class DocumentController extends Controller
             return Company::query()->findOrFail($id);
         }
 
+        if ($type === 'project') {
+            // Project carries the company scope — out-of-company ids 404 here
+            return Project::query()->findOrFail($id);
+        }
+
         // Employee carries the company scope — out-of-company ids 404 here
         return Employee::query()->findOrFail($id);
     }
@@ -162,9 +168,11 @@ class DocumentController extends Controller
             return; // free label slots are allowed by design
         }
 
-        $known = $entityType === 'company'
-            ? DocumentTypes::companyKeys()
-            : DocumentTypes::employeeKeys();
+        $known = match ($entityType) {
+            'company' => DocumentTypes::companyKeys(),
+            'project' => DocumentTypes::projectKeys(),
+            default => DocumentTypes::employeeKeys(),
+        };
 
         abort_unless(in_array($typeKey, $known, true), 422, 'Unknown document type.');
     }

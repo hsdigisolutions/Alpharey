@@ -22,8 +22,8 @@ const primaryNav = [
     { key: 'dashboard', icon: 'dashboard', href: '/dashboard' },
     { key: 'companies', icon: 'companies', href: '/companies', superAdminOnly: true },
     { key: 'employees', icon: 'employees', href: '/employees' },
-    { key: 'clients', icon: 'clients', href: null },
-    { key: 'projects', icon: 'projects', href: null },
+    { key: 'clients', icon: 'clients', href: '/clients' },
+    { key: 'projects', icon: 'projects', href: '/projects' },
     { key: 'invoices', icon: 'invoices', href: null },
     { key: 'attendance', icon: 'attendance', href: null },
     { key: 'payroll', icon: 'payroll', href: null },
@@ -34,9 +34,9 @@ const primaryNav = [
 const isAdmin = computed(() => ['super_admin', 'company_admin'].includes(page.props.auth.user?.role));
 
 const secondaryNav = computed(() => [
-    { key: 'vendors', labelKey: 'nav.vendors', href: null },
+    { key: 'vendors', labelKey: 'nav.vendors', href: '/vendors' },
     { key: 'vehicles', labelKey: 'nav.vehicles', href: null },
-    { key: 'proposals', labelKey: 'nav.proposals', href: null },
+    { key: 'proposals', labelKey: 'nav.proposals', href: '/proposals' },
     { key: 'commissions', labelKey: 'nav.commissions', href: null },
     { key: 'leave', labelKey: 'nav.leave', href: null },
     { key: 'inventory', labelKey: 'nav.inventory', href: null },

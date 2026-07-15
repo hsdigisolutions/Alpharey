@@ -68,6 +68,34 @@ class DocumentTypes
     }
 
     /**
+     * Project document slots (Screen 09 Tab 7). All optional file uploads
+     * with expiry; the free "custom" slot covers anything else. Grouped
+     * under a single "project" category to match the employee-set shape.
+     *
+     * @return array<string, array<string, array{flag: bool, file: bool, expiry: bool}>>
+     */
+    public static function project(): array
+    {
+        return [
+            'project' => [
+                'permit' => ['flag' => false, 'file' => true, 'expiry' => true],
+                'health_safety_plan' => ['flag' => false, 'file' => true, 'expiry' => true],
+                'site_plan' => ['flag' => false, 'file' => true, 'expiry' => false],
+                'contract' => ['flag' => false, 'file' => true, 'expiry' => true],
+                'insurance' => ['flag' => false, 'file' => true, 'expiry' => true],
+            ],
+        ];
+    }
+
+    /**
+     * @return list<string>
+     */
+    public static function projectKeys(): array
+    {
+        return array_keys(self::project()['project']);
+    }
+
+    /**
      * @return list<string>
      */
     public static function companyKeys(): array
