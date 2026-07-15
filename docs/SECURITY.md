@@ -77,10 +77,12 @@ by automated tests for every module that follows — not bolted on at the end.
 - Encrypted Eloquent casts (AES-256 via APP_KEY) for: NIF/DNI/NIE/passport numbers, IBAN,
   bank name, salary/wage fields on the employee record.
 - **Searchable encrypted fields** (e.g. search employees by NIF) get a blind-index column
-  (HMAC hash) — search works without storing plaintext.
+  (HMAC hash keyed on APP_KEY) — search works without storing plaintext.
 - **APP_KEY is a crown jewel**: losing it makes encrypted data unrecoverable. Key is stored
   in `.env` (never in git) and backed up in a separate secure location (password manager).
-  Key rotation procedure documented.
+  Key rotation procedure documented. **Rotating APP_KEY also invalidates every blind index
+  (`employees.nif_hash`): after a rotation, re-derive them by re-saving each employee (or a
+  one-off `Employee::hashNif()` backfill) or NIF search silently returns no matches.**
 - Employees and clients soft-delete only — never hard-deleted.
 - HTTPS enforced: AutoSSL certificate, `Strict-Transport-Security` header, all HTTP → HTTPS.
 - Security headers middleware: CSP (no inline/CDN scripts — everything bundled),

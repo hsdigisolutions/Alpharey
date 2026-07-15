@@ -131,12 +131,21 @@ class DocumentController extends Controller
     private function resolveEntity(string $type, int $id): Model
     {
         if ($type === 'company') {
-            // Company has no tenancy scope (it IS the tenant) — guard
-            // explicitly: Super Admin anywhere, admins their own company only.
+            // Company has no tenancy scope (it IS the tenant). Company
+            // documents are the official records surfaced only on the
+            // Super-Admin-only Companies screen, so operating on them
+            // requires an admin role (not just the documents.* module
+            // permission a Company Admin might grant a custom user), and
+            // Company Admins are confined to their own company.
             $user = request()->user();
 
             abort_if(
-                $user !== null && ! $user->isSuperAdmin() && $user->company_id !== $id,
+                $user === null || (! $user->isSuperAdmin() && ! $user->isCompanyAdmin()),
+                403,
+            );
+
+            abort_if(
+                ! $user->isSuperAdmin() && $user->company_id !== $id,
                 404,
             );
 

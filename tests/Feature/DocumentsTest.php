@@ -138,6 +138,45 @@ it('soft deletes a document, preserving metadata', function (): void {
         ->and(Document::withTrashed()->find($document->id))->not->toBeNull();
 });
 
+it('lets a company admin upload their own company document', function (): void {
+    $this->actingAs($this->admin)->post('/documents', [
+        'entity_type' => 'company',
+        'entity_id' => $this->company->id,
+        'type_key' => 'certificado_digital',
+        'category' => 'company',
+        'has_flag' => true,
+        'expiry_date' => now()->addYear()->toDateString(),
+    ])->assertRedirect();
+
+    expect(Document::query()->where('type_key', 'certificado_digital')->exists())->toBeTrue();
+});
+
+it('forbids a custom user with documents.upload from touching company documents', function (): void {
+    // Even with the module permission, company documents require an admin role
+    $user = User::factory()->forCompany($this->company)->create();
+    grantDocs($user, $this->company, ['can_view' => true, 'can_upload' => true]);
+
+    $this->actingAs($user)->post('/documents', [
+        'entity_type' => 'company',
+        'entity_id' => $this->company->id,
+        'type_key' => 'certificado_digital',
+        'category' => 'company',
+        'has_flag' => true,
+    ])->assertForbidden();
+});
+
+it('forbids a company admin from touching another company document', function (): void {
+    $otherCompany = Company::factory()->create();
+
+    $this->actingAs($this->admin)->post('/documents', [
+        'entity_type' => 'company',
+        'entity_id' => $otherCompany->id,
+        'type_key' => 'certificado_digital',
+        'category' => 'company',
+        'has_flag' => true,
+    ])->assertNotFound();
+});
+
 it('cannot upload a document to another company employee', function (): void {
     $otherCompany = Company::factory()->create();
     $foreign = Employee::factory()->forCompany($otherCompany)->create();
