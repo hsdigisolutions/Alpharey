@@ -2,25 +2,25 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Status: Phase 3 complete (2026-07-15)
+## Status: Phase 4 complete (2026-07-15)
 
-Development Phase 3 (clients, projects, vendors, proposals) is built and verified:
-**192 Pest tests / 683 assertions passing · Pint clean · Larastan level 6 clean ·
-`composer audit` clean · production Vite build working · projects table+kanban, project
-detail, proposals, clients, vendors verified in the browser against seeded MySQL.**
+Development Phase 4 (attendance & measurements) is built and verified:
+**212 Pest tests / 755 assertions passing (1 skipped) · Pint clean · Larastan level 6
+clean · `composer audit` clean · production Vite build working · attendance calendar
+grid + monthly summary + measurements + overtime settings verified in the browser
+against seeded MySQL.**
 
-Live screens: **07 Clients** (shared pool, 6 tabs — Info/Contactos/Proyectos/Propuestas/
-Comunicación live, Facturas is Phase 6) · **08 Projects List** (Table + Kanban toggle) ·
-**09 Project Detail** (Resumen/Trabajadores/Documentos/Notas — immutable notes;
-Asistencia/Mediciones/Facturas/Gastos are Phase 4/6 placeholders) · **18 Proposals**
-(optional VAT dropdown, line items, server-computed totals, PDF) · **20 Vendors**
-(4 tabs — Info/Contactos/Condiciones live, Gastos Phase 6). Shared documents engine
-extended with a `project` entity type. Legacy importers registered: clients, vendors,
-projects (client-id remap). Live dump still pending (DATA_MIGRATION.md §1).
+Live screens: **11 Attendance** (calendar grid employees×days, click-to-edit modal with
+hourly/project-based modes, monthly summary, Excel export) · **24 Measurements**
+(approve/reject workflow feeding project billing) · **26 Settings → Overtime policies**
+(percentage/fixed_hourly/accumulate_days/none). Wage/rate SNAPSHOTS freeze at entry time
+(`AttendanceService`) so payroll reads the day's historical rate; overtime pay computed
+from the employee's policy. Legacy attendance importer registered (snapshots carried
+over verbatim, employee/project id remap). Live dump still pending (DATA_MIGRATION.md §1).
 
-Next up: **Development Phase 4** (attendance & measurements). Earlier phases: Phase 0
-(foundations), Phase 1 (identity/access), Phase 2 (employees/documents), design D1–D3
-(approved 2026-07-14). Review findings 1–2 hardened in commit 31ede45.
+Next up: **Development Phase 5** (cross-company employee deployments — the signature
+feature). Earlier phases: Phase 0–3, design D1–D3 (approved 2026-07-14). Review
+findings 1–2 hardened in commit 31ede45.
 
 ## Project skills — read them first
 
@@ -324,19 +324,55 @@ Admin), `empresa1.admin@verto5.local` (Company Admin), `empresa1.user@verto5.loc
 21. Client communication types: call/meeting/email/note; project note types:
     internal/client_call/client_email/meeting/message.
 
-## Ready for Phase 4
+## Phase 4 additions (map for future phases)
 
-Phase 4 (screens 11 Attendance, 24 Measurements + project Tab 3/4 — see
-DEVELOPMENT_PLAN.md) builds on:
+- **Attendance** (`attendance`, singular table; company-owned): `AttendanceService` is
+  the create/update pipeline. It FREEZES `wage_type_snapshot`/`wage_rate_snapshot`/
+  `hourly_rate_snapshot` at entry (a later raise never rewrites history — tested), and
+  computes the day total from the snapshot + the employee's overtime policy, unless
+  `manual_wage_override`. Hourly mode derives hours from check-in/out − break;
+  project-based takes manual hours. Decimal columns are assigned as strings (matches the
+  `numeric-string` @property so Larastan is happy). `attendance_logs` records edits.
+- **Calendar grid**: `AttendanceController::index` builds `grid[employee][day]` + a
+  monthly `summary`. **The summary counts status via `$r->status->value`** — `status` is
+  an AttendanceStatus enum cast, so `whereIn('status', ['present'])` on the collection
+  silently matches nothing (bug found + fixed + pinned by a test in Phase 4). Cell edit
+  loads via a partial reload (`?edit=ID`, Inertia `only: ['editing']`).
+- **Measurements** (company-owned): approve/reject sets `approved`/`approved_by`/
+  `approved_at` DIRECTLY (not mass-assignable — like `Document::is_current`); approved
+  rows feed project billing in Phase 6. `measurements.approve` gates the action.
+- **Overtime policies**: `OvertimePolicy` gets an `OvertimePolicyType` cast; managed in
+  Settings (Admin only). Percentage → OT × (1+rate/100); fixed_hourly → fixed rate;
+  accumulate/none → OT not paid as cash.
+- **Importer**: `AttendanceImporter` remaps employee + project ids and carries wage
+  snapshots + totals over VERBATIM (historical facts, never recomputed).
 
-- **Attendance** is company-owned (`BelongsToCompany`); wage/rate snapshots freeze at
-  entry time (don't recompute from the employee's current rate). Overtime policies table
-  already exists (Phase 2) — wire the Settings section + calculation here.
-- **Measurements** feed project billing; approve/reject workflow. Both surface on the
-  Project detail's Asistencia/Mediciones placeholder tabs and the Employee Asistencia tab.
-- **Deployed employees** show a home-company badge in the attendance grid — but the
-  deployment feature itself is Phase 5, so Phase 4 handles own-company attendance only.
-- **Importers**: register attendance/measurements next (DATA_MIGRATION.md §3, Phase 4 row).
+## Scaffolding decisions made in Phase 4 (not in DECISIONS.md)
+
+22. Attendance is one row per employee per day (unique index). The UI prevents duplicate
+    cells; a raw duplicate POST surfaces as a 500 (acceptable — a friendly guard can be
+    added if the import path ever needs it).
+23. Employee Asistencia/Nómina and Project Asistencia/Mediciones/Facturas/Gastos detail
+    tabs remain "coming soon" placeholders — the standalone Screens 11/24 are the
+    canonical surfaces; wiring the tabs to the same data is a cheap later pass.
+
+## Ready for Phase 5
+
+Phase 5 (cross-company employee deployments — the signature feature; see
+DEVELOPMENT_PLAN.md + `docs/PAYROLL_DEPLOYMENTS.md`) builds on:
+
+- **`employee_deployments`** table + model: employee, home/host company, project, dates,
+  rate + rate type, `billing_method` (Option A only is automated — home company pays),
+  split %, approver. Overlap guards (no double-deployment for the same dates).
+- **Cross-charge engine (Option A)**: auto-generate an internal expense on the host
+  company + a receivable line for the home company; payroll note lines prepared for
+  Phase 6. NEVER implement Option B (cesión ilegal — dev skill Rule 13).
+- **Attendance integration**: a deployed employee appears in the HOST project's grid with
+  a home-company badge + "Desplegado" indicator; hours log against the host project. The
+  `Attendance` model + grid already exist — add the deployment badge + home-company
+  column.
+- **Reports**: deployment history, cross-company cost summary, active deployments
+  (surfaced fully in Phase 8; the data model lands in Phase 5).
 
 External blocker (unchanged): legacy DB dump + `storage/app` from the live server
 (DATA_MIGRATION.md §1) — needed to validate importers against real data. Not blocking UI.

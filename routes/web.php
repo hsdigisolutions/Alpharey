@@ -2,9 +2,12 @@
 
 use App\Enums\VatRate;
 use App\Http\Controllers\Admin\AuditLogController;
+use App\Http\Controllers\Admin\OvertimePolicyController;
 use App\Http\Controllers\Admin\PermissionMatrixController;
 use App\Http\Controllers\Admin\SettingsController;
 use App\Http\Controllers\Admin\UserController;
+use App\Http\Controllers\AttendanceController;
+use App\Http\Controllers\AttendanceImportExportController;
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Auth\NewPasswordController;
 use App\Http\Controllers\Auth\PasswordResetLinkController;
@@ -19,6 +22,7 @@ use App\Http\Controllers\EmployeeController;
 use App\Http\Controllers\EmployeeImportExportController;
 use App\Http\Controllers\EmployeeNoteController;
 use App\Http\Controllers\LocaleController;
+use App\Http\Controllers\MeasurementController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\ProjectController;
 use App\Http\Controllers\ProjectWorkerController;
@@ -133,6 +137,21 @@ Route::middleware(['auth', 'active'])->group(function (): void {
     Route::post('/projects/{project}/remarks', [ProjectWorkerController::class, 'storeRemark'])->name('projects.remarks.store');
     Route::post('/projects/{project}/alerts', [ProjectWorkerController::class, 'storeAlert'])->name('projects.alerts.store');
 
+    // Screen 11 — Attendance (company-owned)
+    Route::get('/attendance/export', [AttendanceImportExportController::class, 'export'])->name('attendance.export');
+    Route::get('/attendance/template', [AttendanceImportExportController::class, 'template'])->name('attendance.template');
+    Route::get('/attendance', [AttendanceController::class, 'index'])->name('attendance.index');
+    Route::post('/attendance', [AttendanceController::class, 'store'])->name('attendance.store');
+    Route::put('/attendance/{attendance}', [AttendanceController::class, 'update'])->name('attendance.update');
+    Route::delete('/attendance/{attendance}', [AttendanceController::class, 'destroy'])->name('attendance.destroy');
+
+    // Screen 24 — Measurements (company-owned)
+    Route::get('/measurements', [MeasurementController::class, 'index'])->name('measurements.index');
+    Route::post('/measurements', [MeasurementController::class, 'store'])->name('measurements.store');
+    Route::put('/measurements/{measurement}', [MeasurementController::class, 'update'])->name('measurements.update');
+    Route::delete('/measurements/{measurement}', [MeasurementController::class, 'destroy'])->name('measurements.destroy');
+    Route::post('/measurements/{measurement}/approve', [MeasurementController::class, 'approve'])->name('measurements.approve');
+
     // Screen 18 — Proposals (shared pool)
     Route::get('/proposals', [ProposalController::class, 'index'])->name('proposals.index');
     Route::post('/proposals', [ProposalController::class, 'store'])->name('proposals.store');
@@ -174,5 +193,10 @@ Route::middleware(['auth', 'active'])->group(function (): void {
         Route::put('/settings/general', [SettingsController::class, 'updateGeneral'])->name('settings.general');
         Route::put('/settings/mail', [SettingsController::class, 'updateMail'])->name('settings.mail');
         Route::post('/settings/mail/test', [SettingsController::class, 'testMail'])->name('settings.mail.test');
+
+        // Settings → Overtime policies (Phase 4)
+        Route::post('/overtime-policies', [OvertimePolicyController::class, 'store'])->name('overtime-policies.store');
+        Route::put('/overtime-policies/{overtime_policy}', [OvertimePolicyController::class, 'update'])->name('overtime-policies.update');
+        Route::delete('/overtime-policies/{overtime_policy}', [OvertimePolicyController::class, 'destroy'])->name('overtime-policies.destroy');
     });
 });

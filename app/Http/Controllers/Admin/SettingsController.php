@@ -2,10 +2,12 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Enums\OvertimePolicyType;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\TestMailRequest;
 use App\Http\Requests\Admin\UpdateGeneralSettingsRequest;
 use App\Http\Requests\Admin\UpdateMailSettingsRequest;
+use App\Models\OvertimePolicy;
 use App\Services\Settings\MailSettings;
 use App\Services\Settings\SettingsService;
 use Illuminate\Http\RedirectResponse;
@@ -36,6 +38,11 @@ class SettingsController extends Controller
             // SMTP configuration is Super Admin-only — never shipped to others
             'mail' => $isSuperAdmin ? $mail->current() : null,
             'canManageMail' => $isSuperAdmin,
+            // Overtime policies (Phase 4) — company-scoped via the global scope
+            'overtimePolicies' => OvertimePolicy::query()->orderBy('name')->get([
+                'id', 'name', 'type', 'rate', 'daily_threshold_hours', 'accumulate_hours_per_day', 'notes',
+            ]),
+            'overtimeTypes' => array_map(fn (OvertimePolicyType $t) => $t->value, OvertimePolicyType::cases()),
         ]);
     }
 

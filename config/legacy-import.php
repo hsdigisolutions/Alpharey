@@ -1,5 +1,6 @@
 <?php
 
+use App\Services\LegacyImport\Importers\AttendanceImporter;
 use App\Services\LegacyImport\Importers\ClientsImporter;
 use App\Services\LegacyImport\Importers\EmployeesImporter;
 use App\Services\LegacyImport\Importers\ProjectsImporter;
@@ -27,7 +28,8 @@ return [
         ClientsImporter::class,
         VendorsImporter::class,
         ProjectsImporter::class,
-        // Phase 4: attendance, measurements, production tasks
+        // Phase 4: attendance (remaps employee + project ids; run after them)
+        AttendanceImporter::class,
         // Phase 6: expenses, invoices, payments, payrolls, advances, commissions
         // Phase 7: leaves, vehicles, inventory
         // Phase 8: audit archive, notifications
