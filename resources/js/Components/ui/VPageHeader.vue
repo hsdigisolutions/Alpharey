@@ -9,11 +9,11 @@ defineProps({
 </script>
 
 <template>
-    <div class="mb-5 flex flex-wrap items-center justify-between gap-3">
-        <h1 class="text-2xl font-semibold tracking-tight">
+    <div class="mb-5 flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+        <h1 class="min-w-0 text-2xl font-semibold tracking-tight">
             <Bilingual :k="k" />
         </h1>
-        <div v-if="$slots.default" class="flex items-center gap-2">
+        <div v-if="$slots.default" class="flex flex-wrap items-center justify-end gap-2">
             <slot />
         </div>
     </div>

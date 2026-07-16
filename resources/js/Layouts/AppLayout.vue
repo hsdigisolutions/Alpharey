@@ -281,11 +281,11 @@ const roleLabels = {
                 <component
                     :is="item.href ? 'a' : 'div'"
                     :href="item.href ?? undefined"
-                    class="flex min-h-11 flex-1 flex-col items-center gap-0.5 py-2"
+                    class="flex min-h-11 min-w-0 flex-1 flex-col items-center gap-0.5 py-2"
                     :class="item.href ? 'text-accent-hover' : 'text-muted opacity-70'"
                 >
-                    <AppIcon :name="item.icon" class="h-5 w-5" />
-                    <Bilingual :k="`nav.${item.key}`" class="items-center text-center text-[0.6rem]" />
+                    <AppIcon :name="item.icon" class="h-5 w-5 shrink-0" />
+                    <Bilingual :k="`nav.${item.key}`" class="w-full items-center px-0.5 text-center text-[0.6rem] leading-tight [&>span]:block [&>span]:truncate" />
                 </component>
             </template>
         </nav>

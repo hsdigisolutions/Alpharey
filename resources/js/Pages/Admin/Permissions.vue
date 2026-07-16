@@ -161,7 +161,7 @@ function submitUser() {
 
         <div class="grid gap-5 lg:grid-cols-[280px_1fr]">
             <!-- User list -->
-            <div class="rounded-lg border border-line bg-surface-raised p-3 shadow-card lg:self-start">
+            <div class="min-w-0 rounded-lg border border-line bg-surface-raised p-3 shadow-card lg:self-start">
                 <VSearchInput v-model="search" />
                 <ul class="mt-2 space-y-0.5">
                     <li v-for="user in filteredUsers" :key="user.id">
@@ -189,7 +189,7 @@ function submitUser() {
             </div>
 
             <!-- Matrix -->
-            <div class="rounded-lg border border-line bg-surface-raised shadow-card">
+            <div class="min-w-0 rounded-lg border border-line bg-surface-raised shadow-card">
                 <template v-if="selected === null">
                     <p class="px-6 py-16 text-center text-sm text-muted">
                         <Bilingual k="permissions.select_user_hint" class="items-center" />

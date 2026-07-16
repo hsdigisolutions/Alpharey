@@ -58,12 +58,12 @@ function switchLocale() {
                         :invalid="Boolean(form.errors.password)" />
                 </FormField>
 
-                <div class="flex items-center justify-between gap-2">
+                <div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
                     <VCheckbox v-model="form.remember">
                         <Bilingual k="auth.remember_me" inline class="text-sm" />
                     </VCheckbox>
-                    <a href="/forgot-password" class="text-sm text-accent-hover hover:underline">
-                        <Bilingual k="auth.forgot_password" inline class="text-[13px]" />
+                    <a href="/forgot-password" class="text-accent-hover hover:underline">
+                        <Bilingual k="auth.forgot_password" class="items-end text-end text-[13px] leading-tight" />
                     </a>
                 </div>
 
