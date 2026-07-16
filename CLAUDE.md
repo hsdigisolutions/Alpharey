@@ -279,8 +279,11 @@ Admin), `empresa1.admin@verto5.local` (Company Admin), `empresa1.user@verto5.loc
   `App\Support\DocumentTypes` is the registry; labels in `lang/*/ui.php` under
   `doc_types.*`. **The registry mirrors the client's own workbook `DATOS OBLIGATORIOS
   EMPRESA.xlsx` (16 company docs + the worker/prevención set) — corrected 2026-07-16,
-  replacing the earlier spec-inferred list. Do not "tidy" these keys; see DECISIONS.md
-  → "Document types". Renewal frequencies are still an OPEN assumption there.**
+  replacing the earlier spec-inferred list; frequencies client-confirmed the same day.
+  Do not "tidy" these keys; see DECISIONS.md → "Document types". Certificado SS +
+  Hacienda are MONTHLY (not expiry-driven); REA is a 3-year periodic renewal; DNI and
+  NIE are separate slots; the contract is an uploaded file. Pinned by
+  `tests/Unit/DocumentTypesTest.php`.**
 - **Notifications**: DB + mail via `DocumentAlertNotification`; bell shares unread count
   + latest 8 through `HandleInertiaRequests`; `verto:scan-documents` (scheduled daily
   07:00 Madrid in `routes/console.php`) implements the confirmed schedules — annual

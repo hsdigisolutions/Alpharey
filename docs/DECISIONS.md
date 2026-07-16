@@ -137,21 +137,30 @@ are Employee fields. `REGISTRO HORARIO` is produced by the attendance module (Sc
 **Sheet OBRAS** confirms projects are keyed by `CODIGO OBRA` + `NOMBRE` + `DIRECCION` —
 already modelled on the Project model.
 
-### ⚠ OPEN — frequencies are our assumption, not the client's
+### Frequencies — CONFIRMED by client 2026-07-16
 
-The workbook lists one `FECHA` per document but no renewal frequency. Frequency drives
-the alert schedule (monthly → 5/2-days-before + 1st-of-month overdue; anything with an
-expiry → 90/60/30 + expiry day), so these need client confirmation:
+The workbook lists one `FECHA` per document but no renewal cycle. Frequency decides which
+alert schedule fires, so it was put to the client. Their answers:
 
-| Assumed | Documents |
-|---|---|
-| **Monthly** | ITA, RNT, RLC, Recibo de pago RLC, Justificante de pago salarios |
-| **Annual (expiry)** | Póliza RC + recibo, Póliza accidentes + recibo, Certificado SPA + recibo |
-| **Periodic (expiry, period TBC)** | Certificado SS, Certificado Hacienda (validity window?), REA (3 years?), Evaluación |
-| **On change** | Documento Mutua |
+| Frequency | Documents | Alert schedule |
+|---|---|---|
+| **Monthly** | ITA, RNT, RLC, Recibo de pago RLC, Justificante de pago salarios, **Certificado SS**, **Certificado Hacienda** | 5 + 2 days before, then 1st-of-month overdue |
+| **Annual (expiry)** | Póliza RC + recibo, Póliza accidentes + recibo, Certificado SPA + recibo | 90/60/30 + expiry day |
+| **Periodic (expiry)** | **REA (3-year renewal)**, Evaluación | 90/60/30 + expiry day |
+| **On change** | Documento Mutua | none |
 
-Also unconfirmed: the client's list has **no DNI/passport** slot (only NIE) and no work-
-contract *file* slot — - correct for their workforce, or an omission?
+Certificado SS and Certificado Hacienda are **monthly**, not expiry-driven — this was our
+one wrong assumption. They therefore track **no expiry date**: `DocumentStatus` resolves
+the monthly rule first, so an expiry on these would be collected and then ignored.
+
+Worker slots the client added on top of the workbook:
+
+- **DNI *and* NIE are separate slots** — part of the workforce is Spanish (DNI), part
+  foreign residents (NIE). Each worker fills whichever applies; both carry a caducidad.
+- **Contrato de trabajo is an uploaded file**, not just the `FECHA CONTRATO` field —
+  the client wants the signed PDF. Its expiry carries a temporary contract's end date.
+
+These rules are pinned by `tests/Unit/DocumentTypesTest.php` rather than left to prose.
 
 ### Real company name spotted
 

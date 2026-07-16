@@ -40,15 +40,21 @@ class DocumentTypes
             'recibo_accidentes' => ['frequency' => 'annual', 'expiry' => true],
             'certificado_spa' => ['frequency' => 'annual', 'expiry' => true],
             'recibo_spa' => ['frequency' => 'annual', 'expiry' => true],
-            'evaluacion_riesgos' => ['frequency' => 'varies', 'expiry' => true],
+
+            // Periódicos — renewal cycle other than yearly; the expiry date
+            // drives the 90/60/30 + expiry-day run. REA renews every 3 years
+            // (client-confirmed 2026-07-16).
+            'evaluacion_riesgos' => ['frequency' => 'periodic', 'expiry' => true],
+            'rea' => ['frequency' => 'periodic', 'expiry' => true],
+
             'documento_mutua' => ['frequency' => 'on_change', 'expiry' => false],
-            'rea' => ['frequency' => 'varies', 'expiry' => true],
 
-            // Certificados de estar al corriente — periodic validity window
-            'certificado_ss' => ['frequency' => 'varies', 'expiry' => true],
-            'certificado_hacienda' => ['frequency' => 'varies', 'expiry' => true],
-
-            // Ciclo mensual de nómina / Seguridad Social
+            // Ciclo mensual — a fresh copy is expected every month, so the
+            // month-end rule governs and no expiry date is tracked (the monthly
+            // branch of DocumentStatus short-circuits expiry anyway).
+            // Certificado SS + Hacienda are monthly per client, 2026-07-16.
+            'certificado_ss' => ['frequency' => 'monthly', 'expiry' => false],
+            'certificado_hacienda' => ['frequency' => 'monthly', 'expiry' => false],
             'ita' => ['frequency' => 'monthly', 'expiry' => false],
             'rnt' => ['frequency' => 'monthly', 'expiry' => false],
             'rlc' => ['frequency' => 'monthly', 'expiry' => false],
@@ -66,6 +72,10 @@ class DocumentTypes
      * ENLACE CARPETA TRABAJADOR was the legacy shared-drive link that this
      * documents engine replaces — neither is modelled as an upload slot.
      *
+     * Two slots go beyond the workbook, both client-confirmed 2026-07-16:
+     * `dni` (the sheet only had NIE, but part of the workforce is Spanish) and
+     * `contrato_trabajo` (the sheet only had the contract *date*).
+     *
      * flag = the Yes/No confirmation field; file = upload slot; expiry = date.
      *
      * @return array<string, array<string, array{flag: bool, file: bool, expiry: bool}>>
@@ -74,10 +84,18 @@ class DocumentTypes
     {
         return [
             'personal' => [
+                // Spanish nationals carry a DNI, foreign residents an NIE — both
+                // slots exist and each worker fills the one that applies
+                // (client-confirmed 2026-07-16). Both carry a caducidad.
+                'dni' => ['flag' => false, 'file' => true, 'expiry' => true],
                 'nie_fotocopia' => ['flag' => false, 'file' => true, 'expiry' => true],
                 'foto' => ['flag' => false, 'file' => true, 'expiry' => false],
             ],
             'employment' => [
+                // The signed contract PDF itself — the workbook only tracked
+                // FECHA CONTRATO (an Employee field); the client wants the file
+                // too. Expiry carries the end date of a temporary contract.
+                'contrato_trabajo' => ['flag' => false, 'file' => true, 'expiry' => true],
                 'documento_alta_ss' => ['flag' => false, 'file' => true, 'expiry' => false],
                 'documento_idc' => ['flag' => false, 'file' => true, 'expiry' => false],
             ],
