@@ -35,7 +35,7 @@ class DocumentController extends Controller
             'entity_type' => ['required', 'in:employee,company,project'],
             'entity_id' => ['required', 'integer'],
             'type_key' => ['required', 'string', 'max:60'],
-            'category' => ['required', 'in:personal,employment,training,medical,custom,company,project'],
+            'category' => ['required', 'in:personal,employment,prevencion,custom,company,project'],
             'name' => ['nullable', 'string', 'max:150'],
             'file' => ['nullable', 'file', 'max:'.self::MAX_KB, 'mimes:pdf,jpg,jpeg,png,webp,doc,docx,xls,xlsx'],
             'has_flag' => ['nullable', 'boolean'],

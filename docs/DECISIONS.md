@@ -110,3 +110,51 @@ data is the seed dataset for the new system — no manual re-entry.
 |---|---|
 | Mobile | All 26 screens work on phones/tablets; one-tap check-in and camera document upload required. (As already planned.) |
 | Prototype gate | **The Figma clickable prototype (D9) must be reviewed and approved by the client before development Phase 6 (Payroll & Finance) begins.** |
+
+## Document types — CORRECTED 2026-07-16 (client workbook is now the source of truth)
+
+Client supplied **`DATOS OBLIGATORIOS EMPRESA.xlsx`** — their real compliance checklist.
+It **supersedes** the document list previously inferred from REQUIREMENTS.md, which was
+wrong in material ways: it carried the pre-2015 **TC1/TC2** pair (Spain replaced these
+with **RLC/RNT** under Sistema RED), and it omitted **REA**, **SPA**, **ITA**, the
+**Mutua** document and every **payment receipt** — all of which a CAE audit checks.
+Several types it did contain (escritura de constitución, certificado digital, licencia de
+actividad, modelo 303, contratos vigentes) are **not** on the client's mandatory list.
+
+Registry: `App\Support\DocumentTypes`. Labels: `lang/{es,en}/ui.php` → `doc_types.*`.
+The Spanish names are the client's own wording and are authoritative; English is a gloss.
+
+**Sheet EMPRESA → 16 company documents.** `NOMBRE EMPRESA` and `CIF` on that sheet are
+company *data* fields (they live on the Company model / Settings), not documents.
+
+**Sheet TRABAJADORES → worker documents**, split `personal` (NIE fotocopia + caducidad,
+foto), `employment` (documento alta SS, documento IDC) and `prevencion` (aptitud +
+caducidad, art. 19 + caducidad, art. 18, EPIs, autorización uso maquinaria). The plain
+identity/contact columns (nombre, apellidos, NIE, teléfono, mail, nº SS, fecha contrato)
+are Employee fields. `REGISTRO HORARIO` is produced by the attendance module (Screen 11);
+`ENLACE CARPETA TRABAJADOR` was the legacy shared-drive link this engine replaces.
+
+**Sheet OBRAS** confirms projects are keyed by `CODIGO OBRA` + `NOMBRE` + `DIRECCION` —
+already modelled on the Project model.
+
+### ⚠ OPEN — frequencies are our assumption, not the client's
+
+The workbook lists one `FECHA` per document but no renewal frequency. Frequency drives
+the alert schedule (monthly → 5/2-days-before + 1st-of-month overdue; anything with an
+expiry → 90/60/30 + expiry day), so these need client confirmation:
+
+| Assumed | Documents |
+|---|---|
+| **Monthly** | ITA, RNT, RLC, Recibo de pago RLC, Justificante de pago salarios |
+| **Annual (expiry)** | Póliza RC + recibo, Póliza accidentes + recibo, Certificado SPA + recibo |
+| **Periodic (expiry, period TBC)** | Certificado SS, Certificado Hacienda (validity window?), REA (3 years?), Evaluación |
+| **On change** | Documento Mutua |
+
+Also unconfirmed: the client's list has **no DNI/passport** slot (only NIE) and no work-
+contract *file* slot — - correct for their workforce, or an omission?
+
+### Real company name spotted
+
+The workbook's EMPRESA sheet is filled in for **"PINTURAS SHIZUKANI, S.L."** — one of the
+five real companies. Local seed data still uses the dummy "Empresa Uno…Cinco"; company
+names are editable data (Settings), so no code change is implied.

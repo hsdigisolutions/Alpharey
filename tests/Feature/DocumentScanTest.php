@@ -18,7 +18,7 @@ function scanDoc(Employee $employee, array $attrs): Document
 {
     $document = new Document(array_merge([
         'category' => 'personal',
-        'type_key' => 'dni',
+        'type_key' => 'nie_fotocopia',
     ], $attrs));
     $document->documentable()->associate($employee);
     $document->company_id = $employee->company_id;

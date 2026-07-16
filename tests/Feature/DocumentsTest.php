@@ -29,13 +29,13 @@ it('uploads an employee document to private storage and audits it', function ():
     $this->actingAs($this->admin)->post('/documents', [
         'entity_type' => 'employee',
         'entity_id' => $this->employee->id,
-        'type_key' => 'dni',
+        'type_key' => 'nie_fotocopia',
         'category' => 'personal',
         'file' => UploadedFile::fake()->create('dni.pdf', 200, 'application/pdf'),
         'expiry_date' => now()->addYear()->toDateString(),
     ])->assertRedirect();
 
-    $document = Document::query()->where('type_key', 'dni')->firstOrFail();
+    $document = Document::query()->where('type_key', 'nie_fotocopia')->firstOrFail();
 
     expect($document->getAttribute('file_path'))->toStartWith('employees/'.$this->employee->id.'/documents/')
         ->and(Storage::disk('local')->exists($document->getAttribute('file_path')))->toBeTrue()
@@ -47,7 +47,7 @@ it('never stores uploads in a public location', function (): void {
     $this->actingAs($this->admin)->post('/documents', [
         'entity_type' => 'employee',
         'entity_id' => $this->employee->id,
-        'type_key' => 'dni',
+        'type_key' => 'nie_fotocopia',
         'category' => 'personal',
         'file' => UploadedFile::fake()->create('dni.pdf', 100),
     ]);
@@ -61,25 +61,25 @@ it('creates a new version when re-uploading the same type', function (): void {
     $payload = [
         'entity_type' => 'employee',
         'entity_id' => $this->employee->id,
-        'type_key' => 'contract',
+        'type_key' => 'documento_alta_ss',
         'category' => 'employment',
     ];
 
     $this->actingAs($this->admin)->post('/documents', $payload + ['file' => UploadedFile::fake()->create('c1.pdf', 50)]);
     $this->post('/documents', $payload + ['file' => UploadedFile::fake()->create('c2.pdf', 50)]);
 
-    $current = Document::query()->where('type_key', 'contract')->where('is_current', true)->firstOrFail();
+    $current = Document::query()->where('type_key', 'documento_alta_ss')->where('is_current', true)->firstOrFail();
 
     expect($current->version)->toBe(2)
-        ->and(Document::query()->where('type_key', 'contract')->count())->toBe(2)
-        ->and(Document::query()->where('type_key', 'contract')->where('is_current', true)->count())->toBe(1);
+        ->and(Document::query()->where('type_key', 'documento_alta_ss')->count())->toBe(2)
+        ->and(Document::query()->where('type_key', 'documento_alta_ss')->where('is_current', true)->count())->toBe(1);
 });
 
 it('downloads only through a permission-checked route and audits it', function (): void {
     $file = UploadedFile::fake()->create('dni.pdf', 100);
     $this->actingAs($this->admin)->post('/documents', [
         'entity_type' => 'employee', 'entity_id' => $this->employee->id,
-        'type_key' => 'dni', 'category' => 'personal', 'file' => $file,
+        'type_key' => 'nie_fotocopia', 'category' => 'personal', 'file' => $file,
     ]);
     $document = Document::query()->firstOrFail();
 
@@ -92,7 +92,7 @@ it('denies download without documents.download permission', function (): void {
     $file = UploadedFile::fake()->create('dni.pdf', 100);
     $this->actingAs($this->admin)->post('/documents', [
         'entity_type' => 'employee', 'entity_id' => $this->employee->id,
-        'type_key' => 'dni', 'category' => 'personal', 'file' => $file,
+        'type_key' => 'nie_fotocopia', 'category' => 'personal', 'file' => $file,
     ]);
     $document = Document::query()->firstOrFail();
 
@@ -116,19 +116,19 @@ it('accepts a Yes/No flag without a file', function (): void {
     $this->actingAs($this->admin)->post('/documents', [
         'entity_type' => 'employee',
         'entity_id' => $this->employee->id,
-        'type_key' => 'bank_details',
+        'type_key' => 'documento_idc',
         'category' => 'employment',
         'has_flag' => true,
     ])->assertRedirect();
 
-    expect(Document::query()->where('type_key', 'bank_details')->value('has_flag'))->toBe(true);
+    expect(Document::query()->where('type_key', 'documento_idc')->value('has_flag'))->toBe(true);
 });
 
 it('soft deletes a document, preserving metadata', function (): void {
     $file = UploadedFile::fake()->create('dni.pdf', 100);
     $this->actingAs($this->admin)->post('/documents', [
         'entity_type' => 'employee', 'entity_id' => $this->employee->id,
-        'type_key' => 'dni', 'category' => 'personal', 'file' => $file,
+        'type_key' => 'nie_fotocopia', 'category' => 'personal', 'file' => $file,
     ]);
     $document = Document::query()->firstOrFail();
 
@@ -142,13 +142,13 @@ it('lets a company admin upload their own company document', function (): void {
     $this->actingAs($this->admin)->post('/documents', [
         'entity_type' => 'company',
         'entity_id' => $this->company->id,
-        'type_key' => 'certificado_digital',
+        'type_key' => 'poliza_rc',
         'category' => 'company',
         'has_flag' => true,
         'expiry_date' => now()->addYear()->toDateString(),
     ])->assertRedirect();
 
-    expect(Document::query()->where('type_key', 'certificado_digital')->exists())->toBeTrue();
+    expect(Document::query()->where('type_key', 'poliza_rc')->exists())->toBeTrue();
 });
 
 it('forbids a custom user with documents.upload from touching company documents', function (): void {
@@ -159,7 +159,7 @@ it('forbids a custom user with documents.upload from touching company documents'
     $this->actingAs($user)->post('/documents', [
         'entity_type' => 'company',
         'entity_id' => $this->company->id,
-        'type_key' => 'certificado_digital',
+        'type_key' => 'poliza_rc',
         'category' => 'company',
         'has_flag' => true,
     ])->assertForbidden();
@@ -171,7 +171,7 @@ it('forbids a company admin from touching another company document', function ()
     $this->actingAs($this->admin)->post('/documents', [
         'entity_type' => 'company',
         'entity_id' => $otherCompany->id,
-        'type_key' => 'certificado_digital',
+        'type_key' => 'poliza_rc',
         'category' => 'company',
         'has_flag' => true,
     ])->assertNotFound();
@@ -184,7 +184,7 @@ it('cannot upload a document to another company employee', function (): void {
     $this->actingAs($this->admin)->post('/documents', [
         'entity_type' => 'employee',
         'entity_id' => $foreign->id,
-        'type_key' => 'dni',
+        'type_key' => 'nie_fotocopia',
         'category' => 'personal',
         'has_flag' => true,
     ])->assertNotFound();

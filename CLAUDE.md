@@ -276,8 +276,11 @@ Admin), `empresa1.admin@verto5.local` (Company Admin), `empresa1.user@verto5.loc
   tenancy-scoped, so `DocumentController::resolveEntity` guards company docs explicitly.
 - **DocumentStatus service**: the single traffic-light authority (ok/warn/danger/
   neutral/exempt) + compliance scoring; monthly company types get month-end logic.
-  `App\Support\DocumentTypes` is the registry (13 company types + employee sets);
-  labels in `lang/*/ui.php` under `doc_types.*`.
+  `App\Support\DocumentTypes` is the registry; labels in `lang/*/ui.php` under
+  `doc_types.*`. **The registry mirrors the client's own workbook `DATOS OBLIGATORIOS
+  EMPRESA.xlsx` (16 company docs + the worker/prevención set) — corrected 2026-07-16,
+  replacing the earlier spec-inferred list. Do not "tidy" these keys; see DECISIONS.md
+  → "Document types". Renewal frequencies are still an OPEN assumption there.**
 - **Notifications**: DB + mail via `DocumentAlertNotification`; bell shares unread count
   + latest 8 through `HandleInertiaRequests`; `verto:scan-documents` (scheduled daily
   07:00 Madrid in `routes/console.php`) implements the confirmed schedules — annual

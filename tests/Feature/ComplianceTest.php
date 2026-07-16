@@ -17,7 +17,7 @@ function makeDoc(Employee $employee, array $attrs): Document
 {
     $document = new Document(array_merge([
         'category' => 'personal',
-        'type_key' => 'dni',
+        'type_key' => 'nie_fotocopia',
     ], $attrs));
     $document->documentable()->associate($employee);
     $document->company_id = $employee->company_id;
@@ -59,7 +59,7 @@ it('excludes exempt documents from scoring', function (): void {
 
 it('renders the compliance center with a summary and rows', function (): void {
     makeDoc($this->employee, ['expiry_date' => now()->subDay()->toDateString()]);
-    makeDoc($this->employee, ['type_key' => 'nie', 'expiry_date' => now()->addYears(2)->toDateString()]);
+    makeDoc($this->employee, ['type_key' => 'foto', 'expiry_date' => now()->addYears(2)->toDateString()]);
 
     $this->actingAs($this->admin)->get('/compliance')
         ->assertOk()
