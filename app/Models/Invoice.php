@@ -8,6 +8,7 @@ use App\Enums\InvoiceSubType;
 use App\Enums\InvoiceType;
 use App\Enums\PaymentMethod;
 use App\Enums\PaymentStatus;
+use App\Enums\VatRate;
 use App\Models\Concerns\Auditable;
 use App\Models\Concerns\BelongsToCompany;
 use Database\Factories\InvoiceFactory;
@@ -36,9 +37,14 @@ use Illuminate\Support\Carbon;
  * @property PaymentMethod|null $payment_method
  * @property Carbon $invoice_date
  * @property Carbon|null $due_date
+ * @property Carbon|null $payment_date
  * @property numeric-string $subtotal
- * @property numeric-string|null $vat_rate
+ * @property VatRate|null $vat_rate
  * @property numeric-string $vat_amount
+ * @property numeric-string $discount_value
+ * @property numeric-string $discount_amount
+ * @property numeric-string|null $retention_percent
+ * @property numeric-string $retention_amount
  * @property numeric-string $total
  * @property numeric-string $paid_amount
  */
@@ -75,12 +81,12 @@ class Invoice extends Model
             'status' => InvoiceStatus::class,
             'payment_status' => PaymentStatus::class,
             'discount_type' => DiscountType::class,
+            'vat_rate' => VatRate::class,
             'payment_method' => PaymentMethod::class,
             'invoice_date' => 'date:Y-m-d',
             'due_date' => 'date:Y-m-d',
             'payment_date' => 'date:Y-m-d',
             'subtotal' => 'decimal:2',
-            'vat_rate' => 'decimal:2',
             'vat_amount' => 'decimal:2',
             'discount_value' => 'decimal:2',
             'discount_amount' => 'decimal:2',

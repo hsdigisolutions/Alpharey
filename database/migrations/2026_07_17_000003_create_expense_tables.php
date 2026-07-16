@@ -48,7 +48,7 @@ return new class extends Migration
             $table->date('date');
             $table->date('due_date')->nullable();
             $table->decimal('subtotal', 14, 2)->default(0);
-            $table->decimal('vat_rate', 5, 2)->nullable(); // blank default (DECISIONS.md)
+            $table->string('vat_rate', 20)->nullable();    // VatRate enum value; null = No aplica
             $table->decimal('vat_amount', 14, 2)->default(0);
             $table->decimal('total', 14, 2)->default(0);
 

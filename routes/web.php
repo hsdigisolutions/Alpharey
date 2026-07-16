@@ -23,9 +23,12 @@ use App\Http\Controllers\EmployeeCallLogController;
 use App\Http\Controllers\EmployeeController;
 use App\Http\Controllers\EmployeeImportExportController;
 use App\Http\Controllers\EmployeeNoteController;
+use App\Http\Controllers\ExpenseController;
+use App\Http\Controllers\InvoiceController;
 use App\Http\Controllers\LocaleController;
 use App\Http\Controllers\MeasurementController;
 use App\Http\Controllers\NotificationController;
+use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\PayrollController;
 use App\Http\Controllers\ProjectController;
 use App\Http\Controllers\ProjectWorkerController;
@@ -154,6 +157,23 @@ Route::middleware(['auth', 'active'])->group(function (): void {
     Route::put('/measurements/{measurement}', [MeasurementController::class, 'update'])->name('measurements.update');
     Route::delete('/measurements/{measurement}', [MeasurementController::class, 'destroy'])->name('measurements.destroy');
     Route::post('/measurements/{measurement}/approve', [MeasurementController::class, 'approve'])->name('measurements.approve');
+
+    // Screen 10 — Invoices (Ventas / Gastos tabs) + payments
+    Route::get('/invoices', [InvoiceController::class, 'index'])->name('invoices.index');
+    Route::get('/invoices/{invoice}', [InvoiceController::class, 'show'])->name('invoices.show');
+    Route::post('/invoices', [InvoiceController::class, 'store'])->name('invoices.store');
+    Route::put('/invoices/{invoice}', [InvoiceController::class, 'update'])->name('invoices.update');
+    Route::delete('/invoices/{invoice}', [InvoiceController::class, 'destroy'])->name('invoices.destroy');
+    Route::get('/invoices/{invoice}/pdf', [InvoiceController::class, 'pdf'])->name('invoices.pdf');
+    Route::post('/invoices/{invoice}/payments', [PaymentController::class, 'store'])->name('payments.store');
+    Route::delete('/payments/{payment}', [PaymentController::class, 'destroy'])->name('payments.destroy');
+
+    // Screen 10 Gastos / Screen 09 Tab 6 — expenses
+    Route::get('/expenses', [ExpenseController::class, 'index'])->name('expenses.index');
+    Route::post('/expenses', [ExpenseController::class, 'store'])->name('expenses.store');
+    Route::post('/expenses/{expense}', [ExpenseController::class, 'update'])->name('expenses.update');
+    Route::post('/expenses/{expense}/approve', [ExpenseController::class, 'approve'])->name('expenses.approve');
+    Route::delete('/expenses/{expense}', [ExpenseController::class, 'destroy'])->name('expenses.destroy');
 
     // Screen 12 — Payroll (company-owned; locked periods reject dated edits)
     Route::get('/payroll', [PayrollController::class, 'index'])->name('payroll.index');

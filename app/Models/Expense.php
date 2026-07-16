@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Enums\ExpenseType;
 use App\Enums\PaymentMethod;
 use App\Enums\PaymentStatus;
+use App\Enums\VatRate;
 use App\Models\Concerns\Auditable;
 use App\Models\Concerns\BelongsToCompany;
 use Database\Factories\ExpenseFactory;
@@ -32,8 +33,11 @@ use Illuminate\Support\Carbon;
  * @property Carbon $date
  * @property bool $approved
  * @property bool $is_reimbursable
+ * @property Carbon|null $due_date
+ * @property Carbon|null $payment_date
  * @property numeric-string $subtotal
- * @property numeric-string|null $vat_rate
+ * @property VatRate|null $vat_rate
+ * @property numeric-string $vat_amount
  * @property numeric-string $total
  */
 class Expense extends Model
@@ -60,6 +64,7 @@ class Expense extends Model
             'type' => ExpenseType::class,
             'payment_status' => PaymentStatus::class,
             'payment_method' => PaymentMethod::class,
+            'vat_rate' => VatRate::class,
             'date' => 'date:Y-m-d',
             'due_date' => 'date:Y-m-d',
             'payment_date' => 'date:Y-m-d',
@@ -67,7 +72,6 @@ class Expense extends Model
             'approved' => 'boolean',
             'is_reimbursable' => 'boolean',
             'subtotal' => 'decimal:2',
-            'vat_rate' => 'decimal:2',
             'vat_amount' => 'decimal:2',
             'total' => 'decimal:2',
         ];

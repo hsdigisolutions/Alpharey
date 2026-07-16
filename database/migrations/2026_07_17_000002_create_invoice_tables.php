@@ -38,7 +38,10 @@ return new class extends Migration
 
             // Totals — all computed server-side from the line items
             $table->decimal('subtotal', 14, 2)->default(0);
-            $table->decimal('vat_rate', 5, 2)->nullable();  // blank default, per DECISIONS.md
+            // VatRate enum value ('general'|'reducido'|…), NOT a raw percent —
+            // same representation as proposals. null = "No aplica" (the default,
+            // per DECISIONS.md; the spec's "default 21%" is overridden).
+            $table->string('vat_rate', 20)->nullable();
             $table->decimal('vat_amount', 14, 2)->default(0);
             $table->string('discount_type', 10)->nullable(); // DiscountType
             $table->decimal('discount_value', 14, 2)->default(0);
