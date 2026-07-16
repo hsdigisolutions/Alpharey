@@ -9,6 +9,7 @@ use App\Services\Permissions\ModulePermissions;
 use App\Services\Settings\MailSettings;
 use App\Services\Settings\SettingsService;
 use App\Support\CurrentCompany;
+use App\Support\PeriodLock;
 use Illuminate\Auth\SessionGuard;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Gate;
@@ -25,6 +26,9 @@ class AppServiceProvider extends ServiceProvider
         $this->app->singleton(CurrentCompany::class);
         $this->app->singleton(SettingsService::class);
         $this->app->singleton(ModulePermissions::class);
+        // Singleton so the locked-month memo — and forget() after a lock is
+        // taken — are shared by every service that guards a dated write.
+        $this->app->singleton(PeriodLock::class);
     }
 
     /**

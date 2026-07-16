@@ -10,6 +10,7 @@ use App\Models\AttendanceLog;
 use App\Models\Employee;
 use App\Models\OvertimePolicy;
 use App\Support\CurrentCompany;
+use App\Support\PeriodLock;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 
@@ -21,9 +22,14 @@ use Illuminate\Support\Facades\DB;
  *     so a later raise never rewrites historical pay.
  *  2. TOTALS — compute hours (hourly mode) and the day amount from the
  *     snapshot + the employee's overtime policy, unless manually overridden.
+ *
+ * Once a month is locked (Phase 6), writes into it are rejected here — that is
+ * what makes the lock hold "system-wide" rather than only on the payroll screen.
  */
 class AttendanceService
 {
+    public function __construct(private readonly PeriodLock $lock) {}
+
     /**
      * @param  array<string, mixed>  $data
      */
@@ -34,6 +40,11 @@ class AttendanceService
 
             $attendance = new Attendance($data);
             $attendance->company_id = app(CurrentCompany::class)->id();
+
+            if ($attendance->company_id !== null) {
+                $this->lock->assertOpen($attendance->company_id, $attendance->date);
+            }
+
             $this->applySnapshots($attendance, $employee);
             $this->recompute($attendance);
             $attendance->save();
@@ -50,7 +61,12 @@ class AttendanceService
     public function update(Attendance $attendance, array $data): Attendance
     {
         return DB::transaction(function () use ($attendance, $data): Attendance {
+            // Guard both the month it is in now and the month it would move to.
+            $this->lock->assertOpen($attendance->company_id, $attendance->date);
+
             $attendance->fill($data);
+
+            $this->lock->assertOpen($attendance->company_id, $attendance->date);
 
             // Re-freeze the snapshot only if the employee changed; otherwise
             // the original day-rate stands.

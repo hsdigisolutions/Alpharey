@@ -26,7 +26,7 @@ const primaryNav = [
     { key: 'projects', icon: 'projects', href: '/projects' },
     { key: 'invoices', icon: 'invoices', href: null },
     { key: 'attendance', icon: 'attendance', href: '/attendance' },
-    { key: 'payroll', icon: 'payroll', href: null },
+    { key: 'payroll', icon: 'payroll', href: '/payroll' },
     { key: 'calls', icon: 'calls', href: null },
     { key: 'reports', icon: 'reports', href: null },
 ];

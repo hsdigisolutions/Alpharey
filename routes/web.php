@@ -6,6 +6,7 @@ use App\Http\Controllers\Admin\OvertimePolicyController;
 use App\Http\Controllers\Admin\PermissionMatrixController;
 use App\Http\Controllers\Admin\SettingsController;
 use App\Http\Controllers\Admin\UserController;
+use App\Http\Controllers\AdvanceController;
 use App\Http\Controllers\AttendanceController;
 use App\Http\Controllers\AttendanceImportExportController;
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
@@ -25,6 +26,7 @@ use App\Http\Controllers\EmployeeNoteController;
 use App\Http\Controllers\LocaleController;
 use App\Http\Controllers\MeasurementController;
 use App\Http\Controllers\NotificationController;
+use App\Http\Controllers\PayrollController;
 use App\Http\Controllers\ProjectController;
 use App\Http\Controllers\ProjectWorkerController;
 use App\Http\Controllers\ProposalController;
@@ -152,6 +154,22 @@ Route::middleware(['auth', 'active'])->group(function (): void {
     Route::put('/measurements/{measurement}', [MeasurementController::class, 'update'])->name('measurements.update');
     Route::delete('/measurements/{measurement}', [MeasurementController::class, 'destroy'])->name('measurements.destroy');
     Route::post('/measurements/{measurement}/approve', [MeasurementController::class, 'approve'])->name('measurements.approve');
+
+    // Screen 12 — Payroll (company-owned; locked periods reject dated edits)
+    Route::get('/payroll', [PayrollController::class, 'index'])->name('payroll.index');
+    Route::post('/payroll/calculate', [PayrollController::class, 'calculate'])->name('payroll.calculate');
+    Route::post('/payroll/approve-all', [PayrollController::class, 'approveAll'])->name('payroll.approve-all');
+    Route::post('/payroll/lock', [PayrollController::class, 'lockPeriod'])->name('payroll.lock');
+    Route::post('/payroll/unlock', [PayrollController::class, 'unlockPeriod'])->name('payroll.unlock');
+    Route::get('/payroll/{payroll}/payslip', [PayrollController::class, 'payslip'])->name('payroll.payslip');
+    Route::post('/payroll/{payroll}/paid', [PayrollController::class, 'markPaid'])->name('payroll.paid');
+    Route::put('/payroll/{payroll}/adjust', [PayrollController::class, 'adjust'])->name('payroll.adjust');
+
+    // Salary advances (payroll module)
+    Route::post('/advances', [AdvanceController::class, 'store'])->name('advances.store');
+    Route::post('/advances/{advance}/decide', [AdvanceController::class, 'decide'])->name('advances.decide');
+    Route::delete('/advances/{advance}', [AdvanceController::class, 'destroy'])->name('advances.destroy');
+    Route::post('/advance-categories', [AdvanceController::class, 'storeCategory'])->name('advance-categories.store');
 
     // Screen 12 — Cross-company employee deployments (spans two companies)
     Route::get('/deployments', [DeploymentController::class, 'index'])->name('deployments.index');

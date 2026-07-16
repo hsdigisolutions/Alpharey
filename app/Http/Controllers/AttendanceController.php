@@ -11,6 +11,7 @@ use App\Models\EmployeeDeployment;
 use App\Models\Project;
 use App\Services\Attendance\AttendanceService;
 use App\Support\CurrentCompany;
+use App\Support\PeriodLock;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -130,9 +131,12 @@ class AttendanceController extends Controller
         return back()->with('success', __('ui.attendance.saved'));
     }
 
-    public function destroy(Attendance $attendance): RedirectResponse
+    public function destroy(Attendance $attendance, PeriodLock $lock): RedirectResponse
     {
         Gate::authorize('attendance.delete');
+
+        // A closed month is closed for deletes too, not just edits.
+        $lock->assertOpen($attendance->company_id, $attendance->date);
 
         $attendance->delete();
 
