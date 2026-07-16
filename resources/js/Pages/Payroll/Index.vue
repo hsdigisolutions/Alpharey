@@ -7,7 +7,7 @@
  * null otherwise — this page never decides who may see pay, it just renders
  * what it was given.
  */
-import { computed, reactive, ref } from 'vue';
+import { computed, ref } from 'vue';
 import { Head, router, useForm, usePage } from '@inertiajs/vue3';
 import AppIcon from '@/Components/AppIcon.vue';
 import AppLayout from '@/Layouts/AppLayout.vue';
@@ -18,7 +18,6 @@ import VEmptyState from '@/Components/ui/VEmptyState.vue';
 import VInput from '@/Components/ui/VInput.vue';
 import VModal from '@/Components/ui/VModal.vue';
 import VPageHeader from '@/Components/ui/VPageHeader.vue';
-import VSelect from '@/Components/ui/VSelect.vue';
 import VTable from '@/Components/ui/VTable.vue';
 import VTextarea from '@/Components/ui/VTextarea.vue';
 
@@ -55,15 +54,22 @@ function markPaid(row) {
     router.post(`/payroll/${row.id}/paid`, { payment_method: row.payment_method }, { preserveScroll: true });
 }
 
-/* ---------- breakdown ---------- */
-const breakdown = ref(null);
+/* ---------- breakdown ----------
+ * Track the row by id and read it back out of props, never by holding the row
+ * object: after any action Inertia hands us a NEW rows array, and a captured
+ * object would leave the modal showing pre-adjustment figures. On a payroll
+ * screen a stale net is worse than no net.
+ */
+const breakdownId = ref(null);
+const breakdown = computed(() => props.rows.find((r) => r.id === breakdownId.value) ?? null);
 
 /* ---------- manual adjustments ---------- */
-const adjusting = ref(null);
+const adjustingId = ref(null);
+const adjusting = computed(() => props.rows.find((r) => r.id === adjustingId.value) ?? null);
 const adjustForm = useForm({ other_deductions: 0, manual_additions: 0, notes: '' });
 
 function openAdjust(row) {
-    adjusting.value = row;
+    adjustingId.value = row.id;
     adjustForm.other_deductions = row.other_deductions ?? 0;
     adjustForm.manual_additions = row.manual_additions ?? 0;
     adjustForm.notes = row.notes ?? '';
@@ -71,9 +77,9 @@ function openAdjust(row) {
 }
 
 function submitAdjust() {
-    adjustForm.put(`/payroll/${adjusting.value.id}/adjust`, {
+    adjustForm.put(`/payroll/${adjustingId.value}/adjust`, {
         preserveScroll: true,
-        onSuccess: () => (adjusting.value = null),
+        onSuccess: () => (adjustingId.value = null),
     });
 }
 
@@ -169,7 +175,7 @@ const columns = [
                 </td>
                 <td class="px-3 py-2.5 text-end">
                     <span class="flex items-center justify-end gap-1.5">
-                        <VButton variant="ghost" size="sm" icon="eye" @click="breakdown = r">
+                        <VButton variant="ghost" size="sm" icon="eye" @click="breakdownId = r.id">
                             <Bilingual k="payroll.breakdown" inline />
                         </VButton>
                         <VButton v-if="can.edit && r.status !== 'paid' && !locked" variant="ghost" size="sm" icon="edit"
@@ -191,7 +197,7 @@ const columns = [
         </VTable>
 
         <!-- Breakdown modal — layout per REQUIREMENTS.md Screen 12 -->
-        <VModal :open="breakdown !== null" title-key="payroll.breakdown" @close="breakdown = null">
+        <VModal :open="breakdown !== null" title-key="payroll.breakdown" @close="breakdownId = null">
             <div v-if="breakdown" class="space-y-4">
                 <p class="text-sm font-semibold">{{ breakdown.employee }}</p>
 
@@ -255,12 +261,12 @@ const columns = [
                 </p>
             </div>
             <template #footer>
-                <VButton variant="ghost" @click="breakdown = null"><Bilingual k="common.close" inline /></VButton>
+                <VButton variant="ghost" @click="breakdownId = null"><Bilingual k="common.close" inline /></VButton>
             </template>
         </VModal>
 
         <!-- Manual adjustments -->
-        <VModal :open="adjusting !== null" title-key="payroll.adjustments" @close="adjusting = null">
+        <VModal :open="adjusting !== null" title-key="payroll.adjustments" @close="adjustingId = null">
             <form id="adjust-form" class="grid gap-4 sm:grid-cols-2" @submit.prevent="submitAdjust">
                 <FormField k="payroll.other_deductions" :error="adjustForm.errors.other_deductions">
                     <VInput v-model="adjustForm.other_deductions" type="number" step="0.01" min="0" />
@@ -273,7 +279,7 @@ const columns = [
                 </FormField>
             </form>
             <template #footer>
-                <VButton variant="ghost" @click="adjusting = null"><Bilingual k="common.cancel" inline /></VButton>
+                <VButton variant="ghost" @click="adjustingId = null"><Bilingual k="common.cancel" inline /></VButton>
                 <VButton type="submit" form="adjust-form" :loading="adjustForm.processing">
                     <Bilingual k="common.save" inline />
                 </VButton>
