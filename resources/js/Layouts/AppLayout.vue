@@ -177,16 +177,18 @@ const roleLabels = {
 
                 <div class="ms-auto flex items-center gap-1.5">
                     <!-- Active company context: SA gets a switch link to Welcome -->
+                    <!-- Company context chip: from md up only — below that it
+                         crowds the global search into an unreadable sliver. -->
                     <a v-if="page.props.auth.user?.role === 'super_admin'" href="/welcome"
-                        class="hidden items-center gap-1.5 rounded-md border border-line px-2 py-1.5 text-xs font-medium text-ink-soft hover:bg-surface-hover sm:flex"
+                        class="hidden items-center gap-1.5 rounded-md border border-line px-2 py-1.5 text-xs font-medium text-ink-soft hover:bg-surface-hover md:flex"
                         :title="page.props.lang.es.welcome.switch_company">
-                        <AppIcon name="companies" class="h-3.5 w-3.5" />
+                        <AppIcon name="companies" class="h-3.5 w-3.5 shrink-0" />
                         <span v-if="page.props.company" class="max-w-36 truncate">{{ page.props.company.name }}</span>
-                        <Bilingual v-else k="welcome.browsing_all" inline class="text-xs" />
+                        <Bilingual v-else k="welcome.browsing_all" inline class="max-w-44 truncate text-xs" />
                     </a>
                     <span v-else-if="page.props.company"
-                        class="hidden items-center gap-1.5 rounded-md border border-line px-2 py-1.5 text-xs font-medium text-ink-soft sm:flex">
-                        <AppIcon name="companies" class="h-3.5 w-3.5" />
+                        class="hidden items-center gap-1.5 rounded-md border border-line px-2 py-1.5 text-xs font-medium text-ink-soft md:flex">
+                        <AppIcon name="companies" class="h-3.5 w-3.5 shrink-0" />
                         <span class="max-w-36 truncate">{{ page.props.company.name }}</span>
                     </span>
 

@@ -106,7 +106,7 @@ function eur(n) {
         </VPageHeader>
 
         <div class="flex flex-wrap items-end gap-2 pb-3">
-            <VSelect v-model="filters.status" class="w-48" @update:model-value="apply()">
+            <VSelect v-model="filters.status" class="w-full sm:w-52" @update:model-value="apply()">
                 <option value="">{{ $page.props.lang.es.deployments.all_statuses }}</option>
                 <option v-for="s in statuses" :key="s" :value="s">{{ $page.props.lang.es.deployments[`status_${s}`] }}</option>
             </VSelect>

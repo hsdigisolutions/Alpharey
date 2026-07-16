@@ -89,7 +89,7 @@ const columns = [
 
         <div class="flex flex-wrap items-end gap-2 pb-3">
             <div class="w-full sm:w-56"><VSearchInput v-model="filters.search" /></div>
-            <VSelect v-model="filters.status" class="w-40" @update:model-value="apply()">
+            <VSelect v-model="filters.status" class="w-full sm:w-52" @update:model-value="apply()">
                 <option value="">{{ $page.props.lang.es.proposals.status }}</option>
                 <option v-for="s in statuses" :key="s" :value="s">{{ $page.props.lang.es.proposals[`status_${s}`] }}</option>
             </VSelect>

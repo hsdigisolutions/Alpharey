@@ -71,11 +71,11 @@ const columns = [
 
         <div class="flex flex-wrap items-end gap-2 pb-3">
             <div class="w-full sm:w-60"><VSearchInput v-model="filters.search" /></div>
-            <VSelect v-model="filters.client_type" class="w-40" @update:model-value="apply()">
+            <VSelect v-model="filters.client_type" class="w-full sm:w-52" @update:model-value="apply()">
                 <option value="">{{ $page.props.lang.es.clients.type }}</option>
                 <option v-for="t in clientTypes" :key="t" :value="t">{{ $page.props.lang.es.clients[`type_${t}`] }}</option>
             </VSelect>
-            <VSelect v-model="filters.status" class="w-36" @update:model-value="apply()">
+            <VSelect v-model="filters.status" class="w-full sm:w-52" @update:model-value="apply()">
                 <option value="">{{ $page.props.lang.es.clients.active }} / {{ $page.props.lang.en.clients.active }}</option>
                 <option value="active">{{ $page.props.lang.es.clients.active }}</option>
                 <option value="inactive">Inactivo</option>

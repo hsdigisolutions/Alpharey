@@ -72,11 +72,11 @@ const columns = [
         </VPageHeader>
 
         <div class="flex flex-wrap items-end gap-2 pb-3">
-            <VSelect v-model="filters.project_id" class="w-48" @update:model-value="apply()">
+            <VSelect v-model="filters.project_id" class="w-full sm:w-56" @update:model-value="apply()">
                 <option value="">{{ $page.props.lang.es.measurements.project }}</option>
                 <option v-for="p in projects" :key="p.id" :value="p.id">{{ p.name }}</option>
             </VSelect>
-            <VSelect v-model="filters.approval" class="w-40" @update:model-value="apply()">
+            <VSelect v-model="filters.approval" class="w-full sm:w-52" @update:model-value="apply()">
                 <option value="">{{ $page.props.lang.es.measurements.approval }}</option>
                 <option value="approved">{{ $page.props.lang.es.measurements.is_approved }}</option>
                 <option value="pending">{{ $page.props.lang.es.measurements.pending }}</option>

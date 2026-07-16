@@ -95,7 +95,7 @@ function markExempt(row) {
 
         <!-- Filters -->
         <div class="mt-5 flex flex-wrap gap-2">
-            <VSelect v-model="filters.status" class="w-40">
+            <VSelect v-model="filters.status" class="w-full sm:w-52">
                 <option value="">{{ $page.props.lang.es.compliance.filter_status }} / {{ $page.props.lang.en.compliance.filter_status }}</option>
                 <option v-for="s in ['ok', 'warn', 'danger', 'neutral', 'exempt']" :key="s" :value="s">
                     {{ $page.props.lang.es[`documents`][`status_${s}`] }}

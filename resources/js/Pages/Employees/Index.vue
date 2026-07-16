@@ -153,58 +153,69 @@ const docDot = { ok: 'ok', warn: 'warn', danger: 'danger', neutral: 'neutral', e
 
     <AppLayout>
         <VPageHeader k="employees.title">
-            <VButton v-if="can.create" variant="secondary" icon="upload" @click="showImport = true">
-                <Bilingual k="employees.import" inline />
+            <!-- Secondary action collapses to icon-only on small screens so the
+                 two wide bilingual buttons never wrap into a ragged stack. -->
+            <VButton v-if="can.create" variant="secondary" icon="upload"
+                :aria-label="`${$page.props.lang.es.employees.import} / ${$page.props.lang.en.employees.import}`"
+                @click="showImport = true">
+                <span class="hidden sm:inline"><Bilingual k="employees.import" inline /></span>
             </VButton>
             <VButton v-if="can.create" icon="plus" @click="showForm = true">
                 <Bilingual k="employees.new" inline />
             </VButton>
         </VPageHeader>
 
-        <!-- Toolbar: search + filters + columns + export -->
-        <div class="flex flex-wrap items-end gap-2 pb-3">
-            <div class="w-full sm:w-60">
-                <VSearchInput v-model="filters.search" />
-            </div>
-            <VSelect v-model="filters.status" class="w-36" @update:model-value="apply()">
-                <option value="">{{ $page.props.lang.es.employees.status }} / {{ $page.props.lang.en.employees.status }}</option>
-                <option value="active">{{ $page.props.lang.es.employees.active }}</option>
-                <option value="inactive">{{ $page.props.lang.es.employees.inactive }}</option>
-            </VSelect>
-            <VSelect v-model="filters.department" class="w-40" @update:model-value="apply()">
-                <option value="">{{ $page.props.lang.es.employees.department }}</option>
-                <option v-for="dept in filterOptions.departments" :key="dept" :value="dept">{{ dept }}</option>
-            </VSelect>
-            <VSelect v-model="filters.designation" class="w-40" @update:model-value="apply()">
-                <option value="">{{ $page.props.lang.es.employees.designation }}</option>
-                <option v-for="role in filterOptions.designations" :key="role" :value="role">{{ role }}</option>
-            </VSelect>
-            <VSelect v-model="filters.wage_type" class="w-36" @update:model-value="apply()">
-                <option value="">{{ $page.props.lang.es.employees.wage_type }}</option>
-                <option v-for="type in filterOptions.wageTypes" :key="type" :value="type">
-                    {{ $page.props.lang.es.employees[`wage_${type}`] }}
-                </option>
-            </VSelect>
+        <!-- Toolbar: search + utilities on one row, filters on an even grid
+             below. Filters are grid-sized (never fixed widths) so the long
+             bilingual placeholders can't clip. -->
+        <div class="space-y-2 pb-3">
+            <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
+                <div class="sm:w-64">
+                    <VSearchInput v-model="filters.search" />
+                </div>
 
-            <div class="ms-auto flex items-center gap-2">
-                <VDropdown width="w-56">
-                    <template #trigger="{ toggle }">
-                        <VButton variant="secondary" size="sm" icon="columns" @click="toggle">
-                            <Bilingual k="employees.columns" inline />
-                        </VButton>
+                <div class="flex flex-wrap items-center gap-2 sm:ms-auto">
+                    <VDropdown width="w-56">
+                        <template #trigger="{ toggle }">
+                            <VButton variant="secondary" size="sm" icon="columns" @click="toggle">
+                                <Bilingual k="employees.columns" inline />
+                            </VButton>
+                        </template>
+                        <div class="max-h-72 space-y-1 overflow-y-auto p-1.5">
+                            <label v-for="column in allColumns" :key="column.key" class="flex items-center gap-2 rounded-md px-1.5 py-1 hover:bg-surface-sunken">
+                                <VCheckbox :model-value="visible.has(column.key)" @update:model-value="toggleColumn(column.key)">
+                                    <Bilingual :k="column.labelKey" inline class="text-xs" />
+                                </VCheckbox>
+                            </label>
+                        </div>
+                    </VDropdown>
+                    <template v-if="can.export">
+                        <VButton variant="secondary" size="sm" icon="export" @click="exportAs('excel')">Excel</VButton>
+                        <VButton variant="secondary" size="sm" icon="export" @click="exportAs('pdf')">PDF</VButton>
                     </template>
-                    <div class="max-h-72 space-y-1 overflow-y-auto p-1.5">
-                        <label v-for="column in allColumns" :key="column.key" class="flex items-center gap-2 rounded-md px-1.5 py-1 hover:bg-surface-sunken">
-                            <VCheckbox :model-value="visible.has(column.key)" @update:model-value="toggleColumn(column.key)">
-                                <Bilingual :k="column.labelKey" inline class="text-xs" />
-                            </VCheckbox>
-                        </label>
-                    </div>
-                </VDropdown>
-                <template v-if="can.export">
-                    <VButton variant="secondary" size="sm" icon="export" @click="exportAs('excel')">Excel</VButton>
-                    <VButton variant="secondary" size="sm" icon="export" @click="exportAs('pdf')">PDF</VButton>
-                </template>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-2 lg:grid-cols-4">
+                <VSelect v-model="filters.status" @update:model-value="apply()">
+                    <option value="">{{ $page.props.lang.es.employees.status }} / {{ $page.props.lang.en.employees.status }}</option>
+                    <option value="active">{{ $page.props.lang.es.employees.active }}</option>
+                    <option value="inactive">{{ $page.props.lang.es.employees.inactive }}</option>
+                </VSelect>
+                <VSelect v-model="filters.department" @update:model-value="apply()">
+                    <option value="">{{ $page.props.lang.es.employees.department }}</option>
+                    <option v-for="dept in filterOptions.departments" :key="dept" :value="dept">{{ dept }}</option>
+                </VSelect>
+                <VSelect v-model="filters.designation" @update:model-value="apply()">
+                    <option value="">{{ $page.props.lang.es.employees.designation }}</option>
+                    <option v-for="role in filterOptions.designations" :key="role" :value="role">{{ role }}</option>
+                </VSelect>
+                <VSelect v-model="filters.wage_type" @update:model-value="apply()">
+                    <option value="">{{ $page.props.lang.es.employees.wage_type }}</option>
+                    <option v-for="type in filterOptions.wageTypes" :key="type" :value="type">
+                        {{ $page.props.lang.es.employees[`wage_${type}`] }}
+                    </option>
+                </VSelect>
             </div>
         </div>
 

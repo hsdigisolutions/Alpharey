@@ -217,7 +217,7 @@ function submitUser() {
                             <Bilingual k="permissions.preset_none" inline />
                         </VButton>
                         <div class="flex items-center gap-1.5">
-                            <VSelect v-model="copyFrom" class="w-40" @update:model-value="requestCopy">
+                            <VSelect v-model="copyFrom" class="w-full sm:w-52" @update:model-value="requestCopy">
                                 <option value="">{{ $page.props.lang.es.permissions.copy_from }}</option>
                                 <option v-for="user in props.users.filter((u) => u.editable && u.id !== props.selectedUser)"
                                     :key="user.id" :value="user.id">
