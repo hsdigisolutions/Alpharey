@@ -33,13 +33,13 @@ defineEmits(['sort', 'toggle-all']);
                         <button v-if="column.sortable" type="button"
                             class="group inline-flex items-center gap-1 text-ink-soft hover:text-ink"
                             @click="$emit('sort', column.key)">
-                            <Bilingual :k="column.labelKey" class="text-xs font-semibold" />
+                            <Bilingual :k="column.labelKey" class="text-[11px] font-semibold uppercase tracking-wide" />
                             <AppIcon
                                 :name="sort?.key === column.key && sort?.dir === 'desc' ? 'chevron-down' : 'chevron-up'"
                                 class="h-3 w-3 transition-opacity"
                                 :class="sort?.key === column.key ? 'text-accent opacity-100' : 'opacity-0 group-hover:opacity-60'" />
                         </button>
-                        <Bilingual v-else :k="column.labelKey" class="text-xs font-semibold text-ink-soft" />
+                        <Bilingual v-else :k="column.labelKey" class="text-[11px] font-semibold uppercase tracking-wide text-muted" />
                     </th>
                 </tr>
             </thead>

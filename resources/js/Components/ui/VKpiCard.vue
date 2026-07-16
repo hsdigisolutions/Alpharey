@@ -16,7 +16,7 @@ defineProps({
     <div class="rounded-lg border border-line bg-surface-raised p-4 shadow-card">
         <div class="flex items-start justify-between gap-2">
             <Bilingual :k="k" class="text-xs font-medium text-ink-soft" />
-            <span v-if="icon" class="rounded-md bg-surface-sunken p-1.5 text-muted">
+            <span v-if="icon" class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-accent-soft text-accent">
                 <AppIcon :name="icon" class="h-4 w-4" />
             </span>
         </div>

@@ -101,9 +101,9 @@ const roleLabels = {
              with the content; only the right side scrolls (design skill). -->
         <aside class="fixed inset-y-0 start-0 z-30 hidden h-screen flex-col bg-sidebar transition-[width] duration-200 md:flex"
             :class="collapsed ? 'w-14' : 'w-60'">
-            <div class="flex items-center gap-2.5 px-3 py-4" :class="collapsed ? 'justify-center px-0' : 'px-4'">
-                <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-accent text-sm font-bold text-on-accent">V5</span>
-                <span v-if="!collapsed" class="text-base font-semibold tracking-tight text-white">Verto5</span>
+            <div class="flex items-center gap-2.5 border-b border-white/5 px-3 py-4" :class="collapsed ? 'justify-center px-0' : 'px-4'">
+                <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-accent text-sm font-bold text-on-accent shadow-sm">V5</span>
+                <span v-if="!collapsed" class="text-base font-semibold tracking-tight text-white">Verto<span class="text-accent">5</span></span>
             </div>
 
             <nav class="flex-1 space-y-0.5 overflow-y-auto px-2 pb-2">

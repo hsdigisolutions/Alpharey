@@ -10,9 +10,14 @@ defineProps({
 
 <template>
     <div class="mb-5 flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
-        <h1 class="min-w-0 text-2xl font-semibold tracking-tight">
-            <Bilingual :k="k" />
-        </h1>
+        <div class="flex min-w-0 items-center gap-3">
+            <!-- Signature accent: the recurring coral kicker used on every
+                 page + card header, the brand's geometric motif. -->
+            <span class="h-8 w-1.5 shrink-0 rounded-full bg-accent" aria-hidden="true" />
+            <h1 class="min-w-0 text-2xl font-semibold tracking-tight">
+                <Bilingual :k="k" />
+            </h1>
+        </div>
         <div v-if="$slots.default" class="flex flex-wrap items-center justify-end gap-2">
             <slot />
         </div>
