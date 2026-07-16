@@ -167,3 +167,20 @@ These rules are pinned by `tests/Unit/DocumentTypesTest.php` rather than left to
 The workbook's EMPRESA sheet is filled in for **"PINTURAS SHIZUKANI, S.L."** — one of the
 five real companies. Local seed data still uses the dummy "Empresa Uno…Cinco"; company
 names are editable data (Settings), so no code change is implied.
+
+## Prototype gate — WAIVED by client 2026-07-16
+
+The D9 prototype gate above ("the Figma clickable prototype must be reviewed and approved
+before development Phase 6") is **waived at the client's explicit instruction**. Phase 6
+(Payroll & Finance) proceeds without a prior prototype review.
+
+Context offered at the time: 4 of D9's 6 review journeys (login→dashboard, employee→
+documents→compliance, cross-company deployment, permissions) are already live and
+clickable in the real application, which serves the gate's purpose better than a Figma
+file; the two that are not (payroll run, invoice→payment) are Phase 6's own core. The
+client chose to proceed rather than review those two layouts first.
+
+**Consequence accepted:** if the Payroll or Invoices screen layout needs rework after the
+client sees it, that rework lands in the heaviest phase of the build. Design-change
+requests against Phase 6 screens are therefore expected to be handled as normal
+follow-up work, not as a defect.

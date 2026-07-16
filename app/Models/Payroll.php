@@ -1,0 +1,123 @@
+<?php
+
+namespace App\Models;
+
+use App\Enums\PaymentMethod;
+use App\Enums\PayrollStatus;
+use App\Enums\WageType;
+use App\Models\Concerns\Auditable;
+use App\Models\Concerns\BelongsToCompany;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Carbon;
+
+/**
+ * Screen 12 — one payroll row per employee per month, computed by
+ * PayrollService from the wage snapshots frozen on attendance.
+ *
+ * Every money column is encrypted at rest and hidden from serialization —
+ * per-employee pay is the most sensitive data in the system (SECURITY.md §7).
+ * Wage/bank visibility is gated server-side by `payroll.view || employees.edit`;
+ * controllers null these out of props for anyone without it.
+ *
+ * @property int $id
+ * @property int $company_id
+ * @property int $employee_id
+ * @property string $month
+ * @property PayrollStatus $status
+ * @property WageType|null $wage_type
+ * @property PaymentMethod|null $payment_method
+ * @property Carbon|null $paid_at
+ * @property numeric-string $attendance_days
+ * @property numeric-string $attendance_hours
+ * @property numeric-string $overtime_hours
+ * @property array<int, string>|null $deployment_notes
+ */
+class Payroll extends Model
+{
+    use Auditable;
+    use BelongsToCompany;
+
+    public string $auditModule = 'payroll';
+
+    /**
+     * Never write pay figures into the audit trail.
+     *
+     * @var list<string>
+     */
+    public array $auditExclude = [
+        'wage_rate', 'base_salary', 'days_amount', 'hours_amount', 'overtime_pay',
+        'reimbursements', 'project_expenses', 'gross_pay', 'advance_deductions',
+        'other_deductions', 'manual_additions', 'net_amount',
+    ];
+
+    /** @var list<string> */
+    protected $fillable = [
+        'employee_id', 'month', 'attendance_days', 'attendance_hours', 'overtime_hours',
+        'wage_type', 'wage_rate', 'base_salary', 'days_amount', 'hours_amount',
+        'overtime_pay', 'reimbursements', 'project_expenses', 'gross_pay',
+        'advance_deductions', 'other_deductions', 'manual_additions', 'net_amount',
+        'status', 'payment_method', 'paid_at', 'notes', 'deployment_notes',
+    ];
+
+    /** @var list<string> */
+    protected $hidden = [
+        'wage_rate', 'base_salary', 'days_amount', 'hours_amount', 'overtime_pay',
+        'reimbursements', 'project_expenses', 'gross_pay', 'advance_deductions',
+        'other_deductions', 'manual_additions', 'net_amount',
+    ];
+
+    protected function casts(): array
+    {
+        return [
+            'status' => PayrollStatus::class,
+            'wage_type' => WageType::class,
+            'payment_method' => PaymentMethod::class,
+            'paid_at' => 'date:Y-m-d',
+            'approved_at' => 'datetime',
+            'attendance_days' => 'decimal:2',
+            'attendance_hours' => 'decimal:2',
+            'overtime_hours' => 'decimal:2',
+            'deployment_notes' => 'array',
+            // Money — encrypted at rest
+            'wage_rate' => 'encrypted',
+            'base_salary' => 'encrypted',
+            'days_amount' => 'encrypted',
+            'hours_amount' => 'encrypted',
+            'overtime_pay' => 'encrypted',
+            'reimbursements' => 'encrypted',
+            'project_expenses' => 'encrypted',
+            'gross_pay' => 'encrypted',
+            'advance_deductions' => 'encrypted',
+            'other_deductions' => 'encrypted',
+            'manual_additions' => 'encrypted',
+            'net_amount' => 'encrypted',
+        ];
+    }
+
+    /**
+     * @return BelongsTo<Employee, $this>
+     */
+    public function employee(): BelongsTo
+    {
+        // Deployed workers stay on their HOME company payroll, so the employee
+        // can sit outside the payroll's company (Option A) — read unscoped.
+        return $this->belongsTo(Employee::class)->withoutGlobalScopes();
+    }
+
+    /**
+     * @return BelongsTo<Company, $this>
+     */
+    public function company(): BelongsTo
+    {
+        return $this->belongsTo(Company::class);
+    }
+
+    /**
+     * @return BelongsTo<User, $this>
+     */
+    public function approver(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'approved_by');
+    }
+}
