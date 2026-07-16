@@ -9,6 +9,7 @@ import { Head, router, usePage } from '@inertiajs/vue3';
 import AppIcon from '@/Components/AppIcon.vue';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import AttendanceModal from '@/Components/Attendance/AttendanceModal.vue';
+import VBadge from '@/Components/ui/VBadge.vue';
 import VButton from '@/Components/ui/VButton.vue';
 import VPageHeader from '@/Components/ui/VPageHeader.vue';
 
@@ -120,8 +121,16 @@ const monthLabel = computed(() => {
                 <tbody class="divide-y divide-line">
                     <tr v-for="emp in employees" :key="emp.id" class="hover:bg-surface-hover/50">
                         <td class="sticky start-0 z-10 bg-surface-raised px-3 py-1.5">
-                            <span class="block truncate text-sm font-medium">{{ emp.full_name }}</span>
-                            <span class="block truncate text-[10px] text-muted">{{ emp.designation ?? '—' }}</span>
+                            <span class="flex items-center gap-1.5 truncate text-sm font-medium">
+                                {{ emp.full_name }}
+                                <VBadge v-if="emp.deployed" status="info" class="shrink-0">
+                                    <Bilingual k="attendance.deployed" inline />
+                                </VBadge>
+                            </span>
+                            <span class="block truncate text-[10px] text-muted">
+                                <template v-if="emp.deployed">{{ emp.home_company }}</template>
+                                <template v-else>{{ emp.designation ?? '—' }}</template>
+                            </span>
                         </td>
                         <td v-for="day in days" :key="day" class="p-0.5 text-center">
                             <button type="button"

@@ -41,6 +41,7 @@ const secondaryNav = computed(() => [
     { key: 'leave', labelKey: 'nav.leave', href: null },
     { key: 'inventory', labelKey: 'nav.inventory', href: null },
     { key: 'measurements', labelKey: 'nav.measurements', href: '/measurements' },
+    { key: 'deployments', labelKey: 'nav.deployments', href: '/deployments' },
     { key: 'compliance', labelKey: 'nav.compliance', href: '/compliance' },
     { key: 'permissions', labelKey: 'permissions.title', href: isAdmin.value ? '/admin/permissions' : null },
     { key: 'audit_logs', labelKey: 'nav.audit_logs', href: isAdmin.value ? '/admin/audit-logs' : null },

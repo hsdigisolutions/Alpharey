@@ -2,15 +2,19 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\DeploymentStatus;
 use App\Http\Requests\Attendance\StoreAttendanceRequest;
 use App\Http\Requests\Attendance\UpdateAttendanceRequest;
 use App\Models\Attendance;
 use App\Models\Employee;
+use App\Models\EmployeeDeployment;
 use App\Models\Project;
 use App\Services\Attendance\AttendanceService;
+use App\Support\CurrentCompany;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Gate;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -30,10 +34,31 @@ class AttendanceController extends Controller
         $start = $month->copy()->startOfMonth();
         $end = $month->copy()->endOfMonth();
 
+        // Own active employees…
         $employees = Employee::query()->where('active', true)->orderBy('full_name')
-            ->get(['id', 'full_name', 'designation']);
+            ->get(['id', 'full_name', 'designation'])
+            ->map(fn (Employee $e): array => [
+                'id' => $e->id,
+                'full_name' => $e->full_name,
+                'designation' => $e->designation,
+                'deployed' => false,
+                'home_company' => null,
+            ]);
+
+        // …plus employees from OTHER companies deployed INTO this one whose
+        // deployment overlaps the shown month (Phase 5 — they log hours against
+        // the host project and appear with a "Desplegado" badge).
+        $employees = $employees
+            ->concat($this->deployedInEmployees($start, $end))
+            ->values();
+
+        // Attendance rows for exactly the employees on the grid (own + deployed).
+        $employeeIds = $employees->pluck('id')->all();
 
         $records = Attendance::query()
+            ->withoutGlobalScopes()
+            ->where('company_id', app(CurrentCompany::class)->id())
+            ->whereIn('employee_id', $employeeIds)
             ->whereBetween('date', [$start->toDateString(), $end->toDateString()])
             ->with('project:id,name')
             ->get();
@@ -140,6 +165,51 @@ class AttendanceController extends Controller
             'is_exception' => $attendance->is_exception,
             'exception_reason' => $attendance->exception_reason,
             'notes' => $attendance->notes,
+        ];
+    }
+
+    /**
+     * Employees from other companies deployed INTO the active company whose
+     * deployment window overlaps the shown month. Crosses the tenant scope by
+     * design (this IS the cross-company feature); flagged so the grid renders a
+     * home-company badge.
+     *
+     * @return Collection<int, array<string, mixed>>
+     */
+    private function deployedInEmployees(Carbon $start, Carbon $end): Collection
+    {
+        $hostCompanyId = app(CurrentCompany::class)->id();
+
+        if ($hostCompanyId === null) {
+            return collect();
+        }
+
+        return EmployeeDeployment::query()
+            ->where('host_company_id', $hostCompanyId)
+            ->where('status', DeploymentStatus::Active->value)
+            ->where('deployment_start', '<=', $end->toDateString())
+            ->where(fn ($q) => $q->whereNull('deployment_end')
+                ->orWhere('deployment_end', '>=', $start->toDateString()))
+            ->with(['employee:id,full_name,designation', 'homeCompany:id,name'])
+            ->get()
+            ->filter(fn (EmployeeDeployment $d): bool => $d->employee !== null)
+            ->map(fn (EmployeeDeployment $d): array => $this->deployedRow($d))
+            ->values();
+    }
+
+    /**
+     * Grid-row shape for a deployed employee (home-company badge fields).
+     *
+     * @return array<string, mixed>
+     */
+    private function deployedRow(EmployeeDeployment $deployment): array
+    {
+        return [
+            'id' => $deployment->employee?->id,
+            'full_name' => $deployment->employee?->full_name,
+            'designation' => $deployment->employee?->designation,
+            'deployed' => true,
+            'home_company' => $deployment->homeCompany?->name,
         ];
     }
 

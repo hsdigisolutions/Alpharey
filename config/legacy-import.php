@@ -30,6 +30,10 @@ return [
         ProjectsImporter::class,
         // Phase 4: attendance (remaps employee + project ids; run after them)
         AttendanceImporter::class,
+        // Phase 5: cross-company deployments have NO importer — the legacy system
+        // was single-company (all data maps to Company 1, DATA_MIGRATION.md §3.1),
+        // so it never modelled a deployment BETWEEN companies. Deployments are a
+        // net-new feature; there is nothing to migrate.
         // Phase 6: expenses, invoices, payments, payrolls, advances, commissions
         // Phase 7: leaves, vehicles, inventory
         // Phase 8: audit archive, notifications

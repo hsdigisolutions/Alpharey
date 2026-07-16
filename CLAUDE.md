@@ -2,25 +2,29 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Status: Phase 4 complete (2026-07-15)
+## Status: Phase 5 complete (2026-07-16)
 
-Development Phase 4 (attendance & measurements) is built and verified:
-**212 Pest tests / 755 assertions passing (1 skipped) · Pint clean · Larastan level 6
-clean · `composer audit` clean · production Vite build working · attendance calendar
-grid + monthly summary + measurements + overtime settings verified in the browser
-against seeded MySQL.**
+Development Phase 5 (cross-company employee deployments — the signature feature) is
+built and verified:
+**224 Pest tests / 814 assertions passing (1 skipped) · Pint clean · Larastan level 6
+clean · `composer audit` clean · production Vite build working · deployment create flow
++ Option A cross-charge + host attendance-grid badge verified in the browser against
+seeded MySQL.**
 
-Live screens: **11 Attendance** (calendar grid employees×days, click-to-edit modal with
-hourly/project-based modes, monthly summary, Excel export) · **24 Measurements**
-(approve/reject workflow feeding project billing) · **26 Settings → Overtime policies**
-(percentage/fixed_hourly/accumulate_days/none). Wage/rate SNAPSHOTS freeze at entry time
-(`AttendanceService`) so payroll reads the day's historical rate; overtime pay computed
-from the employee's policy. Legacy attendance importer registered (snapshots carried
-over verbatim, employee/project id remap). Live dump still pending (DATA_MIGRATION.md §1).
+Live screen: **12 Deployments** — a host-company admin deploys an employee FROM another
+company onto their own project (create modal: home company → cross-company employee
+lookup → host project → dates/rate). Option A ONLY is automated (employee stays on the
+HOME payroll; the HOST gets an automatic internal cross-charge — `DeploymentChargeService`
+computes units × rate × split from the employee's hours logged on the host project).
+Overlap guard blocks double-deployment. Deployed employees appear on the HOST attendance
+grid with a "Desplegado/Deployed" badge + home-company label (browser-verified: 240,00 €
+accrued from 16h). Option B (cesión ilegal) is refused at validation AND in the engine —
+never automated (dev skill Rule 13). No legacy importer: the legacy system was
+single-company, so there is nothing to migrate.
 
-Next up: **Development Phase 5** (cross-company employee deployments — the signature
-feature). Earlier phases: Phase 0–3, design D1–D3 (approved 2026-07-14). Review
-findings 1–2 hardened in commit 31ede45.
+Next up: **Development Phase 6** (payroll & finance — gated on the Figma prototype review
+the client requested before Phase 6). Earlier phases: Phase 0–4, design D1–D3 (approved
+2026-07-14). Review findings 1–2 hardened in commit 31ede45.
 
 ## Project skills — read them first
 
@@ -356,23 +360,53 @@ Admin), `empresa1.admin@verto5.local` (Company Admin), `empresa1.user@verto5.loc
     tabs remain "coming soon" placeholders — the standalone Screens 11/24 are the
     canonical surfaces; wiring the tabs to the same data is a cheap later pass.
 
-## Ready for Phase 5
+## Phase 5 additions (map for future phases)
 
-Phase 5 (cross-company employee deployments — the signature feature; see
-DEVELOPMENT_PLAN.md + `docs/PAYROLL_DEPLOYMENTS.md`) builds on:
+- **Deployments** (`employee_deployments`, `deployment_charges`): span TWO companies, so
+  the model does NOT use `BelongsToCompany`. Visibility is home-OR-host (or Super Admin)
+  via `EmployeeDeployment::scopeVisibleTo($companyId)`; `employee()`/`project()` relations
+  use `->withoutGlobalScopes()` (they cross the tenant scope by design). Still `Auditable`
+  (`$auditModule = 'deployments'`) + permission-gated. Decimal columns
+  (`rate_during_deployment`, `split_pct`) assigned as strings (`numeric-string` @property).
+- **DeploymentController**: `host_company_id` is ALWAYS the acting company (never accepted
+  from input); the project must belong to the host, the employee to the chosen home
+  company (both re-checked server-side after validation). `availableEmployees` is the
+  gated cross-company lookup (returns id/name/designation only). `store` runs the overlap
+  guard; `complete`/`cancel` mutate status, `complete` generates the cross-charge.
+- **Option A cross-charge engine** (`DeploymentChargeService`): `accruedUnits` reads the
+  employee's HOST-project attendance within the window (hours, or day count for a daily
+  rate); `accruedAmount` = units × rate × split% (live, shown on the list for
+  payroll/approve viewers); `generateCharge` persists a `DeploymentCharge` on completion.
+  **Returns null for any billing method other than Option A** — the engine itself refuses
+  to automate Option B/C (belt-and-braces with the `StoreDeploymentRequest` `Rule::in`).
+- **Attendance integration**: `AttendanceController::index` appends employees deployed
+  INTO the active company for the shown month (`deployedInEmployees`) with a `deployed`
+  flag + `home_company`; the grid renders a `VBadge status="info"` "Desplegado/Deployed"
+  and shows the home company in place of the designation. The records query is explicit
+  (`withoutGlobalScopes()->where('company_id', …)->whereIn('employee_id', …)`) so deployed
+  rows (logged under the host `company_id`) are included.
+- **No legacy importer**: the legacy system was single-company, so it never modelled a
+  deployment between companies — net-new feature, nothing to migrate (noted in
+  `config/legacy-import.php`).
 
-- **`employee_deployments`** table + model: employee, home/host company, project, dates,
-  rate + rate type, `billing_method` (Option A only is automated — home company pays),
-  split %, approver. Overlap guards (no double-deployment for the same dates).
-- **Cross-charge engine (Option A)**: auto-generate an internal expense on the host
-  company + a receivable line for the home company; payroll note lines prepared for
-  Phase 6. NEVER implement Option B (cesión ilegal — dev skill Rule 13).
-- **Attendance integration**: a deployed employee appears in the HOST project's grid with
-  a home-company badge + "Desplegado" indicator; hours log against the host project. The
-  `Attendance` model + grid already exist — add the deployment badge + home-company
-  column.
-- **Reports**: deployment history, cross-company cost summary, active deployments
-  (surfaced fully in Phase 8; the data model lands in Phase 5).
+## Scaffolding decisions made in Phase 5 (not in DECISIONS.md)
+
+24. `billing_method` is validated to Option A only (`Rule::in([BillingMethod::OptionA])`)
+    AND the charge engine returns null for non-A — Option B (cesión ilegal) is refused at
+    two layers, never merely hidden in the UI. A test pins both.
+25. Deployments are NOT soft-deleted and have no in-place edit — the lifecycle is
+    create → complete/cancel (status transitions), matching how a real posting is closed
+    out. `deployment_charges` are keyed 1:1 on the deployment (`updateOrCreate`).
+26. The Deployments screen (Screen 12) lives in the "Más módulos" secondary nav; a
+    `deployments` AppIcon was added. Per Phase-4 decision 23, the project-detail deploy
+    tab stays a placeholder — the standalone screen is the canonical create surface.
+
+## Ready for Phase 6
+
+Phase 6 (payroll & finance) is **gated on the Figma prototype review** the client asked
+for before Phase 6 (Setup Answers). It will consume Phase 5 outputs: approved measurements
+feed project billing, and `deployment_charges` become internal expense (host) + receivable
+(home) lines, with Option A payroll note lines per `docs/PAYROLL_DEPLOYMENTS.md`.
 
 External blocker (unchanged): legacy DB dump + `storage/app` from the live server
 (DATA_MIGRATION.md §1) — needed to validate importers against real data. Not blocking UI.

@@ -16,6 +16,7 @@ use App\Http\Controllers\ClientController;
 use App\Http\Controllers\ColumnSettingsController;
 use App\Http\Controllers\CompanyController;
 use App\Http\Controllers\ComplianceController;
+use App\Http\Controllers\DeploymentController;
 use App\Http\Controllers\DocumentController;
 use App\Http\Controllers\EmployeeCallLogController;
 use App\Http\Controllers\EmployeeController;
@@ -151,6 +152,13 @@ Route::middleware(['auth', 'active'])->group(function (): void {
     Route::put('/measurements/{measurement}', [MeasurementController::class, 'update'])->name('measurements.update');
     Route::delete('/measurements/{measurement}', [MeasurementController::class, 'destroy'])->name('measurements.destroy');
     Route::post('/measurements/{measurement}/approve', [MeasurementController::class, 'approve'])->name('measurements.approve');
+
+    // Screen 12 — Cross-company employee deployments (spans two companies)
+    Route::get('/deployments', [DeploymentController::class, 'index'])->name('deployments.index');
+    Route::get('/deployments/available-employees', [DeploymentController::class, 'availableEmployees'])->name('deployments.available-employees');
+    Route::post('/deployments', [DeploymentController::class, 'store'])->name('deployments.store');
+    Route::post('/deployments/{deployment}/complete', [DeploymentController::class, 'complete'])->name('deployments.complete');
+    Route::post('/deployments/{deployment}/cancel', [DeploymentController::class, 'cancel'])->name('deployments.cancel');
 
     // Screen 18 — Proposals (shared pool)
     Route::get('/proposals', [ProposalController::class, 'index'])->name('proposals.index');

@@ -22,6 +22,7 @@ const paths = {
     calls: ['M4 4h4l2 5-2.5 1.5a12 12 0 0 0 6 6L15 14l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 2 6a2 2 0 0 1 2-2z'],
     reports: ['M5 20v-6M11 20V8M17 20V10', 'M3 20h18'],
     apps: ['M4 4h4v4H4z', 'M10 4h4v4h-4z', 'M16 4h4v4h-4z', 'M4 10h4v4H4z', 'M10 10h4v4h-4z', 'M16 10h4v4h-4z', 'M4 16h4v4H4z', 'M10 16h4v4h-4z', 'M16 16h4v4h-4z'],
+    deployments: ['M8 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6z', 'M3 20a5 5 0 0 1 10 0', 'M16 5l4 4-4 4', 'M20 9h-6'],
 
     /* actions */
     plus: ['M12 5v14M5 12h14'],
