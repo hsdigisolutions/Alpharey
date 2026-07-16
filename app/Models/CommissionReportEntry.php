@@ -20,8 +20,11 @@ use Illuminate\Support\Carbon;
  * @property int $id
  * @property CommissionStatus $status
  * @property string $month
+ * @property numeric-string $base_amount
+ * @property numeric-string|null $commission_percent
  * @property numeric-string $original_amount
  * @property numeric-string|null $adjusted_amount
+ * @property Carbon|null $finalized_at
  * @property Carbon|null $paid_at
  */
 class CommissionReportEntry extends Model
@@ -35,7 +38,7 @@ class CommissionReportEntry extends Model
     protected $fillable = [
         'employee_id', 'project_id', 'invoice_id', 'month', 'base_amount',
         'commission_percent', 'original_amount', 'adjusted_amount',
-        'adjustment_reason',
+        'adjustment_reason', 'notes',
     ];
 
     protected function casts(): array

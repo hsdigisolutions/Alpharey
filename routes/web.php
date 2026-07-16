@@ -15,6 +15,7 @@ use App\Http\Controllers\Auth\PasswordResetLinkController;
 use App\Http\Controllers\ClientContactController;
 use App\Http\Controllers\ClientController;
 use App\Http\Controllers\ColumnSettingsController;
+use App\Http\Controllers\CommissionController;
 use App\Http\Controllers\CompanyController;
 use App\Http\Controllers\ComplianceController;
 use App\Http\Controllers\DeploymentController;
@@ -174,6 +175,14 @@ Route::middleware(['auth', 'active'])->group(function (): void {
     Route::post('/expenses/{expense}', [ExpenseController::class, 'update'])->name('expenses.update');
     Route::post('/expenses/{expense}/approve', [ExpenseController::class, 'approve'])->name('expenses.approve');
     Route::delete('/expenses/{expense}', [ExpenseController::class, 'destroy'])->name('expenses.destroy');
+
+    // Screen 19 — Commission reports (finalizing is a one-way door)
+    Route::get('/commissions', [CommissionController::class, 'index'])->name('commissions.index');
+    Route::post('/commissions/generate', [CommissionController::class, 'generate'])->name('commissions.generate');
+    Route::get('/commissions/pdf', [CommissionController::class, 'pdf'])->name('commissions.pdf');
+    Route::put('/commissions/{entry}/adjust', [CommissionController::class, 'adjust'])->name('commissions.adjust');
+    Route::post('/commissions/{entry}/finalize', [CommissionController::class, 'finalize'])->name('commissions.finalize');
+    Route::post('/commissions/{entry}/paid', [CommissionController::class, 'markPaid'])->name('commissions.paid');
 
     // Screen 12 — Payroll (company-owned; locked periods reject dated edits)
     Route::get('/payroll', [PayrollController::class, 'index'])->name('payroll.index');
