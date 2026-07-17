@@ -27,7 +27,7 @@ const primaryNav = [
     { key: 'invoices', icon: 'invoices', href: '/invoices' },
     { key: 'attendance', icon: 'attendance', href: '/attendance' },
     { key: 'payroll', icon: 'payroll', href: '/payroll' },
-    { key: 'calls', icon: 'calls', href: null },
+    { key: 'calls', icon: 'calls', href: '/calls' },
     { key: 'reports', icon: 'reports', href: null },
 ];
 
@@ -35,12 +35,12 @@ const isAdmin = computed(() => ['super_admin', 'company_admin'].includes(page.pr
 
 const secondaryNav = computed(() => [
     { key: 'vendors', labelKey: 'nav.vendors', href: '/vendors' },
-    { key: 'vehicles', labelKey: 'nav.vehicles', href: null },
+    { key: 'vehicles', labelKey: 'nav.vehicles', href: '/vehicles' },
     { key: 'proposals', labelKey: 'nav.proposals', href: '/proposals' },
     { key: 'commissions', labelKey: 'nav.commissions', href: '/commissions' },
     { key: 'expenses', labelKey: 'nav.expenses', href: '/expenses' },
-    { key: 'leave', labelKey: 'nav.leave', href: null },
-    { key: 'inventory', labelKey: 'nav.inventory', href: null },
+    { key: 'leave', labelKey: 'nav.leave', href: '/leave' },
+    { key: 'inventory', labelKey: 'nav.inventory', href: '/inventory' },
     { key: 'measurements', labelKey: 'nav.measurements', href: '/measurements' },
     { key: 'deployments', labelKey: 'nav.deployments', href: '/deployments' },
     { key: 'compliance', labelKey: 'nav.compliance', href: '/compliance' },

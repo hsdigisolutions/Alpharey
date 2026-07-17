@@ -4,12 +4,14 @@ namespace App\Http\Controllers;
 
 use App\Enums\FuelType;
 use App\Enums\VehicleOwnership;
+use App\Http\Controllers\Admin\Concerns\ResolvesCompanyContext;
 use App\Http\Requests\StoreVehicleRequest;
 use App\Models\Employee;
 use App\Models\Vehicle;
 use App\Models\VehicleMaintenanceHistory;
 use App\Services\Vehicles\VehicleCompliance;
 use App\Services\Vehicles\VehicleService;
+use App\Support\CurrentCompany;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -25,6 +27,11 @@ use Inertia\Response;
  */
 class VehicleController extends Controller
 {
+    // A vehicle belongs to exactly one fleet, so creating one needs an active
+    // company. A Super Admin browsing "all companies" is sent to Welcome to
+    // pick one rather than hitting a null company_id (decision 27).
+    use ResolvesCompanyContext;
+
     public function __construct(
         private readonly VehicleService $vehicles,
         private readonly VehicleCompliance $compliance,
@@ -48,7 +55,9 @@ class VehicleController extends Controller
             'ownerships' => array_map(fn (VehicleOwnership $o): string => $o->value, VehicleOwnership::cases()),
             'fuelTypes' => array_map(fn (FuelType $f): string => $f->value, FuelType::cases()),
             'can' => [
-                'create' => Gate::allows('vehicles.create'),
+                // No active company = nothing to create the vehicle in, so the
+                // button is not offered (decision 27).
+                'create' => Gate::allows('vehicles.create') && app(CurrentCompany::class)->id() !== null,
                 'edit' => Gate::allows('vehicles.edit'),
                 'delete' => Gate::allows('vehicles.delete'),
             ],
@@ -117,7 +126,7 @@ class VehicleController extends Controller
 
     public function store(StoreVehicleRequest $request): RedirectResponse
     {
-        $this->vehicles->create($request->validated());
+        $this->vehicles->create($request->validated(), $this->contextCompanyId());
 
         return back()->with('success', __('ui.vehicles.saved'));
     }

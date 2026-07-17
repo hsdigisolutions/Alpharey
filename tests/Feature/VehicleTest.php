@@ -312,3 +312,28 @@ it('denies vehicle actions to a user without the permission', function (): void 
     $this->actingAs($plain)->get('/vehicles')->assertForbidden();
     $this->actingAs($plain)->post("/vehicles/{$vehicle->id}/assign", ['employee_id' => null])->assertForbidden();
 });
+
+/**
+ * Found in the browser, not by the suite: a Super Admin browsing "all
+ * companies" has no active company, so company_id went null and the insert
+ * blew up with a 500. The suite missed it for the reason CLAUDE.md decision 27
+ * already records — a company admin always HAS a company, so every other test
+ * here is blind to it.
+ */
+it('sends a super admin with no company selected to Welcome instead of failing', function (): void {
+    $superAdmin = User::factory()->create(['role' => UserRole::SuperAdmin, 'company_id' => null]);
+
+    $this->actingAs($superAdmin)->post('/vehicles', [
+        'plate_number' => '0000XXX',
+        'ownership' => VehicleOwnership::Company->value,
+    ])->assertRedirect('/welcome');
+
+    expect(Vehicle::query()->withoutGlobalScopes()->where('plate_number', '0000XXX')->exists())->toBeFalse();
+});
+
+it('does not offer the create button when no company is selected', function (): void {
+    $superAdmin = User::factory()->create(['role' => UserRole::SuperAdmin, 'company_id' => null]);
+
+    $this->actingAs($superAdmin)->get('/vehicles')
+        ->assertInertia(fn ($page) => $page->where('can.create', false));
+});

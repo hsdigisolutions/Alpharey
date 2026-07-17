@@ -8,7 +8,6 @@ use App\Models\Vehicle;
 use App\Models\VehicleHistory;
 use App\Models\VehicleMaintenanceHistory;
 use App\Models\VehicleMileageHistory;
-use App\Support\CurrentCompany;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -121,12 +120,17 @@ class VehicleService
     }
 
     /**
+     * The owning company is passed in, not resolved here: a Super Admin
+     * browsing "all companies" has no active company, and a vehicle always
+     * belongs to exactly one fleet. The caller settles that question first
+     * (ResolvesCompanyContext) — see CLAUDE.md scaffolding decision 27.
+     *
      * @param  array<string, mixed>  $data
      */
-    public function create(array $data): Vehicle
+    public function create(array $data, int $companyId): Vehicle
     {
         $vehicle = new Vehicle($data);
-        $vehicle->company_id = app(CurrentCompany::class)->id();
+        $vehicle->company_id = $companyId;
         $vehicle->save();
 
         // A vehicle created already assigned still needs its history opened,
