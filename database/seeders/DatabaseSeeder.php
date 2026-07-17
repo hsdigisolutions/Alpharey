@@ -72,5 +72,9 @@ class DatabaseSeeder extends Seeder
                 'locale' => 'es',
             ],
         );
+
+        // Reference data, not dummies: the 8 leave categories ship with the
+        // product and are needed in production too.
+        $this->call(LeaveCategorySeeder::class);
     }
 }
