@@ -228,6 +228,70 @@ Known old-schema drift that migration simply ignores (documented in CODEBASE_REV
 the broken `attendances` index migration, Vehicle model fillable/schema mismatch, empty
 no-op migrations — none of these affect data content.
 
+### 3.7 Leave hangs off `user_id` in the old schema, `employee_id` in the new one
+
+**The single riskiest mapping in the migration**, because nothing in either
+schema can settle it.
+
+The legacy `leaves` and `leave_balances` tables key on `user_id` — a *login*.
+The new tables key on `employee_id` — a *member of the workforce* — because
+approved leave writes attendance rows and therefore reaches payroll, and both
+of those are keyed on employees. Keeping `user_id` would have made Phase 7's
+headline deliverable ("leave feeds attendance and payroll") impossible.
+
+There is **no `users.employee_id`, and no `employees.user_id`, in either
+schema**. The bridge has to be reconstructed, and `LeavesImporter` does it by
+normalised name (case- and accent-insensitive, so *José García* matches
+*Jose Garcia*):
+
+| Name matches | Result |
+|---|---|
+| exactly one employee | imported and mapped |
+| zero, or more than one | **NOT imported** — reported with the legacy user id, leave type and start date |
+
+An ambiguous row is left for a human rather than guessed at: attaching a
+worker's holiday to the wrong person corrupts *their* balance and *their*
+attendance, and neither is obvious afterwards.
+
+**Before cutover:** run `--dry-run`, read the exceptions CSV, and expect to
+resolve some rows by hand. Two workers with the same name in a 5-company
+construction group is not a hypothetical.
+
+Imported leave is **not** replayed through `LeaveService`: it never re-books
+attendance and never re-derives a balance. The legacy system already booked
+those days; re-running the engine would either double-book the grid or refuse
+on its own attendance-conflict guard. Balances migrate as stored, never
+recomputed from the imported leaves — that would silently "correct" a figure
+the client has been running on.
+
+### 3.8 Vehicles: column names and the maintenance total
+
+- `assigned_emp_id` → `assigned_employee_id`
+- legacy `tire` → `tyre` (the spec's spelling): `last_tire_change_date` →
+  `last_tyre_change_date`, same for the mileage column
+- `ita_expiry_date` **keeps its legacy name** even though the Spanish
+  roadworthiness test is normally abbreviated *ITV*. It looks like a legacy
+  typo; the UI already labels it ITV. Renaming the column is a one-line change
+  once the client confirms — not worth diverging from the dump before then.
+- `maintenance_cost` → `maintenance_cost_total`, **verbatim**. The new system
+  recomputes that total from the maintenance log, but the legacy log has no
+  per-record cost at all, so recomputing on import would reset every vehicle to
+  0. The stored figure is what the client reads; the rollup takes over from the
+  first maintenance record the new system writes.
+
+### 3.9 Inventory: why the ledger is not replayed
+
+`StockMovementService` is the authority for stock, and an item's counters are
+its cached tail — but the importer carries `total_stock`/`available_stock` over
+**verbatim** and does not replay the movements through the service.
+
+That is deliberate, not an oversight. Replaying would recompute every
+`balance_after` from an opening stock the legacy data does not record, and any
+gap in the old ledger (a movement someone deleted, a counter corrected by hand)
+would surface as a stock figure that disagrees with the warehouse shelf. What
+is physically on the shelf today is the fact worth preserving. The ledger
+becomes the authority from the first movement the new system writes.
+
 ---
 
 ## 4. Cutover sequence (Phase 9, on alpharey.com)

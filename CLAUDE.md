@@ -2,7 +2,30 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Status: Phase 6 complete (2026-07-17)
+## Status: Phase 7 complete (2026-07-17)
+
+Development Phase 7 (operations modules) is built and verified:
+**387 Pest tests / 1358 assertions passing (1 skipped) · Pint clean · Larastan
+level 6 clean · production Vite build working · all 5 translation guards green ·
+the vehicle compliance light verified in the browser against seeded MySQL.**
+
+Live screens: **22 Leave** (request → approve/reject/cancel, balances, adjust) ·
+**21 Vehicles** (4 tabs) · **23 Inventory** (items, ledger, issues, project
+assignments, categories) · **13 Call Panel**. The two integrations that made this
+phase worth doing:
+
+- **Leave feeds attendance AND payroll.** Approving writes the days into the grid
+  as `AttendanceStatus::Leave`; paid leave for a daily worker then lands in
+  `days_amount` on a real payroll run (verified: 3 days × 80 € = 240 €, overtime 0).
+- **Vehicle insurance/ITV feed the compliance alerts.** Same traffic light, same
+  `documents.warn_days` setting, same 90/60/30 + expiry-day schedule as documents.
+
+Browser-verified: a Kangoo whose ITV lapses in 15 days saves under `company_id=1`
+and renders the amber dot from the real date. That check also caught a **repeat of
+scaffolding decision 27** (SA with no company → null `company_id` → 500) which 23
+green tests were blind to; fixed + pinned.
+
+## Phase 6 (complete, 2026-07-17)
 
 Development Phase 6 (payroll & finance — the heaviest phase) is built and verified:
 **306 Pest tests / 1102 assertions passing (1 skipped) · Pint clean · Larastan level 6
@@ -21,8 +44,8 @@ the server independently agreeing.
 without a prototype review, so design-change requests against these screens are normal
 follow-up work, not defects.
 
-Next up: **Development Phase 7** (operations modules: vehicles, leave, inventory, call
-panel). Earlier phases: Phase 0–5, design D1–D3 (approved 2026-07-14).
+Next up: **Development Phase 8** (dashboards, reports, global search, notifications).
+Earlier phases: Phase 0–6, design D1–D3 (approved 2026-07-14).
 
 ## Project skills — read them first
 
@@ -459,10 +482,85 @@ Admin), `empresa1.admin@verto5.local` (Company Admin), `empresa1.user@verto5.loc
 31. `payroll.export` additionally requires `payroll.view`: the sheet is nothing but
     wages, so exporting without the right to see pay would leak the whole payroll.
 
-## Ready for Phase 7
+## Phase 7 additions (map for future phases)
 
-Phase 7 (operations modules: vehicles, leave management, inventory, call panel) builds on
-the same conventions. Still open from Phase 6, in priority order:
+- **Leave** (`leaves`, `leave_balances`, `leave_categories`): keyed on
+  `employee_id`, NOT `user_id` as legacy had it — approved leave writes attendance
+  and therefore reaches payroll, and both are keyed on employees. `LeaveService`
+  owns the lifecycle. **The pricing rules are load-bearing**: unpaid leave, and
+  paid leave for monthly/per-meter workers, book 0 hours and 0 pay (a salary
+  already covers the day — paying it again through attendance pays it twice); paid
+  leave for daily/hourly workers is priced from the wage snapshot frozen at write
+  time. **Both keep `total_amount == hours × rate`** because `PayrollService`
+  splits every attendance row as `overtime = total − base` — a row with pay but no
+  hours silently becomes OVERTIME on a payslip. Tests pin all of it.
+- `approve()` refuses when ANY attendance exists in the span (a worker cannot be
+  on site and on leave) and names the dates. That guard is also what makes
+  `cancel()` safe to withdraw rows by status + range. PeriodLock is asserted for
+  **every month the span touches**, not just the start.
+- Pending days are held against the balance immediately, so two requests that each
+  fit cannot both be approved when together they do not. `remaining()` is computed,
+  never stored.
+- **Vehicles**: `VehicleCompliance` grades insurance/ITV on the same traffic light
+  as documents and **reuses `DocumentStatus::warnDays()`** — widening the window in
+  Settings must widen it everywhere. `verto:scan-documents` sweeps the fleet on the
+  same 90/60/30 + expiry-day schedule. A missing expiry is `neutral`, never `ok`.
+  `maintenance_cost_total` is RECOMPUTED from the log (so deleting a record reduces
+  it); an odometer never runs backwards; `assign()` closes the open history row
+  before opening the next, and the edit form routes through it rather than bypassing
+  tab 2. `employee_vehicle_assignments` is NOT a duplicate of `vehicle_history` —
+  its `vehicle_id` is nullable because `type='own'` records a worker's own car.
+- **Inventory**: `equipment_stock_movements` is the authority; `total_stock` /
+  `available_stock` are its cached tail and are **not mass assignable**. total =
+  owned, available = in the store, so `total − available` = out with workers. An
+  adjustment sets the STORE and moves total by the same delta, so what is out with
+  workers is not rewritten. `balance_after` is frozen per movement; the item row is
+  locked for update so two concurrent issues of the last helmet cannot both succeed.
+  Opening stock is a `stock_in` movement, not a column write.
+- **Call Panel**: builds on the Phase 2 `employee_call_logs`. The indicator reads the
+  SOONEST OUTSTANDING follow-up, not the latest call's (a newer call with no
+  follow-up must not hide an older overdue one); "this week" means since the start of
+  the working week, not a rolling 7 days.
+- **Importers**: `LeavesImporter` reconstructs the user→employee link neither schema
+  has, **by name**, and reports every row it cannot resolve to exactly one employee
+  rather than guessing (DATA_MIGRATION.md §3.7 — the riskiest mapping in the
+  migration; expect to resolve some by hand at cutover). Vehicles/inventory carry
+  figures over verbatim; the stock ledger is NOT replayed (§3.9).
+
+## Scaffolding decisions made in Phase 7 (not in DECISIONS.md)
+
+32. Leave keys on `employee_id`. The legacy `user_id` design cannot feed attendance
+    or payroll, which is the whole point of the module.
+33. Leave books weekdays only. **There is no public-holiday calendar in the schema**,
+    so a Spanish national/regional holiday inside a span still books a (zero-cost)
+    cell — worth a `holidays` table later.
+34. `total_days` is entered by hand (half days are real) but is validated against the
+    weekdays the span actually covers, so a 2-day request cannot burn 20 days.
+35. `ita_expiry_date` keeps the legacy name (ITV is the usual Spanish abbreviation —
+    a likely legacy typo). The UI already labels it ITV; renaming the column is a
+    one-line change once confirmed.
+36. Plate numbers and SKUs are unique **per company**, not per group.
+37. Leave/equipment categories follow the `ExpenseCategory` shape (NULL `company_id`
+    = group-wide default), so they are not tenancy-scoped. The 8 leave categories are
+    seeded as reference data (idempotent, safe in production).
+
+## Open, in priority order
+
+**Unpaid leave does not reduce a MONTHLY worker's salary** — the pro-rata divisor
+(30 days vs the calendar month) is a real Spanish nómina choice DECISIONS.md does not
+record, so it was flagged rather than invented. A clerk handles it through the payroll
+screen's `other_deductions` until the client confirms. **Ask the client.**
+
+Not built in Phase 7, though the plan lists them under Screen 26:
+
+- **Settings → leave categories**: the 8 defaults are seeded and the API respects a
+  per-company category, but there is no Settings UI to add or edit one yet. Inventory
+  categories ARE manageable (inline on the Inventory screen, "Categorías" tab).
+- **Settings → teams**: not started. Phase 1 scaffolding decision 11 deferred the teams
+  tables to "the Settings→Teams section in a later phase" — they still do not exist,
+  so this is a schema + UI pass, not just a screen.
+
+Still open from Phase 6:
 
 - **Finance detail tabs** — employee Nómina, project Facturas/Gastos, client Facturas,
   vendor Gastos. Per scaffolding decision 23 the standalone screens are canonical and the
