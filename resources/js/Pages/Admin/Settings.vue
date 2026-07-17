@@ -82,7 +82,7 @@ function deletePolicy(p) { router.delete(`/admin/overtime-policies/${p.id}`, { p
 </script>
 
 <template>
-    <Head title="Configuración" />
+    <Head :title="$t('settings.title')" />
 
     <AppLayout>
         <VPageHeader k="settings.title" />
@@ -223,7 +223,7 @@ function deletePolicy(p) { router.delete(`/admin/overtime-policies/${p.id}`, { p
                 <FormField k="overtime.name" :error="policyForm.errors.name" required><VInput v-model="policyForm.name" /></FormField>
                 <FormField k="overtime.type" :error="policyForm.errors.type" required>
                     <VSelect v-model="policyForm.type">
-                        <option v-for="t in overtimeTypes" :key="t" :value="t">{{ $page.props.lang.es.overtime[`type_${t}`] }}</option>
+                        <option v-for="t in overtimeTypes" :key="t" :value="t">{{ $t(`overtime.type_${t}`) }}</option>
                     </VSelect>
                 </FormField>
                 <FormField k="overtime.rate" :error="policyForm.errors.rate"><VInput v-model="policyForm.rate" type="number" step="0.01" /></FormField>

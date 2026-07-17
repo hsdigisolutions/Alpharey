@@ -88,7 +88,7 @@ const fieldRows = [
 </script>
 
 <template>
-    <Head title="Empresas" />
+    <Head :title="$t('companies.title')" />
 
     <AppLayout>
         <VPageHeader k="companies.title">
@@ -132,8 +132,8 @@ const fieldRows = [
                         <template v-for="field in row" :key="field">
                             <FormField v-if="field === 'status'" k="companies.status" :error="editForm.errors.status">
                                 <VSelect v-model="editForm.status">
-                                    <option value="active">{{ $page.props.lang.es.companies.active }} / {{ $page.props.lang.en.companies.active }}</option>
-                                    <option value="inactive">{{ $page.props.lang.es.companies.inactive }} / {{ $page.props.lang.en.companies.inactive }}</option>
+                                    <option value="active">{{ $tPair('companies.active') }}</option>
+                                    <option value="inactive">{{ $tPair('companies.inactive') }}</option>
                                 </VSelect>
                             </FormField>
                             <FormField v-else :k="`companies.${field}`" :error="editForm.errors[field]"

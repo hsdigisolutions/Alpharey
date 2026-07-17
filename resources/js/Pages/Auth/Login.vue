@@ -30,7 +30,7 @@ function switchLocale() {
 </script>
 
 <template>
-    <Head title="Login" />
+    <Head :title="$t('auth.login')" />
 
     <div class="flex min-h-screen flex-col items-center justify-center px-4">
         <button type="button"

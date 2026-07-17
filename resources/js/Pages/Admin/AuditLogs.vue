@@ -72,7 +72,7 @@ const columns = [
 </script>
 
 <template>
-    <Head title="Registro de Actividad" />
+    <Head :title="$t('audit.title')" />
 
     <AppLayout>
         <VPageHeader k="audit.title">
@@ -111,7 +111,7 @@ const columns = [
         <div class="mb-4 grid gap-3 rounded-lg border border-line bg-surface-raised p-4 shadow-card sm:grid-cols-2 lg:grid-cols-5">
             <FormField k="audit.filter_action">
                 <VSelect v-model="filters.action" @update:model-value="apply()">
-                    <option value="">{{ $page.props.lang.es.audit.all }} / {{ $page.props.lang.en.audit.all }}</option>
+                    <option value="">{{ $tPair('audit.all') }}</option>
                     <option v-for="action in props.actionOptions" :key="action" :value="action">{{ action }}</option>
                 </VSelect>
             </FormField>

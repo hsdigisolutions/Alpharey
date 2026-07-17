@@ -53,7 +53,7 @@ const types = ['company', 'private', 'municipality', 'other'];
             <FormField k="clients.type" :error="form.errors.client_type" required>
                 <VSelect v-model="form.client_type">
                     <option v-for="t in types" :key="t" :value="t">
-                        {{ $page.props.lang.es.clients[`type_${t}`] }} / {{ $page.props.lang.en.clients[`type_${t}`] }}
+                        {{ $t(`clients.type_${t}`) }} / {{ $t(`clients.type_${t}`) }}
                     </option>
                 </VSelect>
             </FormField>

@@ -123,7 +123,7 @@ const columns = [
 </script>
 
 <template>
-    <Head title="Gastos" />
+    <Head :title="$t('expenses.title')" />
     <AppLayout>
         <VPageHeader k="expenses.title">
             <VButton v-if="can.create" icon="plus" @click="openCreate">
@@ -133,17 +133,17 @@ const columns = [
 
         <div class="grid grid-cols-2 gap-2 pb-3 lg:grid-cols-5">
             <VSelect v-model="filters.project_id" @update:model-value="apply()">
-                <option value="">{{ $page.props.lang.es.expenses.project }}</option>
+                <option value="">{{ $t('expenses.project') }}</option>
                 <option v-for="p in projects" :key="p.id" :value="p.id">{{ p.name }}</option>
             </VSelect>
             <VSelect v-model="filters.vendor_id" @update:model-value="apply()">
-                <option value="">{{ $page.props.lang.es.expenses.vendor }}</option>
+                <option value="">{{ $t('expenses.vendor') }}</option>
                 <option v-for="v in vendors" :key="v.id" :value="v.id">{{ v.name }}</option>
             </VSelect>
             <VSelect v-model="filters.approval" @update:model-value="apply()">
-                <option value="">{{ $page.props.lang.es.expenses.approval }}</option>
-                <option value="approved">{{ $page.props.lang.es.expenses.is_approved }}</option>
-                <option value="pending">{{ $page.props.lang.es.expenses.pending }}</option>
+                <option value="">{{ $t('expenses.approval') }}</option>
+                <option value="approved">{{ $t('expenses.is_approved') }}</option>
+                <option value="pending">{{ $t('expenses.pending') }}</option>
             </VSelect>
             <VDateInput v-model="filters.from" @update:model-value="apply()" />
             <VDateInput v-model="filters.to" @update:model-value="apply()" />
@@ -199,7 +199,7 @@ const columns = [
                 <FormField k="expenses.type" :error="form.errors.type" required>
                     <VSelect v-model="form.type">
                         <option v-for="t in types" :key="t" :value="t">
-                            {{ $page.props.lang.es.expenses[`type_${t}`] }}
+                            {{ $t(`expenses.type_${t}`) }}
                         </option>
                     </VSelect>
                 </FormField>
@@ -256,7 +256,7 @@ const columns = [
                     <VSelect v-model="form.payment_method">
                         <option value="">—</option>
                         <option v-for="m in paymentMethods" :key="m" :value="m">
-                            {{ $page.props.lang.es.employees[`payment_${m}`] ?? m }}
+                            {{ $t(`employees.payment_${m}`) ?? m }}
                         </option>
                     </VSelect>
                 </FormField>

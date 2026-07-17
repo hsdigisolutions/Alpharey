@@ -86,7 +86,7 @@ const monthLabel = computed(() => {
 </script>
 
 <template>
-    <Head title="Asistencia" />
+    <Head :title="$t('attendance.title')" />
     <AppLayout>
         <VPageHeader k="attendance.title">
             <VButton v-if="can.export" variant="secondary" size="sm" icon="export" @click="exportMonth">Excel</VButton>

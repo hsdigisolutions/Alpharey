@@ -172,7 +172,7 @@ function destroy() {
                     <VTimeline v-if="notes.length">
                         <VTimelineItem v-for="note in notes" :key="note.id"
                             :time="note.noted_at" :author="note.author"
-                            :type-label="$page.props.lang.es.employees[`note_${note.type}`]"
+                            :type-label="$t(`employees.note_${note.type}`)"
                             :type-status="noteStatus[note.type]">
                             {{ note.body }}
                             <template v-if="can.edit" #attachment>
@@ -190,7 +190,7 @@ function destroy() {
                         <FormField k="employees.note_type">
                             <VSelect v-model="noteForm.type">
                                 <option v-for="t in ['general', 'reminder', 'issue', 'call']" :key="t" :value="t">
-                                    {{ $page.props.lang.es.employees[`note_${t}`] }} / {{ $page.props.lang.en.employees[`note_${t}`] }}
+                                    {{ $t(`employees.note_${t}`) }} / {{ $t(`employees.note_${t}`) }}
                                 </option>
                             </VSelect>
                         </FormField>

@@ -95,8 +95,8 @@ function destroy() { router.delete(`/projects/${props.project.id}`); }
                 <VCard title-key="projects.section_budget">
                     <dl class="divide-y divide-line">
                         <div class="flex justify-between py-2"><dt><Bilingual k="projects.budget" class="text-xs text-muted" /></dt><dd class="tabular-nums text-sm">{{ project.budget ?? '—' }}</dd></div>
-                        <div class="flex justify-between py-2"><dt><Bilingual k="projects.billing_type" class="text-xs text-muted" /></dt><dd class="text-sm">{{ project.billing_type ? $page.props.lang.es.projects[`billing_${project.billing_type}`] : '—' }}</dd></div>
-                        <div class="flex justify-between py-2"><dt><Bilingual k="projects.vat" class="text-xs text-muted" /></dt><dd class="text-sm">{{ project.vat_rate ? $page.props.lang.es.vat[project.vat_rate] : $page.props.lang.es.vat.not_applicable }}</dd></div>
+                        <div class="flex justify-between py-2"><dt><Bilingual k="projects.billing_type" class="text-xs text-muted" /></dt><dd class="text-sm">{{ project.billing_type ? $t(`projects.billing_${project.billing_type}`) : '—' }}</dd></div>
+                        <div class="flex justify-between py-2"><dt><Bilingual k="projects.vat" class="text-xs text-muted" /></dt><dd class="text-sm">{{ project.vat_rate ? $t(`vat.${project.vat_rate}`) : $t('vat.not_applicable') }}</dd></div>
                         <div class="flex justify-between py-2"><dt><Bilingual k="projects.start" class="text-xs text-muted" /></dt><dd class="tabular-nums text-sm">{{ project.start_date ?? '—' }} → {{ project.end_date ?? '—' }}</dd></div>
                     </dl>
                     <p v-if="project.description" class="mt-3 text-sm text-ink-soft">{{ project.description }}</p>
@@ -155,7 +155,7 @@ function destroy() { router.delete(`/projects/${props.project.id}`); }
                 <VCard>
                     <VTimeline v-if="remarks.length">
                         <VTimelineItem v-for="r in remarks" :key="r.id" :time="r.noted_at" :author="r.author"
-                            :type-label="$page.props.lang.es.projects[`note_${r.type}`]" :type-status="noteStatus[r.type]">
+                            :type-label="$t(`projects.note_${r.type}`)" :type-status="noteStatus[r.type]">
                             {{ r.body }}
                         </VTimelineItem>
                     </VTimeline>
@@ -167,7 +167,7 @@ function destroy() { router.delete(`/projects/${props.project.id}`); }
                         <FormField k="projects.tab_notes">
                             <VSelect v-model="noteForm.type">
                                 <option v-for="t in ['internal','client_call','client_email','meeting','message']" :key="t" :value="t">
-                                    {{ $page.props.lang.es.projects[`note_${t}`] }}
+                                    {{ $t(`projects.note_${t}`) }}
                                 </option>
                             </VSelect>
                         </FormField>

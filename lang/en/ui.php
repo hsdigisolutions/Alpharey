@@ -11,6 +11,13 @@ return [
         'name' => 'Verto5',
     ],
 
+    // Role names as shown in the header user menu.
+    'roles' => [
+        'super_admin' => 'Super Admin',
+        'company_admin' => 'Company Admin',
+        'user' => 'Staff',
+    ],
+
     'nav' => [
         'dashboard' => 'Dashboard',
         'companies' => 'Companies',
@@ -62,6 +69,7 @@ return [
     ],
 
     'welcome' => [
+        'title' => 'Welcome',
         'greeting_morning' => 'Good morning',
         'greeting_afternoon' => 'Good afternoon',
         'greeting_evening' => 'Good evening',
@@ -213,6 +221,11 @@ return [
     ],
 
     'common' => [
+        'yes' => 'Yes',
+        'no' => 'No',
+        'expand_menu' => 'Expand menu',
+        'collapse_menu' => 'Collapse menu',
+        'clear' => 'Clear',
         'search' => 'Search',
         'search_everything' => 'Search the whole system',
         'language' => 'Language',

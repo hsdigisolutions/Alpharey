@@ -128,7 +128,7 @@ const paymentMethods = ['bank_transfer', 'cash', 'cash_via_supervisor'];
                         <VSelect v-model="form.wage_type">
                             <option value="">—</option>
                             <option v-for="type in wageTypes" :key="type" :value="type">
-                                {{ $page.props.lang.es.employees[`wage_${type}`] }} / {{ $page.props.lang.en.employees[`wage_${type}`] }}
+                                {{ $t(`employees.wage_${type}`) }} / {{ $t(`employees.wage_${type}`) }}
                             </option>
                         </VSelect>
                     </FormField>
@@ -151,7 +151,7 @@ const paymentMethods = ['bank_transfer', 'cash', 'cash_via_supervisor'];
                         <VSelect v-model="form.payment_method">
                             <option value="">—</option>
                             <option v-for="method in paymentMethods" :key="method" :value="method">
-                                {{ $page.props.lang.es.employees[`pm_${method}`] }} / {{ $page.props.lang.en.employees[`pm_${method}`] }}
+                                {{ $t(`employees.pm_${method}`) }} / {{ $t(`employees.pm_${method}`) }}
                             </option>
                         </VSelect>
                     </FormField>

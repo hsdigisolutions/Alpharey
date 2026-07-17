@@ -51,7 +51,7 @@ const statCards = [
 </script>
 
 <template>
-    <Head title="Bienvenido" />
+    <Head :title="$t('welcome.title')" />
 
     <AppLayout>
         <div class="mb-6">

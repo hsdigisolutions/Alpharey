@@ -102,7 +102,7 @@ const columns = [
 </script>
 
 <template>
-    <Head title="Nóminas" />
+    <Head :title="$t('payroll.title')" />
     <AppLayout>
         <VPageHeader k="payroll.title">
             <VButton v-if="can.create && !locked" variant="secondary" icon="plus" @click="post('/payroll/calculate')">

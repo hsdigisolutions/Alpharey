@@ -15,7 +15,7 @@ function submit() {
 </script>
 
 <template>
-    <Head title="Recuperar contraseña" />
+    <Head :title="$t('auth.forgot_title')" />
 
     <div class="flex min-h-screen flex-col items-center justify-center px-4">
         <div class="w-full max-w-sm">

@@ -52,7 +52,7 @@ const columns = [
 </script>
 
 <template>
-    <Head title="Proveedores" />
+    <Head :title="$t('vendors.title')" />
     <AppLayout>
         <VPageHeader k="vendors.title">
             <VButton v-if="can.create" icon="plus" @click="showForm = true"><Bilingual k="vendors.new" inline /></VButton>

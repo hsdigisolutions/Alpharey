@@ -161,7 +161,7 @@ const statusBadge = { active: 'ok', in_progress: 'info', completed: 'ok', cancel
                 <VCard>
                     <VTimeline v-if="communications.length">
                         <VTimelineItem v-for="c in communications" :key="c.id" :time="c.logged_at" :author="c.author"
-                            :type-label="$page.props.lang.es.clients[`comm_${c.type}`]" :type-status="commStatus[c.type]">
+                            :type-label="$t(`clients.comm_${c.type}`)" :type-status="commStatus[c.type]">
                             {{ c.body }}
                         </VTimelineItem>
                     </VTimeline>
@@ -172,7 +172,7 @@ const statusBadge = { active: 'ok', in_progress: 'info', completed: 'ok', cancel
                         <FormField k="clients.tab_communication">
                             <VSelect v-model="commForm.type">
                                 <option v-for="t in ['call','meeting','email','note']" :key="t" :value="t">
-                                    {{ $page.props.lang.es.clients[`comm_${t}`] }} / {{ $page.props.lang.en.clients[`comm_${t}`] }}
+                                    {{ $t(`clients.comm_${t}`) }} / {{ $t(`clients.comm_${t}`) }}
                                 </option>
                             </VSelect>
                         </FormField>

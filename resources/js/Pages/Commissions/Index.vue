@@ -113,7 +113,7 @@ const columns = [
 </script>
 
 <template>
-    <Head title="Comisiones" />
+    <Head :title="$t('commissions.title')" />
     <AppLayout>
         <VPageHeader k="commissions.title">
             <VButton v-if="can.edit" variant="secondary" icon="plus" @click="generate">
@@ -141,17 +141,17 @@ const columns = [
 
         <div class="grid grid-cols-2 gap-2 pb-3 lg:grid-cols-3">
             <VSelect v-model="filters.employee_id" @update:model-value="apply()">
-                <option value="">{{ $page.props.lang.es.commissions.employee }}</option>
+                <option value="">{{ $t('commissions.employee') }}</option>
                 <option v-for="e in employees" :key="e.id" :value="e.id">{{ e.full_name }}</option>
             </VSelect>
             <VSelect v-model="filters.project_id" @update:model-value="apply()">
-                <option value="">{{ $page.props.lang.es.commissions.project }}</option>
+                <option value="">{{ $t('commissions.project') }}</option>
                 <option v-for="p in projects" :key="p.id" :value="p.id">{{ p.name }}</option>
             </VSelect>
             <VSelect v-model="filters.status" @update:model-value="apply()">
-                <option value="">{{ $page.props.lang.es.commissions.status }}</option>
+                <option value="">{{ $t('commissions.status') }}</option>
                 <option v-for="s in statuses" :key="s" :value="s">
-                    {{ $page.props.lang.es.commissions[`status_${s}`] }}
+                    {{ $t(`commissions.status_${s}`) }}
                 </option>
             </VSelect>
         </div>

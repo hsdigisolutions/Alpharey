@@ -62,7 +62,7 @@ function markExempt(row) {
 </script>
 
 <template>
-    <Head title="Cumplimiento" />
+    <Head :title="$t('compliance.title')" />
 
     <AppLayout>
         <VPageHeader k="compliance.title" />
@@ -96,13 +96,13 @@ function markExempt(row) {
         <!-- Filters -->
         <div class="mt-5 flex flex-wrap gap-2">
             <VSelect v-model="filters.status" class="w-full sm:w-52">
-                <option value="">{{ $page.props.lang.es.compliance.filter_status }} / {{ $page.props.lang.en.compliance.filter_status }}</option>
+                <option value="">{{ $tPair('compliance.filter_status') }}</option>
                 <option v-for="s in ['ok', 'warn', 'danger', 'neutral', 'exempt']" :key="s" :value="s">
                     {{ $page.props.lang.es[`documents`][`status_${s}`] }}
                 </option>
             </VSelect>
             <VSelect v-if="companies.length > 1" v-model="filters.company" class="w-44">
-                <option value="">{{ $page.props.lang.es.employees.company }}</option>
+                <option value="">{{ $t('employees.company') }}</option>
                 <option v-for="c in companies" :key="c" :value="c">{{ c }}</option>
             </VSelect>
         </div>

@@ -99,7 +99,7 @@ function eur(n) {
 </script>
 
 <template>
-    <Head title="Desplazamientos" />
+    <Head :title="$t('deployments.title')" />
     <AppLayout>
         <VPageHeader k="deployments.title">
             <VButton v-if="can.create" icon="plus" @click="open()"><Bilingual k="deployments.new" inline /></VButton>
@@ -107,8 +107,8 @@ function eur(n) {
 
         <div class="flex flex-wrap items-end gap-2 pb-3">
             <VSelect v-model="filters.status" class="w-full sm:w-52" @update:model-value="apply()">
-                <option value="">{{ $page.props.lang.es.deployments.all_statuses }}</option>
-                <option v-for="s in statuses" :key="s" :value="s">{{ $page.props.lang.es.deployments[`status_${s}`] }}</option>
+                <option value="">{{ $t('deployments.all_statuses') }}</option>
+                <option v-for="s in statuses" :key="s" :value="s">{{ $t(`deployments.status_${s}`) }}</option>
             </VSelect>
         </div>
 
@@ -173,7 +173,7 @@ function eur(n) {
                 </FormField>
                 <FormField k="deployments.rate_type" :error="form.errors.rate_type" required>
                     <VSelect v-model="form.rate_type">
-                        <option v-for="t in rateTypes" :key="t" :value="t">{{ $page.props.lang.es.deployments[`rate_${t}`] }}</option>
+                        <option v-for="t in rateTypes" :key="t" :value="t">{{ $t(`deployments.rate_${t}`) }}</option>
                     </VSelect>
                 </FormField>
                 <FormField k="deployments.start" :error="form.errors.deployment_start" required><VDateInput v-model="form.deployment_start" /></FormField>

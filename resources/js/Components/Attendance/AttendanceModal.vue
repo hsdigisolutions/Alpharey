@@ -83,8 +83,8 @@ function destroy() {
                 </FormField>
                 <FormField k="attendance.mode" required>
                     <VSelect v-model="form.mode">
-                        <option value="hourly">{{ $page.props.lang.es.attendance.mode_hourly }}</option>
-                        <option value="project_based">{{ $page.props.lang.es.attendance.mode_project_based }}</option>
+                        <option value="hourly">{{ $t('attendance.mode_hourly') }}</option>
+                        <option value="project_based">{{ $t('attendance.mode_project_based') }}</option>
                     </VSelect>
                 </FormField>
 
@@ -103,7 +103,7 @@ function destroy() {
                 </FormField>
                 <FormField k="attendance.status" required>
                     <VSelect v-model="form.status">
-                        <option v-for="s in statuses" :key="s" :value="s">{{ $page.props.lang.es.attendance[`status_${s}`] }}</option>
+                        <option v-for="s in statuses" :key="s" :value="s">{{ $t(`attendance.status_${s}`) }}</option>
                     </VSelect>
                 </FormField>
             </div>

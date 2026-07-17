@@ -18,7 +18,7 @@ const placeholderKpis = [
 </script>
 
 <template>
-    <Head title="Panel" />
+    <Head :title="$t('nav.dashboard')" />
 
     <AppLayout>
         <VPageHeader k="nav.dashboard" />

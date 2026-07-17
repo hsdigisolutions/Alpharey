@@ -111,7 +111,7 @@ function removeDoc(doc) {
                             <td class="px-3 py-2.5 text-center">
                                 <template v-if="cfg.flag">
                                     <VBadge :status="currentDoc(typeKey)?.has_flag ? 'ok' : 'neutral'">
-                                        {{ currentDoc(typeKey)?.has_flag ? 'Sí / Yes' : 'No' }}
+                                        {{ currentDoc(typeKey)?.has_flag ? $tPair('common.yes') : $tPair('common.no') }}
                                     </VBadge>
                                 </template>
                                 <span v-else class="text-muted">—</span>

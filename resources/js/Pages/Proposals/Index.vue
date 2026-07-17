@@ -81,7 +81,7 @@ const columns = [
 </script>
 
 <template>
-    <Head title="Propuestas" />
+    <Head :title="$t('proposals.title')" />
     <AppLayout>
         <VPageHeader k="proposals.title">
             <VButton v-if="can.create" icon="plus" @click="open()"><Bilingual k="proposals.new" inline /></VButton>
@@ -90,8 +90,8 @@ const columns = [
         <div class="flex flex-wrap items-end gap-2 pb-3">
             <div class="w-full sm:w-56"><VSearchInput v-model="filters.search" /></div>
             <VSelect v-model="filters.status" class="w-full sm:w-52" @update:model-value="apply()">
-                <option value="">{{ $page.props.lang.es.proposals.status }}</option>
-                <option v-for="s in statuses" :key="s" :value="s">{{ $page.props.lang.es.proposals[`status_${s}`] }}</option>
+                <option value="">{{ $t('proposals.status') }}</option>
+                <option v-for="s in statuses" :key="s" :value="s">{{ $t(`proposals.status_${s}`) }}</option>
             </VSelect>
         </div>
 
@@ -132,7 +132,7 @@ const columns = [
                     </FormField>
                     <FormField k="proposals.status" required>
                         <VSelect v-model="form.status">
-                            <option v-for="s in statuses" :key="s" :value="s">{{ $page.props.lang.es.proposals[`status_${s}`] }}</option>
+                            <option v-for="s in statuses" :key="s" :value="s">{{ $t(`proposals.status_${s}`) }}</option>
                         </VSelect>
                     </FormField>
                     <FormField k="proposals.date"><VDateInput v-model="form.proposal_date" /></FormField>
@@ -147,7 +147,7 @@ const columns = [
                         <VButton type="button" variant="secondary" size="sm" icon="plus" @click="addLine"><Bilingual k="proposals.add_line" inline /></VButton>
                     </div>
                     <div v-for="(item, i) in form.line_items" :key="i" class="mb-2 grid grid-cols-[1fr_70px_100px_auto] items-end gap-2">
-                        <VInput v-model="item.description" :placeholder="$page.props.lang.es.proposals.item_desc" />
+                        <VInput v-model="item.description" :placeholder="$t('proposals.item_desc')" />
                         <VInput v-model="item.qty" type="number" step="0.01" placeholder="Cant." />
                         <VCurrencyInput v-model="item.unit_price" />
                         <button type="button" class="rounded-md p-2 text-status-danger hover:bg-status-danger-soft" @click="removeLine(i)"><AppIcon name="trash" class="h-4 w-4" /></button>

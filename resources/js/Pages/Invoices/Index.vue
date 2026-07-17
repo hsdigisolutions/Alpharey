@@ -144,7 +144,7 @@ const columns = computed(() => [
 </script>
 
 <template>
-    <Head title="Facturas" />
+    <Head :title="$t('invoices.title')" />
     <AppLayout>
         <VPageHeader k="invoices.title">
             <VButton v-if="can.create" icon="plus" @click="openCreate">
@@ -157,13 +157,13 @@ const columns = computed(() => [
         <div class="space-y-2 py-3">
             <div class="grid grid-cols-2 gap-2 lg:grid-cols-4">
                 <VSelect v-model="filters.payment_status" @update:model-value="apply()">
-                    <option value="">{{ $page.props.lang.es.invoices.payment_status }}</option>
+                    <option value="">{{ $t('invoices.payment_status') }}</option>
                     <option v-for="s in paymentStatuses" :key="s" :value="s">
-                        {{ $page.props.lang.es.invoices[`payment_${s}`] }}
+                        {{ $t(`invoices.payment_${s}`) }}
                     </option>
                 </VSelect>
                 <VSelect v-model="filters.project_id" @update:model-value="apply()">
-                    <option value="">{{ $page.props.lang.es.invoices.project }}</option>
+                    <option value="">{{ $t('invoices.project') }}</option>
                     <option v-for="p in projects" :key="p.id" :value="p.id">{{ p.name }}</option>
                 </VSelect>
                 <VDateInput v-model="filters.from" @update:model-value="apply()" />
@@ -222,14 +222,14 @@ const columns = computed(() => [
                 <div class="grid gap-4 sm:grid-cols-2">
                     <FormField k="invoices.sub_type" :error="form.errors.sub_type" required>
                         <VSelect v-model="form.sub_type">
-                            <option value="final">{{ $page.props.lang.es.invoices.sub_type_final }}</option>
-                            <option value="pre">{{ $page.props.lang.es.invoices.sub_type_pre }}</option>
+                            <option value="final">{{ $t('invoices.sub_type_final') }}</option>
+                            <option value="pre">{{ $t('invoices.sub_type_pre') }}</option>
                         </VSelect>
                     </FormField>
                     <FormField k="invoices.status" :error="form.errors.status" required>
                         <VSelect v-model="form.status">
                             <option v-for="s in statuses" :key="s" :value="s">
-                                {{ $page.props.lang.es.invoices[`status_${s}`] }}
+                                {{ $t(`invoices.status_${s}`) }}
                             </option>
                         </VSelect>
                     </FormField>
@@ -273,7 +273,7 @@ const columns = computed(() => [
                     <div class="space-y-2">
                         <div v-for="(line, i) in form.lines" :key="i" class="grid grid-cols-12 items-center gap-2">
                             <VInput v-model="line.description" class="col-span-6"
-                                :placeholder="$page.props.lang.es.invoices.description" />
+                                :placeholder="$t('invoices.description')" />
                             <VInput v-model="line.quantity" type="number" step="0.01" min="0" class="col-span-2" />
                             <VInput v-model="line.unit_price" type="number" step="0.01" min="0" class="col-span-3" />
                             <button type="button" class="col-span-1 rounded-sm p-1.5 text-muted hover:text-status-danger"
@@ -296,8 +296,8 @@ const columns = computed(() => [
                     <FormField k="invoices.discount_type" :error="form.errors.discount_type">
                         <VSelect v-model="form.discount_type">
                             <option value="">—</option>
-                            <option value="percent">{{ $page.props.lang.es.invoices.discount_percent }}</option>
-                            <option value="fixed">{{ $page.props.lang.es.invoices.discount_fixed }}</option>
+                            <option value="percent">{{ $t('invoices.discount_percent') }}</option>
+                            <option value="fixed">{{ $t('invoices.discount_fixed') }}</option>
                         </VSelect>
                     </FormField>
                     <FormField k="invoices.discount" :error="form.errors.discount_value">

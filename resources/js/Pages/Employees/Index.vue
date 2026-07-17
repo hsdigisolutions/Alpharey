@@ -149,14 +149,14 @@ const docDot = { ok: 'ok', warn: 'warn', danger: 'danger', neutral: 'neutral', e
 </script>
 
 <template>
-    <Head title="Empleados" />
+    <Head :title="$t('employees.title')" />
 
     <AppLayout>
         <VPageHeader k="employees.title">
             <!-- Secondary action collapses to icon-only on small screens so the
                  two wide bilingual buttons never wrap into a ragged stack. -->
             <VButton v-if="can.create" variant="secondary" icon="upload"
-                :aria-label="`${$page.props.lang.es.employees.import} / ${$page.props.lang.en.employees.import}`"
+                :aria-label="$tPair('employees.import')"
                 @click="showImport = true">
                 <span class="hidden sm:inline"><Bilingual k="employees.import" inline /></span>
             </VButton>
@@ -198,22 +198,22 @@ const docDot = { ok: 'ok', warn: 'warn', danger: 'danger', neutral: 'neutral', e
 
             <div class="grid grid-cols-2 gap-2 lg:grid-cols-4">
                 <VSelect v-model="filters.status" @update:model-value="apply()">
-                    <option value="">{{ $page.props.lang.es.employees.status }} / {{ $page.props.lang.en.employees.status }}</option>
-                    <option value="active">{{ $page.props.lang.es.employees.active }}</option>
-                    <option value="inactive">{{ $page.props.lang.es.employees.inactive }}</option>
+                    <option value="">{{ $tPair('employees.status') }}</option>
+                    <option value="active">{{ $t('employees.active') }}</option>
+                    <option value="inactive">{{ $t('employees.inactive') }}</option>
                 </VSelect>
                 <VSelect v-model="filters.department" @update:model-value="apply()">
-                    <option value="">{{ $page.props.lang.es.employees.department }}</option>
+                    <option value="">{{ $t('employees.department') }}</option>
                     <option v-for="dept in filterOptions.departments" :key="dept" :value="dept">{{ dept }}</option>
                 </VSelect>
                 <VSelect v-model="filters.designation" @update:model-value="apply()">
-                    <option value="">{{ $page.props.lang.es.employees.designation }}</option>
+                    <option value="">{{ $t('employees.designation') }}</option>
                     <option v-for="role in filterOptions.designations" :key="role" :value="role">{{ role }}</option>
                 </VSelect>
                 <VSelect v-model="filters.wage_type" @update:model-value="apply()">
-                    <option value="">{{ $page.props.lang.es.employees.wage_type }}</option>
+                    <option value="">{{ $t('employees.wage_type') }}</option>
                     <option v-for="type in filterOptions.wageTypes" :key="type" :value="type">
-                        {{ $page.props.lang.es.employees[`wage_${type}`] }}
+                        {{ $t(`employees.wage_${type}`) }}
                     </option>
                 </VSelect>
             </div>
@@ -261,7 +261,7 @@ const docDot = { ok: 'ok', warn: 'warn', danger: 'danger', neutral: 'neutral', e
                         {{ employee[column.key] ?? '—' }}
                     </td>
                     <td v-else-if="column.key === 'wage_type'" class="px-3 py-2.5 text-sm text-ink-soft">
-                        {{ employee.wage_type ? $page.props.lang.es.employees[`wage_${employee.wage_type}`] : '—' }}
+                        {{ employee.wage_type ? $t(`employees.wage_${employee.wage_type}`) : '—' }}
                     </td>
                     <td v-else class="px-3 py-2.5 text-sm text-ink-soft">{{ employee[column.key] ?? '—' }}</td>
                 </template>

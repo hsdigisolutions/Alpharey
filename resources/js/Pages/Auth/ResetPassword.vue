@@ -24,7 +24,7 @@ function submit() {
 </script>
 
 <template>
-    <Head title="Nueva contraseña" />
+    <Head :title="$t('auth.reset_title')" />
 
     <div class="flex min-h-screen flex-col items-center justify-center px-4">
         <div class="w-full max-w-sm">

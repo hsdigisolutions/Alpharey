@@ -61,7 +61,7 @@ const columns = [
 </script>
 
 <template>
-    <Head title="Proyectos" />
+    <Head :title="$t('projects.title')" />
     <AppLayout>
         <VPageHeader k="projects.title">
             <div class="flex overflow-hidden rounded-md border border-line">
@@ -78,12 +78,12 @@ const columns = [
         <div class="flex flex-wrap items-end gap-2 pb-3">
             <div class="w-full sm:w-56"><VSearchInput v-model="filters.search" /></div>
             <VSelect v-model="filters.client_id" class="w-full sm:w-56" @update:model-value="apply()">
-                <option value="">{{ $page.props.lang.es.projects.client }}</option>
+                <option value="">{{ $t('projects.client') }}</option>
                 <option v-for="c in filterOptions.clients" :key="c.id" :value="c.id">{{ c.name }}</option>
             </VSelect>
             <VSelect v-if="view === 'table'" v-model="filters.status" class="w-full sm:w-52" @update:model-value="apply()">
-                <option value="">{{ $page.props.lang.es.projects.status }}</option>
-                <option v-for="s in filterOptions.statuses" :key="s" :value="s">{{ $page.props.lang.es.projects[`status_${s}`] }}</option>
+                <option value="">{{ $t('projects.status') }}</option>
+                <option v-for="s in filterOptions.statuses" :key="s" :value="s">{{ $t(`projects.status_${s}`) }}</option>
             </VSelect>
         </div>
 

@@ -150,7 +150,7 @@ function submitUser() {
 </script>
 
 <template>
-    <Head title="Permisos" />
+    <Head :title="$t('permissions.title')" />
 
     <AppLayout>
         <VPageHeader k="permissions.title">
@@ -218,7 +218,7 @@ function submitUser() {
                         </VButton>
                         <div class="flex items-center gap-1.5">
                             <VSelect v-model="copyFrom" class="w-full sm:w-52" @update:model-value="requestCopy">
-                                <option value="">{{ $page.props.lang.es.permissions.copy_from }}</option>
+                                <option value="">{{ $t('permissions.copy_from') }}</option>
                                 <option v-for="user in props.users.filter((u) => u.editable && u.id !== props.selectedUser)"
                                     :key="user.id" :value="user.id">
                                     {{ user.name }}
@@ -275,9 +275,9 @@ function submitUser() {
                 <div class="grid gap-4 sm:grid-cols-2">
                     <FormField k="permissions.role" :error="userForm.errors.role" required>
                         <VSelect v-model="userForm.role">
-                            <option value="user">{{ $page.props.lang.es.permissions.role_user }} / {{ $page.props.lang.en.permissions.role_user }}</option>
+                            <option value="user">{{ $tPair('permissions.role_user') }}</option>
                             <option v-if="$page.props.auth.user?.role === 'super_admin'" value="company_admin">
-                                {{ $page.props.lang.es.permissions.role_company_admin }} / {{ $page.props.lang.en.permissions.role_company_admin }}
+                                {{ $tPair('permissions.role_company_admin') }}
                             </option>
                         </VSelect>
                     </FormField>

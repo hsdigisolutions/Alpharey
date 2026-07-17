@@ -61,7 +61,7 @@ const columns = [
 </script>
 
 <template>
-    <Head title="Clientes" />
+    <Head :title="$t('clients.title')" />
     <AppLayout>
         <VPageHeader k="clients.title">
             <VButton v-if="can.create" icon="plus" @click="showForm = true">
@@ -72,12 +72,12 @@ const columns = [
         <div class="flex flex-wrap items-end gap-2 pb-3">
             <div class="w-full sm:w-60"><VSearchInput v-model="filters.search" /></div>
             <VSelect v-model="filters.client_type" class="w-full sm:w-52" @update:model-value="apply()">
-                <option value="">{{ $page.props.lang.es.clients.type }}</option>
-                <option v-for="t in clientTypes" :key="t" :value="t">{{ $page.props.lang.es.clients[`type_${t}`] }}</option>
+                <option value="">{{ $t('clients.type') }}</option>
+                <option v-for="t in clientTypes" :key="t" :value="t">{{ $t(`clients.type_${t}`) }}</option>
             </VSelect>
             <VSelect v-model="filters.status" class="w-full sm:w-52" @update:model-value="apply()">
-                <option value="">{{ $page.props.lang.es.clients.active }} / {{ $page.props.lang.en.clients.active }}</option>
-                <option value="active">{{ $page.props.lang.es.clients.active }}</option>
+                <option value="">{{ $tPair('clients.active') }}</option>
+                <option value="active">{{ $t('clients.active') }}</option>
                 <option value="inactive">Inactivo</option>
             </VSelect>
         </div>
@@ -93,7 +93,7 @@ const columns = [
                 </td>
                 <td class="px-3 py-2.5 text-sm text-ink-soft">{{ client.company_name ?? '—' }}</td>
                 <td class="px-3 py-2.5 text-sm text-ink-soft">{{ client.nif ?? '—' }}</td>
-                <td class="px-3 py-2.5 text-sm text-ink-soft">{{ $page.props.lang.es.clients[`type_${client.client_type}`] }}</td>
+                <td class="px-3 py-2.5 text-sm text-ink-soft">{{ $t(`clients.type_${client.client_type}`) }}</td>
                 <td class="px-3 py-2.5 text-sm text-ink-soft">{{ client.contact_person ?? '—' }}</td>
                 <td class="px-3 py-2.5 text-sm text-ink-soft">{{ client.phone ?? '—' }}</td>
                 <td class="px-3 py-2.5 text-sm text-ink-soft">{{ client.city ?? '—' }}</td>

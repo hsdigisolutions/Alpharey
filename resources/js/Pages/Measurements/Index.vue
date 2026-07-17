@@ -65,7 +65,7 @@ const columns = [
 </script>
 
 <template>
-    <Head title="Mediciones" />
+    <Head :title="$t('measurements.title')" />
     <AppLayout>
         <VPageHeader k="measurements.title">
             <VButton v-if="can.create" icon="plus" @click="open()"><Bilingual k="measurements.new" inline /></VButton>
@@ -73,13 +73,13 @@ const columns = [
 
         <div class="flex flex-wrap items-end gap-2 pb-3">
             <VSelect v-model="filters.project_id" class="w-full sm:w-56" @update:model-value="apply()">
-                <option value="">{{ $page.props.lang.es.measurements.project }}</option>
+                <option value="">{{ $t('measurements.project') }}</option>
                 <option v-for="p in projects" :key="p.id" :value="p.id">{{ p.name }}</option>
             </VSelect>
             <VSelect v-model="filters.approval" class="w-full sm:w-52" @update:model-value="apply()">
-                <option value="">{{ $page.props.lang.es.measurements.approval }}</option>
-                <option value="approved">{{ $page.props.lang.es.measurements.is_approved }}</option>
-                <option value="pending">{{ $page.props.lang.es.measurements.pending }}</option>
+                <option value="">{{ $t('measurements.approval') }}</option>
+                <option value="approved">{{ $t('measurements.is_approved') }}</option>
+                <option value="pending">{{ $t('measurements.pending') }}</option>
             </VSelect>
         </div>
 
@@ -127,7 +127,7 @@ const columns = [
                 <FormField k="measurements.unit"><VInput v-model="form.unit" placeholder="m, m2, m3, kg" /></FormField>
                 <FormField k="measurements.type" :error="form.errors.measurement_type" required>
                     <VSelect v-model="form.measurement_type">
-                        <option v-for="t in types" :key="t" :value="t">{{ $page.props.lang.es.measurements[`type_${t}`] }}</option>
+                        <option v-for="t in types" :key="t" :value="t">{{ $t(`measurements.type_${t}`) }}</option>
                     </VSelect>
                 </FormField>
                 <FormField k="measurements.notes" class="sm:col-span-2"><VTextarea v-model="form.notes" :rows="2" /></FormField>

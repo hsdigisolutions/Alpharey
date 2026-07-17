@@ -87,11 +87,8 @@ function switchLocale() {
     router.post('/locale', { locale: next }, { preserveScroll: true });
 }
 
-const roleLabels = {
-    super_admin: 'Super Admin',
-    company_admin: 'Admin',
-    user: 'Staff',
-};
+/* Role names come from the dictionary (ui.roles.*) so they follow the ES/EN
+   toggle like everything else — they used to be hardcoded English. */
 </script>
 
 <template>
@@ -120,7 +117,7 @@ const roleLabels = {
                                 ? 'bg-accent font-medium text-on-accent'
                                 : 'cursor-default text-sidebar-ink opacity-60',
                         ]"
-                        :title="item.href ? undefined : `${page.props.lang.es.common.coming_soon}`"
+                        :title="item.href ? undefined : `${$t('common.coming_soon')}`"
                     >
                         <AppIcon :name="item.icon" class="h-5 w-5 shrink-0" />
                         <Bilingual v-if="!collapsed" :k="`nav.${item.key}`" class="text-sm" />
@@ -146,7 +143,7 @@ const roleLabels = {
                             :href="item.href ?? undefined"
                             class="rounded-md px-2.5 py-2"
                             :class="item.href ? 'text-ink hover:bg-surface-sunken' : 'cursor-default text-muted opacity-70'"
-                            :title="item.href ? undefined : page.props.lang.es.common.coming_soon">
+                            :title="item.href ? undefined : $t('common.coming_soon')">
                             <Bilingual :k="item.labelKey" class="text-xs" />
                         </component>
                     </div>
@@ -155,7 +152,7 @@ const roleLabels = {
                 <button type="button"
                     class="flex w-full items-center gap-3 rounded-md px-2.5 py-2 text-sidebar-ink transition-colors duration-150 hover:bg-sidebar-hover hover:text-white"
                     :class="collapsed ? 'justify-center px-0' : ''"
-                    :aria-label="collapsed ? 'Expandir menú / Expand menu' : 'Contraer menú / Collapse menu'"
+                    :aria-label="collapsed ? $tPair('common.expand_menu') : $tPair('common.collapse_menu')"
                     @click="toggleSidebar">
                     <AppIcon :name="collapsed ? 'chevron-right' : 'chevron-left'" class="h-5 w-5 shrink-0" />
                 </button>
@@ -173,7 +170,7 @@ const roleLabels = {
                     <input type="search" disabled
                         :placeholder="`${page.props.lang[page.props.locale.primary].common.search_everything}…`"
                         class="w-full rounded-md border border-line bg-surface-sunken py-1.5 ps-9 pe-3 text-sm placeholder:text-muted disabled:cursor-not-allowed"
-                        :title="page.props.lang.es.common.coming_soon" />
+                        :title="$t('common.coming_soon')" />
                 </div>
 
                 <div class="ms-auto flex items-center gap-1.5">
@@ -182,7 +179,7 @@ const roleLabels = {
                          crowds the global search into an unreadable sliver. -->
                     <a v-if="page.props.auth.user?.role === 'super_admin'" href="/welcome"
                         class="hidden items-center gap-1.5 rounded-md border border-line px-2 py-1.5 text-xs font-medium text-ink-soft hover:bg-surface-hover md:flex"
-                        :title="page.props.lang.es.welcome.switch_company">
+                        :title="$t('welcome.switch_company')">
                         <AppIcon name="companies" class="h-3.5 w-3.5 shrink-0" />
                         <span v-if="page.props.company" class="max-w-36 truncate">{{ page.props.company.name }}</span>
                         <Bilingual v-else k="welcome.browsing_all" inline class="max-w-44 truncate text-xs" />
@@ -197,7 +194,7 @@ const roleLabels = {
                     <VDropdown width="w-80">
                         <template #trigger="{ toggle }">
                             <button type="button" class="relative rounded-md p-2 text-ink-soft hover:bg-surface-hover"
-                                :aria-label="`${page.props.lang.es.common.notifications} / ${page.props.lang.en.common.notifications}`"
+                                :aria-label="$tPair('common.notifications')"
                                 @click="toggle">
                                 <AppIcon name="bell" class="h-4.5 w-4.5" />
                                 <span v-if="unreadCount > 0"
@@ -241,7 +238,7 @@ const roleLabels = {
 
                     <!-- Theme -->
                     <button type="button" class="rounded-md p-2 text-ink-soft hover:bg-surface-hover"
-                        :aria-label="isDark ? 'Modo claro / Light mode' : 'Modo oscuro / Dark mode'"
+                        :aria-label="isDark ? $tPair('common.light_mode') : $tPair('common.dark_mode')"
                         @click="toggleTheme">
                         <AppIcon :name="isDark ? 'sun' : 'moon'" class="h-4.5 w-4.5" />
                     </button>
@@ -253,7 +250,7 @@ const roleLabels = {
                                 <VAvatar :name="page.props.auth.user.name" size="sm" />
                                 <span class="hidden text-start sm:block">
                                     <span class="block max-w-32 truncate text-xs font-medium leading-tight">{{ page.props.auth.user.name }}</span>
-                                    <span class="block text-[10px] leading-tight text-muted">{{ roleLabels[page.props.auth.user.role] }}</span>
+                                    <span class="block text-[10px] leading-tight text-muted">{{ $t(`roles.${page.props.auth.user.role}`) }}</span>
                                 </span>
                                 <AppIcon name="chevron-down" class="hidden h-3 w-3 text-muted sm:block" />
                             </button>

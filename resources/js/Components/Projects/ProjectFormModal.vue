@@ -65,17 +65,17 @@ const billingTypes = ['fixed', 'hourly', 'per_meter', 'milestone'];
                 <FormField k="projects.billing_type">
                     <VSelect v-model="form.billing_type">
                         <option value="">—</option>
-                        <option v-for="b in billingTypes" :key="b" :value="b">{{ $page.props.lang.es.projects[`billing_${b}`] }}</option>
+                        <option v-for="b in billingTypes" :key="b" :value="b">{{ $t(`projects.billing_${b}`) }}</option>
                     </VSelect>
                 </FormField>
                 <FormField k="projects.status" required>
                     <VSelect v-model="form.status">
-                        <option v-for="s in statuses" :key="s" :value="s">{{ $page.props.lang.es.projects[`status_${s}`] }}</option>
+                        <option v-for="s in statuses" :key="s" :value="s">{{ $t(`projects.status_${s}`) }}</option>
                     </VSelect>
                 </FormField>
                 <FormField k="projects.priority" required>
                     <VSelect v-model="form.priority">
-                        <option v-for="p in priorities" :key="p" :value="p">{{ $page.props.lang.es.projects[`priority_${p}`] }}</option>
+                        <option v-for="p in priorities" :key="p" :value="p">{{ $t(`projects.priority_${p}`) }}</option>
                     </VSelect>
                 </FormField>
                 <FormField k="projects.start"><VDateInput v-model="form.start_date" /></FormField>
