@@ -26,6 +26,7 @@ use App\Http\Controllers\EmployeeImportExportController;
 use App\Http\Controllers\EmployeeNoteController;
 use App\Http\Controllers\ExpenseController;
 use App\Http\Controllers\InvoiceController;
+use App\Http\Controllers\LeaveController;
 use App\Http\Controllers\LocaleController;
 use App\Http\Controllers\MeasurementController;
 use App\Http\Controllers\NotificationController;
@@ -210,6 +211,16 @@ Route::middleware(['auth', 'active'])->group(function (): void {
     Route::post('/deployments', [DeploymentController::class, 'store'])->name('deployments.store');
     Route::post('/deployments/{deployment}/complete', [DeploymentController::class, 'complete'])->name('deployments.complete');
     Route::post('/deployments/{deployment}/cancel', [DeploymentController::class, 'cancel'])->name('deployments.cancel');
+
+    // Screen 22 — Leave management (Phase 7). Approving books the days into
+    // the attendance grid, so these go through LeaveService, not the model.
+    Route::get('/leave', [LeaveController::class, 'index'])->name('leave.index');
+    Route::post('/leave', [LeaveController::class, 'store'])->name('leave.store');
+    Route::post('/leave/{leave}/approve', [LeaveController::class, 'approve'])->name('leave.approve');
+    Route::post('/leave/{leave}/reject', [LeaveController::class, 'reject'])->name('leave.reject');
+    Route::post('/leave/{leave}/cancel', [LeaveController::class, 'cancel'])->name('leave.cancel');
+    Route::get('/leave/{leave}/attachment', [LeaveController::class, 'download'])->name('leave.attachment');
+    Route::put('/leave-balances/{balance}', [LeaveController::class, 'adjustBalance'])->name('leave-balances.update');
 
     // Screen 18 — Proposals (shared pool)
     Route::get('/proposals', [ProposalController::class, 'index'])->name('proposals.index');
