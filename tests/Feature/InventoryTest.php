@@ -1,0 +1,318 @@
+<?php
+
+use App\Enums\EquipmentIssueStatus;
+use App\Enums\EquipmentItemType;
+use App\Enums\StockMovementType;
+use App\Enums\UserRole;
+use App\Models\Company;
+use App\Models\Employee;
+use App\Models\EmployeeEquipmentIssue;
+use App\Models\EquipmentItem;
+use App\Models\EquipmentStockMovement;
+use App\Models\User;
+use App\Services\Inventory\StockMovementService;
+use Illuminate\Validation\ValidationException;
+
+beforeEach(function (): void {
+    $this->company = Company::factory()->create();
+    $this->admin = User::factory()->create([
+        'role' => UserRole::CompanyAdmin,
+        'company_id' => $this->company->id,
+    ]);
+    $this->actingAs($this->admin);
+
+    $this->item = EquipmentItem::factory()->create([
+        'company_id' => $this->company->id,
+        'name' => 'Casco de seguridad',
+        'item_type' => EquipmentItemType::Safety,
+    ]);
+    $this->stock = app(StockMovementService::class);
+});
+
+/**
+ * The ledger arithmetic. total_stock is everything owned; available_stock is
+ * what is in the store — so total - available is what is out with workers.
+ */
+it('adds stock in and moves both counters', function (): void {
+    $this->stock->record($this->item, StockMovementType::StockIn, 10);
+
+    $item = $this->item->fresh();
+
+    expect((float) $item->total_stock)->toBe(10.0)
+        ->and((float) $item->available_stock)->toBe(10.0);
+});
+
+it('takes an issue out of available but not out of total — it is still owned', function (): void {
+    $this->stock->record($this->item, StockMovementType::StockIn, 10);
+    $this->stock->record($this->item->fresh(), StockMovementType::Issue, 3);
+
+    $item = $this->item->fresh();
+
+    expect((float) $item->total_stock)->toBe(10.0)
+        ->and((float) $item->available_stock)->toBe(7.0);
+});
+
+it('puts a return back into available', function (): void {
+    $this->stock->record($this->item, StockMovementType::StockIn, 10);
+    $this->stock->record($this->item->fresh(), StockMovementType::Issue, 3);
+    $this->stock->record($this->item->fresh(), StockMovementType::Return, 3);
+
+    expect((float) $this->item->fresh()->available_stock)->toBe(10.0);
+});
+
+it('writes damaged stock off both counters', function (): void {
+    $this->stock->record($this->item, StockMovementType::StockIn, 10);
+    $this->stock->record($this->item->fresh(), StockMovementType::Damaged, 2);
+
+    $item = $this->item->fresh();
+
+    expect((float) $item->total_stock)->toBe(8.0)
+        ->and((float) $item->available_stock)->toBe(8.0);
+});
+
+/**
+ * A recount counts the STORE. It must not silently rewrite what is out with
+ * workers — so the total moves by the same delta, and issued survives.
+ */
+it('adjusts the store without rewriting what is out with workers', function (): void {
+    $this->stock->record($this->item, StockMovementType::StockIn, 10);
+    $this->stock->record($this->item->fresh(), StockMovementType::Issue, 3); // 3 out, 7 in store
+
+    // A recount finds only 6 in the store (one walked off).
+    $this->stock->record($this->item->fresh(), StockMovementType::Adjustment, 6);
+
+    $item = $this->item->fresh();
+
+    expect((float) $item->available_stock)->toBe(6.0)
+        // total drops by the same 1, so "issued" is still 3 — not 4
+        ->and((float) $item->total_stock)->toBe(9.0)
+        ->and(round((float) $item->total_stock - (float) $item->available_stock, 2))->toBe(3.0);
+});
+
+it('records the running balance on every movement', function (): void {
+    $this->stock->record($this->item, StockMovementType::StockIn, 10);
+    $this->stock->record($this->item->fresh(), StockMovementType::Issue, 4);
+    $this->stock->record($this->item->fresh(), StockMovementType::Return, 1);
+
+    $balances = EquipmentStockMovement::query()
+        ->where('equipment_item_id', $this->item->id)
+        ->orderBy('id')
+        ->pluck('balance_after')
+        ->map(fn ($b): float => (float) $b)
+        ->all();
+
+    // The balance is frozen per movement, so the history reconstructs itself.
+    expect($balances)->toBe([10.0, 6.0, 7.0]);
+});
+
+it('refuses to issue more than is available', function (): void {
+    $this->stock->record($this->item, StockMovementType::StockIn, 2);
+
+    expect(fn () => $this->stock->record($this->item->fresh(), StockMovementType::Issue, 5))
+        ->toThrow(ValidationException::class);
+
+    // and nothing moved
+    expect((float) $this->item->fresh()->available_stock)->toBe(2.0)
+        ->and(EquipmentStockMovement::query()->count())->toBe(1);
+});
+
+it('refuses a zero or negative quantity', function (): void {
+    expect(fn () => $this->stock->record($this->item, StockMovementType::StockIn, 0))
+        ->toThrow(ValidationException::class);
+});
+
+/**
+ * Issues to employees.
+ */
+it('issues kit to a worker and takes it out of the store in one go', function (): void {
+    $employee = Employee::factory()->create(['company_id' => $this->company->id]);
+    $this->stock->record($this->item, StockMovementType::StockIn, 10);
+
+    $issue = $this->stock->issueTo($this->item->fresh(), [
+        'employee_id' => $employee->id,
+        'issued_quantity' => 2,
+        'issue_date' => now()->toDateString(),
+    ]);
+
+    expect($issue->status)->toBe(EquipmentIssueStatus::Open)
+        ->and((float) $this->item->fresh()->available_stock)->toBe(8.0);
+});
+
+it('keeps a partial return open until the rest comes back', function (): void {
+    $employee = Employee::factory()->create(['company_id' => $this->company->id]);
+    $this->stock->record($this->item, StockMovementType::StockIn, 10);
+
+    $issue = $this->stock->issueTo($this->item->fresh(), [
+        'employee_id' => $employee->id,
+        'issued_quantity' => 5,
+    ]);
+
+    $issue = $this->stock->returnFrom($issue, 3);
+
+    expect($issue->status)->toBe(EquipmentIssueStatus::PartiallyReturned)
+        ->and($issue->outstanding())->toBe(2.0)
+        // a partial return has no return date — it is not finished
+        ->and($issue->return_date)->toBeNull()
+        ->and((float) $this->item->fresh()->available_stock)->toBe(8.0);
+
+    $issue = $this->stock->returnFrom($issue, 2);
+
+    expect($issue->status)->toBe(EquipmentIssueStatus::Returned)
+        ->and($issue->outstanding())->toBe(0.0)
+        ->and($issue->return_date)->not->toBeNull()
+        ->and((float) $this->item->fresh()->available_stock)->toBe(10.0);
+});
+
+it('refuses to take back more than went out', function (): void {
+    $employee = Employee::factory()->create(['company_id' => $this->company->id]);
+    $this->stock->record($this->item, StockMovementType::StockIn, 10);
+
+    $issue = $this->stock->issueTo($this->item->fresh(), [
+        'employee_id' => $employee->id,
+        'issued_quantity' => 2,
+    ]);
+
+    expect(fn () => $this->stock->returnFrom($issue, 5))->toThrow(ValidationException::class);
+});
+
+it('flags an issue that is past its expected return', function (): void {
+    $issue = EmployeeEquipmentIssue::factory()->create([
+        'company_id' => $this->company->id,
+        'equipment_item_id' => $this->item->id,
+        'expected_return_date' => now()->subWeek()->toDateString(),
+    ]);
+
+    expect($issue->isOverdue())->toBeTrue();
+});
+
+it('never calls a returned issue overdue, however late it was', function (): void {
+    $issue = EmployeeEquipmentIssue::factory()->create([
+        'company_id' => $this->company->id,
+        'equipment_item_id' => $this->item->id,
+        'expected_return_date' => now()->subYear()->toDateString(),
+    ]);
+    $issue->status = EquipmentIssueStatus::Returned;
+    $issue->save();
+
+    expect($issue->isOverdue())->toBeFalse();
+});
+
+/**
+ * Low stock: a minimum of 0 means "not tracked", not "always low".
+ */
+it('flags low stock only when a minimum is set', function (): void {
+    $tracked = EquipmentItem::factory()->create(['company_id' => $this->company->id, 'minimum_stock' => '5']);
+    $untracked = EquipmentItem::factory()->create(['company_id' => $this->company->id, 'minimum_stock' => '0']);
+
+    app(StockMovementService::class)->record($tracked, StockMovementType::StockIn, 3);
+
+    expect($tracked->fresh()->isLowStock())->toBeTrue()
+        ->and($untracked->fresh()->isLowStock())->toBeFalse();
+});
+
+/**
+ * Opening stock is a movement, not a column write.
+ */
+it('records opening stock as a stock_in movement', function (): void {
+    $this->post('/inventory/items', [
+        'name' => 'Taladro',
+        'sku' => 'SKU-9999',
+        'item_type' => EquipmentItemType::Tool->value,
+        'unit' => 'pcs',
+        'opening_stock' => 4,
+    ])->assertRedirect();
+
+    $item = EquipmentItem::query()->where('sku', 'SKU-9999')->first();
+
+    expect((float) $item->available_stock)->toBe(4.0)
+        // the ledger has to explain where every unit came from
+        ->and(EquipmentStockMovement::query()->where('equipment_item_id', $item->id)
+            ->where('movement_type', StockMovementType::StockIn->value)->count())->toBe(1);
+});
+
+it('ignores stock counters submitted through the item form', function (): void {
+    $this->post('/inventory/items', [
+        'name' => 'Taladro',
+        'sku' => 'SKU-8888',
+        'item_type' => EquipmentItemType::Tool->value,
+        'unit' => 'pcs',
+        'total_stock' => '999',      // the ledger owns these —
+        'available_stock' => '999',  // a form must never set them
+    ])->assertRedirect();
+
+    $item = EquipmentItem::query()->where('sku', 'SKU-8888')->first();
+
+    expect((float) $item->total_stock)->toBe(0.0)
+        ->and((float) $item->available_stock)->toBe(0.0);
+});
+
+/**
+ * Tenancy + permissions (Rule 11).
+ */
+it('shows a user only the stock of their own company', function (): void {
+    $other = Company::factory()->create();
+    EquipmentItem::factory()->create(['company_id' => $other->id]);
+
+    expect(EquipmentItem::query()->count())->toBe(1); // only the beforeEach item
+});
+
+it('cannot record a movement against another company item', function (): void {
+    $other = Company::factory()->create();
+    $foreign = EquipmentItem::factory()->create(['company_id' => $other->id]);
+
+    $this->post("/inventory/items/{$foreign->id}/movements", [
+        'movement_type' => StockMovementType::StockIn->value,
+        'quantity' => 5,
+    ])->assertNotFound();
+});
+
+it('ignores a company_id supplied in request input', function (): void {
+    $other = Company::factory()->create();
+
+    $this->post('/inventory/items', [
+        'company_id' => $other->id, // malicious
+        'name' => 'Guantes',
+        'sku' => 'SKU-7777',
+        'item_type' => EquipmentItemType::Safety->value,
+        'unit' => 'pcs',
+    ])->assertRedirect();
+
+    expect(EquipmentItem::query()->withoutGlobalScopes()->where('sku', 'SKU-7777')->first()->company_id)
+        ->toBe($this->company->id);
+});
+
+it('lets two companies use the same SKU but not one company twice', function (): void {
+    $other = Company::factory()->create();
+    EquipmentItem::factory()->create(['company_id' => $other->id, 'sku' => 'SKU-DUP']);
+
+    $this->post('/inventory/items', [
+        'name' => 'A', 'sku' => 'SKU-DUP', 'item_type' => EquipmentItemType::Tool->value, 'unit' => 'pcs',
+    ])->assertSessionHasNoErrors();
+
+    $this->post('/inventory/items', [
+        'name' => 'B', 'sku' => 'SKU-DUP', 'item_type' => EquipmentItemType::Tool->value, 'unit' => 'pcs',
+    ])->assertSessionHasErrors('sku');
+});
+
+it('refuses to issue kit to another company employee', function (): void {
+    $other = Company::factory()->create();
+    $foreign = Employee::factory()->create(['company_id' => $other->id]);
+    $this->stock->record($this->item, StockMovementType::StockIn, 10);
+
+    $this->post("/inventory/items/{$this->item->id}/issue", [
+        'employee_id' => $foreign->id,
+        'issued_quantity' => 1,
+    ])->assertSessionHasErrors('employee_id');
+
+    expect(EmployeeEquipmentIssue::query()->count())->toBe(0);
+});
+
+it('denies inventory actions to a user without the permission', function (): void {
+    $plain = User::factory()->create(['role' => UserRole::User, 'company_id' => $this->company->id]);
+
+    $this->actingAs($plain)->get('/inventory')->assertForbidden();
+    $this->actingAs($plain)->post("/inventory/items/{$this->item->id}/movements", [
+        'movement_type' => StockMovementType::StockIn->value,
+        'quantity' => 1,
+    ])->assertForbidden();
+});

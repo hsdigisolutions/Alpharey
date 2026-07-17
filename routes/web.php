@@ -12,6 +12,7 @@ use App\Http\Controllers\AttendanceImportExportController;
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Auth\NewPasswordController;
 use App\Http\Controllers\Auth\PasswordResetLinkController;
+use App\Http\Controllers\CallPanelController;
 use App\Http\Controllers\ClientContactController;
 use App\Http\Controllers\ClientController;
 use App\Http\Controllers\ColumnSettingsController;
@@ -25,6 +26,7 @@ use App\Http\Controllers\EmployeeController;
 use App\Http\Controllers\EmployeeImportExportController;
 use App\Http\Controllers\EmployeeNoteController;
 use App\Http\Controllers\ExpenseController;
+use App\Http\Controllers\InventoryController;
 use App\Http\Controllers\InvoiceController;
 use App\Http\Controllers\LeaveController;
 use App\Http\Controllers\LocaleController;
@@ -212,6 +214,23 @@ Route::middleware(['auth', 'active'])->group(function (): void {
     Route::post('/deployments', [DeploymentController::class, 'store'])->name('deployments.store');
     Route::post('/deployments/{deployment}/complete', [DeploymentController::class, 'complete'])->name('deployments.complete');
     Route::post('/deployments/{deployment}/cancel', [DeploymentController::class, 'cancel'])->name('deployments.cancel');
+
+    // Screen 13 — Call Panel (Phase 7). Same employee_call_logs rows as the
+    // employee Llamadas tab, with follow-up triage on top.
+    Route::get('/calls', [CallPanelController::class, 'index'])->name('calls.index');
+    Route::post('/calls', [CallPanelController::class, 'store'])->name('calls.store');
+
+    // Screen 23 — Inventory (Phase 7). Every stock change goes through
+    // StockMovementService: the ledger and the item counters move together.
+    Route::get('/inventory', [InventoryController::class, 'index'])->name('inventory.index');
+    Route::post('/inventory/items', [InventoryController::class, 'store'])->name('inventory.items.store');
+    Route::put('/inventory/items/{item}', [InventoryController::class, 'update'])->name('inventory.items.update');
+    Route::delete('/inventory/items/{item}', [InventoryController::class, 'destroy'])->name('inventory.items.destroy');
+    Route::post('/inventory/items/{item}/movements', [InventoryController::class, 'storeMovement'])->name('inventory.movements.store');
+    Route::post('/inventory/items/{item}/issue', [InventoryController::class, 'issue'])->name('inventory.issue');
+    Route::post('/inventory/items/{item}/assign', [InventoryController::class, 'assignToProject'])->name('inventory.assign');
+    Route::post('/inventory/issues/{issue}/return', [InventoryController::class, 'returnIssue'])->name('inventory.issues.return');
+    Route::post('/inventory/categories', [InventoryController::class, 'storeCategory'])->name('inventory.categories.store');
 
     // Screen 21 — Vehicles (Phase 7). Insurance/ITV expiries feed the same
     // compliance alerts as documents (VehicleCompliance + verto:scan-documents).
