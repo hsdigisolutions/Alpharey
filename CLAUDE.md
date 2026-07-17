@@ -573,5 +573,15 @@ Still open from Phase 6:
 - **Commission base** is the invoice TOTAL, not the amount collected
   (`CommissionService::baseFor()` — one line to change if the client wants otherwise).
 
-External blocker (unchanged): legacy DB dump + `storage/app` from the live server
-(DATA_MIGRATION.md §1) — needed to validate importers against real data. Not blocking UI.
+Legacy dump validation (2026-07-17): **the live DB dump arrived and the importers
+were validated against it** — `vertocrm-313539dae2.sql` (88 tables) restored locally
+as `vertocrm_legacy`, a full `verto:import-legacy` run exercised, money reconciled to
+the cent (attendance 333.692,44 € · expenses 39.685,80 € · payroll net 119.494,36 €).
+It surfaced **6 real bugs 387 tests missed** — a dry-run framework flaw (each importer
+rolled back its own transaction, so every dependent importer saw nothing), two enum
+values that crashed the whole run (`expenses.payment_method='employee'`,
+`attendance.wage_type='day'`), and three mapping bugs (payroll `payroll_month`,
+expense `reimbursed`→paid, inventory item entity_type). All fixed + pinned
+(`LegacyRealDataShapeTest`, `LegacyImportersTest`); DATA_MIGRATION.md §6 records it.
+**Still outstanding**: `storage/app` upload set from the live server (document/photo
+files) — but the dump has zero `documents` rows, so nothing to import there yet.
