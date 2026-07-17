@@ -43,19 +43,40 @@ abstract class AbstractImporter
      */
     abstract protected function import(): void;
 
-    public function run(bool $dryRun = false): ImportResult
+    /**
+     * @param  bool  $dryRun  report as a dry run, and (when this importer owns
+     *                        the transaction) roll back its own writes
+     * @param  bool  $ownsTransaction  false when the CALLER holds one outer
+     *                                 transaction around the whole sequence —
+     *                                 then a dry-run importer commits its work
+     *                                 so later importers can resolve the ids it
+     *                                 recorded, and the caller rolls the lot
+     *                                 back at the end. Only a caller passes
+     *                                 false; a standalone run (or a test) owns
+     *                                 its transaction and rolls back itself.
+     */
+    public function run(bool $dryRun = false, bool $ownsTransaction = true): ImportResult
     {
         $this->dryRun = $dryRun;
         $this->imported = 0;
         $this->skipped = 0;
         $this->exceptions = [];
 
+        // The dry-run rollback only happens here when we own the transaction.
+        // When the command wraps the whole sequence in one transaction it
+        // passes ownsTransaction:false and rolls back itself — otherwise each
+        // importer's legacy_id_map rows would vanish before the importer that
+        // depends on them runs, and every dependency would look broken (found
+        // validating against the real dump — DATA_MIGRATION.md §5). Detecting
+        // this by transaction level cannot work: a test's RefreshDatabase
+        // transaction is indistinguishable from the command's, so the caller
+        // must say so explicitly.
         DB::beginTransaction();
 
         try {
             $this->import();
 
-            $dryRun ? DB::rollBack() : DB::commit();
+            ($dryRun && $ownsTransaction) ? DB::rollBack() : DB::commit();
         } catch (\Throwable $e) {
             DB::rollBack();
 

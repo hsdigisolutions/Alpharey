@@ -2,6 +2,7 @@
 
 namespace App\Services\LegacyImport\Importers;
 
+use App\Enums\PaymentMethod;
 use App\Enums\VatRate;
 use App\Models\Company;
 use App\Models\Expense;
@@ -65,8 +66,8 @@ class ExpensesImporter extends AbstractImporter
                     'vat_rate' => $vatRate?->value,
                     'vat_amount' => (string) ($row->vat_amount ?? 0),
                     'total' => (string) ($row->total ?? $row->amount ?? 0),
-                    'payment_method' => $row->payment_method ?? null,
-                    'payment_status' => $this->normalizePaymentStatus($row->payment_status ?? null),
+                    'payment_method' => $this->normalizePaymentMethod($row),
+                    'payment_status' => $this->normalizePaymentStatus($row),
                     'payment_date' => $row->payment_date ?? null,
                     'is_reimbursable' => (bool) ($row->is_reimbursable ?? false),
                     'notes' => $row->notes ?? null,
@@ -145,8 +146,70 @@ class ExpensesImporter extends AbstractImporter
         return in_array($legacy, ['albaran', 'factura', 'ticket', 'other'], true) ? $legacy : 'other';
     }
 
-    private function normalizePaymentStatus(?string $legacy): string
+    /**
+     * The legacy `payment_method` answers "WHO paid", not "by what method":
+     * its values are employee / company_card / bank / not_paid. Only `bank` is
+     * a payment method in this schema's sense.
+     *
+     * The other three are facts this schema already records elsewhere, so they
+     * map to NULL rather than being mangled into a method they never were:
+     *   - employee     → the worker fronted the cost: `is_reimbursable`
+     *   - company_card → `company_card_id`
+     *   - not_paid     → `payment_status`
+     *
+     * Found against the real dump: the old code passed this column straight
+     * through into a PaymentMethod cast and the import died on the first
+     * `employee` row (510 of 687). DATA_MIGRATION.md §3.4b.
+     */
+    private function normalizePaymentMethod(object $row): ?string
     {
-        return in_array($legacy, ['unpaid', 'partial', 'paid', 'pending'], true) ? $legacy : 'unpaid';
+        $legacy = $row->payment_method ?? null;
+
+        return match ($legacy) {
+            'bank' => PaymentMethod::BankTransfer->value,
+            'employee', 'company_card', 'not_paid', '', null => null,
+            default => $this->flagUnmapped($row, 'payment_method', (string) $legacy),
+        };
+    }
+
+    /**
+     * `reimbursed` is the legacy terminal state for a worker-fronted cost that
+     * has been paid back — settled, i.e. paid. It has no case of its own here.
+     *
+     * Anything genuinely unrecognised is REPORTED rather than silently
+     * defaulted: the old whitelist quietly turned every unknown value into
+     * 'unpaid', which is how `reimbursed` was about to import as an
+     * outstanding debt to 2 workers.
+     */
+    private function normalizePaymentStatus(object $row): string
+    {
+        $legacy = $row->payment_status ?? null;
+
+        if (in_array($legacy, ['unpaid', 'partial', 'paid', 'pending'], true)) {
+            return $legacy;
+        }
+
+        if ($legacy === 'reimbursed') {
+            return 'paid';
+        }
+
+        if ($legacy !== null && $legacy !== '') {
+            $this->flagUnmapped($row, 'payment_status', (string) $legacy);
+        }
+
+        return 'unpaid';
+    }
+
+    /**
+     * A value the new schema has no home for: keep the row, report the field.
+     * Returns null so a caller can both flag and yield the blank in one arm.
+     */
+    private function flagUnmapped(object $row, string $field, string $value): null
+    {
+        $this->exception('expenses', $row->id, "Unmapped {$field} '{$value}' — left blank for a human", [
+            $field => $value,
+        ]);
+
+        return null;
     }
 }

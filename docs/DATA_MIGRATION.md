@@ -13,6 +13,18 @@ Source references:
 
 ## 1. Where the data actually is (verified 2026-07-12)
 
+> **UPDATE 2026-07-17 — the live dump arrived and the importers were validated
+> against it. The external blocker below is CLEARED.** The dump
+> (`vertocrm-313539dae2.sql`, 88 tables, 24 MB) was restored locally as
+> `vertocrm_legacy` and a full `verto:import-legacy` run was exercised against
+> it. Results and the bugs it surfaced are in **§6**. In short: employees (264),
+> clients (34), vendors (221), projects (64), attendance (4 911), expenses (687),
+> payrolls (156), vehicles (12) and the inventory ledger all import, and the
+> money reconciles to the cent (attendance 333 692,44 €, expenses 39 685,80 €,
+> payroll net 119 494,36 €). The `storage/app` upload set (item 2 below) is still
+> outstanding, so document/photo *files* cannot be validated yet — but no legacy
+> `documents` rows exist in the dump anyway (that store was empty).
+
 The downloaded copy was inspected on this machine:
 
 - `database.sqlite` in the download is **empty (0 bytes)**.
@@ -321,3 +333,81 @@ becomes the authority from the first movement the new system writes.
 | Phase 7 | Import leaves (§3.7), vehicles, inventory |
 | Phase 8 | Import audit archive (§3.10), notifications; full-system validation run |
 | Phase 9 | Freeze → delta import → validation → cutover (§4) |
+
+---
+
+## 6. First real-dump validation run (2026-07-17)
+
+The live dump (`vertocrm-313539dae2.sql`, 88 tables) was restored locally and
+`verto:import-legacy` was run against it — first `--dry-run`, then a committed
+run into a throwaway database. It surfaced **six defects that 387 green tests
+never could**, because the in-memory test stand-in only ever held the shapes we
+imagined, not the ones the production database actually contains. All six are
+fixed and pinned (`tests/Feature/LegacyRealDataShapeTest.php` +
+`LegacyImportersTest.php`).
+
+### 6a. The dry-run framework flaw (the important one)
+
+Each importer wrapped itself in its own transaction and, in `--dry-run`, rolled
+that transaction back at the end. So the employees importer's `legacy_id_map`
+rows vanished *before* the attendance importer ran, and **every dependent
+importer reported 100 % "not imported — run the X importer first"** while X
+reported a clean run. The dry-run was lying about what a real run would do —
+exactly when you most need it to be honest (attendance: 0 imported / 4 911
+exceptions; payrolls 0/156).
+
+Fix: in `--dry-run` the **command** now holds ONE transaction around the whole
+sequence and rolls it back at the end; importers commit into it (their
+savepoints release, so a later importer resolves the ids an earlier one
+recorded). The importer only rolls back its own work when it *owns* the
+transaction (a standalone/test run) — signalled by an explicit
+`ownsTransaction` flag, because a test's `RefreshDatabase` transaction is
+indistinguishable from the command's by nesting level alone.
+
+### 6b. Two enum values that CRASHED the whole migration
+
+A `ValueError` on an enum cast aborts the entire run on the first offending row
+— the worst failure mode for a one-shot cutover. Two were hiding in real data:
+
+- **`expenses.payment_method`** answers *who* paid, not *how*: its values are
+  `employee` (510), `company_card` (145), `bank` (26), `not_paid` (6) — none of
+  which is a `PaymentMethod`. Only `bank` maps (→ `bank_transfer`); the other
+  three are facts the new schema already records elsewhere (`is_reimbursable`,
+  `company_card_id`, `payment_status`) and map to a blank method. The old code
+  passed the column straight into the cast and died on the first `employee` row.
+- **`attendance.wage_type`** is spelled `day`/`hour` in the dump, `daily`/
+  `hourly` in the new `WageType` enum — the same fact, a different spelling.
+  4 888 + 23 rows died on the cast. Translated, not recomputed; the frozen rate
+  is untouched.
+
+### 6c. Three quieter mapping bugs
+
+- **`payrolls`**: the period lives in `payroll_month` (`'YYYY-MM'`), which the
+  importer never read — it looked only at `month`/`year`, so all 156 rows
+  reported "could not resolve the payroll month". Now prefers `payroll_month`.
+- **`expenses.payment_status = 'reimbursed'`** (a settled worker refund) fell
+  through a whitelist to `unpaid` — silently *re-opening* a debt the company had
+  already paid. Now maps to `paid`; any genuinely unknown status is flagged, not
+  defaulted.
+- **inventory**: items were recorded in `legacy_id_map` under the importer's
+  default entity type (`inventory`) but looked up under `equipment_items`, so
+  every stock movement, issue and assignment orphaned. Keyed correctly now, and
+  the downstream steps increment the imported counter (they under-reported).
+
+### 6d. Noise that is working as designed, not a bug
+
+`expenses` reports 459 exceptions on a clean run. 436 are "conflicting
+iva_percent/vat_percent" — but `vat_percent` in the real dump is a **dead column,
+uniformly 21.00**, while `iva_percent` carries the real varied rates. The
+importer correctly picks `iva_percent` and preserves `vat_amount`; the flag is
+informational and the row imports. The other 22 are genuine non-official
+effective rates (`vat_amount/base`, e.g. 9,99 %) that a human should eyeball
+(§3.5b). No change made — flagging-not-guessing is the deliberate contract.
+
+### 6e. What could not be validated yet
+
+The `storage/app` upload set (§1 item 2) has not arrived, so document/photo
+*files* are unverified — but the dump contains **zero `documents` rows** (that
+legacy store was empty), so there is nothing to import there regardless. Legacy
+`leaves`, `advances`, `invoices` and `employee_call_logs` are also all empty in
+this dump; their importers are exercised by the unit stand-ins, not this run.

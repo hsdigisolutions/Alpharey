@@ -137,3 +137,39 @@ it('rolls back all writes in dry-run mode but still counts work', function (): v
         ->and(User::query()->where('email', 'dry@legacy.es')->exists())->toBeFalse()
         ->and(LegacyIdMap::query()->count())->toBe(0);
 });
+
+/**
+ * The framework fix found against the real dump: in a dry run the COMMAND
+ * holds one transaction around the whole sequence, so an importer that depends
+ * on an earlier one can resolve the ids it recorded — and nothing persists.
+ *
+ * A standalone importer that rolled back its own writes (the old behaviour)
+ * made every dependent importer report 100% "not imported — run the X importer
+ * first" while X reported a clean run (DATA_MIGRATION.md §5). This pins that a
+ * caller-owned transaction keeps the mapping visible mid-run yet rolls it all
+ * back at the end.
+ */
+it('keeps mappings visible across importers in one dry-run, then rolls back', function (): void {
+    DB::connection('legacy')->table('users')->insert([
+        'name' => 'Puente', 'email' => 'puente@legacy.es',
+        'password' => password_hash('x', PASSWORD_BCRYPT), 'role' => 'viewer', 'status' => 'active',
+    ]);
+
+    // The caller (as the command does) holds ONE transaction around the run.
+    DB::beginTransaction();
+
+    // ownsTransaction:false — the importer must commit into the caller's
+    // transaction, not roll back its own work.
+    $result = app(UsersImporter::class)->run(dryRun: true, ownsTransaction: false);
+
+    // Mid-run: the mapping IS visible, so a dependent importer could resolve it.
+    expect($result->imported)->toBe(1)
+        ->and(LegacyIdMap::query()->where('entity_type', 'users')->count())->toBe(1)
+        ->and(User::query()->where('email', 'puente@legacy.es')->exists())->toBeTrue();
+
+    // The caller rolls back the whole sequence — nothing survives.
+    DB::rollBack();
+
+    expect(User::query()->where('email', 'puente@legacy.es')->exists())->toBeFalse()
+        ->and(LegacyIdMap::query()->count())->toBe(0);
+});

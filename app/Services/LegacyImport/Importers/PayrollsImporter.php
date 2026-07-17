@@ -104,7 +104,12 @@ class PayrollsImporter extends AbstractImporter
      */
     private function normalizeMonth(object $row): ?string
     {
-        $month = $row->month ?? null;
+        // The real dump keys the period in `payroll_month` ('YYYY-MM'); older
+        // shapes used `month` (± a separate `year`) or a date column. Prefer
+        // payroll_month, then fall back. Found against the real dump: all 156
+        // rows carry payroll_month and none carry `month`, so the importer was
+        // resolving nothing.
+        $month = $row->payroll_month ?? $row->month ?? null;
 
         if (is_string($month) && preg_match('/^\d{4}-\d{2}$/', $month)) {
             return $month;

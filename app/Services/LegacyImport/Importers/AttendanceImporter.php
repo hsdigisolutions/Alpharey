@@ -2,6 +2,7 @@
 
 namespace App\Services\LegacyImport\Importers;
 
+use App\Enums\WageType;
 use App\Models\Attendance;
 use App\Models\Company;
 use App\Services\LegacyImport\AbstractImporter;
@@ -69,8 +70,13 @@ class AttendanceImporter extends AbstractImporter
                     'notes' => $row->notes ?? null,
                 ]);
                 $attendance->company_id = $defaultCompanyId;
-                // Historical snapshots carried over verbatim (not recomputed)
-                $attendance->wage_type_snapshot = $row->wage_type ?? $row->wage_type_snapshot ?? null;
+                // Historical snapshots carried over verbatim (not recomputed).
+                // wage_type is the one exception: the legacy dump spells it
+                // `day`/`hour`, this schema `daily`/`hourly` — the same fact in
+                // a different spelling, so we translate the label without
+                // touching the frozen rate. Found against the real dump: 4 888
+                // `day` rows + 23 `hour` rows died on the WageType cast.
+                $attendance->wage_type_snapshot = $this->normalizeWageType($row->wage_type ?? $row->wage_type_snapshot ?? null);
                 $attendance->wage_rate_snapshot = $row->wage_rate ?? $row->wage_rate_snapshot ?? null;
                 $attendance->hourly_rate_snapshot = $row->hourly_rate ?? $row->hourly_rate_snapshot ?? null;
                 $attendance->save();
@@ -89,5 +95,21 @@ class AttendanceImporter extends AbstractImporter
     private function normalizeStatus(?string $legacy): string
     {
         return in_array($legacy, ['present', 'absent', 'late', 'early_leave', 'leave'], true) ? $legacy : 'present';
+    }
+
+    /**
+     * Legacy `day`/`hour` → this schema's `daily`/`hourly`. Already-correct
+     * values (and per_meter/monthly) pass through; an unknown value is left
+     * null rather than guessed — an unreadable snapshot must not invent a rate.
+     */
+    private function normalizeWageType(?string $legacy): ?WageType
+    {
+        return match ($legacy) {
+            'day', 'daily' => WageType::Daily,
+            'hour', 'hourly' => WageType::Hourly,
+            'month', 'monthly' => WageType::Monthly,
+            'meter', 'per_meter' => WageType::PerMeter,
+            default => null,
+        };
     }
 }

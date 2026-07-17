@@ -77,7 +77,12 @@ class InventoryImporter extends AbstractImporter
     {
         $this->legacy('equipment_items')->orderBy('id')->chunk(500, function ($rows) use ($companyId): void {
             foreach ($rows as $row) {
-                if ($this->alreadyImported($row->id)) {
+                // Items must be keyed under 'equipment_items' — the movement,
+                // issue and assignment steps resolve them with exactly that
+                // entity_type. Keying them under the importer's default name
+                // ('inventory') left every downstream row unable to find its
+                // item (found against the real dump: 4/5 rows orphaned).
+                if ($this->alreadyImported($row->id, 'equipment_items')) {
                     $this->skipped++;
 
                     continue;
@@ -101,7 +106,7 @@ class InventoryImporter extends AbstractImporter
                 $item->available_stock = (string) ($row->available_stock ?? 0);
                 $item->save();
 
-                $this->recordMapping($row->id, $item->id);
+                $this->recordMapping($row->id, $item->id, 'equipment_items');
                 $this->imported++;
             }
         });
@@ -150,6 +155,7 @@ class InventoryImporter extends AbstractImporter
                 $movement->save();
 
                 $this->recordMapping($row->id, $movement->id, 'equipment_stock_movements');
+                $this->imported++;
             }
         });
     }
@@ -193,6 +199,7 @@ class InventoryImporter extends AbstractImporter
             $issue->save();
 
             $this->recordMapping($row->id, $issue->id, 'employee_equipment_issues');
+            $this->imported++;
         }
     }
 
@@ -233,6 +240,7 @@ class InventoryImporter extends AbstractImporter
             $assignment->save();
 
             $this->recordMapping($row->id, $assignment->id, 'equipment_project_assignments');
+            $this->imported++;
         }
     }
 

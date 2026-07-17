@@ -5,6 +5,7 @@ namespace App\Console\Commands;
 use App\Services\LegacyImport\AbstractImporter;
 use App\Services\LegacyImport\ImportResult;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\DB;
 
 class ImportLegacyData extends Command
 {
@@ -50,20 +51,37 @@ class ImportLegacyData extends Command
 
         if ($dryRun) {
             $this->components->info('DRY RUN — all writes will be rolled back.');
+            // One transaction around the WHOLE sequence: importers commit into
+            // it (their savepoints release, so a later importer can resolve the
+            // ids an earlier one recorded), and this outer transaction rolls
+            // the lot back at the end. Without this, dry-run would roll back
+            // each importer before the next ran and every dependency would
+            // look broken — see AbstractImporter::run().
+            DB::beginTransaction();
         }
 
-        $results = $importers->map(function (AbstractImporter $importer) use ($dryRun): ImportResult {
-            $this->components->task(
-                $importer->name(),
-                function () use ($importer, $dryRun, &$result): bool {
-                    $result = $importer->run($dryRun);
+        try {
+            $results = $importers->map(function (AbstractImporter $importer) use ($dryRun): ImportResult {
+                $this->components->task(
+                    $importer->name(),
+                    function () use ($importer, $dryRun, &$result): bool {
+                        // In dry-run WE hold the outer transaction, so the
+                        // importer must not roll back its own work.
+                        $result = $importer->run($dryRun, ownsTransaction: ! $dryRun);
 
-                    return true;
-                },
-            );
+                        return true;
+                    },
+                );
 
-            return $result;
-        });
+                return $result;
+            })->all();
+        } finally {
+            if ($dryRun && DB::transactionLevel() > 0) {
+                DB::rollBack();
+            }
+        }
+
+        $results = collect($results);
 
         $this->table(
             ['Importer', 'Imported', 'Skipped', 'Exceptions', 'Report'],
