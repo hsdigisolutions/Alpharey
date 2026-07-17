@@ -19,6 +19,7 @@ use App\Http\Controllers\ColumnSettingsController;
 use App\Http\Controllers\CommissionController;
 use App\Http\Controllers\CompanyController;
 use App\Http\Controllers\ComplianceController;
+use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DeploymentController;
 use App\Http\Controllers\DocumentController;
 use App\Http\Controllers\EmployeeCallLogController;
@@ -90,9 +91,9 @@ if (! app()->isProduction()) {
 Route::middleware(['auth', 'active'])->group(function (): void {
     Route::post('/logout', [AuthenticatedSessionController::class, 'destroy'])->name('logout');
 
-    Route::get('/dashboard', function () {
-        return Inertia::render('Dashboard');
-    })->name('dashboard');
+    // Screen 03 — Dashboard (Phase 8). Per selected company; SA without a
+    // selection is redirected to Welcome to pick one.
+    Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
 
     // Screen 05/06 — Employees (module permissions checked in controllers)
     Route::get('/employees/export', [EmployeeImportExportController::class, 'export'])->name('employees.export');
