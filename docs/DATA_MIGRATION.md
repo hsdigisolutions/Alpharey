@@ -137,6 +137,30 @@ Old rows default `vat_percent` to 21.00 even where VAT may never have applied.
 **Resolution:** historical financial records migrate **exactly as stored** — migration
 never alters financial history. The optional-VAT rule applies to new records only.
 
+### 3.5b VAT is an enum in the new schema, a percentage in the old one
+
+Phase 6 stores `vat_rate` as an `App\Enums\VatRate` value ('general', 'reducido',
+'superreducido', 'exento'), matching proposals, so that every VAT field in the system
+is the one official dropdown. The legacy schema stores a raw `vat_percent` decimal.
+
+**Consequence:** a legacy row at a NON-official percentage (e.g. 17%) has no
+representation in the new schema.
+
+**Resolution:** `VatRate::fromPercent()` maps the four official rates across
+(21/10/4/0). Anything else:
+- keeps its `vat_amount` and `total` EXACTLY as stored — the money is never touched,
+  so the books still reconcile (§3.5)
+- imports with `vat_rate` left blank
+- lands in the exceptions report with the original percentage, for a human
+
+The importer never rounds an unofficial rate into a nearby official one: that would
+silently rewrite what a client was charged. Pinned by
+`tests/Unit/VatRateFromPercentTest.php`.
+
+**Open until the dump arrives:** whether any legacy row actually uses a non-official
+rate. If the report comes back empty, this is a non-issue; if not, the client decides
+per row.
+
 ### 3.6 Wage system (5 overlapping mechanisms)
 
 Old wage data lives in: employee columns (wage_type/wage_rate/base_salary/daily_wage/

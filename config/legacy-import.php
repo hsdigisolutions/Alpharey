@@ -1,8 +1,12 @@
 <?php
 
+use App\Services\LegacyImport\Importers\AdvancesImporter;
 use App\Services\LegacyImport\Importers\AttendanceImporter;
 use App\Services\LegacyImport\Importers\ClientsImporter;
 use App\Services\LegacyImport\Importers\EmployeesImporter;
+use App\Services\LegacyImport\Importers\ExpensesImporter;
+use App\Services\LegacyImport\Importers\InvoicesImporter;
+use App\Services\LegacyImport\Importers\PayrollsImporter;
 use App\Services\LegacyImport\Importers\ProjectsImporter;
 use App\Services\LegacyImport\Importers\SettingsImporter;
 use App\Services\LegacyImport\Importers\UsersImporter;
@@ -34,7 +38,18 @@ return [
         // was single-company (all data maps to Company 1, DATA_MIGRATION.md §3.1),
         // so it never modelled a deployment BETWEEN companies. Deployments are a
         // net-new feature; there is nothing to migrate.
-        // Phase 6: expenses, invoices, payments, payrolls, advances, commissions
+
+        // Phase 6 — money. Order matters: invoices remap client/vendor/project
+        // ids, expenses remap vendor/project/employee, payrolls + advances remap
+        // employees. All financial figures migrate VERBATIM (DATA_MIGRATION.md
+        // §3.5) — never recomputed by the new engines.
+        InvoicesImporter::class,
+        ExpensesImporter::class,
+        PayrollsImporter::class,
+        AdvancesImporter::class,
+        // Commission entries are derived from invoices by CommissionService and
+        // the legacy "settlement engine" is dead code (DATA_MIGRATION.md §5) —
+        // no importer; the client regenerates a month if they want it.
         // Phase 7: leaves, vehicles, inventory
         // Phase 8: audit archive, notifications
     ],

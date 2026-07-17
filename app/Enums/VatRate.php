@@ -79,4 +79,29 @@ enum VatRate: string
     {
         return round($subtotal * $this->percent() / 100, 2);
     }
+
+    /**
+     * Map a stored percentage back to a rate — the legacy database keeps a raw
+     * `vat_percent` where the new schema keeps this enum.
+     *
+     * Returns null for null/blank AND for any percentage that is not an official
+     * Agencia Tributaria rate. A legacy row at, say, 17% has no representation
+     * here: the importer keeps its vat_amount exactly as stored (migration never
+     * alters financial history — DATA_MIGRATION.md §3.5) and sends the row to the
+     * exceptions report for a human, rather than silently rounding it to 21%.
+     */
+    public static function fromPercent(int|float|string|null $percent): ?self
+    {
+        if ($percent === null || $percent === '') {
+            return null;
+        }
+
+        foreach (self::cases() as $case) {
+            if (abs($case->percent() - (float) $percent) < 0.005) {
+                return $case;
+            }
+        }
+
+        return null;
+    }
 }

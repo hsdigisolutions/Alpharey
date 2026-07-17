@@ -2,29 +2,27 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Status: Phase 5 complete (2026-07-16)
+## Status: Phase 6 complete (2026-07-17)
 
-Development Phase 5 (cross-company employee deployments — the signature feature) is
-built and verified:
-**224 Pest tests / 814 assertions passing (1 skipped) · Pint clean · Larastan level 6
-clean · `composer audit` clean · production Vite build working · deployment create flow
-+ Option A cross-charge + host attendance-grid badge verified in the browser against
-seeded MySQL.**
+Development Phase 6 (payroll & finance — the heaviest phase) is built and verified:
+**306 Pest tests / 1102 assertions passing (1 skipped) · Pint clean · Larastan level 6
+clean · `composer audit` clean · production Vite build working · payroll run, invoice
+totals and the cross-company Option A note verified in the browser against seeded
+MySQL.**
 
-Live screen: **12 Deployments** — a host-company admin deploys an employee FROM another
-company onto their own project (create modal: home company → cross-company employee
-lookup → host project → dates/rate). Option A ONLY is automated (employee stays on the
-HOME payroll; the HOST gets an automatic internal cross-charge — `DeploymentChargeService`
-computes units × rate × split from the employee's hours logged on the host project).
-Overlap guard blocks double-deployment. Deployed employees appear on the HOST attendance
-grid with a "Desplegado/Deployed" badge + home-company label (browser-verified: 240,00 €
-accrued from 16h). Option B (cesión ilegal) is refused at validation AND in the engine —
-never automated (dev skill Rule 13). No legacy importer: the legacy system was
-single-company, so there is nothing to migrate.
+Live screens: **12 Payroll** (calculate → breakdown → adjust → approve all → mark paid
+→ lock period) · **10 Invoices** (Ventas/Gastos tabs + slide-panel detail) · **Gastos**
+· **19 Commission Reports**. Browser-verified: 4 employees × 840 € = 3.360 € from the
+seeded July attendance (matching the Phase 4 grid exactly), and an invoice of
+1000 − 10% discount + 21% IVA − 15% retención = **954,00 €** with the live preview and
+the server independently agreeing.
 
-Next up: **Development Phase 6** (payroll & finance — gated on the Figma prototype review
-the client requested before Phase 6). Earlier phases: Phase 0–4, design D1–D3 (approved
-2026-07-14). Review findings 1–2 hardened in commit 31ede45.
+**The D9 prototype gate was WAIVED by the client** (DECISIONS.md) — Phase 6 proceeded
+without a prototype review, so design-change requests against these screens are normal
+follow-up work, not defects.
+
+Next up: **Development Phase 7** (operations modules: vehicles, leave, inventory, call
+panel). Earlier phases: Phase 0–5, design D1–D3 (approved 2026-07-14).
 
 ## Project skills — read them first
 
@@ -407,12 +405,75 @@ Admin), `empresa1.admin@verto5.local` (Company Admin), `empresa1.user@verto5.loc
     `deployments` AppIcon was added. Per Phase-4 decision 23, the project-detail deploy
     tab stays a placeholder — the standalone screen is the canonical create surface.
 
-## Ready for Phase 6
+## Phase 6 additions (map for future phases)
 
-Phase 6 (payroll & finance) is **gated on the Figma prototype review** the client asked
-for before Phase 6 (Setup Answers). It will consume Phase 5 outputs: approved measurements
-feed project billing, and `deployment_charges` become internal expense (host) + receivable
-(home) lines, with Option A payroll note lines per `docs/PAYROLL_DEPLOYMENTS.md`.
+- **Payroll** (`payrolls`, `advances`, `advance_categories`, `locked_periods`):
+  `PayrollService` computes a month ONLY from the wage snapshots frozen on attendance
+  (Phase 4) — never the live rate. The breakdown mirrors REQUIREMENTS.md Screen 12
+  exactly. Per-employee pay is **encrypted at rest AND in `$hidden`**, so it cannot leak
+  into an Inertia payload; controllers opt each figure in behind `payroll.view`.
+- **Cross-company (the subtle one)**: under Option A a deployed worker's attendance is
+  written under the HOST `company_id` but the HOME company pays. `PayrollService`
+  therefore gathers attendance **per employee, `withoutGlobalScopes()`**, and the home
+  payroll carries a "Deployed to X — cost transferred" note. Don't "fix" that to a
+  company-scoped query.
+- **`App\Support\PeriodLock`** is the single authority for closed months, enforced in
+  `AttendanceService` + the attendance delete path too — that is what makes "locked
+  months reject edits SYSTEM-WIDE" true rather than a payroll-screen courtesy. Bound as
+  a **singleton** so the memo and `forget()` are shared.
+- **Invoices** (`invoices`, `invoice_line_items`, `payments`, `invoice_reminders`):
+  `InvoiceTotals` is the single authority — subtotal − discount = base; **IVA on the
+  base; retención withheld from the base**. Client-sent totals are ignored;
+  `payment_status` is always re-derived from the payment records.
+- **VAT is a `VatRate` enum everywhere** (invoices/expenses/proposals), never a raw
+  percent. Blank = NO VAT line, never 0% — the PDF omits the row entirely.
+  `VatRate::fromPercent()` maps a legacy percentage back; a non-official rate is flagged
+  rather than rounded (DATA_MIGRATION.md §3.5b).
+- **Expenses**: an expense carrying BOTH `employee_id` and `project_id` is a "worker
+  project expense" and is paid back through that worker's payroll for the month. Those
+  two fields together are load-bearing, not tags.
+- **Commissions**: invoice total × the employee's `commission_percent`, only for
+  employees assigned to the project. Finalizing is a one-way door; `original_amount` is
+  never overwritten — (original, adjusted + reason) IS the audit story.
+- **i18n**: `resources/js/translate.js` provides global `$t()` / `$tPair()` for slots
+  that cannot hold markup (tab titles, aria-labels, placeholders, `<option>` text).
+  `<Bilingual k>` still covers two-line labels. **Never write `lang.es.*` in a component
+  or hardcode a `<Head title>`** — `tests/Unit/TranslationCoverageTest.php` fails the
+  build on the pattern.
+- **Importers**: invoices/expenses/payrolls/advances migrate every figure VERBATIM —
+  historical money is a fact and is never recomputed by the new engines. Commission
+  entries have no importer (derived; the legacy settlement engine is dead code).
+
+## Scaffolding decisions made in Phase 6 (not in DECISIONS.md)
+
+27. Company-scoped finance actions use `ResolvesCompanyContext` (redirect to Welcome),
+    not a bare 403: an invoice/payroll always belongs to ONE issuing company, and a
+    Super Admin browsing "all companies" has none. Found in the browser as a 500 — the
+    suite missed it because a company admin always HAS a company.
+28. Invoice/expense money is NOT encrypted (company books, aggregated in SQL); only
+    per-employee pay is. Two different rules, deliberately.
+29. `filteredQuery()` is shared by the invoices screen and its Excel export so "export
+    the filtered view" (§10) is literal and the two cannot drift.
+30. Export routes register BEFORE `{param}` routes (`/invoices/export` must not resolve
+    as `/invoices/{invoice}`) — pinned by a test, not left to ordering luck.
+31. `payroll.export` additionally requires `payroll.view`: the sheet is nothing but
+    wages, so exporting without the right to see pay would leak the whole payroll.
+
+## Ready for Phase 7
+
+Phase 7 (operations modules: vehicles, leave management, inventory, call panel) builds on
+the same conventions. Still open from Phase 6, in priority order:
+
+- **Finance detail tabs** — employee Nómina, project Facturas/Gastos, client Facturas,
+  vendor Gastos. Per scaffolding decision 23 the standalone screens are canonical and the
+  tabs remain placeholders; wiring them to the same data is a cheap pass.
+- **Settings sections** for advance categories, expense categories and company cards.
+- **`deployment_charges` → invoice/expense lines**: Phase 5 generates the cross-charge,
+  but it is not yet posted as a host expense + home receivable.
+- **Invoice reminders** are stored but not sent — sending lands in Phase 8 with the other
+  scheduled mail.
+- **Commission base** is the invoice TOTAL, not the amount collected
+  (`CommissionService::baseFor()` — one line to change if the client wants otherwise).
 
 External blocker (unchanged): legacy DB dump + `storage/app` from the live server
 (DATA_MIGRATION.md §1) — needed to validate importers against real data. Not blocking UI.
