@@ -7,6 +7,7 @@ use App\Enums\InvoiceType;
 use App\Enums\PaymentMethod;
 use App\Enums\PaymentStatus;
 use App\Enums\VatRate;
+use App\Exports\InvoicesExport;
 use App\Http\Controllers\Admin\Concerns\ResolvesCompanyContext;
 use App\Http\Requests\Invoices\StoreInvoiceRequest;
 use App\Http\Requests\Invoices\UpdateInvoiceRequest;
@@ -18,12 +19,15 @@ use App\Services\Audit\AuditLogger;
 use App\Services\Invoices\InvoiceService;
 use App\Support\CurrentCompany;
 use Barryvdh\DomPDF\Facade\Pdf;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response as HttpResponse;
 use Illuminate\Support\Facades\Gate;
 use Inertia\Inertia;
 use Inertia\Response;
+use Maatwebsite\Excel\Facades\Excel;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 /**
  * Screen 10 — Invoices. Two tabs on one screen: Ventas (money in, to a client)
@@ -37,15 +41,16 @@ class InvoiceController extends Controller
 {
     use ResolvesCompanyContext;
 
-    public function index(Request $request): Response
+    /**
+     * The list query, shared by the screen and the Excel export so that
+     * "export the filtered view" is literal (REQUIREMENTS.md §10) and the two
+     * can never drift apart.
+     *
+     * @return Builder<Invoice>
+     */
+    private function filteredQuery(Request $request, InvoiceType $tab): Builder
     {
-        Gate::authorize('invoices.view');
-
-        $tab = $request->string('tab')->value() === InvoiceType::Expense->value
-            ? InvoiceType::Expense
-            : InvoiceType::Sale;
-
-        $invoices = Invoice::query()
+        return Invoice::query()
             ->where('type', $tab->value)
             ->with(['client:id,name', 'vendor:id,name', 'project:id,name', 'company:id,name'])
             ->when($request->filled('search'), function ($q) use ($request) {
@@ -58,7 +63,23 @@ class InvoiceController extends Controller
             ->when($request->filled('project_id'), fn ($q) => $q->where('project_id', $request->integer('project_id')))
             ->when($request->filled('from'), fn ($q) => $q->whereDate('invoice_date', '>=', $request->string('from')))
             ->when($request->filled('to'), fn ($q) => $q->whereDate('invoice_date', '<=', $request->string('to')))
-            ->orderByDesc('invoice_date')->orderByDesc('id')
+            ->orderByDesc('invoice_date')->orderByDesc('id');
+    }
+
+    private function resolveTab(Request $request): InvoiceType
+    {
+        return $request->string('tab')->value() === InvoiceType::Expense->value
+            ? InvoiceType::Expense
+            : InvoiceType::Sale;
+    }
+
+    public function index(Request $request): Response
+    {
+        Gate::authorize('invoices.view');
+
+        $tab = $this->resolveTab($request);
+
+        $invoices = $this->filteredQuery($request, $tab)
             ->paginate(25)
             ->withQueryString()
             ->through(fn (Invoice $i): array => $this->row($i));
@@ -140,6 +161,21 @@ class InvoiceController extends Controller
         $invoice->delete();
 
         return back()->with('success', __('ui.invoices.deleted'));
+    }
+
+    /**
+     * The CURRENT FILTERED VIEW as a spreadsheet — same query as the screen.
+     */
+    public function export(Request $request, AuditLogger $audit): BinaryFileResponse
+    {
+        Gate::authorize('invoices.export');
+
+        $tab = $this->resolveTab($request);
+        $rows = $this->filteredQuery($request, $tab)->get();
+
+        $audit->log('exported', new Invoice, null, null, 'Invoices Excel ('.$tab->value.')', 'invoices');
+
+        return Excel::download(new InvoicesExport($rows), 'facturas-'.$tab->value.'.xlsx');
     }
 
     public function pdf(Invoice $invoice, AuditLogger $audit): HttpResponse

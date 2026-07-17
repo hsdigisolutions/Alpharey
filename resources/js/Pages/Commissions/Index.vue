@@ -119,9 +119,13 @@ const columns = [
             <VButton v-if="can.edit" variant="secondary" icon="plus" @click="generate">
                 <Bilingual k="commissions.generate" inline />
             </VButton>
+            <a v-if="can.export" :href="`/commissions/export?month=${month}`"
+                class="inline-flex items-center gap-2 rounded-md border border-line bg-surface-raised px-3.5 py-2 text-sm font-medium text-ink hover:bg-surface-hover">
+                <AppIcon name="export" class="h-4 w-4" /> Excel
+            </a>
             <a v-if="can.export" :href="`/commissions/pdf?month=${month}`"
                 class="inline-flex items-center gap-2 rounded-md border border-line bg-surface-raised px-3.5 py-2 text-sm font-medium text-ink hover:bg-surface-hover">
-                <AppIcon name="export" class="h-4 w-4" /> PDF
+                <AppIcon name="download" class="h-4 w-4" /> PDF
             </a>
         </VPageHeader>
 

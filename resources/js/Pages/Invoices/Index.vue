@@ -147,6 +147,11 @@ const columns = computed(() => [
     <Head :title="$t('invoices.title')" />
     <AppLayout>
         <VPageHeader k="invoices.title">
+            <!-- Exports the CURRENT filtered view — same query as the table -->
+            <a v-if="can.export" :href="`/invoices/export?${new URLSearchParams({ tab, ...filters }).toString()}`"
+                class="inline-flex items-center gap-2 rounded-md border border-line bg-surface-raised px-3.5 py-2 text-sm font-medium text-ink hover:bg-surface-hover">
+                <AppIcon name="export" class="h-4 w-4" /> Excel
+            </a>
             <VButton v-if="can.create" icon="plus" @click="openCreate">
                 <Bilingual k="invoices.new" inline />
             </VButton>

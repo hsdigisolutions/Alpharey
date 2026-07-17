@@ -117,6 +117,14 @@ const columns = [
             <VButton v-if="can.approve && locked" variant="secondary" @click="post('/payroll/unlock')">
                 <Bilingual k="payroll.unlock" inline />
             </VButton>
+            <a v-if="can.export" :href="`/payroll/export?month=${month}`"
+                class="inline-flex items-center gap-2 rounded-md border border-line bg-surface-raised px-3.5 py-2 text-sm font-medium text-ink hover:bg-surface-hover">
+                <AppIcon name="export" class="h-4 w-4" /> Excel
+            </a>
+            <a v-if="can.download" :href="`/payroll/payslips?month=${month}`"
+                class="inline-flex items-center gap-2 rounded-md border border-line bg-surface-raised px-3.5 py-2 text-sm font-medium text-ink hover:bg-surface-hover">
+                <AppIcon name="download" class="h-4 w-4" /> PDF
+            </a>
         </VPageHeader>
 
         <!-- Month navigation + lock state -->

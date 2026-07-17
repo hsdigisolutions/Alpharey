@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Enums\CommissionStatus;
+use App\Exports\CommissionsExport;
 use App\Http\Controllers\Admin\Concerns\ResolvesCompanyContext;
 use App\Models\CommissionReportEntry;
 use App\Models\Employee;
@@ -17,6 +18,8 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Gate;
 use Inertia\Inertia;
 use Inertia\Response;
+use Maatwebsite\Excel\Facades\Excel;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 /**
  * Screen 19 — Commission Reports. Company-owned.
@@ -101,6 +104,23 @@ class CommissionController extends Controller
         $service->markPaid($entry);
 
         return back()->with('success', __('ui.commissions.marked_paid'));
+    }
+
+    public function export(Request $request, AuditLogger $audit): BinaryFileResponse
+    {
+        Gate::authorize('commission_reports.export');
+
+        $month = $this->resolveMonth($request);
+
+        $entries = CommissionReportEntry::query()
+            ->where('month', $month)
+            ->with(['employee:id,full_name', 'project:id,name', 'invoice:id,number,total,paid_amount'])
+            ->orderBy('employee_id')
+            ->get();
+
+        $audit->log('exported', new CommissionReportEntry, null, null, 'Commission Excel '.$month, 'commission_reports');
+
+        return Excel::download(new CommissionsExport($entries), 'comisiones-'.$month.'.xlsx');
     }
 
     public function pdf(Request $request, AuditLogger $audit): HttpResponse

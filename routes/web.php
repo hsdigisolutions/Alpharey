@@ -161,6 +161,7 @@ Route::middleware(['auth', 'active'])->group(function (): void {
 
     // Screen 10 — Invoices (Ventas / Gastos tabs) + payments
     Route::get('/invoices', [InvoiceController::class, 'index'])->name('invoices.index');
+    Route::get('/invoices/export', [InvoiceController::class, 'export'])->name('invoices.export');
     Route::get('/invoices/{invoice}', [InvoiceController::class, 'show'])->name('invoices.show');
     Route::post('/invoices', [InvoiceController::class, 'store'])->name('invoices.store');
     Route::put('/invoices/{invoice}', [InvoiceController::class, 'update'])->name('invoices.update');
@@ -180,12 +181,15 @@ Route::middleware(['auth', 'active'])->group(function (): void {
     Route::get('/commissions', [CommissionController::class, 'index'])->name('commissions.index');
     Route::post('/commissions/generate', [CommissionController::class, 'generate'])->name('commissions.generate');
     Route::get('/commissions/pdf', [CommissionController::class, 'pdf'])->name('commissions.pdf');
+    Route::get('/commissions/export', [CommissionController::class, 'export'])->name('commissions.export');
     Route::put('/commissions/{entry}/adjust', [CommissionController::class, 'adjust'])->name('commissions.adjust');
     Route::post('/commissions/{entry}/finalize', [CommissionController::class, 'finalize'])->name('commissions.finalize');
     Route::post('/commissions/{entry}/paid', [CommissionController::class, 'markPaid'])->name('commissions.paid');
 
     // Screen 12 — Payroll (company-owned; locked periods reject dated edits)
     Route::get('/payroll', [PayrollController::class, 'index'])->name('payroll.index');
+    Route::get('/payroll/export', [PayrollController::class, 'export'])->name('payroll.export');
+    Route::get('/payroll/payslips', [PayrollController::class, 'payslips'])->name('payroll.payslips');
     Route::post('/payroll/calculate', [PayrollController::class, 'calculate'])->name('payroll.calculate');
     Route::post('/payroll/approve-all', [PayrollController::class, 'approveAll'])->name('payroll.approve-all');
     Route::post('/payroll/lock', [PayrollController::class, 'lockPeriod'])->name('payroll.lock');

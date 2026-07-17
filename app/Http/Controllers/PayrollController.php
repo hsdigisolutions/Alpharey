@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Enums\PaymentMethod;
 use App\Enums\PayrollStatus;
+use App\Exports\PayrollExport;
 use App\Http\Controllers\Admin\Concerns\ResolvesCompanyContext;
 use App\Models\LockedPeriod;
 use App\Models\Payroll;
@@ -20,6 +21,8 @@ use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
+use Maatwebsite\Excel\Facades\Excel;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 /**
  * Screen 12 — Payroll. Company-owned.
@@ -161,6 +164,58 @@ class PayrollController extends Controller
         $workflow->unlockPeriod($companyId, $this->resolveMonth($request));
 
         return back()->with('success', __('ui.payroll.unlocked'));
+    }
+
+    /**
+     * The month as a spreadsheet. Gated on payroll.view as well as .export —
+     * the sheet is nothing but pay figures, so there is no "without wages"
+     * variant the way the employees export has one.
+     */
+    public function export(Request $request, AuditLogger $audit): BinaryFileResponse
+    {
+        Gate::authorize('payroll.export');
+        Gate::authorize('payroll.view');
+
+        $companyId = $this->contextCompanyId();
+        $month = $this->resolveMonth($request);
+
+        $rows = Payroll::query()
+            ->where('company_id', $companyId)
+            ->where('month', $month)
+            ->with(['employee:id,full_name', 'company:id,name'])
+            ->get()
+            ->sortBy(fn (Payroll $p) => $p->employee?->full_name)
+            ->values();
+
+        $audit->log('exported', new Payroll, null, null, 'Payroll Excel '.$month, 'payroll');
+
+        return Excel::download(new PayrollExport($rows), 'nominas-'.$month.'.xlsx');
+    }
+
+    /**
+     * Every payslip for the month in one PDF (spec: "Export PDF (all payslips)").
+     */
+    public function payslips(Request $request, AuditLogger $audit): HttpResponse
+    {
+        Gate::authorize('payroll.download');
+        Gate::authorize('payroll.view');
+
+        $companyId = $this->contextCompanyId();
+        $month = $this->resolveMonth($request);
+
+        $rows = Payroll::query()
+            ->where('company_id', $companyId)
+            ->where('month', $month)
+            ->with(['employee:id,full_name,designation', 'company:id,name'])
+            ->get()
+            ->sortBy(fn (Payroll $p) => $p->employee?->full_name)
+            ->values();
+
+        $audit->log('exported', new Payroll, null, null, 'Payslips PDF '.$month, 'payroll');
+
+        $pdf = Pdf::loadView('exports.payslips-bulk-pdf', ['payrolls' => $rows, 'month' => $month]);
+
+        return $pdf->download('nominas-'.$month.'.pdf');
     }
 
     /**
