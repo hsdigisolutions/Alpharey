@@ -35,6 +35,7 @@ use App\Http\Controllers\PayrollController;
 use App\Http\Controllers\ProjectController;
 use App\Http\Controllers\ProjectWorkerController;
 use App\Http\Controllers\ProposalController;
+use App\Http\Controllers\VehicleController;
 use App\Http\Controllers\VendorController;
 use App\Http\Controllers\WelcomeController;
 use Illuminate\Support\Facades\Auth;
@@ -211,6 +212,18 @@ Route::middleware(['auth', 'active'])->group(function (): void {
     Route::post('/deployments', [DeploymentController::class, 'store'])->name('deployments.store');
     Route::post('/deployments/{deployment}/complete', [DeploymentController::class, 'complete'])->name('deployments.complete');
     Route::post('/deployments/{deployment}/cancel', [DeploymentController::class, 'cancel'])->name('deployments.cancel');
+
+    // Screen 21 — Vehicles (Phase 7). Insurance/ITV expiries feed the same
+    // compliance alerts as documents (VehicleCompliance + verto:scan-documents).
+    Route::get('/vehicles', [VehicleController::class, 'index'])->name('vehicles.index');
+    Route::post('/vehicles', [VehicleController::class, 'store'])->name('vehicles.store');
+    Route::get('/vehicles/{vehicle}', [VehicleController::class, 'show'])->name('vehicles.show');
+    Route::put('/vehicles/{vehicle}', [VehicleController::class, 'update'])->name('vehicles.update');
+    Route::delete('/vehicles/{vehicle}', [VehicleController::class, 'destroy'])->name('vehicles.destroy');
+    Route::post('/vehicles/{vehicle}/assign', [VehicleController::class, 'assign'])->name('vehicles.assign');
+    Route::post('/vehicles/{vehicle}/maintenance', [VehicleController::class, 'storeMaintenance'])->name('vehicles.maintenance.store');
+    Route::delete('/vehicles/{vehicle}/maintenance/{maintenance}', [VehicleController::class, 'destroyMaintenance'])->name('vehicles.maintenance.destroy');
+    Route::post('/vehicles/{vehicle}/mileage', [VehicleController::class, 'storeMileage'])->name('vehicles.mileage.store');
 
     // Screen 22 — Leave management (Phase 7). Approving books the days into
     // the attendance grid, so these go through LeaveService, not the model.

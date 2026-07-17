@@ -6,8 +6,10 @@ use App\Enums\UserRole;
 use App\Models\Company;
 use App\Models\Document;
 use App\Models\User;
+use App\Models\Vehicle;
 use App\Notifications\DocumentAlertNotification;
 use App\Services\Settings\SettingsService;
+use App\Services\Vehicles\VehicleCompliance;
 use App\Support\DocumentTypes;
 use Illuminate\Console\Command;
 use Illuminate\Support\Collection;
@@ -40,10 +42,76 @@ class ScanDocuments extends Command
         $sent = 0;
         $sent += $this->scanExpiries($warnDays);
         $sent += $this->scanMonthlies();
+        $sent += $this->scanVehicleExpiries($warnDays);
 
         $this->components->info("Document scan complete — {$sent} notification group(s) sent.");
 
         return self::SUCCESS;
+    }
+
+    /**
+     * Phase 7: a vehicle's insurance and ITV are compliance dates like any
+     * other, so they ride the SAME 90/60/30 + expiry-day schedule and reach
+     * the same Company Admins. An uninsured van on the road is exactly the
+     * kind of thing this system exists to catch.
+     *
+     * @param  list<int>  $warnDays
+     */
+    private function scanVehicleExpiries(array $warnDays): int
+    {
+        $today = now()->startOfDay();
+        $horizon = $today->copy()->addDays(max($warnDays))->toDateString();
+        $sent = 0;
+
+        // System context: sweep every company's fleet (Rule 1 opt-out).
+        $vehicles = Vehicle::query()
+            ->withoutGlobalScopes()
+            ->where('active', true)
+            ->where(function ($q) use ($today, $horizon): void {
+                foreach (VehicleCompliance::EXPIRY_FIELDS as $column) {
+                    // Date-string bounds so a same-day row matches under both
+                    // MySQL and SQLite (the Phase 2 lesson).
+                    $q->orWhereBetween($column, [$today->toDateString(), $horizon]);
+                }
+            })
+            ->with('company:id,name')
+            ->get();
+
+        foreach ($vehicles as $vehicle) {
+            foreach (VehicleCompliance::EXPIRY_FIELDS as $field => $column) {
+                $date = $vehicle->getAttribute($column);
+
+                if ($date === null) {
+                    continue;
+                }
+
+                $daysLeft = (int) $today->diffInDays($date->startOfDay(), false);
+
+                if (! in_array($daysLeft, $warnDays, true) && $daysLeft !== 0) {
+                    continue;
+                }
+
+                $label = __('ui.vehicles.'.$field).' — '.$vehicle->plate_number;
+
+                $this->notifyCompanyAdmins($vehicle->company_id, [
+                    'kind' => $daysLeft === 0 ? 'expired' : 'expiring',
+                    'title_es' => $daysLeft === 0
+                        ? "Vehículo — vence hoy: {$label}"
+                        : "Vehículo — vence en {$daysLeft} días: {$label}",
+                    'title_en' => $daysLeft === 0
+                        ? "Vehicle — expires today: {$label}"
+                        : "Vehicle — expires in {$daysLeft} days: {$label}",
+                    'entity' => $label,
+                    'company' => $vehicle->company?->name,
+                    'days' => $daysLeft,
+                    'document_id' => null,
+                ]);
+
+                $sent++;
+            }
+        }
+
+        return $sent;
     }
 
     /**
