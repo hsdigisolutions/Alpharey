@@ -34,6 +34,7 @@ const primaryNav = [
 const isAdmin = computed(() => ['super_admin', 'company_admin'].includes(page.props.auth.user?.role));
 
 const secondaryNav = computed(() => [
+    { key: 'today', labelKey: 'nav.today', href: '/today' },
     { key: 'vendors', labelKey: 'nav.vendors', href: '/vendors' },
     { key: 'vehicles', labelKey: 'nav.vehicles', href: '/vehicles' },
     { key: 'proposals', labelKey: 'nav.proposals', href: '/proposals' },

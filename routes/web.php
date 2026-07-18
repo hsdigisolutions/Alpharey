@@ -38,6 +38,7 @@ use App\Http\Controllers\PayrollController;
 use App\Http\Controllers\ProjectController;
 use App\Http\Controllers\ProjectWorkerController;
 use App\Http\Controllers\ProposalController;
+use App\Http\Controllers\TodayController;
 use App\Http\Controllers\VehicleController;
 use App\Http\Controllers\VendorController;
 use App\Http\Controllers\WelcomeController;
@@ -94,6 +95,9 @@ Route::middleware(['auth', 'active'])->group(function (): void {
     // Screen 03 — Dashboard (Phase 8). Per selected company; SA without a
     // selection is redirected to Welcome to pick one.
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
+
+    // Screen 15 — Today's Report (Phase 8). Live view, client auto-refresh.
+    Route::get('/today', [TodayController::class, 'index'])->name('today.index');
 
     // Screen 05/06 — Employees (module permissions checked in controllers)
     Route::get('/employees/export', [EmployeeImportExportController::class, 'export'])->name('employees.export');
