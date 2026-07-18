@@ -38,6 +38,7 @@ use App\Http\Controllers\PayrollController;
 use App\Http\Controllers\ProjectController;
 use App\Http\Controllers\ProjectWorkerController;
 use App\Http\Controllers\ProposalController;
+use App\Http\Controllers\ReportController;
 use App\Http\Controllers\SearchController;
 use App\Http\Controllers\TodayController;
 use App\Http\Controllers\VehicleController;
@@ -103,6 +104,12 @@ Route::middleware(['auth', 'active'])->group(function (): void {
     // Global search (Phase 8) — JSON for the header dropdown; permission- and
     // company-scoped in GlobalSearch. The only non-Inertia GET in the app.
     Route::get('/search', SearchController::class)->name('search');
+
+    // Screen 14 — Reports (Phase 8). Export routes before index so
+    // /reports/export-* never resolve as a module param.
+    Route::get('/reports/export/excel', [ReportController::class, 'exportExcel'])->name('reports.export.excel');
+    Route::get('/reports/export/pdf', [ReportController::class, 'exportPdf'])->name('reports.export.pdf');
+    Route::get('/reports', [ReportController::class, 'index'])->name('reports.index');
 
     // Screen 05/06 — Employees (module permissions checked in controllers)
     Route::get('/employees/export', [EmployeeImportExportController::class, 'export'])->name('employees.export');

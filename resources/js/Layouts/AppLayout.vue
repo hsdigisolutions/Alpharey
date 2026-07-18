@@ -29,7 +29,7 @@ const primaryNav = [
     { key: 'attendance', icon: 'attendance', href: '/attendance' },
     { key: 'payroll', icon: 'payroll', href: '/payroll' },
     { key: 'calls', icon: 'calls', href: '/calls' },
-    { key: 'reports', icon: 'reports', href: null },
+    { key: 'reports', icon: 'reports', href: '/reports' },
 ];
 
 const isAdmin = computed(() => ['super_admin', 'company_admin'].includes(page.props.auth.user?.role));
