@@ -2,9 +2,53 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Status: Phase 7 complete (2026-07-17)
+## Status: Phase 8 complete (2026-07-18)
 
-Development Phase 7 (operations modules) is built and verified:
+Development Phase 8 (dashboards, reports, search, notifications) is built and verified:
+**428 Pest tests / 1521 assertions passing (1 skipped) · Pint clean · Larastan level 6
+clean · `composer audit` + `npm audit` clean · production Vite build working · all
+translation guards green · the Dashboard and Reports screens verified in the browser
+against seeded MySQL (charts drawn, 9 report modules + working export links, live
+global-search endpoint).**
+
+Live screens: **03 Dashboard** (8 KPIs, 3 Chart.js charts, quick actions, expiring +
+activity panels) · **14 Reports** (10 modules, filter bar, PDF/Excel export) · **15
+Today's Report** (6 KPIs, live table, pending actions, 5-min refresh) · **global search**
+(9 entity types, header dropdown) · **26 Settings** notification matrix + system health.
+
+**Every screen 01–26 is now built.** The feature-complete system remains: Phase 9 is
+hardening, UAT, and launch (no new screens).
+
+### Phase 8 additions (map for future phases)
+
+- **Dashboard** (`DashboardService`, cached 120s per company): all figures through the
+  tenant-scoped models; deployments (no scope) hand-filtered. New **`VChart`** wraps
+  Chart.js (bundled via Vite — the CSP blocks CDNs) and resolves the design tokens to
+  concrete colours via `getComputedStyle`, re-rendering on theme flip. SA without a
+  company selection → Welcome (decision 27).
+- **Today's Report** (`TodayService`) is deliberately NOT cached — a live view. Advance
+  amounts are encrypted pay data, stripped for anyone without `payroll.view`.
+- **Reports** (`ReportService`, 9 modules): payroll/commission/financial each need their
+  own module-view right beyond `reports.view` — the module is withheld from the page AND
+  the export refused (403), and the dropdown only offers what the user may open. Export
+  routes register BEFORE the index (the Phase 6 lesson). Generic `ReportExport` (Excel) +
+  `exports/report-pdf.blade.php` (DomPDF).
+- **Global search** (`GlobalSearch`): `/search` is the only non-Inertia GET (a keystroke
+  dropdown wants JSON). A group is searched only if the user may view that module;
+  company-owned models stay in the tenant scope; encrypted fields are never search
+  targets.
+- **Notifications** (`NotificationRules` + `NotificationDispatcher`): `notification_role_rules`
+  is (type × role → enabled), group-wide; a missing row falls back to
+  `NotificationType::defaultRoles`, so an empty table behaves as before. Every Phase-8
+  alert goes through the dispatcher, so the Settings matrix genuinely controls delivery.
+  **Deployment lifecycle events are the wired reference sender**; the other types (payroll
+  ready, invoice overdue, advance/leave/project) have the dispatcher to call — their
+  triggers are follow-up. `SystemHealth` powers the Settings health panel (DB, storage,
+  DB-queue backlog, SMTP) — each check never throws.
+
+### Phase 7 recap (2026-07-17)
+
+Development Phase 7 (operations modules) was built and verified:
 **387 Pest tests / 1358 assertions passing (1 skipped) · Pint clean · Larastan
 level 6 clean · production Vite build working · all 5 translation guards green ·
 the vehicle compliance light verified in the browser against seeded MySQL.**
@@ -44,8 +88,8 @@ the server independently agreeing.
 without a prototype review, so design-change requests against these screens are normal
 follow-up work, not defects.
 
-Next up: **Development Phase 8** (dashboards, reports, global search, notifications).
-Earlier phases: Phase 0–6, design D1–D3 (approved 2026-07-14).
+Next up: **Development Phase 9** (hardening, UAT, launch — no new screens).
+Earlier phases: Phase 0–8, design D1–D3 (approved 2026-07-14).
 
 ## Project skills — read them first
 
