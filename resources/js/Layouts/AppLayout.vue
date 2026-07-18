@@ -14,6 +14,7 @@ import { router, usePage } from '@inertiajs/vue3';
 import AppIcon from '@/Components/AppIcon.vue';
 import VAvatar from '@/Components/ui/VAvatar.vue';
 import VDropdown from '@/Components/ui/VDropdown.vue';
+import VGlobalSearch from '@/Components/ui/VGlobalSearch.vue';
 import VToastHost from '@/Components/ui/VToastHost.vue';
 
 const page = usePage();
@@ -165,14 +166,8 @@ function switchLocale() {
             :class="collapsed ? 'md:ps-14' : 'md:ps-60'">
             <!-- Header -->
             <header class="sticky top-0 z-20 flex items-center gap-3 border-b border-line bg-surface/95 px-4 py-2.5 backdrop-blur md:px-6">
-                <!-- Global search (visual — wired in Phase 8) -->
-                <div class="relative max-w-md flex-1">
-                    <AppIcon name="search" class="pointer-events-none absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
-                    <input type="search" disabled
-                        :placeholder="`${page.props.lang[page.props.locale.primary].common.search_everything}…`"
-                        class="w-full rounded-md border border-line bg-surface-sunken py-1.5 ps-9 pe-3 text-sm placeholder:text-muted disabled:cursor-not-allowed"
-                        :title="$t('common.coming_soon')" />
-                </div>
+                <!-- Global search — permission- and company-scoped (Phase 8) -->
+                <VGlobalSearch />
 
                 <div class="ms-auto flex items-center gap-1.5">
                     <!-- Active company context: SA gets a switch link to Welcome -->

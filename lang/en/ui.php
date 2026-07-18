@@ -229,6 +229,8 @@ return [
         'clear' => 'Clear',
         'search' => 'Search',
         'search_everything' => 'Search the whole system',
+        'search_no_results' => 'No results',
+        'search_hint' => 'Type at least 2 characters',
         'language' => 'Language',
         'theme' => 'Theme',
         'dark_mode' => 'Dark mode',
