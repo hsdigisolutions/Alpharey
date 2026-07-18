@@ -8,8 +8,10 @@ use App\Http\Requests\Admin\TestMailRequest;
 use App\Http\Requests\Admin\UpdateGeneralSettingsRequest;
 use App\Http\Requests\Admin\UpdateMailSettingsRequest;
 use App\Models\OvertimePolicy;
+use App\Services\Notifications\NotificationRules;
 use App\Services\Settings\MailSettings;
 use App\Services\Settings\SettingsService;
+use App\Services\System\SystemHealth;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Mail;
@@ -23,7 +25,7 @@ use Inertia\Response;
  */
 class SettingsController extends Controller
 {
-    public function index(Request $request, SettingsService $settings, MailSettings $mail): Response
+    public function index(Request $request, SettingsService $settings, MailSettings $mail, NotificationRules $rules, SystemHealth $health): Response
     {
         $user = $request->user();
         $isSuperAdmin = $user !== null && $user->isSuperAdmin();
@@ -43,7 +45,25 @@ class SettingsController extends Controller
                 'id', 'name', 'type', 'rate', 'daily_threshold_hours', 'accumulate_hours_per_day', 'notes',
             ]),
             'overtimeTypes' => array_map(fn (OvertimePolicyType $t) => $t->value, OvertimePolicyType::cases()),
+            // Notification matrix + system health are brand-level → Super Admin only
+            'notificationMatrix' => $isSuperAdmin ? $rules->matrix() : null,
+            'systemHealth' => $isSuperAdmin ? $health->check() : null,
         ]);
+    }
+
+    public function updateNotifications(Request $request, NotificationRules $rules): RedirectResponse
+    {
+        abort_unless($request->user()?->isSuperAdmin() === true, 403);
+
+        $validated = $request->validate([
+            'matrix' => ['required', 'array'],
+            'matrix.*.type' => ['required', 'string'],
+            'matrix.*.roles' => ['required', 'array'],
+        ]);
+
+        $rules->save($validated['matrix']);
+
+        return back()->with('success', __('ui.settings.saved'));
     }
 
     public function updateGeneral(UpdateGeneralSettingsRequest $request, SettingsService $settings): RedirectResponse

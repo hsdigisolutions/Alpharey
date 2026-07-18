@@ -312,6 +312,8 @@ Route::middleware(['auth', 'active'])->group(function (): void {
         Route::put('/settings/general', [SettingsController::class, 'updateGeneral'])->name('settings.general');
         Route::put('/settings/mail', [SettingsController::class, 'updateMail'])->name('settings.mail');
         Route::post('/settings/mail/test', [SettingsController::class, 'testMail'])->name('settings.mail.test');
+        // Screen 26 — notification rules matrix (Phase 8, Super Admin only)
+        Route::put('/settings/notifications', [SettingsController::class, 'updateNotifications'])->name('settings.notifications');
 
         // Settings → Overtime policies (Phase 4)
         Route::post('/overtime-policies', [OvertimePolicyController::class, 'store'])->name('overtime-policies.store');

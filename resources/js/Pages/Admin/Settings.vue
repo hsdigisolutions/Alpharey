@@ -14,6 +14,7 @@ import VInput from '@/Components/ui/VInput.vue';
 import VModal from '@/Components/ui/VModal.vue';
 import VPageHeader from '@/Components/ui/VPageHeader.vue';
 import VSelect from '@/Components/ui/VSelect.vue';
+import VStatusDot from '@/Components/ui/VStatusDot.vue';
 import VTextarea from '@/Components/ui/VTextarea.vue';
 
 const props = defineProps({
@@ -22,7 +23,21 @@ const props = defineProps({
     canManageMail: { type: Boolean, required: true },
     overtimePolicies: { type: Array, default: () => [] },
     overtimeTypes: { type: Array, default: () => [] },
+    notificationMatrix: { type: Array, default: null },
+    systemHealth: { type: Object, default: null },
 });
+
+// Notification matrix — deep-clone so toggles don't mutate the prop directly.
+const roles = ['super_admin', 'company_admin', 'user'];
+const matrixForm = useForm({
+    matrix: (props.notificationMatrix ?? []).map((row) => ({ type: row.type, roles: { ...row.roles } })),
+});
+
+function saveMatrix() {
+    matrixForm.put(route('settings.notifications'), { preserveScroll: true });
+}
+
+const healthStatus = { ok: 'ok', warn: 'warn', danger: 'danger' };
 
 const generalForm = useForm({
     app_name: props.general.app_name,
@@ -215,6 +230,49 @@ function deletePolicy(p) { router.delete(`/admin/overtime-policies/${p.id}`, { p
                     </tbody>
                 </table>
                 <p v-else class="px-4 py-6 text-center text-sm text-muted"><Bilingual k="common.coming_soon" class="items-center" /></p>
+            </VCard>
+
+            <!-- Notification rules matrix (Super Admin only) -->
+            <VCard v-if="notificationMatrix" title-key="settings.notifications_section">
+                <template #description><Bilingual k="settings.notifications_hint" /></template>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead>
+                            <tr class="border-b border-line text-xs uppercase text-muted">
+                                <th class="px-3 py-2 text-start font-medium"></th>
+                                <th v-for="role in roles" :key="role" class="px-3 py-2 text-center font-medium">
+                                    {{ $t(`settings.role_${role}`) }}
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="row in matrixForm.matrix" :key="row.type" class="border-b border-line">
+                                <td class="px-3 py-2 text-ink">{{ $t(`settings.ntype_${row.type}`) }}</td>
+                                <td v-for="role in roles" :key="role" class="px-3 py-2 text-center">
+                                    <input type="checkbox" v-model="row.roles[role]"
+                                        class="h-4 w-4 rounded border-line-strong text-accent focus:ring-accent" />
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="mt-4 flex justify-end">
+                    <VButton :loading="matrixForm.processing" @click="saveMatrix"><Bilingual k="common.save" inline /></VButton>
+                </div>
+            </VCard>
+
+            <!-- System health (Super Admin only) -->
+            <VCard v-if="systemHealth" title-key="settings.health_section">
+                <div class="grid grid-cols-2 gap-3 md:grid-cols-4">
+                    <div v-for="(check, key) in systemHealth" :key="key"
+                        class="rounded-lg border border-line bg-surface-sunken p-3">
+                        <div class="flex items-center gap-2">
+                            <VStatusDot :status="healthStatus[check.status] ?? 'neutral'" />
+                            <span class="text-xs font-medium text-ink-soft">{{ $t(`settings.health_${key}`) }}</span>
+                        </div>
+                        <p class="mt-1 text-sm text-ink">{{ check.detail }}</p>
+                    </div>
+                </div>
             </VCard>
         </div>
 
