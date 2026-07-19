@@ -9,6 +9,7 @@ use App\Models\Brand;
 use App\Models\Company;
 use App\Models\Document;
 use App\Models\Employee;
+use App\Models\Scopes\CompanyScope;
 use App\Services\Companies\CompanyRemovalGuard;
 use App\Services\Documents\DocumentStatus;
 use App\Support\CurrentCompany;
@@ -27,9 +28,10 @@ class CompanyController extends Controller
 {
     public function index(DocumentStatus $status): Response
     {
-        // Employee counts per company, unscoped (SA operates across companies)
+        // Employee counts per company — tenant scope only (SA operates across
+        // companies); SoftDeletes stays so removed employees don't inflate it.
         $employeeCounts = Employee::query()
-            ->withoutGlobalScopes()
+            ->withoutGlobalScope(CompanyScope::class)
             ->where('active', true)
             ->selectRaw('company_id, count(*) as total')
             ->groupBy('company_id')
