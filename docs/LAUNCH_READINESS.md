@@ -71,7 +71,8 @@ decision or confirmation.
   client Facturas and vendor Gastos are wired (read-only, gated; the standalone
   screens stay canonical per scaffolding decision 23).
 - Settings sections for advance/expense categories and company cards.
-- `deployment_charges` → posted invoice/expense lines.
+- ~~`deployment_charges` → posted expense lines~~ — DONE: the host company now
+  gets its `internal_deployment` expense automatically on completion.
 - Invoice reminders are stored but sending is wired to the dispatcher only for
   deployment events so far.
 - Unpaid leave does not yet reduce a MONTHLY salary — the pro-rata divisor is a

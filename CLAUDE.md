@@ -639,8 +639,13 @@ Still open from Phase 6:
   client/vendor shows only the acting company's rows. The standalone screens stay
   canonical (decision 23).
 - **Settings sections** for advance categories, expense categories and company cards.
-- **`deployment_charges` → invoice/expense lines**: Phase 5 generates the cross-charge,
-  but it is not yet posted as a host expense + home receivable.
+- ~~**`deployment_charges` → expense lines**~~ — DONE (commit 356f205): completing an
+  Option A deployment now posts an `internal_deployment` expense on the HOST company
+  (company_id set explicitly to the host, never the session), keyed off the new
+  `deployment_charges.expense_id` so a re-run refreshes rather than double-charges.
+  No vendor + no VAT per PAYROLL_DEPLOYMENTS.md decision 2 — the missing vendor is what
+  keeps it out of vendor reports. There is deliberately NO home-side invoice: the client
+  confirmed no inter-company VAT invoice; the receivable lives in the cross-company report.
 - **Invoice reminders** are stored but not sent — sending lands in Phase 8 with the other
   scheduled mail.
 - **Commission base** is the invoice TOTAL, not the amount collected
