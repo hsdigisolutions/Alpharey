@@ -86,6 +86,19 @@ it('blocks removal while the company still has employees', function (): void {
     expect(Company::query()->find($this->company->id))->not->toBeNull();
 });
 
+it('does not let a soft-deleted employee block removal', function (): void {
+    // The employee is already off the workforce; the removal guard counts only
+    // live records, so this company is safe to close.
+    $employee = Employee::factory()->create(['company_id' => $this->company->id]);
+    $employee->delete(); // soft delete
+
+    $this->actingAs($this->superAdmin)
+        ->delete("/companies/{$this->company->id}", ['confirm_name' => 'Empresa Uno'])
+        ->assertRedirect();
+
+    expect(Company::query()->find($this->company->id))->toBeNull();
+});
+
 it('blocks removal while the company still has projects', function (): void {
     Project::factory()->create(['company_id' => $this->company->id]);
 

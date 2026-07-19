@@ -135,18 +135,16 @@ it('ignores a grant when the custom user has no company', function (): void {
 });
 
 it('registers a gate for every module and action (no ability left undefined)', function (): void {
-    // If a Module or PermissionAction is added without wiring the gate, this
-    // fails — the ability resolves to Gate's "undefined ability = deny" and a
-    // Super Admin (who should pass everything) would be denied it.
-    $sa = User::factory()->create(['role' => UserRole::SuperAdmin, 'active' => true]);
-
+    // If a Module or PermissionAction is added without wiring the gate, the
+    // ability resolves to Gate's "undefined = deny" and a Super Admin (who must
+    // pass everything) would be silently denied it. This catches that at the
+    // source.
     $abilities = everyAbility();
 
-    expect($abilities)->toHaveCount(Module::cases() === [] ? 0 : count(Module::cases()) * count(PermissionAction::cases()));
+    expect($abilities)->toHaveCount(count(Module::cases()) * count(PermissionAction::cases()))
+        ->and(count($abilities))->toBe(144); // 18 modules × 8 actions
 
     foreach ($abilities as $ability) {
         expect(Gate::has($ability))->toBeTrue("ability {$ability} must be a defined gate");
     }
-
-    expect(count($abilities))->toBe(144); // 18 modules × 8 actions
 });
