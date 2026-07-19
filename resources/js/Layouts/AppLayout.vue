@@ -66,9 +66,28 @@ function markRead(id) {
     router.post(`/notifications/${id}/read`, {}, { preserveScroll: true, preserveState: false });
 }
 
+// Four most-used destinations; the fifth slot is the "Más" button below, which
+// opens EVERY module. Without it the bottom nav stranded ~18 destinations —
+// including Invoices, Clients, Projects and all the admin screens — with no way
+// to reach them on a phone.
 const mobileNav = primaryNav.filter((item) =>
-    ['dashboard', 'employees', 'attendance', 'payroll', 'reports'].includes(item.key),
+    ['dashboard', 'employees', 'attendance', 'payroll'].includes(item.key),
 );
+
+const mobileSheetOpen = ref(false);
+
+/**
+ * Everything reachable, for the mobile "Más" sheet: the primary items that did
+ * not fit the bottom bar, plus every secondary module. Items the user may not
+ * open (href null) are filtered out rather than shown dead.
+ */
+const mobileAllModules = computed(() => [
+    ...primaryNav
+        .filter((item) => !mobileNav.some((m) => m.key === item.key))
+        .filter((item) => !item.superAdminOnly || page.props.auth.user?.role === 'super_admin')
+        .map((item) => ({ key: item.key, labelKey: `nav.${item.key}`, href: item.href })),
+    ...secondaryNav.value.filter((item) => item.href !== null),
+]);
 
 const isDark = ref(document.documentElement.classList.contains('dark'));
 const collapsed = ref(localStorage.getItem('sidebar-collapsed') === '1');
@@ -284,6 +303,35 @@ function switchLocale() {
                     <Bilingual :k="`nav.${item.key}`" class="w-full items-center px-0.5 text-center text-[0.6rem] leading-tight [&>span]:block [&>span]:truncate" />
                 </component>
             </template>
+
+            <!-- Fifth slot: reaches every remaining module. -->
+            <button type="button"
+                class="flex min-h-11 min-w-0 flex-1 flex-col items-center gap-0.5 py-2 text-accent-hover"
+                :aria-label="$tPair('nav.apps')"
+                @click="mobileSheetOpen = true">
+                <AppIcon name="apps" class="h-5 w-5 shrink-0" />
+                <Bilingual k="nav.apps" class="w-full items-center px-0.5 text-center text-[0.6rem] leading-tight [&>span]:block [&>span]:truncate" />
+            </button>
         </nav>
+
+        <!-- Mobile module sheet: full screen, per the mobile design rules -->
+        <div v-if="mobileSheetOpen" class="fixed inset-0 z-30 md:hidden" role="dialog" aria-modal="true">
+            <div class="absolute inset-0 bg-black/40 backdrop-blur-sm" @click="mobileSheetOpen = false" />
+            <div class="absolute inset-x-0 bottom-0 top-0 flex flex-col bg-surface-raised">
+                <div class="flex items-center justify-between border-b border-line px-4 py-3">
+                    <Bilingual k="nav.apps" class="text-sm font-semibold text-ink" />
+                    <button type="button" class="min-h-11 px-3 text-sm text-ink-soft"
+                        :aria-label="$tPair('common.close')" @click="mobileSheetOpen = false">
+                        ✕
+                    </button>
+                </div>
+                <div class="grid grid-cols-2 gap-1 overflow-y-auto p-3">
+                    <a v-for="item in mobileAllModules" :key="item.key" :href="item.href"
+                        class="min-h-11 rounded-md px-3 py-2.5 text-ink hover:bg-surface-sunken">
+                        <Bilingual :k="item.labelKey" class="text-sm" />
+                    </a>
+                </div>
+            </div>
+        </div>
     </div>
 </template>
