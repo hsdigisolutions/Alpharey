@@ -83,7 +83,10 @@ class ProjectController extends Controller
             ],
             'vatOptions' => VatRate::options(),
             'can' => [
-                'create' => Gate::allows('projects.create'),
+                // Creating needs a company to own the project; a Super Admin
+                // browsing all companies has none — don't offer a dead end
+                // (decision 27, same as invoices/expenses).
+                'create' => Gate::allows('projects.create') && app(CurrentCompany::class)->id() !== null,
                 'edit' => Gate::allows('projects.edit'),
                 'delete' => Gate::allows('projects.delete'),
                 'export' => Gate::allows('projects.export'),
