@@ -151,12 +151,28 @@ it('requires an exception reason when flagged', function (): void {
 });
 
 it('hides wage totals from users without wage access on the grid summary', function (): void {
+    // The cell payload always gated total_amount behind the wage right — but
+    // the monthly summary row leaked total_wage to anyone with attendance.view.
+    // (This test only asserted assertOk() until the Phase 9 line-by-line pass.)
     $viewer = User::factory()->forCompany($this->companyA)->create();
     UserModulePermission::query()->create([
         'user_id' => $viewer->id, 'company_id' => $this->companyA->id, 'module' => 'attendance', 'can_view' => true,
     ]);
 
-    // The grid page renders; total_wage in summary is only shown client-side
-    // for admins (canSeeWage). Here we assert the viewer still gets the grid.
-    $this->actingAs($viewer)->get('/attendance')->assertOk();
+    $employee = Employee::factory()->forCompany($this->companyA)->create();
+    Attendance::factory()->create([
+        'company_id' => $this->companyA->id, 'employee_id' => $employee->id,
+        'date' => now()->format('Y-m').'-05', 'status' => 'present',
+        'total_amount' => '120', 'manual_wage_override' => true,
+    ]);
+
+    $this->actingAs($viewer)->get('/attendance')
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->where("summary.{$employee->id}.total_wage", null));
+
+    // The admin (wage right via role) still sees the figure.
+    $this->actingAs($this->admin)->get('/attendance')
+        ->assertInertia(fn (Assert $page) => $page
+            ->where("summary.{$employee->id}.total_wage", 120));
 });

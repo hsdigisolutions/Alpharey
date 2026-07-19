@@ -188,3 +188,40 @@ it('refuses to deploy a soft-deleted employee', function (): void {
 
     expect(EmployeeDeployment::query()->count())->toBe(0);
 });
+
+it('books attendance for a worker deployed into the acting company', function (): void {
+    // The host logs the deployed worker's days (Phase 5). The employee row
+    // lives under the HOME company, so a tenant-scoped findOrFail would 404
+    // the legitimate case the deployment exists to permit.
+    $this->actingAs($this->admin)->post('/deployments', deploymentPayload())->assertRedirect();
+
+    $response = $this->actingAs($this->admin)->post('/attendance', [
+        'employee_id' => $this->homeEmployee->id,
+        'date' => '2026-07-06',
+        'mode' => 'project_based',
+        'hours_worked' => 8,
+        'status' => 'present',
+    ]);
+
+    $response->assertRedirect();
+    $response->assertSessionDoesntHaveErrors();
+
+    expect(Attendance::withoutGlobalScopes()
+        ->where('employee_id', $this->homeEmployee->id)
+        ->where('company_id', $this->host->id)
+        ->exists())->toBeTrue();
+});
+
+it('refuses to cancel or re-complete a completed deployment', function (): void {
+    // A completed posting already produced its cross-charge + host expense —
+    // cancelling it would orphan that money on a posting marked never-run.
+    $this->actingAs($this->admin)->post('/deployments', deploymentPayload())->assertRedirect();
+    $deployment = EmployeeDeployment::query()->firstOrFail();
+
+    $this->actingAs($this->admin)->post("/deployments/{$deployment->id}/complete")->assertRedirect();
+
+    $this->actingAs($this->admin)->post("/deployments/{$deployment->id}/cancel")->assertStatus(422);
+    $this->actingAs($this->admin)->post("/deployments/{$deployment->id}/complete")->assertStatus(422);
+
+    expect($deployment->fresh()->status->value)->toBe('completed');
+});

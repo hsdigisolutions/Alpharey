@@ -3,12 +3,15 @@
 namespace App\Services\Attendance;
 
 use App\Enums\AttendanceMode;
+use App\Enums\DeploymentStatus;
 use App\Enums\OvertimePolicyType;
 use App\Enums\WageType;
 use App\Models\Attendance;
 use App\Models\AttendanceLog;
 use App\Models\Employee;
+use App\Models\EmployeeDeployment;
 use App\Models\OvertimePolicy;
+use App\Models\Scopes\CompanyScope;
 use App\Support\CurrentCompany;
 use App\Support\PeriodLock;
 use Illuminate\Support\Facades\Auth;
@@ -36,7 +39,7 @@ class AttendanceService
     public function create(array $data): Attendance
     {
         return DB::transaction(function () use ($data): Attendance {
-            $employee = Employee::query()->findOrFail($data['employee_id']);
+            $employee = $this->resolveEmployee((int) $data['employee_id']);
 
             $attendance = new Attendance($data);
             $attendance->company_id = app(CurrentCompany::class)->id();
@@ -71,7 +74,7 @@ class AttendanceService
             // Re-freeze the snapshot only if the employee changed; otherwise
             // the original day-rate stands.
             if ($attendance->isDirty('employee_id')) {
-                $employee = Employee::query()->findOrFail($attendance->employee_id);
+                $employee = $this->resolveEmployee((int) $attendance->employee_id);
                 $this->applySnapshots($attendance, $employee);
             }
 
@@ -82,6 +85,36 @@ class AttendanceService
 
             return $attendance;
         });
+    }
+
+    /**
+     * The employee whose day is being logged: one of OUR OWN, or one deployed
+     * INTO the acting company (Phase 5) — whose row lives under their HOME
+     * company, where the tenant-scoped lookup this used to be could never see
+     * it. The grid showed deployed workers but saving a cell for one 404'd.
+     * Anyone else stays a 404.
+     */
+    private function resolveEmployee(int $employeeId): Employee
+    {
+        $employee = Employee::query()
+            ->withoutGlobalScope(CompanyScope::class)
+            ->findOrFail($employeeId);
+
+        $companyId = app(CurrentCompany::class)->id();
+
+        if ($employee->company_id === $companyId) {
+            return $employee;
+        }
+
+        $deployedHere = EmployeeDeployment::query()
+            ->where('employee_id', $employee->id)
+            ->where('host_company_id', $companyId)
+            ->whereIn('status', [DeploymentStatus::Active->value, DeploymentStatus::Completed->value])
+            ->exists();
+
+        abort_unless($deployedHere, 404);
+
+        return $employee;
     }
 
     private function applySnapshots(Attendance $attendance, Employee $employee): void
@@ -160,12 +193,17 @@ class AttendanceService
      */
     private function overtimeMultiplier(Attendance $attendance): float
     {
+        // Tenant scope dropped: a deployed worker's row lives under their HOME
+        // company, and a scoped lookup silently priced their OT at the default
+        // instead of their policy. The id comes off the row, never from input.
         $employee = $attendance->relationLoaded('employee')
             ? $attendance->employee
-            : Employee::query()->find($attendance->employee_id);
+            : Employee::query()->withoutGlobalScope(CompanyScope::class)->find($attendance->employee_id);
 
+        // Same cross-scope rule: the policy is the EMPLOYEE's own and lives
+        // under their home company when they are deployed here.
         $policy = $employee?->overtime_policy_id !== null
-            ? OvertimePolicy::query()->find($employee->overtime_policy_id)
+            ? OvertimePolicy::query()->withoutGlobalScope(CompanyScope::class)->find($employee->overtime_policy_id)
             : null;
 
         if ($policy === null) {

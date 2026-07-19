@@ -65,7 +65,7 @@ it('rejects attendance for another company employee unless deployed here', funct
     $payload = [
         'employee_id' => $this->foreignEmployee->id,
         'date' => '2026-07-01',
-        'mode' => 'project',
+        'mode' => 'project_based',
         'hours_worked' => 8,
         'status' => 'present',
     ];

@@ -149,6 +149,11 @@ class DeploymentController extends Controller
         Gate::authorize('deployments.edit');
         $this->assertVisible($deployment);
 
+        // Only an ACTIVE posting completes: completing twice would refresh the
+        // cross-charge off a stale window, and completing a cancelled one
+        // would charge the host for a posting that never ran.
+        abort_unless($deployment->status === DeploymentStatus::Active, 422, 'Only an active deployment can be completed.');
+
         $deployment->update([
             'status' => DeploymentStatus::Completed,
             'deployment_end' => $deployment->deployment_end ?? now()->toDateString(),
@@ -164,6 +169,11 @@ class DeploymentController extends Controller
     {
         Gate::authorize('deployments.edit');
         $this->assertVisible($deployment);
+
+        // A completed posting has already produced its cross-charge and host
+        // expense; cancelling it would leave that money orphaned on a posting
+        // marked as never having run.
+        abort_unless($deployment->status === DeploymentStatus::Active, 422, 'Only an active deployment can be cancelled.');
 
         $deployment->update(['status' => DeploymentStatus::Cancelled]);
         $this->notifyDeploymentEvent($notify, $deployment, 'cancelled');

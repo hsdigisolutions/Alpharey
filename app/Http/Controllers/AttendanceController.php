@@ -76,8 +76,11 @@ class AttendanceController extends Controller
             ];
         }
 
-        // Monthly summary per employee
-        $summary = $records->groupBy('employee_id')->map(function ($rows) {
+        // Monthly summary per employee. The wage total is gated exactly like
+        // the cell payload below — hours are attendance data, money is pay data.
+        $canSeeWage = Gate::allows('payroll.view') || Gate::allows('employees.edit');
+
+        $summary = $records->groupBy('employee_id')->map(function ($rows) use ($canSeeWage) {
             // status is an AttendanceStatus enum cast — compare on ->value
             $countStatus = fn (array $statuses): int => $rows
                 ->filter(fn ($r) => in_array($r->status->value, $statuses, true))->count();
@@ -88,7 +91,9 @@ class AttendanceController extends Controller
                 'overtime' => round((float) $rows->sum(fn ($r) => (float) $r->overtime_hours), 2),
                 'absences' => $countStatus(['absent']),
                 'leave' => $countStatus(['leave']),
-                'total_wage' => round((float) $rows->sum(fn ($r) => (float) $r->total_amount), 2),
+                'total_wage' => $canSeeWage
+                    ? round((float) $rows->sum(fn ($r) => (float) $r->total_amount), 2)
+                    : null,
             ];
         });
 
