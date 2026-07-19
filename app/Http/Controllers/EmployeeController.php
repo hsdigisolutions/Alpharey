@@ -6,6 +6,7 @@ use App\Enums\WageType;
 use App\Http\Requests\Employees\StoreEmployeeRequest;
 use App\Http\Requests\Employees\UpdateEmployeeRequest;
 use App\Models\Employee;
+use App\Models\Payroll;
 use App\Models\UserColumnSetting;
 use App\Services\Documents\DocumentStatus;
 use App\Services\Employees\EmployeeQueryFilter;
@@ -135,6 +136,9 @@ class EmployeeController extends Controller
                     'remarks' => $call->remarks,
                     'follow_up_date' => $call->follow_up_date?->toDateString(),
                 ]),
+            // Nómina tab — pay data, so only for a wage viewer; empty otherwise.
+            'payroll' => $canSeeWages ? $this->payrollRows($employee) : [],
+            'canSeeWages' => $canSeeWages,
             'can' => [
                 'edit' => Gate::allows('employees.edit'),
                 'delete' => Gate::allows('employees.delete'),
@@ -143,6 +147,31 @@ class EmployeeController extends Controller
                 'deleteDocs' => Gate::allows('documents.delete'),
             ],
         ]);
+    }
+
+    /**
+     * The employee's payroll history for the Nómina tab. Figures are encrypted
+     * at rest and decrypted here; the caller only reaches this behind the wage
+     * gate. The employee belongs to the acting company, so the tenant scope on
+     * Payroll resolves to the right rows.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function payrollRows(Employee $employee): array
+    {
+        return Payroll::query()
+            ->where('employee_id', $employee->id)
+            ->orderByDesc('month')
+            ->get()
+            ->map(fn (Payroll $p): array => [
+                'id' => $p->id,
+                'month' => $p->month,
+                'gross_pay' => (float) $p->getAttribute('gross_pay'),
+                'net_amount' => (float) $p->getAttribute('net_amount'),
+                'status' => $p->status->value,
+                'paid_at' => $p->paid_at?->toDateString(),
+            ])
+            ->all();
     }
 
     public function store(StoreEmployeeRequest $request, EmployeeService $service): RedirectResponse

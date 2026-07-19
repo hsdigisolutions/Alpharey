@@ -6,6 +6,7 @@ use App\Enums\ClientType;
 use App\Http\Requests\Clients\StoreClientRequest;
 use App\Http\Requests\Clients\UpdateClientRequest;
 use App\Models\Client;
+use App\Models\Invoice;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -105,11 +106,37 @@ class ClientController extends Controller
                     'logged_at' => $c->logged_at->toDateTimeString(),
                     'author' => $c->author?->name,
                 ]),
+            // Facturas tab — the client is a shared record, but invoices are
+            // company-owned, so the tenant scope shows only THIS company's
+            // invoices to the client, never another company's.
+            'invoices' => Gate::allows('invoices.view') ? $this->clientInvoices($client) : [],
+            'canViewInvoices' => Gate::allows('invoices.view'),
             'can' => [
                 'edit' => Gate::allows('clients.edit'),
                 'delete' => Gate::allows('clients.delete'),
             ],
         ]);
+    }
+
+    /**
+     * This company's invoices to the client (tenant-scoped), newest first.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function clientInvoices(Client $client): array
+    {
+        return Invoice::query()
+            ->where('client_id', $client->id)
+            ->orderByDesc('invoice_date')
+            ->get()
+            ->map(fn (Invoice $i): array => [
+                'id' => $i->id,
+                'number' => $i->number,
+                'date' => $i->invoice_date->toDateString(),
+                'total' => (float) $i->total,
+                'status' => $i->payment_status->value,
+            ])
+            ->all();
     }
 
     public function store(StoreClientRequest $request): RedirectResponse

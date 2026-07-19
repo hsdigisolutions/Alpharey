@@ -369,6 +369,8 @@ return [
         'tab_payroll' => 'Payroll',
         'tab_notes' => 'Notes',
         'tab_calls' => 'Calls',
+        'no_payroll' => 'No payroll runs yet',
+        'no_wage_permission' => 'You do not have permission to view pay data',
         'wage_daily' => 'Daily',
         'wage_hourly' => 'Hourly',
         'wage_monthly' => 'Monthly',
@@ -932,6 +934,17 @@ return [
         'payrolls_count' => 'payrolls',
     ],
 
+    'finance' => [
+        'number' => 'Number',
+        'party' => 'Counterparty',
+        'date' => 'Date',
+        'total' => 'Total',
+        'status' => 'Status',
+        'no_permission' => 'You do not have permission to view this data',
+        'no_invoices' => 'No invoices',
+        'no_expenses' => 'No expenses',
+    ],
+
     'vehicles' => [
         'title' => 'Vehicles',
         'new' => 'New Vehicle',
@@ -1235,8 +1248,10 @@ return [
         'hours' => 'Hours',
         'wage_type' => 'Wage type',
         'wage_rate' => 'Wage rate',
+        'gross' => 'Gross',
         'net' => 'Net',
         'status' => 'Status',
+        'paid_at' => 'Paid on',
         'payment_method' => 'Payment method',
         'status_pending' => 'Pending',
         'status_paid' => 'Paid',

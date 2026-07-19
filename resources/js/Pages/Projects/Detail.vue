@@ -21,6 +21,7 @@ import VTabs from '@/Components/ui/VTabs.vue';
 import VTextarea from '@/Components/ui/VTextarea.vue';
 import VTimeline from '@/Components/ui/VTimeline.vue';
 import VTimelineItem from '@/Components/ui/VTimelineItem.vue';
+import VFinanceRows from '@/Components/ui/VFinanceRows.vue';
 
 const props = defineProps({
     project: { type: Object, required: true },
@@ -32,6 +33,10 @@ const props = defineProps({
     availableEmployees: { type: Array, required: true },
     clients: { type: Array, required: true },
     vatOptions: { type: Array, required: true },
+    invoices: { type: Array, default: () => [] },
+    expenses: { type: Array, default: () => [] },
+    canViewInvoices: { type: Boolean, default: false },
+    canViewExpenses: { type: Boolean, default: false },
     can: { type: Object, required: true },
 });
 
@@ -177,7 +182,15 @@ function destroy() { router.delete(`/projects/${props.project.id}`); }
                 </VCard>
             </div>
 
-            <!-- Phase 4/6 placeholders -->
+            <!-- Facturas — invoices raised against this project -->
+            <VFinanceRows v-else-if="tab === 'invoices'"
+                :rows="invoices" :can-view="canViewInvoices" empty-key="finance.no_invoices" />
+
+            <!-- Gastos — expenses booked against this project -->
+            <VFinanceRows v-else-if="tab === 'expenses'"
+                :rows="expenses" :can-view="canViewExpenses" empty-key="finance.no_expenses" />
+
+            <!-- Asistencia / Mediciones — the standalone screens are canonical -->
             <VCard v-else>
                 <p class="py-8 text-center text-sm text-muted"><Bilingual k="common.coming_soon" class="items-center" /></p>
             </VCard>

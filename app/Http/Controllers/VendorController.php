@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\Vendors\StoreVendorRequest;
 use App\Http\Requests\Vendors\UpdateVendorRequest;
+use App\Models\Expense;
 use App\Models\Vendor;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
@@ -71,11 +72,36 @@ class VendorController extends Controller
             ]),
             'contacts' => $vendor->contacts()->get(['id', 'name', 'position', 'phone', 'email', 'is_primary', 'notes']),
             'paymentTerms' => $vendor->paymentTerms()->get(['id', 'name', 'days', 'discount_percentage', 'discount_days', 'is_default', 'description']),
+            // Gastos tab — vendor is shared, but expenses are company-owned, so
+            // the tenant scope shows only THIS company's expenses to the vendor.
+            'expenses' => Gate::allows('expenses.view') ? $this->vendorExpenses($vendor) : [],
+            'canViewExpenses' => Gate::allows('expenses.view'),
             'can' => [
                 'edit' => Gate::allows('vendors.edit'),
                 'delete' => Gate::allows('vendors.delete'),
             ],
         ]);
+    }
+
+    /**
+     * This company's expenses to the vendor (tenant-scoped), newest first.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function vendorExpenses(Vendor $vendor): array
+    {
+        return Expense::query()
+            ->where('vendor_id', $vendor->id)
+            ->orderByDesc('date')
+            ->get()
+            ->map(fn (Expense $e): array => [
+                'id' => $e->id,
+                'number' => $e->number,
+                'date' => $e->date->toDateString(),
+                'total' => (float) $e->total,
+                'status' => $e->payment_status->value,
+            ])
+            ->all();
     }
 
     public function store(StoreVendorRequest $request): RedirectResponse

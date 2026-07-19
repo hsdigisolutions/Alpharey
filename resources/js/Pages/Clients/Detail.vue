@@ -19,6 +19,7 @@ import VTabs from '@/Components/ui/VTabs.vue';
 import VTextarea from '@/Components/ui/VTextarea.vue';
 import VTimeline from '@/Components/ui/VTimeline.vue';
 import VTimelineItem from '@/Components/ui/VTimelineItem.vue';
+import VFinanceRows from '@/Components/ui/VFinanceRows.vue';
 
 const props = defineProps({
     client: { type: Object, required: true },
@@ -26,6 +27,8 @@ const props = defineProps({
     projects: { type: Array, required: true },
     proposals: { type: Array, required: true },
     communications: { type: Array, required: true },
+    invoices: { type: Array, default: () => [] },
+    canViewInvoices: { type: Boolean, default: false },
     can: { type: Object, required: true },
 });
 
@@ -153,9 +156,10 @@ const statusBadge = { active: 'ok', in_progress: 'info', completed: 'ok', cancel
                 <VEmptyState v-else icon="file" />
             </VCard>
 
-            <VCard v-else-if="tab === 'invoices'">
-                <p class="py-8 text-center text-sm text-muted"><Bilingual k="common.coming_soon" class="items-center" /></p>
-            </VCard>
+            <!-- Facturas — this company's invoices to the client -->
+            <VFinanceRows v-else-if="tab === 'invoices'"
+                :rows="invoices" :can-view="canViewInvoices" empty-key="finance.no_invoices" :show-party="false" />
+
 
             <div v-else-if="tab === 'communication'" class="grid gap-5 lg:grid-cols-[1fr_320px]">
                 <VCard>

@@ -9,6 +9,8 @@ use App\Http\Requests\Projects\StoreProjectRequest;
 use App\Http\Requests\Projects\UpdateProjectRequest;
 use App\Models\Client;
 use App\Models\Employee;
+use App\Models\Expense;
+use App\Models\Invoice;
 use App\Models\Project;
 use App\Services\Documents\DocumentStatus;
 use App\Support\CurrentCompany;
@@ -169,6 +171,13 @@ class ProjectController extends Controller
                 ->orderBy('full_name')->get(['id', 'full_name']),
             'clients' => Client::query()->orderBy('name')->get(['id', 'name']),
             'vatOptions' => VatRate::options(),
+            // Facturas / Gastos tabs — the standalone screens stay canonical;
+            // these are a read-only view of the same rows scoped to the project,
+            // gated by the finance modules' own view rights.
+            'invoices' => Gate::allows('invoices.view') ? $this->projectInvoices($project) : [],
+            'expenses' => Gate::allows('expenses.view') ? $this->projectExpenses($project) : [],
+            'canViewInvoices' => Gate::allows('invoices.view'),
+            'canViewExpenses' => Gate::allows('expenses.view'),
             'can' => [
                 'edit' => Gate::allows('projects.edit'),
                 'delete' => Gate::allows('projects.delete'),
@@ -177,6 +186,52 @@ class ProjectController extends Controller
                 'deleteDocs' => Gate::allows('documents.delete'),
             ],
         ]);
+    }
+
+    /**
+     * Invoices raised against this project (tenant-scoped, newest first).
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function projectInvoices(Project $project): array
+    {
+        return Invoice::query()
+            ->where('project_id', $project->id)
+            ->with('client:id,name')
+            ->orderByDesc('invoice_date')
+            ->get()
+            ->map(fn (Invoice $i): array => [
+                'id' => $i->id,
+                'number' => $i->number,
+                'party' => $i->client?->name,
+                'date' => $i->invoice_date->toDateString(),
+                'total' => (float) $i->total,
+                'status' => $i->payment_status->value,
+            ])
+            ->all();
+    }
+
+    /**
+     * Expenses booked against this project (tenant-scoped, newest first).
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function projectExpenses(Project $project): array
+    {
+        return Expense::query()
+            ->where('project_id', $project->id)
+            ->with('vendor:id,name')
+            ->orderByDesc('date')
+            ->get()
+            ->map(fn (Expense $e): array => [
+                'id' => $e->id,
+                'number' => $e->number,
+                'party' => $e->vendor?->name,
+                'date' => $e->date->toDateString(),
+                'total' => (float) $e->total,
+                'status' => $e->payment_status->value,
+            ])
+            ->all();
     }
 
     public function store(StoreProjectRequest $request): RedirectResponse

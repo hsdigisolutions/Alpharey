@@ -369,6 +369,8 @@ return [
         'tab_payroll' => 'Nómina',
         'tab_notes' => 'Notas',
         'tab_calls' => 'Llamadas',
+        'no_payroll' => 'Aún no hay nóminas',
+        'no_wage_permission' => 'No tiene permiso para ver datos de pago',
         'wage_daily' => 'Diario',
         'wage_hourly' => 'Por hora',
         'wage_monthly' => 'Mensual',
@@ -931,6 +933,17 @@ return [
         'payrolls_count' => 'nóminas',
     ],
 
+    'finance' => [
+        'number' => 'Número',
+        'party' => 'Contraparte',
+        'date' => 'Fecha',
+        'total' => 'Total',
+        'status' => 'Estado',
+        'no_permission' => 'No tiene permiso para ver estos datos',
+        'no_invoices' => 'Sin facturas',
+        'no_expenses' => 'Sin gastos',
+    ],
+
     'vehicles' => [
         'title' => 'Vehículos',
         'new' => 'Nuevo Vehículo',
@@ -1234,8 +1247,10 @@ return [
         'hours' => 'Horas',
         'wage_type' => 'Tipo de salario',
         'wage_rate' => 'Tarifa',
+        'gross' => 'Bruto',
         'net' => 'Neto',
         'status' => 'Estado',
+        'paid_at' => 'Pagado el',
         'payment_method' => 'Forma de pago',
         'status_pending' => 'Pendiente',
         'status_paid' => 'Pagada',

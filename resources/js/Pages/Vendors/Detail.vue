@@ -16,11 +16,14 @@ import VEmptyState from '@/Components/ui/VEmptyState.vue';
 import VInput from '@/Components/ui/VInput.vue';
 import VModal from '@/Components/ui/VModal.vue';
 import VTabs from '@/Components/ui/VTabs.vue';
+import VFinanceRows from '@/Components/ui/VFinanceRows.vue';
 
 const props = defineProps({
     vendor: { type: Object, required: true },
     contacts: { type: Array, required: true },
     paymentTerms: { type: Array, required: true },
+    expenses: { type: Array, default: () => [] },
+    canViewExpenses: { type: Boolean, default: false },
     can: { type: Object, required: true },
 });
 
@@ -111,9 +114,10 @@ function addTerm() { termForm.post(`/vendors/${props.vendor.id}/payment-terms`, 
                 <VEmptyState v-else icon="invoices" />
             </VCard>
 
-            <VCard v-else-if="tab === 'expenses'">
-                <p class="py-8 text-center text-sm text-muted"><Bilingual k="common.coming_soon" class="items-center" /></p>
-            </VCard>
+            <!-- Gastos — this company's expenses to the vendor -->
+            <VFinanceRows v-else-if="tab === 'expenses'"
+                :rows="expenses" :can-view="canViewExpenses" empty-key="finance.no_expenses" :show-party="false" />
+
         </div>
 
         <!-- Edit modal -->

@@ -29,6 +29,8 @@ const props = defineProps({
     documentSets: { type: Object, required: true },
     notes: { type: Array, required: true },
     calls: { type: Array, required: true },
+    payroll: { type: Array, default: () => [] },
+    canSeeWages: { type: Boolean, default: false },
     can: { type: Object, required: true },
 });
 
@@ -36,7 +38,12 @@ const tab = ref('info');
 const showEdit = ref(false);
 const showDelete = ref(false);
 
-const canSeeWages = props.employee.wage_rate !== null || props.employee.base_salary !== null || props.can.edit;
+// Authoritative from the server (payroll.view || employees.edit), not a guess.
+const canSeeWages = props.canSeeWages;
+
+function eur(value) {
+    return `${Number(value ?? 0).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`;
+}
 
 const infoRows = [
     { k: 'employees.code', v: props.employee.employee_code },
@@ -154,16 +161,45 @@ function destroy() {
                 entity-type="employee" :entity-id="employee.id"
                 :documents="documents" :sets="documentSets" :can="can" />
 
-            <!-- Asistencia / Nómina placeholders -->
+            <!-- Asistencia placeholder (the standalone grid is canonical) -->
             <VCard v-else-if="tab === 'attendance'">
                 <p class="py-8 text-center text-sm text-muted">
                     <Bilingual k="common.coming_soon" class="items-center" />
                 </p>
             </VCard>
+
+            <!-- Nómina — the employee's payroll history (pay data, gated) -->
             <VCard v-else-if="tab === 'payroll'">
-                <p class="py-8 text-center text-sm text-muted">
-                    <Bilingual k="common.coming_soon" class="items-center" />
+                <p v-if="!canSeeWages" class="py-8 text-center text-sm text-muted">
+                    <Bilingual k="employees.no_wage_permission" class="items-center" />
                 </p>
+                <p v-else-if="payroll.length === 0" class="py-8 text-center text-sm text-muted">
+                    <Bilingual k="employees.no_payroll" class="items-center" />
+                </p>
+                <div v-else class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead>
+                            <tr class="border-b border-line text-xs uppercase text-muted">
+                                <th class="px-2 py-2 text-start font-medium">{{ $t('payroll.month') }}</th>
+                                <th class="tabular-nums px-2 py-2 text-end font-medium">{{ $t('payroll.gross') }}</th>
+                                <th class="tabular-nums px-2 py-2 text-end font-medium">{{ $t('payroll.net') }}</th>
+                                <th class="px-2 py-2 text-start font-medium">{{ $t('payroll.status') }}</th>
+                                <th class="px-2 py-2 text-start font-medium">{{ $t('payroll.paid_at') }}</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="row in payroll" :key="row.id" class="border-b border-line">
+                                <td class="px-2 py-2 text-ink">{{ row.month }}</td>
+                                <td class="tabular-nums px-2 py-2 text-end text-ink-soft">{{ eur(row.gross_pay) }}</td>
+                                <td class="tabular-nums px-2 py-2 text-end text-ink">{{ eur(row.net_amount) }}</td>
+                                <td class="px-2 py-2">
+                                    <VBadge :status="row.status === 'paid' ? 'ok' : 'warn'">{{ row.status }}</VBadge>
+                                </td>
+                                <td class="tabular-nums px-2 py-2 text-ink-soft">{{ row.paid_at ?? '—' }}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
             </VCard>
 
             <!-- Notas -->
