@@ -2,14 +2,41 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Status: Phase 8 complete (2026-07-18)
+## Status: Phase 9 in progress — hardening (2026-07-18)
 
-Development Phase 8 (dashboards, reports, search, notifications) is built and verified:
-**428 Pest tests / 1521 assertions passing (1 skipped) · Pint clean · Larastan level 6
-clean · `composer audit` + `npm audit` clean · production Vite build working · all
-translation guards green · the Dashboard and Reports screens verified in the browser
-against seeded MySQL (charts drawn, 9 report modules + working export links, live
-global-search endpoint).**
+**Every screen 01–26 is built (Phase 8 complete).** Phase 9 is hardening, UAT, and
+launch — no new screens. Current: **454 Pest tests / 2713 assertions passing (1
+skipped) · Pint clean · Larastan level 6 clean · `composer audit` + `npm audit`
+clean · production Vite build working.**
+
+### Phase 9 done so far
+
+- **Security gate** (`docs/SECURITY_GATE.md`): 5 of the 7 release-blocking points
+  (SECURITY.md §9) are green now — OWASP Top 10 walkthrough clean, tenancy suite
+  (18 files), **permission fuzz** (`PermissionFuzzTest` — every Module × Action ×
+  role, 1160 assertions), **file-access probing** (`FileAccessProbeTest`), audits
+  clean. Items 6–7 (SSL Labs grade A, backup restore drill) are live-server-only
+  and run at cutover.
+- **Performance pass** (`PerformanceTest`): query-count N+1 guards on the heavy
+  endpoints. Caught + fixed a real N+1 (employees list lazy-loaded `company` per
+  row — 36 queries for 30 rows → a handful). Index review clean against the real
+  dump's volumes; dashboard 120s cache verified.
+- **Launch docs**: `LAUNCH_READINESS.md` (go/no-go checklist), `GO_LIVE_RUNBOOK.md`
+  (alpharey.com cutover steps + rollback), `ADMIN_HANDBOOK.md` (roles, matrix,
+  locked periods, APP_KEY custody, audit archive, backups).
+- **Company-removal guard hardened**: the Phase-1 TODO ("append employees/projects/
+  invoices blockers") was never closed — a company with a live workforce or money
+  owed could be soft-deleted. Now blocks on users + employees + projects + unpaid
+  invoices (fully-paid don't block).
+
+Still open in Phase 9 (need the live server or client): TLS grade + backup drill,
+responsive/mobile final pass, the final legacy cutover, UAT sign-off, the bilingual
+screenshot user guide, EU-hosting confirmation in writing.
+
+### Phase 8 recap (2026-07-18)
+
+Dashboards, reports, search, notifications — built and verified against seeded MySQL
+(charts drawn, 10 report modules + export links, live global-search endpoint).
 
 Live screens: **03 Dashboard** (8 KPIs, 3 Chart.js charts, quick actions, expiring +
 activity panels) · **14 Reports** (10 modules, filter bar, PDF/Excel export) · **15
