@@ -14,6 +14,7 @@ use App\Models\EmployeeDeployment;
 use App\Models\Expense;
 use App\Models\Measurement;
 use App\Models\Payroll;
+use App\Models\Scopes\CompanyScope;
 use App\Support\PeriodLock;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
@@ -65,7 +66,11 @@ class PayrollService
     {
         $this->lock->assertOpen($companyId, $month.'-01', 'month');
 
-        $employees = Employee::query()->withoutGlobalScopes()
+        // Only the TENANT scope is dropped — a bare withoutGlobalScopes()
+        // strips SoftDeletes too, and soft deletion does not flip `active`,
+        // so a deleted monthly-salaried worker (whose pay needs no attendance
+        // rows) would keep receiving a full payslip every month.
+        $employees = Employee::query()->withoutGlobalScope(CompanyScope::class)
             ->where('company_id', $companyId)
             ->where('active', true)
             ->get();

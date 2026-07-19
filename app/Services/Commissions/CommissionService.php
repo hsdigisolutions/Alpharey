@@ -8,6 +8,7 @@ use App\Models\CommissionReportEntry;
 use App\Models\Employee;
 use App\Models\Invoice;
 use App\Models\ProjectEmployeeRate;
+use App\Models\Scopes\CompanyScope;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -61,7 +62,10 @@ class CommissionService
                 // Employee's global scope, which returns nothing when this runs
                 // outside a request (a scheduled generate, console, a test) —
                 // and every earner would be silently skipped.
-                $employees = Employee::query()->withoutGlobalScopes()
+                // Tenant scope only — keeping SoftDeletes means an employee
+                // removed from the company stops earning NEW commission
+                // entries (existing entries are history and stay).
+                $employees = Employee::query()->withoutGlobalScope(CompanyScope::class)
                     ->whereIn('id', $earnerIds)
                     ->get(['id', 'commission_percent'])
                     ->keyBy('id');

@@ -2,6 +2,7 @@
 
 use App\Enums\AdvanceStatus;
 use App\Enums\PayrollStatus;
+use App\Enums\WageType;
 use App\Models\Advance;
 use App\Models\Attendance;
 use App\Models\Company;
@@ -342,4 +343,23 @@ it('shows only the acting company payrolls', function (): void {
     $this->actingAs($this->admin)->get('/payroll?month='.$this->month)
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page->component('Payroll/Index')->has('rows', 1));
+});
+
+it('does not pay a soft-deleted employee', function (): void {
+    // Soft delete does not flip `active`, and calculateMonth used a bare
+    // withoutGlobalScopes() — which strips SoftDeletes along with the tenant
+    // scope. A deleted monthly-salaried worker (whose pay needs no attendance
+    // rows) kept receiving a full payslip every month.
+    $employee = Employee::factory()->for($this->company)->create([
+        'wage_type' => WageType::Monthly,
+        'base_salary' => '2000',
+        'active' => true,
+    ]);
+
+    $employee->delete();
+
+    app(PayrollService::class)->calculateMonth($this->company->id, $this->month);
+
+    expect(Payroll::query()->withoutGlobalScopes()
+        ->where('employee_id', $employee->id)->where('month', $this->month)->exists())->toBeFalse();
 });

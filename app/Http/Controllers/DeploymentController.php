@@ -10,6 +10,7 @@ use App\Models\Company;
 use App\Models\Employee;
 use App\Models\EmployeeDeployment;
 use App\Models\Project;
+use App\Models\Scopes\CompanyScope;
 use App\Services\Deployments\DeploymentChargeService;
 use App\Services\Notifications\NotificationDispatcher;
 use App\Support\CurrentCompany;
@@ -99,8 +100,10 @@ class DeploymentController extends Controller
         // Cannot deploy from your own company to your own company
         abort_if($homeCompanyId === $hostCompanyId, 422, 'Home and host company must differ.');
 
+        // Tenant scope only — SoftDeletes stays, so a removed employee is
+        // never offered for a new posting.
         $employees = Employee::query()
-            ->withoutGlobalScopes()
+            ->withoutGlobalScope(CompanyScope::class)
             ->where('company_id', $homeCompanyId)
             ->where('active', true)
             ->orderBy('full_name')
@@ -121,7 +124,9 @@ class DeploymentController extends Controller
         abort_unless($project->company_id === $hostCompanyId, 404);
 
         // The employee must belong to the chosen HOME company (not the host).
-        $employee = Employee::query()->withoutGlobalScopes()->findOrFail($data['employee_id']);
+        // Tenant scope only: a soft-deleted employee id smuggled into the
+        // request must 404, not open a new posting.
+        $employee = Employee::query()->withoutGlobalScope(CompanyScope::class)->findOrFail($data['employee_id']);
         abort_unless($employee->company_id === (int) $data['home_company_id'], 422);
         abort_if((int) $data['home_company_id'] === $hostCompanyId, 422, 'Home and host company must differ.');
 

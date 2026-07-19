@@ -10,6 +10,7 @@ use App\Models\Attendance;
 use App\Models\Employee;
 use App\Models\Leave;
 use App\Models\LeaveBalance;
+use App\Models\Scopes\CompanyScope;
 use App\Support\PeriodLock;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
@@ -222,7 +223,9 @@ class LeaveService
      */
     private function writeAttendance(Leave $leave): void
     {
-        $employee = Employee::query()->withoutGlobalScopes()->findOrFail($leave->employee_id);
+        // Tenant scope only: approving leave for a soft-deleted employee must
+        // fail rather than write attendance for someone no longer employed.
+        $employee = Employee::query()->withoutGlobalScope(CompanyScope::class)->findOrFail($leave->employee_id);
         $paid = (bool) ($leave->category->is_paid ?? true);
 
         foreach ($this->workingDays($leave) as $day) {

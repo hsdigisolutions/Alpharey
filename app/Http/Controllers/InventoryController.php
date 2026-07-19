@@ -327,6 +327,13 @@ class InventoryController extends Controller
      */
     private function availableCategories(): array
     {
+        // One grouped count, not one COUNT per category (N+1).
+        $counts = EquipmentItem::query()
+            ->whereNotNull('equipment_category_id')
+            ->selectRaw('equipment_category_id, count(*) as total')
+            ->groupBy('equipment_category_id')
+            ->pluck('total', 'equipment_category_id');
+
         return EquipmentCategory::query()
             ->forCompany(app(CurrentCompany::class)->id())
             ->orderBy('name')
@@ -336,7 +343,7 @@ class InventoryController extends Controller
                 'name' => $c->name,
                 'description' => $c->description,
                 'active' => $c->active,
-                'item_count' => EquipmentItem::query()->where('equipment_category_id', $c->id)->count(),
+                'item_count' => (int) ($counts[$c->id] ?? 0),
             ])
             ->values()
             ->all();

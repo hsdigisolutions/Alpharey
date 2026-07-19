@@ -176,3 +176,15 @@ it('shows a deployed employee on the host attendance grid with the deployed flag
             ->where('employees', fn ($employees) => collect($employees)
                 ->contains(fn ($e) => $e['deployed'] === true && $e['full_name'] === 'Ana Torres')));
 });
+
+it('refuses to deploy a soft-deleted employee', function (): void {
+    // The server-side re-check dropped ALL global scopes, so a trashed
+    // employee id smuggled into the request could still open a posting.
+    $this->homeEmployee->delete();
+
+    $this->actingAs($this->admin)
+        ->post('/deployments', deploymentPayload())
+        ->assertNotFound();
+
+    expect(EmployeeDeployment::query()->count())->toBe(0);
+});
