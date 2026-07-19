@@ -1,7 +1,12 @@
 <?php
 
+use App\Enums\InvoiceType;
+use App\Enums\PaymentStatus;
 use App\Models\AuditLog;
 use App\Models\Company;
+use App\Models\Employee;
+use App\Models\Invoice;
+use App\Models\Project;
 use App\Models\User;
 use Inertia\Testing\AssertableInertia as Assert;
 
@@ -68,6 +73,56 @@ it('blocks removal while the company has users', function (): void {
         ->assertSessionHasErrors('confirm_name');
 
     expect(Company::query()->find($this->company->id))->not->toBeNull();
+});
+
+it('blocks removal while the company still has employees', function (): void {
+    // No users, but a live employee — history must not be orphaned.
+    Employee::factory()->create(['company_id' => $this->company->id]);
+
+    $this->actingAs($this->superAdmin)
+        ->delete("/companies/{$this->company->id}", ['confirm_name' => 'Empresa Uno'])
+        ->assertSessionHasErrors('confirm_name');
+
+    expect(Company::query()->find($this->company->id))->not->toBeNull();
+});
+
+it('blocks removal while the company still has projects', function (): void {
+    Project::factory()->create(['company_id' => $this->company->id]);
+
+    $this->actingAs($this->superAdmin)
+        ->delete("/companies/{$this->company->id}", ['confirm_name' => 'Empresa Uno'])
+        ->assertSessionHasErrors('confirm_name');
+
+    expect(Company::query()->find($this->company->id))->not->toBeNull();
+});
+
+it('blocks removal while the company has unpaid invoices', function (): void {
+    Invoice::factory()->create([
+        'company_id' => $this->company->id,
+        'type' => InvoiceType::Sale,
+        'payment_status' => PaymentStatus::Unpaid,
+    ]);
+
+    $this->actingAs($this->superAdmin)
+        ->delete("/companies/{$this->company->id}", ['confirm_name' => 'Empresa Uno'])
+        ->assertSessionHasErrors('confirm_name');
+
+    expect(Company::query()->find($this->company->id))->not->toBeNull();
+});
+
+it('allows removal once only fully-paid invoices remain', function (): void {
+    // A paid invoice is settled history, not a blocker.
+    Invoice::factory()->create([
+        'company_id' => $this->company->id,
+        'type' => InvoiceType::Sale,
+        'payment_status' => PaymentStatus::Paid,
+    ]);
+
+    $this->actingAs($this->superAdmin)
+        ->delete("/companies/{$this->company->id}", ['confirm_name' => 'Empresa Uno'])
+        ->assertRedirect();
+
+    expect(Company::query()->find($this->company->id))->toBeNull();
 });
 
 it('requires the exact company name to confirm removal', function (): void {

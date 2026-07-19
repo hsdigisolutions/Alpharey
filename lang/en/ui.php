@@ -116,6 +116,9 @@ return [
         'confirm_hint' => 'Type the exact company name to confirm',
         'confirm_mismatch' => 'El nombre no coincide / The name does not match',
         'blocked_users' => 'No se puede eliminar: la empresa tiene usuarios asignados. / Cannot remove: the company has assigned users.',
+        'blocked_employees' => 'No se puede eliminar: la empresa tiene empleados. / Cannot remove: the company has employees.',
+        'blocked_projects' => 'No se puede eliminar: la empresa tiene proyectos. / Cannot remove: the company has projects.',
+        'blocked_invoices' => 'No se puede eliminar: la empresa tiene facturas pendientes de cobro/pago. / Cannot remove: the company has unpaid invoices.',
     ],
 
     'permissions' => [
