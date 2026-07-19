@@ -235,7 +235,7 @@ const columns = [
 
                 <p v-if="isWorkerProjectExpense"
                     class="sm:col-span-2 rounded-md bg-status-info-soft px-3 py-2 text-xs text-status-info">
-                    <Bilingual k="expenses.worker_project_hint" inline />
+                    <Bilingual k="expenses.worker_project_hint" />
                 </p>
 
                 <FormField k="expenses.date" :error="form.errors.date" required>

@@ -13,7 +13,10 @@ defineProps({
 </script>
 
 <template>
-    <div>
+    <!-- min-w-0: a grid/flex child defaults to min-width:auto, and a native
+         <select> is as wide as its widest <option> — one long employee name
+         would otherwise stretch the whole form and scroll the modal sideways. -->
+    <div class="min-w-0">
         <label :for="forId" class="mb-1.5 flex items-baseline gap-1">
             <Bilingual :k="k" class="text-[13px] font-medium" />
             <span v-if="required" class="text-status-danger" aria-hidden="true">*</span>

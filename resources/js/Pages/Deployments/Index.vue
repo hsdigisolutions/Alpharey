@@ -182,8 +182,10 @@ function eur(n) {
                 <FormField k="deployments.split_pct" :error="form.errors.split_pct"><VInput v-model="form.split_pct" type="number" step="1" min="0" max="100" /></FormField>
                 <FormField k="deployments.notes" class="sm:col-span-2"><VTextarea v-model="form.notes" :rows="2" /></FormField>
 
+                <!-- A sentence, so NOT inline: the inline variant is nowrap and
+                     would force the modal wider than the viewport. -->
                 <p class="sm:col-span-2 rounded-md bg-status-info-soft px-3 py-2 text-xs text-status-info">
-                    <Bilingual k="deployments.option_a_note" inline />
+                    <Bilingual k="deployments.option_a_note" />
                 </p>
             </form>
             <template #footer>

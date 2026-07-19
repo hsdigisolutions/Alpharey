@@ -400,3 +400,18 @@ it('refuses to burn more days than the request actually spans', function (): voi
         'total_days' => '20', // one day span, twenty days claimed
     ])->assertSessionHasErrors('total_days');
 });
+
+it('translates the seeded leave categories but keeps a company custom name', function (): void {
+    // The 8 defaults store a Spanish name in the DB, so an English user was
+    // reading "Vacaciones Anuales" in every dropdown. A company's own category
+    // has no translation key and must keep exactly what it was named.
+    $seeded = LeaveCategory::factory()->create(['key' => 'annual', 'name' => 'Vacaciones Anuales', 'company_id' => null]);
+    $own = LeaveCategory::factory()->create(['key' => 'site_visit', 'name' => 'Visita de Obra']);
+
+    app()->setLocale('en');
+    expect($seeded->label())->toBe('Annual Leave')
+        ->and($own->label())->toBe('Visita de Obra');
+
+    app()->setLocale('es');
+    expect($seeded->label())->toBe('Vacaciones Anuales');
+});

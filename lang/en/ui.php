@@ -934,6 +934,22 @@ return [
         'payrolls_count' => 'payrolls',
     ],
 
+    /*
+     * The 8 seeded leave categories (LeaveCategorySeeder). They live in the DB,
+     * so their stored `name` is Spanish only — LeaveCategory::label() looks the
+     * key up here first and falls back to `name` for a company's own category.
+     */
+    'leave_categories' => [
+        'casual' => 'Casual Leave',
+        'annual' => 'Annual Leave',
+        'sick' => 'Sick Leave',
+        'maternity' => 'Maternity Leave',
+        'paternity' => 'Paternity Leave',
+        'unpaid' => 'Unpaid Leave',
+        'compensatory' => 'Compensatory Time Off',
+        'other' => 'Other',
+    ],
+
     'two_factor' => [
         'title' => 'Two-Step Verification',
         'setup_title' => 'Set Up Two-Step Verification',
@@ -1111,7 +1127,7 @@ return [
         'complete' => 'Complete',
         'cancel_action' => 'Cancel',
         'notes' => 'Notes',
-        'option_a_note' => 'El empleado permanece en la nómina de su empresa de origen; la empresa de destino recibe un cargo interno automático (Opción A). / The employee stays on their home company payroll; the host company receives an automatic internal cross-charge (Option A).',
+        'option_a_note' => 'The employee stays on their home company payroll; the host company receives an automatic internal cross-charge (Option A).',
     ],
 
     'invoices' => [
@@ -1208,7 +1224,7 @@ return [
         'file' => 'Receipt',
         'notes' => 'Notes',
         'no_rows' => 'No expenses yet.',
-        'worker_project_hint' => 'Un gasto con empleado y obra se abona en su nómina del mes. / An expense with both an employee and a project is paid back through their payroll for the month.',
+        'worker_project_hint' => 'An expense with both an employee and a project is paid back through their payroll for the month.',
     ],
 
     'commissions' => [

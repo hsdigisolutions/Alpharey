@@ -108,3 +108,36 @@ it('keeps the two dictionaries structurally in step', function (): void {
     expect(array_values(array_diff($esKeys, $enKeys)))->toBe([])
         ->and(array_values(array_diff($enKeys, $esKeys)))->toBe([]);
 });
+
+it('never renders a sentence through the nowrap inline variant', function (): void {
+    // <Bilingual inline> is whitespace-nowrap so a short label cannot break
+    // between its two languages. Point it at a sentence and the element
+    // refuses to wrap at all: the New Deployment modal grew wider than the
+    // viewport and scrolled sideways, with the fields pushed off-screen.
+    $es = require __DIR__.'/../../lang/es/ui.php';
+
+    $lookup = function (string $key) use ($es): ?string {
+        $node = $es;
+        foreach (explode('.', $key) as $part) {
+            $node = is_array($node) ? ($node[$part] ?? null) : null;
+        }
+
+        return is_string($node) ? $node : null;
+    };
+
+    $offenders = [];
+
+    foreach (vueFiles() as $path => $source) {
+        preg_match_all('/<Bilingual\s+k="([a-zA-Z_.]+)"\s+inline\s*\/?>/', $source, $matches);
+
+        foreach ($matches[1] as $key) {
+            $text = $lookup($key);
+
+            if ($text !== null && mb_strlen($text) > 60) {
+                $offenders[] = basename($path).": {$key}";
+            }
+        }
+    }
+
+    expect($offenders)->toBe([], 'Long string in <Bilingual inline> — drop "inline" so it can wrap');
+});

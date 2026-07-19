@@ -148,7 +148,7 @@ class LeaveController extends Controller
     private function filteredQuery(Request $request): Builder
     {
         return Leave::query()
-            ->with(['employee:id,full_name', 'category:id,name,is_paid', 'reviewer:id,name'])
+            ->with(['employee:id,full_name', 'category:id,key,name,is_paid', 'reviewer:id,name'])
             ->when($request->filled('employee_id'), fn (Builder $q) => $q->where('employee_id', $request->integer('employee_id')))
             ->when($request->filled('leave_category_id'), fn (Builder $q) => $q->where('leave_category_id', $request->integer('leave_category_id')))
             ->when($request->filled('status'), fn (Builder $q) => $q->where('status', $request->string('status')->value()))
@@ -166,7 +166,7 @@ class LeaveController extends Controller
             'id' => $l->id,
             'employee' => $l->employee?->full_name,
             'employee_id' => $l->employee_id,
-            'category' => $l->category?->name,
+            'category' => $l->category?->label(),
             // leave_category_id is a required FK, so the relation always resolves
             'is_paid' => $l->category->is_paid,
             'start_date' => $l->start_date->toDateString(),
@@ -193,13 +193,13 @@ class LeaveController extends Controller
         $year = $request->filled('year') ? $request->integer('year') : (int) now()->format('Y');
 
         return LeaveBalance::query()
-            ->with(['employee:id,full_name', 'category:id,name'])
+            ->with(['employee:id,full_name', 'category:id,key,name'])
             ->where('year', $year)
             ->get()
             ->map(fn (LeaveBalance $b): array => [
                 'id' => $b->id,
                 'employee' => $b->employee?->full_name,
-                'category' => $b->category?->name,
+                'category' => $b->category?->label(),
                 'year' => $b->year,
                 'allocated' => (float) $b->allocated,
                 'used' => (float) $b->used,
@@ -219,11 +219,13 @@ class LeaveController extends Controller
         return LeaveCategory::query()
             ->forCompany(app(CurrentCompany::class)->id())
             ->where('active', true)
-            ->orderBy('name')
-            ->get(['id', 'name', 'is_paid', 'default_allocation'])
+            ->get(['id', 'key', 'name', 'is_paid', 'default_allocation'])
+            // Sorted on the translated label, not the stored Spanish name —
+            // otherwise the English list comes out in Spanish alphabetical order.
+            ->sortBy(fn (LeaveCategory $c): string => $c->label())
             ->map(fn (LeaveCategory $c): array => [
                 'id' => $c->id,
-                'name' => $c->name,
+                'name' => $c->label(),
                 'is_paid' => $c->is_paid,
                 'default_allocation' => (float) $c->default_allocation,
             ])

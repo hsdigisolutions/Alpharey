@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\Lang;
 
 /**
  * Screen 26 Settings — the configurable leave types behind Screen 22.
@@ -18,6 +19,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  *
  * @property int $id
  * @property int|null $company_id
+ * @property string $key
+ * @property string $name
  * @property bool $is_paid
  * @property bool $active
  * @property numeric-string $default_allocation
@@ -44,6 +47,21 @@ class LeaveCategory extends Model
             'is_paid' => 'boolean',
             'active' => 'boolean',
         ];
+    }
+
+    /**
+     * The display label in the user's current language.
+     *
+     * The 8 seeded defaults store a Spanish `name`, so an English user was
+     * reading Spanish in every leave dropdown. Their `key` is stable, so it
+     * carries a translation; a company's OWN category has no such key and
+     * keeps whatever it was named — there is nothing to translate it to.
+     */
+    public function label(): string
+    {
+        $key = "ui.leave_categories.{$this->key}";
+
+        return Lang::has($key) ? __($key) : $this->name;
     }
 
     /**

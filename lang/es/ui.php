@@ -933,6 +933,22 @@ return [
         'payrolls_count' => 'nóminas',
     ],
 
+    /*
+     * The 8 seeded leave categories (LeaveCategorySeeder). They live in the DB,
+     * so their stored `name` is Spanish only — LeaveCategory::label() looks the
+     * key up here first and falls back to `name` for a company's own category.
+     */
+    'leave_categories' => [
+        'casual' => 'Permiso Ocasional',
+        'annual' => 'Vacaciones Anuales',
+        'sick' => 'Baja por Enfermedad',
+        'maternity' => 'Permiso de Maternidad',
+        'paternity' => 'Permiso de Paternidad',
+        'unpaid' => 'Permiso sin Sueldo',
+        'compensatory' => 'Descanso Compensatorio',
+        'other' => 'Otros',
+    ],
+
     'two_factor' => [
         'title' => 'Verificación en Dos Pasos',
         'setup_title' => 'Configurar Verificación en Dos Pasos',
@@ -1110,7 +1126,7 @@ return [
         'complete' => 'Finalizar',
         'cancel_action' => 'Cancelar',
         'notes' => 'Notas',
-        'option_a_note' => 'El empleado permanece en la nómina de su empresa de origen; la empresa de destino recibe un cargo interno automático (Opción A). / The employee stays on their home company payroll; the host company receives an automatic internal cross-charge (Option A).',
+        'option_a_note' => 'El empleado permanece en la nómina de su empresa de origen; la empresa de destino recibe un cargo interno automático (Opción A).',
     ],
 
     'invoices' => [
@@ -1207,7 +1223,7 @@ return [
         'file' => 'Justificante',
         'notes' => 'Notas',
         'no_rows' => 'Sin gastos todavía.',
-        'worker_project_hint' => 'Un gasto con empleado y obra se abona en su nómina del mes. / An expense with both an employee and a project is paid back through their payroll for the month.',
+        'worker_project_hint' => 'Un gasto con empleado y obra se abona en su nómina del mes.',
     ],
 
     'commissions' => [
