@@ -180,7 +180,9 @@ class ExpenseController extends Controller
 
     private function storeAttachment(Request $request, Expense $expense): void
     {
-        $request->validate(['file' => ['nullable', 'file', 'max:10240']]);
+        // Same whitelist discipline as documents and leave attachments — a
+        // receipt is a PDF or a photo, never an executable.
+        $request->validate(['file' => ['nullable', 'file', 'max:10240', 'mimes:pdf,jpg,jpeg,png,webp']]);
 
         if (! $request->hasFile('file')) {
             return;
