@@ -112,3 +112,48 @@ it('records who granted the permissions', function (): void {
     expect(UserModulePermission::query()->where('user_id', $this->staff->id)->value('granted_by'))
         ->toBe($this->admin->id);
 });
+
+/**
+ * A Super Admin administers the whole group, so the directory must not be
+ * clipped to whichever company they happen to be browsing — that hid most of
+ * the users from them (reported from the screen).
+ */
+it('shows a Super Admin every user across all companies', function (): void {
+    $sa = User::factory()->superAdmin()->create();
+    User::factory()->forCompany($this->companyB)->create();
+
+    $this->actingAs($sa)->withSession(['current_company_id' => $this->companyA->id])
+        ->get('/admin/permissions')
+        ->assertOk()
+        // companyA admin + companyA staff + companyB staff + the SA themselves
+        ->assertInertia(fn (Assert $page) => $page->has('users', 4));
+});
+
+it('still confines a Company Admin to their own company users', function (): void {
+    User::factory()->forCompany($this->companyB)->create();
+
+    $this->actingAs($this->admin)
+        ->get('/admin/permissions')
+        ->assertOk()
+        // only companyA's admin + staff — never companyB
+        ->assertInertia(fn (Assert $page) => $page->has('users', 2));
+});
+
+it('lets a Super Admin save grants for another company user', function (): void {
+    $sa = User::factory()->superAdmin()->create();
+    $target = User::factory()->forCompany($this->companyB)->create();
+
+    // Browsing company A while editing a user of company B.
+    $this->actingAs($sa)->withSession(['current_company_id' => $this->companyA->id])
+        ->put("/admin/permissions/{$target->id}", [
+            'permissions' => [['module' => 'employees', 'can_view' => true]],
+        ])->assertRedirect();
+
+    // The grant is stored against the TARGET's company, not the browsed one.
+    $this->assertDatabaseHas('user_module_permissions', [
+        'user_id' => $target->id,
+        'company_id' => $this->companyB->id,
+        'module' => 'employees',
+        'can_view' => true,
+    ]);
+});

@@ -29,16 +29,28 @@ class PermissionMatrixController extends Controller
     {
         $companyId = $this->contextCompanyId();
 
+        $actor = $request->user();
+
+        // A Super Admin administers everyone — including other companies' users
+        // and other Super Admins — so scoping the list to the selected company
+        // hid most of the directory from them. Company Admins stay confined to
+        // their own company (tenancy, dev-skill Rule 1).
         $users = User::query()
-            ->where('company_id', $companyId)
+            ->when(
+                $actor !== null && ! $actor->isSuperAdmin(),
+                fn ($q) => $q->where('company_id', $companyId),
+            )
+            ->with('company:id,name')
             ->orderBy('name')
-            ->get(['id', 'name', 'email', 'role', 'active'])
+            ->get(['id', 'name', 'email', 'role', 'active', 'company_id'])
             ->map(fn (User $user): array => [
                 'id' => $user->id,
                 'name' => $user->name,
                 'email' => $user->email,
                 'role' => $user->role->value,
                 'active' => $user->active,
+                // Shown so a Super Admin can tell two same-named users apart.
+                'company' => $user->company?->name,
                 // Only custom users have per-module rows; admins bypass the matrix
                 'editable' => $user->role === UserRole::User,
             ]);
@@ -50,17 +62,43 @@ class PermissionMatrixController extends Controller
             'users' => $users,
             'matrix' => $this->matrixDefinition(),
             'selectedUser' => $selectedId,
-            'permissions' => $selectedId === null ? [] : $this->permissionsFor($companyId, $selectedId),
-            'copySourcePermissions' => $copyFromId === null ? null : $this->permissionsFor($companyId, $copyFromId),
+            // A user's grants belong to THEIR company, which is not necessarily
+            // the one the Super Admin is currently browsing.
+            'permissions' => $selectedId === null ? [] : $this->permissionsFor($this->companyOfUser($selectedId, $companyId), $selectedId),
+            'copySourcePermissions' => $copyFromId === null ? null : $this->permissionsFor($this->companyOfUser($copyFromId, $companyId), $copyFromId),
         ]);
+    }
+
+    /**
+     * The company whose grants apply to a user. For a Super Admin browsing
+     * another company's user that is the USER's company; for everyone else it
+     * can only ever be their own (the caller already confined the list).
+     */
+    private function companyOfUser(int $userId, int $fallbackCompanyId): int
+    {
+        $actor = request()->user();
+
+        if ($actor === null || ! $actor->isSuperAdmin()) {
+            return $fallbackCompanyId;
+        }
+
+        return User::query()->whereKey($userId)->value('company_id') ?? $fallbackCompanyId;
     }
 
     public function update(SavePermissionsRequest $request, User $user): RedirectResponse
     {
-        $companyId = $this->contextCompanyId();
+        $actor = $request->user();
 
-        // 404 (not 403) for out-of-company targets — never leak existence.
-        abort_unless($user->company_id === $companyId, 404);
+        // A Super Admin may administer any company's user; everyone else is
+        // confined to their own — 404, never 403, so existence is not leaked.
+        if ($actor !== null && $actor->isSuperAdmin()) {
+            abort_if($user->company_id === null, 422, 'This user belongs to no company.');
+            $companyId = $user->company_id;
+        } else {
+            $companyId = $this->contextCompanyId();
+            abort_unless($user->company_id === $companyId, 404);
+        }
+
         // Admin roles bypass the matrix; only custom users carry rows.
         abort_unless($user->role === UserRole::User, 422, 'Admins bypass the permission matrix.');
 
