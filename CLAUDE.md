@@ -633,9 +633,11 @@ Not built in Phase 7, though the plan lists them under Screen 26:
 
 Still open from Phase 6:
 
-- **Finance detail tabs** — employee Nómina, project Facturas/Gastos, client Facturas,
-  vendor Gastos. Per scaffolding decision 23 the standalone screens are canonical and the
-  tabs remain placeholders; wiring them to the same data is a cheap pass.
+- ~~**Finance detail tabs**~~ — DONE (commit 7ac2e3a): employee Nómina, project
+  Facturas/Gastos, client Facturas, vendor Gastos wired as read-only, permission-gated
+  views (one `VFinanceRows` component). Pay data gated behind the wage right; a shared
+  client/vendor shows only the acting company's rows. The standalone screens stay
+  canonical (decision 23).
 - **Settings sections** for advance categories, expense categories and company cards.
 - **`deployment_charges` → invoice/expense lines**: Phase 5 generates the cross-charge,
   but it is not yet posted as a host expense + home receivable.

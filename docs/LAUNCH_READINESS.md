@@ -67,8 +67,9 @@ decision or confirmation.
 
 ## 6. Known follow-ups carried into hypercare (not launch-blocking)
 
-- Finance detail tabs (employee Nómina, project Facturas/Gastos) remain
-  placeholders — the standalone screens are canonical (scaffolding decision 23).
+- ~~Finance detail tabs~~ — DONE: employee Nómina, project Facturas/Gastos,
+  client Facturas and vendor Gastos are wired (read-only, gated; the standalone
+  screens stay canonical per scaffolding decision 23).
 - Settings sections for advance/expense categories and company cards.
 - `deployment_charges` → posted invoice/expense lines.
 - Invoice reminders are stored but sending is wired to the dispatcher only for
