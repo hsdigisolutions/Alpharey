@@ -933,6 +933,26 @@ return [
         'payrolls_count' => 'nóminas',
     ],
 
+    'two_factor' => [
+        'title' => 'Verificación en Dos Pasos',
+        'setup_title' => 'Configurar Verificación en Dos Pasos',
+        'setup_intro' => 'Escanee el código con su aplicación de autenticación (Google Authenticator, Authy) y escriba el código de 6 dígitos para confirmar.',
+        'manual_key' => 'O introduzca esta clave manualmente',
+        'code' => 'Código de 6 dígitos',
+        'confirm' => 'Confirmar',
+        'challenge_title' => 'Verificación en Dos Pasos',
+        'challenge_intro' => 'Introduzca el código de su aplicación de autenticación.',
+        'challenge_recovery_hint' => 'También puede usar uno de sus códigos de recuperación.',
+        'verify' => 'Verificar',
+        'invalid_code' => 'El código no es válido / The code is not valid',
+        'recovery_title' => 'Códigos de Recuperación',
+        'recovery_intro' => 'Guarde estos códigos en un lugar seguro. Cada uno sirve una sola vez y le permitirá entrar si pierde el teléfono. No volverán a mostrarse.',
+        'recovery_done' => 'Los he guardado',
+        'reset' => 'Restablecer 2FA',
+        'reset_done' => '2FA restablecido / Two-factor reset',
+        'reset_confirm' => '¿Restablecer la verificación en dos pasos de este usuario?',
+    ],
+
     'finance' => [
         'number' => 'Número',
         'party' => 'Contraparte',

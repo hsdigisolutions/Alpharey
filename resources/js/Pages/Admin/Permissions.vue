@@ -5,7 +5,8 @@
  * with presets and copy-from. Admin-role users bypass the matrix.
  */
 import { computed, reactive, ref, watch } from 'vue';
-import { Head, router, useForm } from '@inertiajs/vue3';
+import { Head, router, useForm, usePage } from '@inertiajs/vue3';
+import { t } from '@/translate';
 import AppIcon from '@/Components/AppIcon.vue';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import FormField from '@/Components/ui/FormField.vue';
@@ -106,6 +107,18 @@ function save() {
     });
 }
 
+// --- Second factor ---
+// Only a Super Admin holds the lost-phone lever (TwoFactorController::reset
+// enforces it server-side too — this only decides whether to draw the button).
+const page = usePage();
+const isSuperAdmin = computed(() => page.props.auth?.user?.role === 'super_admin');
+
+function resetTwoFactor(user) {
+    if (!window.confirm(`${user.name} — ${t('two_factor.reset_confirm')}`)) return;
+
+    router.post(`/admin/permissions/${user.id}/reset-2fa`, {}, { preserveScroll: true });
+}
+
 // --- User create/edit modal ---
 const showUserModal = ref(false);
 const editingUser = ref(null);
@@ -174,11 +187,21 @@ function submitUser() {
                             <span class="min-w-0 flex-1">
                                 <span class="block truncate text-sm font-medium">{{ user.name }}</span>
                                 <span class="block truncate text-xs text-muted">{{ user.email }}</span>
+                                <!-- Shown for a Super Admin, who sees every company's users -->
+                                <span v-if="user.company" class="block truncate text-xs text-muted">{{ user.company }}</span>
                             </span>
                             <VBadge v-if="!user.editable" status="accent">
                                 <Bilingual k="permissions.role_company_admin" inline />
                             </VBadge>
                             <span v-else-if="!user.active" class="h-2 w-2 rounded-full bg-status-danger" />
+                            <!-- Lost-phone lever: clears the second factor so the
+                                 user re-enrols on their next login. -->
+                            <button v-if="isSuperAdmin" type="button"
+                                class="rounded-sm p-1 text-muted hover:text-status-warn"
+                                :aria-label="`${user.name} — ${$t('two_factor.reset')}`"
+                                @click.stop="resetTwoFactor(user)">
+                                <AppIcon name="alert" class="h-3.5 w-3.5" />
+                            </button>
                             <button type="button" class="rounded-sm p-1 text-muted hover:text-ink"
                                 :aria-label="`${user.name} — edit`" @click.stop="openEdit(user)">
                                 <AppIcon name="edit" class="h-3.5 w-3.5" />

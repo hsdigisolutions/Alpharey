@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Carbon;
 
 /**
  * @property int $id
@@ -20,6 +21,9 @@ use Illuminate\Notifications\Notifiable;
  * @property int|null $company_id
  * @property string $locale
  * @property bool $active
+ * @property string|null $two_factor_secret
+ * @property list<string>|null $two_factor_recovery_codes
+ * @property Carbon|null $two_factor_confirmed_at
  */
 class User extends Authenticatable
 {
@@ -53,6 +57,9 @@ class User extends Authenticatable
     protected $hidden = [
         'password',
         'remember_token',
+        // Second-factor secrets — never serialised, never audited.
+        'two_factor_secret',
+        'two_factor_recovery_codes',
     ];
 
     /**
@@ -67,6 +74,9 @@ class User extends Authenticatable
             'password' => 'hashed',
             'role' => UserRole::class,
             'active' => 'boolean',
+            'two_factor_secret' => 'encrypted',
+            'two_factor_recovery_codes' => 'encrypted:array',
+            'two_factor_confirmed_at' => 'datetime',
         ];
     }
 

@@ -5,6 +5,7 @@ use App\Http\Middleware\EnsureAdmin;
 use App\Http\Middleware\EnsureSuperAdmin;
 use App\Http\Middleware\EnsureUserIsActive;
 use App\Http\Middleware\HandleInertiaRequests;
+use App\Http\Middleware\RequireTwoFactor;
 use App\Http\Middleware\SecurityHeaders;
 use App\Http\Middleware\SetLocale;
 use Illuminate\Foundation\Application;
@@ -35,6 +36,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'active' => EnsureUserIsActive::class,
             'admin' => EnsureAdmin::class,
             'super_admin' => EnsureSuperAdmin::class,
+            'two_factor' => RequireTwoFactor::class,
         ]);
 
         $middleware->redirectGuestsTo(fn () => route('login'));

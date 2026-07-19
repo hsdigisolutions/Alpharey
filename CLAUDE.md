@@ -11,6 +11,18 @@ clean · production Vite build working.**
 
 ### Phase 9 done so far
 
+- **Two-step verification, mandatory on every login** (client request): TOTP via an
+  authenticator app (`pragmarx/google2fa`), with 8 single-use recovery codes and a
+  Super-Admin reset lever on the Permission Matrix (the lost-phone path). The password
+  step grants NO session — it parks the user id in the session and redirects to
+  `/two-factor/challenge`; `TwoFactorController::verify` re-checks `active` there, so an
+  account disabled between the two steps cannot slip through. `RequireTwoFactor`
+  middleware confines an un-enrolled user to the setup screen. The secret and codes are
+  `encrypted` casts AND in `$hidden` — never serialised, never audited. The QR is an
+  inline `data:` SVG (the CSP forbids external images, and a QR service would be handed
+  the shared secret). **`UserFactory` enrols by default** — a factory user without a
+  second factor is half-configured and bounces off the middleware; enrolment tests use
+  the `pendingTwoFactor()` state.
 - **Security gate** (`docs/SECURITY_GATE.md`): 5 of the 7 release-blocking points
   (SECURITY.md §9) are green now — OWASP Top 10 walkthrough clean, tenancy suite
   (18 files), **permission fuzz** (`PermissionFuzzTest` — every Module × Action ×

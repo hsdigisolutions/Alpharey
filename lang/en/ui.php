@@ -934,6 +934,26 @@ return [
         'payrolls_count' => 'payrolls',
     ],
 
+    'two_factor' => [
+        'title' => 'Two-Step Verification',
+        'setup_title' => 'Set Up Two-Step Verification',
+        'setup_intro' => 'Scan the code with your authenticator app (Google Authenticator, Authy) and enter the 6-digit code to confirm.',
+        'manual_key' => 'Or enter this key manually',
+        'code' => '6-digit code',
+        'confirm' => 'Confirm',
+        'challenge_title' => 'Two-Step Verification',
+        'challenge_intro' => 'Enter the code from your authenticator app.',
+        'challenge_recovery_hint' => 'You can also use one of your recovery codes.',
+        'verify' => 'Verify',
+        'invalid_code' => 'El código no es válido / The code is not valid',
+        'recovery_title' => 'Recovery Codes',
+        'recovery_intro' => 'Store these somewhere safe. Each works once and lets you in if you lose your phone. They will not be shown again.',
+        'recovery_done' => 'I have saved them',
+        'reset' => 'Reset 2FA',
+        'reset_done' => '2FA restablecido / Two-factor reset',
+        'reset_confirm' => 'Reset two-step verification for this user?',
+    ],
+
     'finance' => [
         'number' => 'Number',
         'party' => 'Counterparty',

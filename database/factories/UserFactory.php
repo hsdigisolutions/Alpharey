@@ -5,9 +5,11 @@ namespace Database\Factories;
 use App\Enums\UserRole;
 use App\Models\Company;
 use App\Models\User;
+use App\Services\Auth\TwoFactorService;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
+use PragmaRX\Google2FA\Google2FA;
 
 /**
  * @extends Factory<User>
@@ -36,7 +38,27 @@ class UserFactory extends Factory
             'locale' => 'es',
             'active' => true,
             'remember_token' => Str::random(10),
+            // Two-step verification is mandatory (SECURITY.md §1), so a normal
+            // account IS an enrolled one — a factory user without it would be
+            // half-configured and bounce off RequireTwoFactor. Tests that
+            // exercise enrolment itself use the pendingTwoFactor() state.
+            'two_factor_secret' => (new Google2FA)->generateSecretKey(),
+            'two_factor_recovery_codes' => app(TwoFactorService::class)->generateRecoveryCodes(),
+            'two_factor_confirmed_at' => now(),
         ];
+    }
+
+    /**
+     * A user who has not set up their second factor yet — the state every real
+     * account starts in, and the one the enrolment flow is built for.
+     */
+    public function pendingTwoFactor(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'two_factor_secret' => null,
+            'two_factor_recovery_codes' => null,
+            'two_factor_confirmed_at' => null,
+        ]);
     }
 
     /**

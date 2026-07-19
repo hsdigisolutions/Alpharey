@@ -12,6 +12,7 @@ use App\Http\Controllers\AttendanceImportExportController;
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Auth\NewPasswordController;
 use App\Http\Controllers\Auth\PasswordResetLinkController;
+use App\Http\Controllers\Auth\TwoFactorController;
 use App\Http\Controllers\CallPanelController;
 use App\Http\Controllers\ClientContactController;
 use App\Http\Controllers\ClientController;
@@ -91,8 +92,22 @@ if (! app()->isProduction()) {
 | Authenticated (active accounts only)
 |--------------------------------------------------------------------------
 */
-Route::middleware(['auth', 'active'])->group(function (): void {
+// Two-step verification challenge: reachable WITHOUT a session, because the
+// user is parked between password and login (SECURITY.md §1).
+Route::middleware('guest')->group(function (): void {
+    Route::get('/two-factor/challenge', [TwoFactorController::class, 'challenge'])->name('two-factor.challenge');
+    Route::post('/two-factor/challenge', [TwoFactorController::class, 'verify'])
+        ->middleware('throttle:10,1')->name('two-factor.verify');
+});
+
+// 'two_factor' confines anyone who has not enrolled yet to the setup screen.
+Route::middleware(['auth', 'active', 'two_factor'])->group(function (): void {
     Route::post('/logout', [AuthenticatedSessionController::class, 'destroy'])->name('logout');
+
+    // Enrolment — RequireTwoFactor confines an un-enrolled user to these.
+    Route::get('/two-factor/setup', [TwoFactorController::class, 'setup'])->name('two-factor.setup');
+    Route::post('/two-factor/setup', [TwoFactorController::class, 'confirm'])->name('two-factor.confirm');
+    Route::get('/two-factor/recovery', [TwoFactorController::class, 'recovery'])->name('two-factor.recovery');
 
     // Screen 03 — Dashboard (Phase 8). Per selected company; SA without a
     // selection is redirected to Welcome to pick one.
@@ -301,6 +316,9 @@ Route::middleware(['auth', 'active'])->group(function (): void {
     Route::prefix('admin')->middleware('admin')->group(function (): void {
         Route::get('/permissions', [PermissionMatrixController::class, 'index'])->name('permissions.index');
         Route::put('/permissions/{user}', [PermissionMatrixController::class, 'update'])->name('permissions.update');
+        // Super Admin clears a user's second factor (lost phone) — guarded in
+        // the controller, not just by the admin group.
+        Route::post('/permissions/{user}/reset-2fa', [TwoFactorController::class, 'reset'])->name('two-factor.reset');
 
         Route::post('/users', [UserController::class, 'store'])->name('admin.users.store');
         Route::put('/users/{user}', [UserController::class, 'update'])->name('admin.users.update');
