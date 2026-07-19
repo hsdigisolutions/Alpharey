@@ -64,7 +64,7 @@ class ExpenseController extends Controller
             'employees' => Employee::query()->where('active', true)->orderBy('full_name')->get(['id', 'full_name']),
             'categories' => ExpenseCategory::query()->where('active', true)->orderBy('name')->get(['id', 'name']),
             'cards' => CompanyCard::query()->where('active', true)->orderBy('label')->get(['id', 'label', 'last_four']),
-            'types' => array_map(fn ($t) => $t->value, ExpenseType::cases()),
+            'types' => array_map(fn (ExpenseType $t): string => $t->value, ExpenseType::userSelectable()),
             'vatOptions' => VatRate::options(),
             'paymentMethods' => array_map(fn ($m) => $m->value, PaymentMethod::cases()),
             'can' => [
@@ -141,7 +141,9 @@ class ExpenseController extends Controller
     {
         return $request->validate([
             'number' => ['nullable', 'string', 'max:40'],
-            'type' => ['required', Rule::enum(ExpenseType::class)],
+            // Only the human-facing types: internal_deployment is posted by the
+            // cross-charge engine and must never arrive from a form.
+            'type' => ['required', Rule::in(array_map(fn (ExpenseType $t): string => $t->value, ExpenseType::userSelectable()))],
             'expense_category_id' => ['nullable', 'integer', Rule::exists('expense_categories', 'id')],
             'vendor_id' => ['nullable', 'integer', Rule::exists('vendors', 'id')],
             'project_id' => ['nullable', 'integer', Rule::exists('projects', 'id')],

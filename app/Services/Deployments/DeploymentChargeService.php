@@ -4,9 +4,13 @@ namespace App\Services\Deployments;
 
 use App\Enums\BillingMethod;
 use App\Enums\DeploymentRateType;
+use App\Enums\ExpenseType;
 use App\Models\Attendance;
 use App\Models\DeploymentCharge;
 use App\Models\EmployeeDeployment;
+use App\Models\Expense;
+use App\Models\Scopes\CompanyScope;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Option A cross-charge engine (PAYROLL_DEPLOYMENTS.md). The employee stays
@@ -70,21 +74,79 @@ class DeploymentChargeService
         $rate = (float) ($deployment->rate_during_deployment ?? 0);
         $split = (float) $deployment->split_pct / 100;
         $amount = round($units * $rate * $split, 2);
+        $periodEnd = $deployment->deployment_end?->toDateString() ?? now()->toDateString();
 
-        return DeploymentCharge::query()->updateOrCreate(
-            ['employee_deployment_id' => $deployment->id],
-            [
-                'home_company_id' => $deployment->home_company_id,
-                'host_company_id' => $deployment->host_company_id,
-                'project_id' => $deployment->project_id,
-                'period_start' => $deployment->deployment_start->toDateString(),
-                'period_end' => $deployment->deployment_end?->toDateString() ?? now()->toDateString(),
-                'units' => (string) $units,
-                'rate_type' => $deployment->rate_type->value,
-                'rate' => (string) $rate,
-                'amount' => (string) $amount,
-                'status' => 'pending',
-            ],
-        );
+        return DB::transaction(function () use ($deployment, $units, $rate, $amount, $periodEnd): DeploymentCharge {
+            $charge = DeploymentCharge::query()->updateOrCreate(
+                ['employee_deployment_id' => $deployment->id],
+                [
+                    'home_company_id' => $deployment->home_company_id,
+                    'host_company_id' => $deployment->host_company_id,
+                    'project_id' => $deployment->project_id,
+                    'period_start' => $deployment->deployment_start->toDateString(),
+                    'period_end' => $periodEnd,
+                    'units' => (string) $units,
+                    'rate_type' => $deployment->rate_type->value,
+                    'rate' => (string) $rate,
+                    'amount' => (string) $amount,
+                    'status' => 'pending',
+                ],
+            );
+
+            $this->postHostExpense($charge, $deployment, $amount, $periodEnd);
+
+            return $charge;
+        });
+    }
+
+    /**
+     * Post (or refresh) the internal expense the charge creates on the HOST
+     * company — PAYROLL_DEPLOYMENTS.md step 4.
+     *
+     * Three things make this safe:
+     *  - it is keyed off the charge's own expense_id, so re-running the engine
+     *    UPDATES the same expense instead of double-charging the host;
+     *  - company_id is set to the HOST explicitly, never from the session: the
+     *    person completing the deployment may be acting for the home company;
+     *  - no vendor and no VAT. It carries no vendor so it stays out of vendor
+     *    expense reports, and the client confirmed there is no inter-company
+     *    VAT invoice for now (DECISIONS.md / PAYROLL_DEPLOYMENTS.md decision 2).
+     */
+    private function postHostExpense(
+        DeploymentCharge $charge,
+        EmployeeDeployment $deployment,
+        float $amount,
+        string $periodEnd,
+    ): void {
+        $expense = $charge->expense_id !== null
+            ? Expense::query()->withoutGlobalScope(CompanyScope::class)->find($charge->expense_id)
+            : null;
+
+        $expense ??= new Expense;
+
+        $expense->fill([
+            'type' => ExpenseType::InternalDeployment->value,
+            'project_id' => $deployment->project_id,
+            'date' => $periodEnd,
+            'subtotal' => (string) $amount,
+            'vat_rate' => null,
+            'vat_amount' => '0',
+            'total' => (string) $amount,
+            // The employee relation drops all global scopes, so it resolves
+            // even for a soft-deleted worker — never null here.
+            'notes' => __('ui.deployments.charge_expense_note', [
+                'employee' => $deployment->employee->full_name,
+            ]),
+        ]);
+
+        // company_id is not mass assignable — and must be the HOST, not the
+        // acting company (Rule 1 opt-out for legitimate cross-company work).
+        $expense->company_id = $deployment->host_company_id;
+        $expense->save();
+
+        if ($charge->expense_id !== $expense->id) {
+            $charge->expense_id = $expense->id;
+            $charge->save();
+        }
     }
 }

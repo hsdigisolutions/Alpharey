@@ -1066,6 +1066,7 @@ return [
         'saved' => 'Desplazamiento registrado / Deployment saved',
         'completed' => 'Desplazamiento finalizado / Deployment completed',
         'cancelled' => 'Desplazamiento cancelado / Deployment cancelled',
+        'charge_expense_note' => 'Cargo interno por desplazamiento: :employee / Internal deployment charge: :employee',
         'overlap' => 'El empleado ya tiene un desplazamiento activo en esas fechas / Employee already has an active deployment in those dates',
         'employee' => 'Empleado',
         'home_company' => 'Empresa de origen',

@@ -17,6 +17,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property numeric-string $units
  * @property numeric-string $rate
  * @property numeric-string $amount
+ * @property int|null $expense_id the internal expense posted on the host
  */
 class DeploymentCharge extends Model
 {
