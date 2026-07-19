@@ -11,6 +11,7 @@ use App\Support\DocumentTypes;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -82,13 +83,20 @@ class DocumentController extends Controller
         $document->uploaded_by = $request->user()?->id;
         $document->version = $previous !== null ? $previous->version + 1 : 1;
         $document->setAttribute('file_path', $path);
-        $document->save();
 
-        if ($previous !== null) {
-            // is_current is not mass-assignable — set it directly
-            $previous->is_current = false;
-            $previous->save();
-        }
+        // Atomic version swap: the new row goes current and the prior one steps
+        // down together, so a failure between them can never leave a slot with
+        // two current rows. The file write stays outside — a stray file is
+        // harmless, a half-done swap is not.
+        DB::transaction(function () use ($document, $previous): void {
+            $document->save();
+
+            if ($previous !== null) {
+                // is_current is not mass-assignable — set it directly
+                $previous->is_current = false;
+                $previous->save();
+            }
+        });
 
         $audit->log('uploaded', $document, null, null, $document->type_key, 'documents');
 
