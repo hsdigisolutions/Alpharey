@@ -4,6 +4,8 @@ namespace App\Http\Requests\Attendance;
 
 use App\Enums\AttendanceMode;
 use App\Enums\AttendanceStatus;
+use App\Rules\OwnCompanyEmployee;
+use App\Rules\OwnCompanyProject;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
@@ -23,8 +25,10 @@ class StoreAttendanceRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'employee_id' => ['required', 'integer', Rule::exists('employees', 'id')],
-            'project_id' => ['nullable', 'integer', Rule::exists('projects', 'id')],
+            // Own employees plus workers deployed INTO this company (Phase 5) —
+            // any other id would write pay data into a foreign payroll.
+            'employee_id' => ['required', 'integer', new OwnCompanyEmployee(allowDeployed: true)],
+            'project_id' => ['nullable', 'integer', new OwnCompanyProject],
             'date' => ['required', 'date'],
             'mode' => ['required', Rule::enum(AttendanceMode::class)],
             'check_in' => ['nullable', 'date_format:H:i'],

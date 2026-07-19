@@ -8,6 +8,7 @@ use App\Enums\InvoiceSubType;
 use App\Enums\InvoiceType;
 use App\Enums\PaymentMethod;
 use App\Enums\VatRate;
+use App\Rules\OwnCompanyProject;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\Gate;
@@ -35,7 +36,7 @@ class StoreInvoiceRequest extends FormRequest
             'sub_type' => ['required', Rule::enum(InvoiceSubType::class)],
             'client_id' => ['nullable', 'integer', Rule::exists('clients', 'id')],
             'vendor_id' => ['nullable', 'integer', Rule::exists('vendors', 'id')],
-            'project_id' => ['nullable', 'integer', Rule::exists('projects', 'id')],
+            'project_id' => ['nullable', 'integer', new OwnCompanyProject],
             'invoice_date' => ['required', 'date'],
             'due_date' => ['nullable', 'date', 'after_or_equal:invoice_date'],
             'billing_type' => ['nullable', 'string', 'max:30'],

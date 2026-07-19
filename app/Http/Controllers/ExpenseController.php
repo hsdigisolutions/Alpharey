@@ -13,6 +13,8 @@ use App\Models\Expense;
 use App\Models\ExpenseCategory;
 use App\Models\Project;
 use App\Models\Vendor;
+use App\Rules\OwnCompanyEmployee;
+use App\Rules\OwnCompanyProject;
 use App\Support\CurrentCompany;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -146,8 +148,10 @@ class ExpenseController extends Controller
             'type' => ['required', Rule::in(array_map(fn (ExpenseType $t): string => $t->value, ExpenseType::userSelectable()))],
             'expense_category_id' => ['nullable', 'integer', Rule::exists('expense_categories', 'id')],
             'vendor_id' => ['nullable', 'integer', Rule::exists('vendors', 'id')],
-            'project_id' => ['nullable', 'integer', Rule::exists('projects', 'id')],
-            'employee_id' => ['nullable', 'integer', Rule::exists('employees', 'id')],
+            // Own-company only: an employee+project pair from another company
+            // would be paid back through THAT company's payroll.
+            'project_id' => ['nullable', 'integer', new OwnCompanyProject],
+            'employee_id' => ['nullable', 'integer', new OwnCompanyEmployee],
             'company_card_id' => ['nullable', 'integer', Rule::exists('company_cards', 'id')],
             'date' => ['required', 'date'],
             'due_date' => ['nullable', 'date'],

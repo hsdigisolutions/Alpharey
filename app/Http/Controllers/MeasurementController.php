@@ -5,6 +5,8 @@ namespace App\Http\Controllers;
 use App\Enums\MeasurementType;
 use App\Models\Measurement;
 use App\Models\Project;
+use App\Rules\OwnCompanyEmployee;
+use App\Rules\OwnCompanyProject;
 use App\Support\CurrentCompany;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
@@ -118,8 +120,10 @@ class MeasurementController extends Controller
     private function validated(Request $request): array
     {
         return $request->validate([
-            'project_id' => ['required', 'integer', Rule::exists('projects', 'id')],
-            'employee_id' => ['nullable', 'integer', Rule::exists('employees', 'id')],
+            // Own-company only: an approved measurement for another company's
+            // per-meter worker would land in THAT company's payroll.
+            'project_id' => ['required', 'integer', new OwnCompanyProject],
+            'employee_id' => ['nullable', 'integer', new OwnCompanyEmployee],
             'date' => ['required', 'date'],
             'quantity' => ['required', 'numeric', 'min:0', 'max:9999999'],
             'unit' => ['nullable', 'string', 'max:20'],

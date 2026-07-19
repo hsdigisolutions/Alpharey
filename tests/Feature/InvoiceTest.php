@@ -238,3 +238,25 @@ it('downloads an invoice PDF', function (): void {
     $this->actingAs($this->admin)->get("/invoices/{$invoice->id}/pdf")
         ->assertOk()->assertHeader('content-type', 'application/pdf');
 });
+
+it('refuses to delete an invoice that has payments', function (): void {
+    // payments cascade on invoice delete — without this guard, removing a
+    // paid invoice would erase the record of money actually received.
+    $this->actingAs($this->admin)->post('/invoices', invoicePayload());
+    $invoice = Invoice::query()->firstOrFail();
+
+    $this->actingAs($this->admin)->post("/invoices/{$invoice->id}/payments", [
+        'amount' => 100, 'payment_date' => '2026-07-10',
+    ]);
+
+    $this->actingAs($this->admin)->delete("/invoices/{$invoice->id}")
+        ->assertSessionHasErrors('invoice');
+    expect(Invoice::query()->whereKey($invoice->id)->exists())->toBeTrue();
+
+    // Remove the payment (audited, status re-derived) and the delete goes through.
+    $payment = $invoice->payments()->firstOrFail();
+    $this->actingAs($this->admin)->delete("/payments/{$payment->id}");
+    $this->actingAs($this->admin)->delete("/invoices/{$invoice->id}")->assertRedirect();
+
+    expect(Invoice::query()->whereKey($invoice->id)->exists())->toBeFalse();
+});

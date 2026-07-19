@@ -223,9 +223,13 @@ class PayrollService
     {
         [$start, $end] = $this->bounds($month);
 
+        // Approved claims only — the same rule as per-meter measurements: an
+        // unvetted claim is not yet money. The approve gate exists so someone
+        // checks the receipt BEFORE the payroll run pays it back.
         return round((float) Expense::query()->withoutGlobalScopes()
             ->where('employee_id', $employeeId)
             ->whereNotNull('project_id')
+            ->where('approved', true)
             ->whereBetween('date', [$start, $end])
             ->sum('total'), 2);
     }
@@ -242,6 +246,7 @@ class PayrollService
             ->where('employee_id', $employeeId)
             ->whereNull('project_id')
             ->where('is_reimbursable', true)
+            ->where('approved', true)
             ->whereBetween('date', [$start, $end])
             ->sum('total'), 2);
     }

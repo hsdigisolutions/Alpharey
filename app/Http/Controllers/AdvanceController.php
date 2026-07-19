@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Enums\AdvanceStatus;
 use App\Models\Advance;
 use App\Models\AdvanceCategory;
+use App\Rules\OwnCompanyEmployee;
 use App\Support\CurrentCompany;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -24,7 +25,9 @@ class AdvanceController extends Controller
         Gate::authorize('payroll.create');
 
         $validated = $request->validate([
-            'employee_id' => ['required', 'integer', Rule::exists('employees', 'id')],
+            // Ownership is validity: an id from another company would deduct
+            // from THAT company's payslip (payroll gathers per employee).
+            'employee_id' => ['required', 'integer', new OwnCompanyEmployee],
             'advance_category_id' => ['nullable', 'integer', Rule::exists('advance_categories', 'id')],
             'amount' => ['required', 'numeric', 'min:0.01', 'max:999999'],
             'reason' => ['nullable', 'string', 'max:1000'],

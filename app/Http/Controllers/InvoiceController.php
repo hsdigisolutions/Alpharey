@@ -24,6 +24,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response as HttpResponse;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 use Maatwebsite\Excel\Facades\Excel;
@@ -157,6 +158,15 @@ class InvoiceController extends Controller
     public function destroy(Invoice $invoice): RedirectResponse
     {
         Gate::authorize('invoices.delete');
+
+        // payments cascade on delete: removing an invoice with money received
+        // would erase the payment records too. Delete the payments first —
+        // each one audited and re-deriving the status — then the invoice.
+        if ($invoice->payments()->exists()) {
+            throw ValidationException::withMessages([
+                'invoice' => __('ui.invoices.delete_has_payments'),
+            ]);
+        }
 
         $invoice->delete();
 

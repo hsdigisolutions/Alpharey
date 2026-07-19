@@ -950,6 +950,14 @@ return [
         'other' => 'Other',
     ],
 
+    // Cross-tenant reference guards (OwnCompanyEmployee / OwnCompanyProject).
+    // Bilingual in one string: these surface as inline form errors.
+    'validation' => [
+        'no_company_context' => 'Seleccione una empresa primero / Select a company first',
+        'employee_not_of_company' => 'El empleado no pertenece a esta empresa / The employee does not belong to this company',
+        'project_not_of_company' => 'La obra no pertenece a esta empresa / The project does not belong to this company',
+    ],
+
     'two_factor' => [
         'title' => 'Two-Step Verification',
         'setup_title' => 'Set Up Two-Step Verification',
@@ -1131,6 +1139,7 @@ return [
     ],
 
     'invoices' => [
+        'delete_has_payments' => 'La factura tiene pagos registrados — elimínelos primero / The invoice has recorded payments — remove them first',
         'title' => 'Invoices',
         'new' => 'New Invoice',
         'edit' => 'Edit Invoice',

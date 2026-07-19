@@ -67,6 +67,11 @@ it('feeds a worker project expense into that month payroll', function (): void {
         'subtotal' => 75,
     ]))->assertRedirect();
 
+    // Payroll pays back APPROVED claims only (the same rule as per-meter
+    // measurements) — approve through the real endpoint first.
+    $expense = Expense::withoutGlobalScopes()->firstOrFail();
+    $this->actingAs($this->admin)->post("/expenses/{$expense->id}/approve", ['approved' => true]);
+
     app(PayrollService::class)->calculateMonth($this->company->id, '2026-06');
 
     $payroll = Payroll::withoutGlobalScopes()->where('employee_id', $employee->id)->firstOrFail();

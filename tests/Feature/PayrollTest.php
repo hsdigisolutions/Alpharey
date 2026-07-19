@@ -136,16 +136,27 @@ it('pulls worker project expenses into the month', function (): void {
     $employee = hourlyEmployee(rate: 20, days: 1, hours: 8); // 160 gross
     $project = Project::factory()->forCompany($this->company)->create();
 
-    // Tagged to employee + project -> worker project expense
-    Expense::factory()->create([
+    // Tagged to employee + project -> worker project expense (approved)
+    $projectExpense = Expense::factory()->create([
         'company_id' => $this->company->id, 'employee_id' => $employee->id,
         'project_id' => $project->id, 'date' => $this->month.'-05', 'total' => '40',
     ]);
-    // Tagged to employee only + reimbursable -> reimbursement
-    Expense::factory()->create([
+    // Tagged to employee only + reimbursable -> reimbursement (approved)
+    $reimbursement = Expense::factory()->create([
         'company_id' => $this->company->id, 'employee_id' => $employee->id,
         'project_id' => null, 'is_reimbursable' => true,
         'date' => $this->month.'-06', 'total' => '10',
+    ]);
+    // approved is not mass-assignable (set by the approve endpoint) — set direct
+    foreach ([$projectExpense, $reimbursement] as $e) {
+        $e->approved = true;
+        $e->save();
+    }
+    // A claim nobody has approved yet must NOT be paid back — same rule as
+    // unapproved measurements.
+    Expense::factory()->create([
+        'company_id' => $this->company->id, 'employee_id' => $employee->id,
+        'project_id' => $project->id, 'date' => $this->month.'-07', 'total' => '999',
     ]);
 
     app(PayrollService::class)->calculateMonth($this->company->id, $this->month);
