@@ -31,7 +31,10 @@ class EmployeeController extends Controller
     {
         Gate::authorize('employees.view');
 
-        $query = $filter->apply($request)->with('documents');
+        // Eager-load both relations the row shape reads (documents for the
+        // compliance dot, company for its name) — without `company` the list
+        // fires one query per employee (found by the Phase 9 N+1 guard).
+        $query = $filter->apply($request)->with(['documents', 'company:id,name']);
 
         $sort = in_array($request->string('sort')->value(), self::SORTABLE, true)
             ? $request->string('sort')->value()
