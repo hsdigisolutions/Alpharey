@@ -5,6 +5,7 @@
  */
 import { reactive, ref, watch } from 'vue';
 import { Head, router } from '@inertiajs/vue3';
+import { ensureCompanySelected } from '@/composables/useCompanyGate';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import ProjectFormModal from '@/Components/Projects/ProjectFormModal.vue';
 import VBadge from '@/Components/ui/VBadge.vue';
@@ -45,6 +46,12 @@ function sortBy(key) { filters.dir = filters.sort === key && filters.dir === 'as
 
 const showForm = ref(false);
 
+function openCreate() {
+    // A project is owned by one company; pick one first when browsing all.
+    if (!ensureCompanySelected()) return;
+    showForm.value = true;
+}
+
 const statusBadge = { active: 'ok', in_progress: 'info', completed: 'ok', cancelled: 'danger', on_hold: 'warn' };
 const priorityBadge = { low: 'neutral', medium: 'info', high: 'warn', urgent: 'danger' };
 const kanbanColumns = ['active', 'in_progress', 'completed', 'cancelled', 'on_hold'];
@@ -72,7 +79,7 @@ const columns = [
                     <Bilingual k="projects.view_kanban" inline />
                 </button>
             </div>
-            <VButton v-if="can.create" icon="plus" @click="showForm = true"><Bilingual k="projects.new" inline /></VButton>
+            <VButton v-if="can.create" icon="plus" @click="openCreate"><Bilingual k="projects.new" inline /></VButton>
         </VPageHeader>
 
         <div class="flex flex-wrap items-end gap-2 pb-3">

@@ -8,6 +8,7 @@
  */
 import { reactive, ref } from 'vue';
 import { Head, router, useForm } from '@inertiajs/vue3';
+import { ensureCompanySelected } from '@/composables/useCompanyGate';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import FormField from '@/Components/ui/FormField.vue';
 import VBadge from '@/Components/ui/VBadge.vue';
@@ -68,6 +69,9 @@ const itemBlank = {
 const itemForm = useForm({ ...itemBlank });
 
 function openItem(item = null) {
+    // Only creating a new item needs a company; editing one is fine.
+    if (item === null && !ensureCompanySelected()) return;
+
     editingItem.value = item;
     Object.keys(itemBlank).forEach((k) => { itemForm[k] = item?.[k] ?? itemBlank[k]; });
     itemForm.clearErrors();

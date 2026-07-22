@@ -83,10 +83,10 @@ class ProjectController extends Controller
             ],
             'vatOptions' => VatRate::options(),
             'can' => [
-                // Creating needs a company to own the project; a Super Admin
-                // browsing all companies has none — don't offer a dead end
-                // (decision 27, same as invoices/expenses).
-                'create' => Gate::allows('projects.create') && app(CurrentCompany::class)->id() !== null,
+                // Permission-only: shown to anyone who may create. The Vue gate
+                // routes a company-less Super Admin to the picker before the
+                // form; store() still guards company_id server-side.
+                'create' => Gate::allows('projects.create'),
                 'edit' => Gate::allows('projects.edit'),
                 'delete' => Gate::allows('projects.delete'),
                 'export' => Gate::allows('projects.export'),

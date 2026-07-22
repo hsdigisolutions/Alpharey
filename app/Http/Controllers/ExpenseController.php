@@ -15,7 +15,6 @@ use App\Models\Project;
 use App\Models\Vendor;
 use App\Rules\OwnCompanyEmployee;
 use App\Rules\OwnCompanyProject;
-use App\Support\CurrentCompany;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -70,7 +69,10 @@ class ExpenseController extends Controller
             'vatOptions' => VatRate::options(),
             'paymentMethods' => array_map(fn ($m) => $m->value, PaymentMethod::cases()),
             'can' => [
-                'create' => Gate::allows('expenses.create') && app(CurrentCompany::class)->id() !== null,
+                // Permission-only: shown to anyone who may create. The Vue gate
+                // routes a company-less Super Admin to the picker; the store's
+                // contextCompanyId() is the server-side safety net.
+                'create' => Gate::allows('expenses.create'),
                 'edit' => Gate::allows('expenses.edit'),
                 'delete' => Gate::allows('expenses.delete'),
                 'approve' => Gate::allows('expenses.approve'),

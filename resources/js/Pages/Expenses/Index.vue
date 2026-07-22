@@ -11,6 +11,7 @@
  */
 import { computed, reactive, ref } from 'vue';
 import { Head, router, useForm } from '@inertiajs/vue3';
+import { ensureCompanySelected } from '@/composables/useCompanyGate';
 import AppIcon from '@/Components/AppIcon.vue';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import FormField from '@/Components/ui/FormField.vue';
@@ -66,6 +67,9 @@ const blank = {
 const form = useForm({ ...blank });
 
 function openCreate() {
+    // Expenses are company-owned; a company-less Super Admin picks one first.
+    if (!ensureCompanySelected()) return;
+
     editingId.value = null;
     Object.keys(blank).forEach((k) => { form[k] = blank[k]; });
     form.clearErrors();

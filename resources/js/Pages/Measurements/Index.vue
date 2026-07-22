@@ -5,6 +5,7 @@
  */
 import { reactive, ref } from 'vue';
 import { Head, router, useForm } from '@inertiajs/vue3';
+import { ensureCompanySelected } from '@/composables/useCompanyGate';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import FormField from '@/Components/ui/FormField.vue';
 import VBadge from '@/Components/ui/VBadge.vue';
@@ -40,6 +41,9 @@ const blank = { project_id: '', employee_id: '', date: null, quantity: null, uni
 const form = useForm({ ...blank });
 
 function open(m = null) {
+    // Only creating needs a company context; editing an existing row is fine.
+    if (m === null && !ensureCompanySelected()) return;
+
     editing.value = m;
     Object.keys(blank).forEach((k) => { form[k] = m?.[k] ?? blank[k]; });
     form.clearErrors();

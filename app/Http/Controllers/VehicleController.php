@@ -11,7 +11,6 @@ use App\Models\Vehicle;
 use App\Models\VehicleMaintenanceHistory;
 use App\Services\Vehicles\VehicleCompliance;
 use App\Services\Vehicles\VehicleService;
-use App\Support\CurrentCompany;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -55,9 +54,10 @@ class VehicleController extends Controller
             'ownerships' => array_map(fn (VehicleOwnership $o): string => $o->value, VehicleOwnership::cases()),
             'fuelTypes' => array_map(fn (FuelType $f): string => $f->value, FuelType::cases()),
             'can' => [
-                // No active company = nothing to create the vehicle in, so the
-                // button is not offered (decision 27).
-                'create' => Gate::allows('vehicles.create') && app(CurrentCompany::class)->id() !== null,
+                // Permission-only: shown to anyone who may create. The Vue gate
+                // routes a company-less Super Admin to the picker; store() sets
+                // company_id from the resolved context server-side.
+                'create' => Gate::allows('vehicles.create'),
                 'edit' => Gate::allows('vehicles.edit'),
                 'delete' => Gate::allows('vehicles.delete'),
             ],

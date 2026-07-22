@@ -8,6 +8,7 @@
  */
 import { computed, reactive, ref } from 'vue';
 import { Head, router, useForm } from '@inertiajs/vue3';
+import { ensureCompanySelected } from '@/composables/useCompanyGate';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import FormField from '@/Components/ui/FormField.vue';
 import VBadge from '@/Components/ui/VBadge.vue';
@@ -51,6 +52,9 @@ const blank = {
 const form = useForm({ ...blank });
 
 function open() {
+    // The host of a deployment is the acting company; pick one first.
+    if (!ensureCompanySelected()) return;
+
     Object.keys(blank).forEach((k) => { form[k] = blank[k]; });
     availableEmployees.value = [];
     form.clearErrors();

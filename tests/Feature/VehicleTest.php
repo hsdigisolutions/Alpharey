@@ -331,9 +331,13 @@ it('sends a super admin with no company selected to Welcome instead of failing',
     expect(Vehicle::query()->withoutGlobalScopes()->where('plate_number', '0000XXX')->exists())->toBeFalse();
 });
 
-it('does not offer the create button when no company is selected', function (): void {
+it('offers the create button to a Super Admin even with no company selected', function (): void {
+    // The button is now permission-only (a support report: hiding it read as
+    // "the feature is missing"). The Vue gate routes a company-less Super Admin
+    // to the picker on click, and store() still redirects server-side — proven
+    // by the test above. So the button IS offered.
     $superAdmin = User::factory()->create(['role' => UserRole::SuperAdmin, 'company_id' => null]);
 
     $this->actingAs($superAdmin)->get('/vehicles')
-        ->assertInertia(fn ($page) => $page->where('can.create', false));
+        ->assertInertia(fn ($page) => $page->where('can.create', true));
 });

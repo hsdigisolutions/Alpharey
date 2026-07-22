@@ -7,6 +7,7 @@
  */
 import { computed, reactive, ref, watch } from 'vue';
 import { Head, router } from '@inertiajs/vue3';
+import { ensureCompanySelected } from '@/composables/useCompanyGate';
 import AppIcon from '@/Components/AppIcon.vue';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import EmployeeFormModal from '@/Components/Employees/EmployeeFormModal.vue';
@@ -145,6 +146,13 @@ function importFile(files) {
 
 const showForm = ref(false);
 
+function openCreate() {
+    // A new employee joins the acting company; a company-less Super Admin
+    // picks one first (otherwise the store would have no company to file into).
+    if (!ensureCompanySelected()) return;
+    showForm.value = true;
+}
+
 const docDot = { ok: 'ok', warn: 'warn', danger: 'danger', neutral: 'neutral', exempt: 'neutral' };
 </script>
 
@@ -160,7 +168,7 @@ const docDot = { ok: 'ok', warn: 'warn', danger: 'danger', neutral: 'neutral', e
                 @click="showImport = true">
                 <span class="hidden sm:inline"><Bilingual k="employees.import" inline /></span>
             </VButton>
-            <VButton v-if="can.create" icon="plus" @click="showForm = true">
+            <VButton v-if="can.create" icon="plus" @click="openCreate">
                 <Bilingual k="employees.new" inline />
             </VButton>
         </VPageHeader>

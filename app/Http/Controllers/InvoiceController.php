@@ -17,7 +17,6 @@ use App\Models\Project;
 use App\Models\Vendor;
 use App\Services\Audit\AuditLogger;
 use App\Services\Invoices\InvoiceService;
-use App\Support\CurrentCompany;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
@@ -97,9 +96,11 @@ class InvoiceController extends Controller
             'paymentStatuses' => array_map(fn ($s) => $s->value, PaymentStatus::cases()),
             'statuses' => array_map(fn ($s) => $s->value, InvoiceStatus::cases()),
             'can' => [
-                // Creating needs a company to issue the invoice; a Super Admin
-                // browsing all companies has none, so don't offer a dead end.
-                'create' => Gate::allows('invoices.create') && app(CurrentCompany::class)->id() !== null,
+                // Permission-only: the button is shown to anyone who may create.
+                // A Super Admin browsing all companies has no company context —
+                // the Vue gate routes them to pick one, and the store's
+                // ResolvesCompanyContext is the server-side safety net.
+                'create' => Gate::allows('invoices.create'),
                 'edit' => Gate::allows('invoices.edit'),
                 'delete' => Gate::allows('invoices.delete'),
                 'export' => Gate::allows('invoices.export'),

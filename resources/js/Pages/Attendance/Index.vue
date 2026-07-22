@@ -6,6 +6,7 @@
  */
 import { computed, ref } from 'vue';
 import { Head, router, usePage } from '@inertiajs/vue3';
+import { ensureCompanySelected } from '@/composables/useCompanyGate';
 import AppIcon from '@/Components/AppIcon.vue';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import AttendanceModal from '@/Components/Attendance/AttendanceModal.vue';
@@ -56,6 +57,14 @@ const showModal = ref(false);
 const modalRecord = ref(null);
 const preset = ref({ employee: null, date: null });
 
+function openCreate() {
+    // Attendance is logged against the acting company; pick one first.
+    if (!ensureCompanySelected()) return;
+    modalRecord.value = null;
+    preset.value = {};
+    showModal.value = true;
+}
+
 function openCell(employeeId, day) {
     if (!props.can.edit && !props.can.create) return;
     const cell = props.grid[employeeId]?.[day];
@@ -90,7 +99,7 @@ const monthLabel = computed(() => {
     <AppLayout>
         <VPageHeader k="attendance.title">
             <VButton v-if="can.export" variant="secondary" size="sm" icon="export" @click="exportMonth">Excel</VButton>
-            <VButton v-if="can.create" icon="plus" @click="modalRecord = null; preset = {}; showModal = true">
+            <VButton v-if="can.create" icon="plus" @click="openCreate">
                 <Bilingual k="attendance.new" inline />
             </VButton>
         </VPageHeader>

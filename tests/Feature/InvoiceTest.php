@@ -225,6 +225,19 @@ it('sends a super admin with no company selected to Welcome instead of failing',
     expect(Invoice::withoutGlobalScopes()->count())->toBe(0);
 });
 
+it('shows the create button on both tabs even with no company selected', function (): void {
+    // Support report: as a Super Admin browsing all companies the New Invoice
+    // button was hidden on both Ventas and Gastos, reading as a broken page.
+    // It is permission-gated now; the store still redirects to Welcome (above).
+    $superAdmin = User::factory()->superAdmin()->create();
+
+    $this->actingAs($superAdmin)->get('/invoices?tab=sale')
+        ->assertInertia(fn (Assert $p) => $p->where('can.create', true));
+
+    $this->actingAs($superAdmin)->get('/invoices?tab=expense')
+        ->assertInertia(fn (Assert $p) => $p->where('can.create', true));
+});
+
 it('denies invoices without view permission', function (): void {
     $user = User::factory()->forCompany($this->company)->create();
 

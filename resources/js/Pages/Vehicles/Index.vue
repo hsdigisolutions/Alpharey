@@ -6,6 +6,7 @@
  */
 import { reactive, ref } from 'vue';
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
+import { ensureCompanySelected } from '@/composables/useCompanyGate';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import FormField from '@/Components/ui/FormField.vue';
 import VButton from '@/Components/ui/VButton.vue';
@@ -49,6 +50,8 @@ const blank = {
 const form = useForm({ ...blank });
 
 function open() {
+    if (!ensureCompanySelected()) return;
+
     Object.keys(blank).forEach((k) => { form[k] = blank[k]; });
     form.clearErrors();
     showModal.value = true;

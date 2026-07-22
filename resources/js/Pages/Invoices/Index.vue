@@ -10,6 +10,7 @@
  */
 import { computed, reactive, ref } from 'vue';
 import { Head, router, useForm } from '@inertiajs/vue3';
+import { ensureCompanySelected } from '@/composables/useCompanyGate';
 import AppIcon from '@/Components/AppIcon.vue';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import FormField from '@/Components/ui/FormField.vue';
@@ -54,6 +55,12 @@ const filters = reactive({
     to: props.filters.to ?? '',
 });
 
+// Built in the script (URLSearchParams is a real global here, unlike in a
+// template binding) — the "export the filtered view" URL for the header link.
+const exportUrl = computed(
+    () => `/invoices/export?${new URLSearchParams({ tab: props.tab, ...filters }).toString()}`,
+);
+
 function apply(extra = {}) {
     router.get('/invoices', { tab: props.tab, ...filters, ...extra }, { preserveScroll: true, preserveState: true });
 }
@@ -76,6 +83,10 @@ const blank = {
 const form = useForm({ ...structuredClone(blank) });
 
 function openCreate() {
+    // An invoice belongs to one company; a Super Admin browsing all companies
+    // is sent to the picker first (no-op for everyone else).
+    if (!ensureCompanySelected()) return;
+
     editingId.value = null;
     Object.assign(form, structuredClone(blank));
     form.type = props.tab; // the tab you are on decides sale vs expense
@@ -147,8 +158,12 @@ const columns = computed(() => [
     <Head :title="$t('invoices.title')" />
     <AppLayout>
         <VPageHeader k="invoices.title">
-            <!-- Exports the CURRENT filtered view — same query as the table -->
-            <a v-if="can.export" :href="`/invoices/export?${new URLSearchParams({ tab, ...filters }).toString()}`"
+            <!-- Exports the CURRENT filtered view — same query as the table.
+                 The href is a computed: `new URLSearchParams` cannot live in a
+                 template binding (Vue prefixes non-whitelisted globals with the
+                 component proxy, so it became $.URLSearchParams → a render crash
+                 that took the whole header, New Invoice button included, down). -->
+            <a v-if="can.export" :href="exportUrl"
                 class="inline-flex items-center gap-2 rounded-md border border-line bg-surface-raised px-3.5 py-2 text-sm font-medium text-ink hover:bg-surface-hover">
                 <AppIcon name="export" class="h-4 w-4" /> Excel
             </a>
