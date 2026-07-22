@@ -6,6 +6,7 @@
  */
 import { ref } from 'vue';
 import { Head, router, useForm } from '@inertiajs/vue3';
+import { t } from '@/translate';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import EmployeeFormModal from '@/Components/Employees/EmployeeFormModal.vue';
 import DocumentsPanel from '@/Components/Documents/DocumentsPanel.vue';
@@ -16,6 +17,7 @@ import VButton from '@/Components/ui/VButton.vue';
 import VCard from '@/Components/ui/VCard.vue';
 import VDateInput from '@/Components/ui/VDateInput.vue';
 import VEmptyState from '@/Components/ui/VEmptyState.vue';
+import VInput from '@/Components/ui/VInput.vue';
 import VModal from '@/Components/ui/VModal.vue';
 import VSelect from '@/Components/ui/VSelect.vue';
 import VTabs from '@/Components/ui/VTabs.vue';
@@ -30,6 +32,7 @@ const props = defineProps({
     notes: { type: Array, required: true },
     calls: { type: Array, required: true },
     payroll: { type: Array, default: () => [] },
+    appAccess: { type: Object, default: () => ({ email: null, active: false }) },
     canSeeWages: { type: Boolean, default: false },
     can: { type: Object, required: true },
 });
@@ -37,6 +40,27 @@ const props = defineProps({
 const tab = ref('info');
 const showEdit = ref(false);
 const showDelete = ref(false);
+
+// --- Mobile app access (Worker PWA) ---
+const showAppAccess = ref(false);
+
+const appAccessForm = useForm({ email: '', password: '' });
+
+function submitAppAccess() {
+    appAccessForm.post(`/employees/${props.employee.id}/app-access`, {
+        preserveScroll: true,
+        onSuccess: () => {
+            showAppAccess.value = false;
+            appAccessForm.reset();
+        },
+    });
+}
+
+function revokeAppAccess() {
+    if (!window.confirm(t('worker_access.revoke_confirm'))) return;
+
+    router.delete(`/employees/${props.employee.id}/app-access`, { preserveScroll: true });
+}
 
 // Authoritative from the server (payroll.view || employees.edit), not a guess.
 const canSeeWages = props.canSeeWages;
@@ -153,6 +177,33 @@ function destroy() {
                             <Bilingual k="employees.delete_title" inline />
                         </VButton>
                     </div>
+                </VCard>
+
+                <!-- Mobile app access: the login this worker uses to check in
+                     on site. Most employees never need one. -->
+                <VCard v-if="can.edit" title-key="worker_access.title">
+                    <p class="mb-3 text-xs text-muted"><Bilingual k="worker_access.hint" /></p>
+
+                    <div v-if="appAccess.email" class="space-y-3">
+                        <div class="flex items-center justify-between gap-3 rounded-md bg-surface-sunken px-3 py-2">
+                            <span class="min-w-0 truncate text-sm">{{ appAccess.email }}</span>
+                            <VBadge :status="appAccess.active ? 'ok' : 'neutral'">
+                                <Bilingual :k="appAccess.active ? 'worker_access.active' : 'worker_access.inactive'" inline />
+                            </VBadge>
+                        </div>
+                        <div class="flex gap-2">
+                            <VButton variant="secondary" size="sm" @click="showAppAccess = true">
+                                <Bilingual k="worker_access.reset" inline />
+                            </VButton>
+                            <VButton variant="danger" size="sm" @click="revokeAppAccess">
+                                <Bilingual k="worker_access.revoke" inline />
+                            </VButton>
+                        </div>
+                    </div>
+
+                    <VButton v-else size="sm" icon="plus" @click="showAppAccess = true">
+                        <Bilingual k="worker_access.grant" inline />
+                    </VButton>
                 </VCard>
             </div>
 
@@ -278,6 +329,31 @@ function destroy() {
             <template #footer>
                 <VButton variant="ghost" @click="showDelete = false"><Bilingual k="common.cancel" inline /></VButton>
                 <VButton variant="danger" @click="destroy"><Bilingual k="employees.delete_title" inline /></VButton>
+            </template>
+        </VModal>
+
+        <!-- Grant / reset mobile app access -->
+        <VModal :open="showAppAccess"
+            :title-key="appAccess.email ? 'worker_access.reset' : 'worker_access.grant'"
+            size="sm" @close="showAppAccess = false">
+            <form id="app-access-form" class="space-y-4" @submit.prevent="submitAppAccess">
+                <p class="text-xs text-muted"><Bilingual k="worker_access.modal_hint" /></p>
+
+                <FormField k="auth.email" :error="appAccessForm.errors.email" required>
+                    <VInput v-model="appAccessForm.email" type="email" autocomplete="off" />
+                </FormField>
+
+                <FormField k="auth.password" :error="appAccessForm.errors.password" required>
+                    <VInput v-model="appAccessForm.password" type="text" autocomplete="new-password" />
+                </FormField>
+
+                <p class="text-xs text-muted"><Bilingual k="worker_access.password_hint" /></p>
+            </form>
+            <template #footer>
+                <VButton variant="ghost" @click="showAppAccess = false"><Bilingual k="common.cancel" inline /></VButton>
+                <VButton type="submit" form="app-access-form" :loading="appAccessForm.processing">
+                    <Bilingual k="common.save" inline />
+                </VButton>
             </template>
         </VModal>
     </AppLayout>

@@ -117,6 +117,12 @@ class EmployeeController extends Controller
                 'daily_wage' => $canSeeWages ? $employee->getAttribute('daily_wage') : null,
                 'per_meter_rate' => $canSeeWages ? $employee->getAttribute('per_meter_rate') : null,
             ]),
+            // Mobile PWA access (Worker PWA). Only whether a login exists and
+            // which address it uses — never anything about the credential.
+            'appAccess' => [
+                'email' => $employee->user?->email,
+                'active' => (bool) $employee->user?->active,
+            ],
             'documents' => $this->documentsPayload($employee, $status),
             'documentSets' => DocumentTypes::employee(),
             'notes' => $employee->employeeNotes()->with('author:id,name')->orderByDesc('noted_at')->get()

@@ -958,10 +958,31 @@ return [
         'project_not_of_company' => 'La obra no pertenece a esta empresa / The project does not belong to this company',
     ],
 
+    // Granting an employee a login for the mobile app (employee detail).
+    'worker_access' => [
+        'title' => 'App Access',
+        'hint' => 'Lets this employee check in from their phone.',
+        'grant' => 'Give access',
+        'reset' => 'Change password',
+        'revoke' => 'Revoke access',
+        'revoke_confirm' => 'Revoke this employee\'s app access?',
+        'active' => 'Active',
+        'inactive' => 'Inactive',
+        'modal_hint' => 'The employee signs in with this email and password. No two-step verification needed.',
+        'password_hint' => 'Write the password down — it will not be shown again. Minimum 8 characters.',
+        'granted' => 'Acceso concedido / Access granted',
+        'revoked' => 'Acceso retirado / Access revoked',
+        'email_taken' => 'Ese correo ya está en uso / That email is already in use',
+    ],
+
     // Worker PWA — the mobile app used on site.
     'worker' => [
         'title' => 'My Workday',
         'coming_soon' => 'Check-in will be available shortly',
+        'install' => 'Install the app',
+        'install_hint' => 'Install it on your phone to open it like an app.',
+        // iOS has no install API — the manual route is the only honest option.
+        'install_ios' => 'To install: tap Share, then "Add to Home Screen".',
     ],
 
     'two_factor' => [

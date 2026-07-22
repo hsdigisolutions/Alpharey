@@ -957,10 +957,31 @@ return [
         'project_not_of_company' => 'La obra no pertenece a esta empresa / The project does not belong to this company',
     ],
 
+    // Granting an employee a login for the mobile app (employee detail).
+    'worker_access' => [
+        'title' => 'Acceso a la App',
+        'hint' => 'Permite a este empleado fichar desde su móvil.',
+        'grant' => 'Dar acceso',
+        'reset' => 'Cambiar contraseña',
+        'revoke' => 'Retirar acceso',
+        'revoke_confirm' => '¿Retirar el acceso a la app de este empleado?',
+        'active' => 'Activo',
+        'inactive' => 'Inactivo',
+        'modal_hint' => 'El empleado entrará con este correo y contraseña. No necesita verificación en dos pasos.',
+        'password_hint' => 'Anote la contraseña: no volverá a mostrarse. Mínimo 8 caracteres.',
+        'granted' => 'Acceso concedido / Access granted',
+        'revoked' => 'Acceso retirado / Access revoked',
+        'email_taken' => 'Ese correo ya está en uso / That email is already in use',
+    ],
+
     // Worker PWA — the mobile app used on site.
     'worker' => [
         'title' => 'Mi Jornada',
         'coming_soon' => 'El fichaje estará disponible en breve',
+        'install' => 'Instalar la aplicación',
+        'install_hint' => 'Instálela en su teléfono para abrirla como una app.',
+        // iOS has no install API — the manual route is the only honest option.
+        'install_ios' => 'Para instalarla: pulse Compartir y luego «Añadir a pantalla de inicio».',
     ],
 
     'two_factor' => [

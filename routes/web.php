@@ -46,6 +46,7 @@ use App\Http\Controllers\VehicleController;
 use App\Http\Controllers\VendorController;
 use App\Http\Controllers\WelcomeController;
 use App\Http\Controllers\Worker\WorkerController;
+use App\Http\Controllers\WorkerAccessController;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -114,6 +115,14 @@ Route::middleware(['auth', 'active', 'worker'])->prefix('worker')->group(functio
     Route::get('/', [WorkerController::class, 'home'])->name('worker.home');
 });
 
+/*
+ * The offline fallback the service worker precaches and serves when the
+ * network is gone. Deliberately OUTSIDE the auth group: it is a static page
+ * with no data on it, and requiring a session would defeat the point — the
+ * device cannot reach the server to validate one.
+ */
+Route::view('/worker/offline', 'worker-offline')->name('worker.offline');
+
 // 'not_worker' bounces a worker account back to their app rather than
 // leaving them at a 403 on a CRM screen they can never use.
 Route::middleware(['auth', 'active', 'two_factor', 'not_worker'])->group(function (): void {
@@ -154,6 +163,9 @@ Route::middleware(['auth', 'active', 'two_factor', 'not_worker'])->group(functio
     Route::post('/employees/{employee}/notes', [EmployeeNoteController::class, 'store'])->name('employees.notes.store');
     Route::delete('/employees/{employee}/notes/{note}', [EmployeeNoteController::class, 'destroy'])->name('employees.notes.destroy');
     Route::post('/employees/{employee}/calls', [EmployeeCallLogController::class, 'store'])->name('employees.calls.store');
+    // Mobile PWA access for this employee (Worker PWA, Phase B)
+    Route::post('/employees/{employee}/app-access', [WorkerAccessController::class, 'store'])->name('employees.app-access.store');
+    Route::delete('/employees/{employee}/app-access', [WorkerAccessController::class, 'destroy'])->name('employees.app-access.destroy');
 
     // Unified documents (employee + company surfaces in Phase 2)
     Route::post('/documents', [DocumentController::class, 'store'])->name('documents.store');

@@ -4,6 +4,7 @@ import { createApp, h } from 'vue';
 import { createInertiaApp } from '@inertiajs/vue3';
 import { ZiggyVue } from 'ziggy-js';
 import Bilingual from '@/Components/Bilingual.vue';
+import { initPwa } from '@/pwa';
 import { t, tPair } from '@/translate';
 
 createInertiaApp({
@@ -31,3 +32,6 @@ createInertiaApp({
         color: '#d4956a',
     },
 });
+
+// Registers the service worker on /worker pages only (see pwa.js).
+initPwa();
