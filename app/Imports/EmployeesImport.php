@@ -63,7 +63,12 @@ class EmployeesImport implements ToCollection, WithHeadingRow
                 continue;
             }
 
-            $this->service->create($validator->validated());
+            // Create from the fully-mapped $data, NOT $validator->validated():
+            // validated() returns only the keys that carry rules, so nif,
+            // mobile, city, department and designation — real columns in the
+            // template — were silently dropped on every import. The model's
+            // $fillable is the guard on what actually persists.
+            $this->service->create($data);
             $this->imported++;
         }
     }

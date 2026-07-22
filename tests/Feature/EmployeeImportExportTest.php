@@ -65,6 +65,27 @@ it('imports employees from an uploaded spreadsheet', function (): void {
     expect(Employee::query()->whereIn('full_name', ['Juan Nuevo', 'Ana Nueva'])->count())->toBe(2);
 });
 
+it('keeps every mapped column on import, not just the validated ones', function (): void {
+    // validated() drops keys without rules — so nif/mobile/city/department/
+    // designation, all real template columns, used to vanish on import.
+    $csv = "nombre,nif,movil,ciudad,departamento,puesto,tipo_salario,tarifa\n"
+        ."Carlos Pérez,12345678Z,600111222,Sevilla,Obra,Oficial 1ª,hourly,14\n";
+
+    $file = UploadedFile::fake()->createWithContent('empleados.csv', $csv);
+
+    $this->actingAs($this->admin)->post('/employees/import', ['file' => $file])->assertRedirect();
+
+    $employee = Employee::query()->where('full_name', 'Carlos Pérez')->firstOrFail();
+
+    expect($employee->nif)->toBe('12345678Z')
+        ->and($employee->mobile)->toBe('600111222')
+        ->and($employee->city)->toBe('Sevilla')
+        ->and($employee->department)->toBe('Obra')
+        ->and($employee->designation)->toBe('Oficial 1ª')
+        // The NIF blind index must be built too — searchable after import.
+        ->and($employee->nif_hash)->toBe(Employee::hashNif('12345678Z'));
+});
+
 it('reports invalid import rows while importing the valid ones', function (): void {
     $csv = "nombre,email\n"
         .",missing-name@ejemplo.es\n"        // no name → failure
