@@ -35,6 +35,15 @@ class RequireTwoFactor
             return $next($request);
         }
 
+        // Workers are exempt (client decision 2026-07-22): the PWA is used on
+        // site by crews who cannot keep an authenticator app in sync, and the
+        // realistic alternative to exempting them was nobody using the app.
+        // Their reach is the narrowest in the system — their own attendance
+        // and nothing else — which is what makes the trade acceptable.
+        if ($user->isWorker()) {
+            return $next($request);
+        }
+
         if (app(TwoFactorService::class)->isEnrolled($user)) {
             return $next($request);
         }

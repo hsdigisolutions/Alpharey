@@ -958,6 +958,12 @@ return [
         'project_not_of_company' => 'La obra no pertenece a esta empresa / The project does not belong to this company',
     ],
 
+    // Worker PWA — the mobile app used on site.
+    'worker' => [
+        'title' => 'My Workday',
+        'coming_soon' => 'Check-in will be available shortly',
+    ],
+
     'two_factor' => [
         'title' => 'Two-Step Verification',
         'setup_title' => 'Set Up Two-Step Verification',

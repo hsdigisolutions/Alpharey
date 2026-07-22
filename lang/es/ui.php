@@ -957,6 +957,12 @@ return [
         'project_not_of_company' => 'La obra no pertenece a esta empresa / The project does not belong to this company',
     ],
 
+    // Worker PWA — the mobile app used on site.
+    'worker' => [
+        'title' => 'Mi Jornada',
+        'coming_soon' => 'El fichaje estará disponible en breve',
+    ],
+
     'two_factor' => [
         'title' => 'Verificación en Dos Pasos',
         'setup_title' => 'Configurar Verificación en Dos Pasos',

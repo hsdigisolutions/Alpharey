@@ -9,6 +9,7 @@ use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Carbon;
@@ -109,5 +110,21 @@ class User extends Authenticatable
     public function isCompanyAdmin(): bool
     {
         return $this->role === UserRole::CompanyAdmin;
+    }
+
+    public function isWorker(): bool
+    {
+        return $this->role === UserRole::Worker;
+    }
+
+    /**
+     * The workforce record this login belongs to — set only for worker
+     * accounts, which is what lets a phone punch land on the right payslip.
+     *
+     * @return HasOne<Employee, $this>
+     */
+    public function employee(): HasOne
+    {
+        return $this->hasOne(Employee::class);
     }
 }

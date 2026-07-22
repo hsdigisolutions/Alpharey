@@ -29,6 +29,13 @@ class ModulePermissions
             return true;
         }
 
+        // A worker reaches the PWA and nothing else. Refusing the role here
+        // rather than relying on an empty permission row means a matrix entry
+        // created for one by mistake still grants nothing.
+        if ($user->isWorker()) {
+            return false;
+        }
+
         if ($user->company_id === null) {
             return false;
         }

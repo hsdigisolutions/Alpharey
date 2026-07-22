@@ -18,6 +18,7 @@ use Illuminate\Support\Carbon;
 /**
  * @property int $id
  * @property int $company_id
+ * @property int|null $user_id
  * @property string $employee_code
  * @property string $full_name
  * @property string|null $nif
@@ -107,6 +108,18 @@ class Employee extends Model
         }
 
         return hash_hmac('sha256', strtoupper(preg_replace('/\s+/', '', $nif) ?? ''), (string) config('app.key'));
+    }
+
+    /**
+     * The login this worker uses for the mobile PWA, when they have one.
+     * Most employees never do — office staff use the CRM, and only site
+     * workers are given an account.
+     *
+     * @return BelongsTo<User, $this>
+     */
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class);
     }
 
     /**

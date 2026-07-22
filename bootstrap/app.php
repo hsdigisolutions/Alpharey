@@ -1,9 +1,11 @@
 <?php
 
 use App\Http\Middleware\ApplySessionTimeout;
+use App\Http\Middleware\DenyWorkers;
 use App\Http\Middleware\EnsureAdmin;
 use App\Http\Middleware\EnsureSuperAdmin;
 use App\Http\Middleware\EnsureUserIsActive;
+use App\Http\Middleware\EnsureWorker;
 use App\Http\Middleware\HandleInertiaRequests;
 use App\Http\Middleware\RequireTwoFactor;
 use App\Http\Middleware\SecurityHeaders;
@@ -37,6 +39,9 @@ return Application::configure(basePath: dirname(__DIR__))
             'admin' => EnsureAdmin::class,
             'super_admin' => EnsureSuperAdmin::class,
             'two_factor' => RequireTwoFactor::class,
+            // The two halves of the CRM/PWA wall (Worker PWA, Phase A)
+            'worker' => EnsureWorker::class,
+            'not_worker' => DenyWorkers::class,
         ]);
 
         $middleware->redirectGuestsTo(fn () => route('login'));

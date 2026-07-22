@@ -30,7 +30,10 @@ class AuthenticatedSessionController extends Controller
         // drop the guard, remember only who is pending, and let the challenge
         // complete the login. A user who has not enrolled yet stays logged in —
         // RequireTwoFactor confines them to the setup screen.
-        if ($twoFactor->isEnrolled($user)) {
+        // Workers never go through the challenge (client decision) — even if an
+        // account once held a secret from a previous role, the exemption is by
+        // role, so it cannot strand a crew member at a TOTP prompt on site.
+        if ($user !== null && ! $user->isWorker() && $twoFactor->isEnrolled($user)) {
             $remember = $request->boolean('remember');
 
             Auth::guard('web')->logout();
@@ -45,7 +48,13 @@ class AuthenticatedSessionController extends Controller
 
         $audit->log('login', null, null, null, null, 'auth');
 
-        // Post-login routing by role (REQUIREMENTS.md Screen 01)
+        // Post-login routing by role (REQUIREMENTS.md Screen 01). A worker has
+        // no CRM access at all, so they land straight in the PWA — sending them
+        // to /dashboard would only bounce them off the worker guard.
+        if ($user !== null && $user->isWorker()) {
+            return redirect()->route('worker.home');
+        }
+
         return redirect()->intended(
             $user !== null && $user->isSuperAdmin() ? route('welcome') : route('dashboard'),
         );

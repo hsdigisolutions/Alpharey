@@ -45,6 +45,7 @@ use App\Http\Controllers\TodayController;
 use App\Http\Controllers\VehicleController;
 use App\Http\Controllers\VendorController;
 use App\Http\Controllers\WelcomeController;
+use App\Http\Controllers\Worker\WorkerController;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -101,7 +102,21 @@ Route::middleware('guest')->group(function (): void {
 });
 
 // 'two_factor' confines anyone who has not enrolled yet to the setup screen.
-Route::middleware(['auth', 'active', 'two_factor'])->group(function (): void {
+/*
+|--------------------------------------------------------------------------
+| Worker PWA — the mobile app, and the ONLY thing a worker account can reach
+|--------------------------------------------------------------------------
+| 'worker' proves the account is a worker AND linked to an employee record.
+| Two-step verification is deliberately absent from this group (client
+| decision): crews sign in with email + password only.
+*/
+Route::middleware(['auth', 'active', 'worker'])->prefix('worker')->group(function (): void {
+    Route::get('/', [WorkerController::class, 'home'])->name('worker.home');
+});
+
+// 'not_worker' bounces a worker account back to their app rather than
+// leaving them at a 403 on a CRM screen they can never use.
+Route::middleware(['auth', 'active', 'two_factor', 'not_worker'])->group(function (): void {
     Route::post('/logout', [AuthenticatedSessionController::class, 'destroy'])->name('logout');
 
     // Enrolment — RequireTwoFactor confines an un-enrolled user to these.
