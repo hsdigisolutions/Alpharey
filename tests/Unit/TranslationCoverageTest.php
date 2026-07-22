@@ -141,3 +141,22 @@ it('never renders a sentence through the nowrap inline variant', function (): vo
 
     expect($offenders)->toBe([], 'Long string in <Bilingual inline> — drop "inline" so it can wrap');
 });
+
+it('always hands FormField and VModal their real translation-key prop', function (): void {
+    // FormField takes `k`, VModal takes `title-key`. Passing anything else
+    // (label-key=…) silently drops the label — found live on both 2FA screens,
+    // where the code field rendered without its name.
+    $offenders = [];
+
+    foreach (vueFiles() as $path => $source) {
+        if (preg_match('/<FormField[^>]*\blabel-key=/', $source)) {
+            $offenders[] = basename($path).': FormField label-key= (use k=)';
+        }
+
+        if (preg_match('/<VModal[^>]*\s:?k=/', $source)) {
+            $offenders[] = basename($path).': VModal k= (use title-key=)';
+        }
+    }
+
+    expect($offenders)->toBe([]);
+});

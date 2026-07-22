@@ -19,6 +19,9 @@ const props = defineProps({
 const page = usePage();
 
 function lookup(locale, key) {
+    // A missing key must degrade to an empty label, never a render error —
+    // one bad prop must not blank the screen it sits on.
+    if (typeof key !== 'string' || key === '') return '';
     const dict = page.props.lang?.[locale] ?? {};
     return key.split('.').reduce((node, part) => (node ?? {})[part], dict) ?? key;
 }

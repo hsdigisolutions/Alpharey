@@ -31,7 +31,7 @@ function submit() {
             </p>
 
             <form class="mt-5 space-y-4" @submit.prevent="submit">
-                <FormField label-key="two_factor.code" :error="form.errors.code" required>
+                <FormField k="two_factor.code" :error="form.errors.code" required>
                     <VInput v-model="form.code" inputmode="numeric" autocomplete="one-time-code"
                         autofocus maxlength="11" />
                 </FormField>
