@@ -1,6 +1,6 @@
-# Go-live runbook — VertoCRM (Verto5) → alpharey.com
+# Go-live runbook — AlphaReyCRM (AlphaRey) → alpharey.com
 
-Phase 9. The ordered steps to take VertoCRM live on the Mukhost cPanel VPS,
+Phase 9. The ordered steps to take AlphaReyCRM live on the Mukhost cPanel VPS,
 replacing the legacy system. Read `LAUNCH_READINESS.md` first — do not start
 until its go/no-go rule is green. Every command runs over SSH on the server
 unless noted. `$DEPLOY_PATH` is the app root; the document root points at

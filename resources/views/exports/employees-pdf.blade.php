@@ -13,7 +13,7 @@
     </style>
 </head>
 <body>
-    <h1>Empleados / Employees — Verto5</h1>
+    <h1>Empleados / Employees — AlphaRey</h1>
     <p class="sub">{{ now()->format('d/m/Y H:i') }} · {{ $employees->count() }} registros / records</p>
 
     <table>

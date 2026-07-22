@@ -1,9 +1,9 @@
 ---
-name: verto5-design
-description: Verto5 CRM design system — warm Claude.ai-inspired palette, tokens, typography, component rules, dark mode, mobile rules. Read BEFORE touching any UI file (Vue components, Tailwind classes, CSS variables, any visual element). No exceptions.
+name: alpharey-design
+description: AlphaRey CRM design system — warm Claude.ai-inspired palette, tokens, typography, component rules, dark mode, mobile rules. Read BEFORE touching any UI file (Vue components, Tailwind classes, CSS variables, any visual element). No exceptions.
 ---
 
-# SKILL: Verto5 CRM — Design System
+# SKILL: AlphaRey CRM — Design System
 
 ## What this skill is for
 Every time you touch any UI file in this project — Vue components,

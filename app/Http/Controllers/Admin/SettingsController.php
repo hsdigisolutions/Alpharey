@@ -32,7 +32,7 @@ class SettingsController extends Controller
 
         return Inertia::render('Admin/Settings', [
             'general' => [
-                'app_name' => $settings->get('general.app_name', 'Verto5'),
+                'app_name' => $settings->get('general.app_name', 'AlphaRey'),
                 'default_locale' => $settings->get('general.default_locale', 'es'),
                 'timezone' => $settings->get('general.timezone', 'Europe/Madrid'),
                 'session_timeout_minutes' => $settings->get('general.session_timeout_minutes', 120),
@@ -92,11 +92,11 @@ class SettingsController extends Controller
             $mail->applyIfConfigured();
 
             Mail::raw(
-                "Correo de prueba de Verto5 — la configuración SMTP funciona.\n"
-                .'Verto5 test email — the SMTP configuration works.',
+                "Correo de prueba de AlphaRey — la configuración SMTP funciona.\n"
+                .'AlphaRey test email — the SMTP configuration works.',
                 function ($message) use ($request): void {
                     $message->to($request->validated('to'))
-                        ->subject('Prueba de correo / Mail test — Verto5');
+                        ->subject('Prueba de correo / Mail test — AlphaRey');
                 },
             );
         } catch (\Throwable $e) {

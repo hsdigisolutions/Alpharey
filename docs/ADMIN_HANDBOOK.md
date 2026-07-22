@@ -1,4 +1,4 @@
-# VertoCRM (Verto5) — Administrator handbook
+# AlphaReyCRM (AlphaRey) — Administrator handbook
 
 Phase 9. For Super Admins and Company Admins running the system day to day. It
 covers the controls that are not obvious from the screens: roles, the

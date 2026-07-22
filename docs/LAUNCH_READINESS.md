@@ -1,4 +1,4 @@
-# Launch readiness — VertoCRM (Verto5) on alpharey.com
+# Launch readiness — AlphaReyCRM (AlphaRey) on alpharey.com
 
 Phase 9. This is the single checklist a release manager reads before flipping
 the switch. It maps every launch gate to its current state and points at the

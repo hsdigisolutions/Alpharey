@@ -1,6 +1,6 @@
 <script setup>
 /**
- * Verto5 line-icon set (D1): 1.7px stroke on a 24px grid. Icons never appear
+ * AlphaRey line-icon set (D1): 1.7px stroke on a 24px grid. Icons never appear
  * without a text label except inside the icon-button pattern, which must
  * provide an aria-label.
  */

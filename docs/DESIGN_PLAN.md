@@ -1,4 +1,4 @@
-# VertoCRM — Design Plan
+# AlphaReyCRM — Design Plan
 
 Design direction: minimal and professional, in the spirit of Claude.ai / Notion / Linear.
 Simple surfaces, clear typography, generous white space. Light and dark mode from day one.
@@ -15,7 +15,7 @@ where each one lands.
 
 ## Phase D0 — Inputs and brand intake (2–3 days)
 
-- Brand confirmed: **Verto5**. Companies use dummy placeholder names + initials avatars
+- Brand confirmed: **AlphaRey**. Companies use dummy placeholder names + initials avatars
   until real names, CIFs, and logos arrive — design must treat company name/logo as
   fully dynamic (admin-editable from Settings), never baked into artwork
 - Reference board: agreed examples from Claude.ai / Notion / Linear — what "minimal"

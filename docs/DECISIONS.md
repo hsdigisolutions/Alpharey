@@ -1,4 +1,4 @@
-# VertoCRM — Confirmed Decisions Log
+# AlphaReyCRM — Confirmed Decisions Log
 
 Client answers received 2026-07-12 (Section 15 + follow-ups) and 2026-07-13 (stack,
 hosting, VAT). This file is the record of agreed decisions; changes to any of these must
@@ -31,7 +31,7 @@ GitHub → SSH → Mukhost deploys.
 
 | Topic | Decision |
 |---|---|
-| Brand name | **Verto5** |
+| Brand name | **AlphaRey** |
 | Company names | Dummy/placeholder names at build time. Real names, CIFs, and logos provided later. **Company name, logo, and details must be editable by admin from the UI with no code change.** |
 | Domain | **alpharey.com** — the new system replaces the old system currently live there. Clean cutover at go-live; old system taken down. |
 | Session timeout | 120 minutes default, changeable by Company Admin in Settings |

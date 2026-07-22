@@ -11,25 +11,25 @@ use Illuminate\Database\Seeder;
 class DatabaseSeeder extends Seeder
 {
     /**
-     * Local development seed: the Verto5 brand, 5 dummy companies
-     * (placeholder names per DECISIONS.md — real names/CIFs/logos arrive
-     * later and are editable from Settings), and one user per role.
+     * Local development seed: the AlphaRey brand, the group's 5 REAL companies
+     * (client-confirmed 2026-07-22, replacing the Empresa Uno…Cinco
+     * placeholders), and one user per role.
      *
      * Local credentials (never used in production):
-     *   admin@verto5.local / password             Super Admin
-     *   empresa1.admin@verto5.local / password    Company Admin (Empresa Uno)
-     *   empresa1.user@verto5.local / password     Custom user (Empresa Uno)
+     *   admin@alpharey.local / password             Super Admin
+     *   empresa1.admin@alpharey.local / password    Company Admin (Contalex 365)
+     *   empresa1.user@alpharey.local / password     Custom user (Contalex 365)
      */
     public function run(): void
     {
-        $brand = Brand::query()->firstOrCreate(['name' => 'Verto5']);
+        $brand = Brand::query()->firstOrCreate(['name' => 'AlphaRey']);
 
         $provinces = [
-            'Empresa Uno' => 'Madrid',
-            'Empresa Dos' => 'Barcelona',
-            'Empresa Tres' => 'Valencia',
-            'Empresa Cuatro' => 'Sevilla',
-            'Empresa Cinco' => 'Bizkaia',
+            'Contalex 365' => 'Madrid',
+            'Alovar' => 'Barcelona',
+            'Shizukani' => 'Valencia',
+            'Grupo Verto 5' => 'Sevilla',
+            'Malaga' => 'Bizkaia',
         ];
 
         $companies = collect($provinces)->map(
@@ -40,7 +40,7 @@ class DatabaseSeeder extends Seeder
         );
 
         User::query()->firstOrCreate(
-            ['email' => 'admin@verto5.local'],
+            ['email' => 'admin@alpharey.local'],
             [
                 'name' => 'Super Admin',
                 'password' => 'password',
@@ -52,9 +52,9 @@ class DatabaseSeeder extends Seeder
         $first = $companies->first();
 
         User::query()->firstOrCreate(
-            ['email' => 'empresa1.admin@verto5.local'],
+            ['email' => 'empresa1.admin@alpharey.local'],
             [
-                'name' => 'Admin Empresa Uno',
+                'name' => 'Admin Contalex 365',
                 'password' => 'password',
                 'role' => UserRole::CompanyAdmin,
                 'company_id' => $first->id,
@@ -63,9 +63,9 @@ class DatabaseSeeder extends Seeder
         );
 
         User::query()->firstOrCreate(
-            ['email' => 'empresa1.user@verto5.local'],
+            ['email' => 'empresa1.user@alpharey.local'],
             [
-                'name' => 'Usuario Empresa Uno',
+                'name' => 'Usuario Contalex 365',
                 'password' => 'password',
                 'role' => UserRole::User,
                 'company_id' => $first->id,

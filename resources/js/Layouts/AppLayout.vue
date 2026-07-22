@@ -1,6 +1,6 @@
 <script setup>
 /**
- * The application shell (D3 / REQUIREMENTS.md §6, verto5-design skill):
+ * The application shell (D3 / REQUIREMENTS.md §6, alpharey-design skill):
  *  - dark sidebar (#1F1E1B both modes), 10 primary items, no sub-menus,
  *    collapsible 240px ⇄ 56px
  *  - secondary modules behind the "apps" menu
@@ -121,8 +121,11 @@ function switchLocale() {
         <aside class="fixed inset-y-0 start-0 z-30 hidden h-screen flex-col bg-sidebar transition-[width] duration-200 md:flex"
             :class="collapsed ? 'w-14' : 'w-60'">
             <div class="flex items-center gap-2.5 border-b border-white/5 px-3 py-4" :class="collapsed ? 'justify-center px-0' : 'px-4'">
-                <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-accent text-sm font-bold text-on-accent shadow-sm">V5</span>
-                <span v-if="!collapsed" class="text-base font-semibold tracking-tight text-white">Verto<span class="text-accent">5</span></span>
+                <!-- Text wordmark until the real AlphaRey logo asset arrives:
+                     an "AR" monogram badge plus Alpha|Rey with the accent on
+                     the second half, mirroring the old treatment. -->
+                <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-accent text-sm font-bold text-on-accent shadow-sm">AR</span>
+                <span v-if="!collapsed" class="text-base font-semibold tracking-tight text-white">Alpha<span class="text-accent">Rey</span></span>
             </div>
 
             <nav class="flex-1 space-y-0.5 overflow-y-auto px-2 pb-2">

@@ -100,7 +100,7 @@ class CompanyController extends Controller
 
     public function store(StoreCompanyRequest $request): RedirectResponse
     {
-        $brand = Brand::query()->firstOrCreate(['name' => 'Verto5']);
+        $brand = Brand::query()->firstOrCreate(['name' => 'AlphaRey']);
 
         Company::query()->create($request->validated() + ['brand_id' => $brand->id]);
 

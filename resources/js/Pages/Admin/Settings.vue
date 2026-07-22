@@ -52,7 +52,7 @@ const mailForm = useForm({
     username: props.mail?.username ?? '',
     password: '',
     encryption: props.mail?.encryption ?? 'tls',
-    from_name: props.mail?.from_name ?? 'Verto5',
+    from_name: props.mail?.from_name ?? 'AlphaRey',
     from_address: props.mail?.from_address ?? '',
 });
 

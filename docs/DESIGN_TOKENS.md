@@ -1,6 +1,6 @@
-# Verto5 Design Tokens — D1 (warm Claude.ai palette)
+# AlphaRey Design Tokens — D1 (warm Claude.ai palette)
 
-Single source of rules: **`.claude/skills/verto5-design/SKILL.md`** (the design skill —
+Single source of rules: **`.claude/skills/alpharey-design/SKILL.md`** (the design skill —
 read it before touching any UI file). Values live in `resources/css/app.css`
 (`@theme` block + `.dark` overrides). Components reference **semantic names only** —
 never raw hex. Retheming is a token edit, not a refactor.

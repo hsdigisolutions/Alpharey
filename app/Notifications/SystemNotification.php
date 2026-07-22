@@ -33,7 +33,7 @@ class SystemNotification extends Notification
     public function toMail(object $notifiable): MailMessage
     {
         $message = (new MailMessage)
-            ->subject($this->payload['title_es'].' / '.$this->payload['title_en'].' — Verto5')
+            ->subject($this->payload['title_es'].' / '.$this->payload['title_en'].' — AlphaRey')
             ->greeting('Hola / Hello')
             ->line($this->payload['title_es'])
             ->line($this->payload['title_en']);
@@ -42,7 +42,7 @@ class SystemNotification extends Notification
             $message->line($this->payload['entity']);
         }
 
-        return $message->salutation('Verto5');
+        return $message->salutation('AlphaRey');
     }
 
     /**

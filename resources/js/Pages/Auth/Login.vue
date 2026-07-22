@@ -41,7 +41,9 @@ function switchLocale() {
 
         <div class="w-full max-w-sm">
             <div class="mb-8 flex flex-col items-center gap-3">
-                <span class="flex h-12 w-12 items-center justify-center rounded-lg bg-accent text-lg font-bold text-on-accent">V5</span>
+                <!-- Text wordmark until the real AlphaRey logo asset arrives -->
+                <span class="flex h-12 w-12 items-center justify-center rounded-lg bg-accent text-lg font-bold text-on-accent">AR</span>
+                <span class="text-lg font-semibold tracking-tight text-ink">Alpha<span class="text-accent">Rey</span></span>
                 <h1 class="text-center text-xl font-semibold">
                     <Bilingual k="auth.welcome_back" class="items-center" />
                 </h1>

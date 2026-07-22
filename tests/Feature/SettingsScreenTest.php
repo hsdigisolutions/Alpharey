@@ -29,7 +29,7 @@ it('ships SMTP settings to the super admin only', function (): void {
 
 it('updates general settings', function (): void {
     $this->actingAs($this->companyAdmin)->put('/admin/settings/general', [
-        'app_name' => 'Verto5 CRM',
+        'app_name' => 'AlphaRey CRM',
         'default_locale' => 'es',
         'timezone' => 'Europe/Madrid',
         'session_timeout_minutes' => 45,
@@ -37,7 +37,7 @@ it('updates general settings', function (): void {
 
     $settings = app(SettingsService::class);
 
-    expect($settings->get('general.app_name'))->toBe('Verto5 CRM')
+    expect($settings->get('general.app_name'))->toBe('AlphaRey CRM')
         ->and($settings->get('general.session_timeout_minutes'))->toBe(45);
 });
 
@@ -51,7 +51,7 @@ it('applies the configured session timeout on the next request', function (): vo
 
 it('rejects out-of-range session timeouts', function (): void {
     $this->actingAs($this->companyAdmin)->put('/admin/settings/general', [
-        'app_name' => 'Verto5',
+        'app_name' => 'AlphaRey',
         'default_locale' => 'es',
         'timezone' => 'Europe/Madrid',
         'session_timeout_minutes' => 2,
@@ -63,7 +63,7 @@ it('forbids company admins from touching SMTP settings', function (): void {
         'host' => 'smtp.alpharey.com',
         'port' => 587,
         'encryption' => 'tls',
-        'from_name' => 'Verto5',
+        'from_name' => 'AlphaRey',
         'from_address' => 'noreply@alpharey.com',
     ])->assertForbidden();
 });
@@ -75,7 +75,7 @@ it('stores the SMTP password encrypted and never echoes it back', function (): v
         'username' => 'noreply@alpharey.com',
         'password' => 'super-secret',
         'encryption' => 'tls',
-        'from_name' => 'Verto5',
+        'from_name' => 'AlphaRey',
         'from_address' => 'noreply@alpharey.com',
     ])->assertRedirect();
 
@@ -94,13 +94,13 @@ it('keeps the stored password when the field is left blank', function (): void {
     $this->actingAs($this->superAdmin)->put('/admin/settings/mail', [
         'host' => 'smtp.alpharey.com', 'port' => 587, 'username' => 'x',
         'password' => 'first-secret', 'encryption' => 'tls',
-        'from_name' => 'Verto5', 'from_address' => 'noreply@alpharey.com',
+        'from_name' => 'AlphaRey', 'from_address' => 'noreply@alpharey.com',
     ]);
 
     $this->put('/admin/settings/mail', [
         'host' => 'smtp.alpharey.com', 'port' => 465, 'username' => 'x',
         'password' => '', 'encryption' => 'ssl',
-        'from_name' => 'Verto5', 'from_address' => 'noreply@alpharey.com',
+        'from_name' => 'AlphaRey', 'from_address' => 'noreply@alpharey.com',
     ]);
 
     expect(Crypt::decryptString(app(SettingsService::class)->get('mail.password')))->toBe('first-secret');

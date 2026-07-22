@@ -8,7 +8,7 @@
 return [
 
     'app' => [
-        'name' => 'Verto5',
+        'name' => 'AlphaRey',
     ],
 
     // Role names as shown in the header user menu.

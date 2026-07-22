@@ -7,7 +7,7 @@ import Bilingual from '@/Components/Bilingual.vue';
 import { t, tPair } from '@/translate';
 
 createInertiaApp({
-    title: (title) => (title ? `${title} — Verto5` : 'Verto5'),
+    title: (title) => (title ? `${title} — AlphaRey` : 'AlphaRey'),
     resolve: (name) => {
         const pages = import.meta.glob('./Pages/**/*.vue', { eager: true });
         return pages[`./Pages/${name}.vue`];

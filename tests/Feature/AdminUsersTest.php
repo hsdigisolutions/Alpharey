@@ -13,14 +13,14 @@ beforeEach(function (): void {
 it('creates a user inside the admin company, ignoring any company_id input', function (): void {
     $this->actingAs($this->admin)->post('/admin/users', [
         'name' => 'Nuevo Usuario',
-        'email' => 'nuevo@verto5.local',
+        'email' => 'nuevo@alpharey.local',
         'password' => 'secret-123',
         'role' => 'user',
         'locale' => 'es',
         'company_id' => $this->companyB->id, // malicious input — must be ignored
     ])->assertRedirect();
 
-    $user = User::query()->where('email', 'nuevo@verto5.local')->firstOrFail();
+    $user = User::query()->where('email', 'nuevo@alpharey.local')->firstOrFail();
 
     expect($user->company_id)->toBe($this->companyA->id)
         ->and($user->role)->toBe(UserRole::User);
@@ -29,7 +29,7 @@ it('creates a user inside the admin company, ignoring any company_id input', fun
 it('forbids company admins from creating other admins', function (): void {
     $this->actingAs($this->admin)->post('/admin/users', [
         'name' => 'Otro Admin',
-        'email' => 'otro@verto5.local',
+        'email' => 'otro@alpharey.local',
         'password' => 'secret-123',
         'role' => 'company_admin',
         'locale' => 'es',
@@ -43,13 +43,13 @@ it('lets the super admin create company admins in the selected company', functio
 
     $this->post('/admin/users', [
         'name' => 'Admin Empresa',
-        'email' => 'admin.empresa@verto5.local',
+        'email' => 'admin.empresa@alpharey.local',
         'password' => 'secret-123',
         'role' => 'company_admin',
         'locale' => 'es',
     ])->assertRedirect();
 
-    $created = User::query()->where('email', 'admin.empresa@verto5.local')->firstOrFail();
+    $created = User::query()->where('email', 'admin.empresa@alpharey.local')->firstOrFail();
 
     expect($created->role)->toBe(UserRole::CompanyAdmin)
         ->and($created->company_id)->toBe($this->companyA->id);

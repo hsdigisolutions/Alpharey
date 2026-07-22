@@ -33,7 +33,7 @@ class DocumentAlertNotification extends Notification
         $subject = $this->payload['title_es'].' / '.$this->payload['title_en'];
 
         $message = (new MailMessage)
-            ->subject($subject.' — Verto5')
+            ->subject($subject.' — AlphaRey')
             ->greeting('Hola / Hello')
             ->line($this->payload['title_es'])
             ->line($this->payload['title_en']);
@@ -46,7 +46,7 @@ class DocumentAlertNotification extends Notification
             $message->line('Empresa / Company: '.$this->payload['company']);
         }
 
-        return $message->salutation('Verto5');
+        return $message->salutation('AlphaRey');
     }
 
     /**

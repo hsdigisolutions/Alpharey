@@ -1,9 +1,9 @@
 ---
-name: verto5-development
-description: Verto5 CRM development conventions — tenancy, authorization gates, audit logging, VAT enum, bilingual system, form requests, encryption, file storage, testing requirements. Read BEFORE writing, editing, or reviewing any PHP or Vue file in this project. No exceptions.
+name: alpharey-development
+description: AlphaRey CRM development conventions — tenancy, authorization gates, audit logging, VAT enum, bilingual system, form requests, encryption, file storage, testing requirements. Read BEFORE writing, editing, or reviewing any PHP or Vue file in this project. No exceptions.
 ---
 
-# SKILL: Verto5 CRM — Development Conventions
+# SKILL: AlphaRey CRM — Development Conventions
 
 ## What this skill is for
 Every time you write, edit, or review any PHP or Vue file in this
@@ -18,7 +18,7 @@ non-negotiable and apply to every line of code.
 
 ## Project at a Glance
 ```
-Brand:      Verto5
+Brand:      AlphaRey
 Domain:     alpharey.com (Mukhost cPanel VPS, London UK)
 Stack:      Laravel 12 + Vue 3 + Inertia.js + Tailwind CSS + MySQL
 Auth:       Session-based (no API tokens, no Sanctum)
@@ -31,7 +31,7 @@ No:         Docker, Redis, Node on server, Livewire, SSR
 Full spec: `docs/REQUIREMENTS.md`
 All decisions: `docs/DECISIONS.md` — check before assuming any default.
 Current status: `CLAUDE.md` — check before starting any phase.
-UI rules: the `verto5-design` skill.
+UI rules: the `alpharey-design` skill.
 
 ---
 

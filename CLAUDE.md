@@ -151,14 +151,14 @@ Earlier phases: Phase 0–8, design D1–D3 (approved 2026-07-14).
 
 Two mandatory skills live in `.claude/skills/` (committed to the repo):
 
-- **`verto5-design`** — read before touching ANY UI file: tokens, typography,
+- **`alpharey-design`** — read before touching ANY UI file: tokens, typography,
   component rules, dark mode, mobile rules, the "what not to do" list.
-- **`verto5-development`** — read before writing ANY PHP/Vue: tenancy, gates,
+- **`alpharey-development`** — read before writing ANY PHP/Vue: tenancy, gates,
   audit, VAT enum, bilingual system, form requests, testing requirements.
 
 ## What this is
 
-VertoCRM (brand: **Verto5**): a multi-company CRM for a Spanish construction group
+AlphaReyCRM (brand: **AlphaRey**): a multi-company CRM for a Spanish construction group
 (5 companies, one brand). Employees, documents/compliance, attendance, payroll,
 invoicing, cross-company employee deployments, reports. 26 screens. Full spec:
 `docs/REQUIREMENTS.md`.
@@ -233,8 +233,8 @@ npm run build                        # production asset build
 php artisan verto:import-legacy --dry-run
 ```
 
-Seeded local users (password `password`, local only): `admin@verto5.local` (Super
-Admin), `empresa1.admin@verto5.local` (Company Admin), `empresa1.user@verto5.local`
+Seeded local users (password `password`, local only): `admin@alpharey.local` (Super
+Admin), `empresa1.admin@alpharey.local` (Company Admin), `empresa1.user@alpharey.local`
 (custom user). There is **no login flow yet** (Phase 1) — use `actingAs()` in tests.
 
 ## CI / deployment

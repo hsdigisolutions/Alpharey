@@ -18,7 +18,7 @@
 <body>
     <div class="head">
         <h1>Propuesta / Proposal {{ $proposal->number }}</h1>
-        <p class="muted">Verto5 · {{ $proposal->proposal_date?->format('d/m/Y') }}
+        <p class="muted">AlphaRey · {{ $proposal->proposal_date?->format('d/m/Y') }}
             @if ($proposal->expiry_date) · Válida hasta / Valid until {{ $proposal->expiry_date->format('d/m/Y') }} @endif
         </p>
     </div>

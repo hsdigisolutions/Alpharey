@@ -19,13 +19,13 @@ class BilingualResetPassword extends ResetPassword
         ], false));
 
         return (new MailMessage)
-            ->subject('Restablecer contraseña / Reset password — Verto5')
+            ->subject('Restablecer contraseña / Reset password — AlphaRey')
             ->greeting('Hola / Hello')
             ->line('Recibimos una solicitud para restablecer la contraseña de tu cuenta.')
             ->line('We received a request to reset the password for your account.')
             ->action('Restablecer contraseña / Reset password', $url)
             ->line('Este enlace caduca en 60 minutos. Si no solicitaste el cambio, ignora este correo.')
             ->line('This link expires in 60 minutes. If you did not request a reset, please ignore this email.')
-            ->salutation('Verto5');
+            ->salutation('AlphaRey');
     }
 }

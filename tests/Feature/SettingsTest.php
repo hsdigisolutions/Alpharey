@@ -31,11 +31,11 @@ it('distinguishes stored null from missing', function (): void {
 });
 
 it('applies new values immediately after set', function (): void {
-    $this->settings->set('app_name', 'Verto5');
-    expect($this->settings->get('app_name'))->toBe('Verto5');
+    $this->settings->set('app_name', 'AlphaRey');
+    expect($this->settings->get('app_name'))->toBe('AlphaRey');
 
-    $this->settings->set('app_name', 'Verto5 CRM');
-    expect($this->settings->get('app_name'))->toBe('Verto5 CRM');
+    $this->settings->set('app_name', 'AlphaRey CRM');
+    expect($this->settings->get('app_name'))->toBe('AlphaRey CRM');
 });
 
 it('survives a cache flush by rereading the database', function (): void {

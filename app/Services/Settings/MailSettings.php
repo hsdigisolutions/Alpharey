@@ -85,7 +85,7 @@ class MailSettings
             'mail.mailers.smtp.username' => $this->settings->get('mail.username'),
             'mail.mailers.smtp.password' => $password,
             'mail.mailers.smtp.scheme' => $encryption === 'ssl' ? 'smtps' : null,
-            'mail.from.name' => $this->settings->get('mail.from_name', 'Verto5'),
+            'mail.from.name' => $this->settings->get('mail.from_name', 'AlphaRey'),
             'mail.from.address' => $this->settings->get('mail.from_address', 'noreply@alpharey.com'),
         ]);
 
