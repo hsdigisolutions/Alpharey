@@ -2,14 +2,31 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Status: Phase 9 in progress — hardening (2026-07-18)
+## Status: Phase 9 in progress — hardening (2026-07-20)
 
 **Every screen 01–26 is built (Phase 8 complete).** Phase 9 is hardening, UAT, and
-launch — no new screens. Current: **454 Pest tests / 2713 assertions passing (1
+launch — no new screens. Current: **496 Pest tests / 2912 assertions passing (1
 skipped) · Pint clean · Larastan level 6 clean · `composer audit` + `npm audit`
 clean · production Vite build working.**
 
 ### Phase 9 done so far
+
+- **Line-by-line review, passes 1–6 (2026-07-19/20)**: every app PHP file, all 87
+  Vue files, and every migration read in full, one phase-group per pass, each pass
+  committed with its fixes pinned by tests. The catches, worst first: unapproved
+  expense claims were reimbursed through payroll; `Rule::exists` on tenant tables
+  let one company's admin inject advances/expenses/measurements into ANOTHER
+  company's payslips (fixed with `OwnCompanyEmployee`/`OwnCompanyProject` rules);
+  booking attendance for a deployed worker had NEVER worked (tenant-scoped lookup
+  404'd the home-company row — the Phase 5 grid displayed them, entry was broken);
+  a soft-deleted monthly employee kept drawing full payslips (bare
+  `withoutGlobalScopes()` strips SoftDeletes — now dead via `ScopeDisciplineTest`);
+  deleting an invoice cascaded away its payment records; the grid summary leaked
+  `total_wage` past the pay gate; deployment complete/cancel transitions were
+  unguarded; the 2FA screens' code label never rendered (`label-key=` vs `k=` —
+  now guarded). Advisories logged for UAT: NIF visible to any employees.view
+  holder; monthly-worker OT prices from `wage_rate` (data-convention risk);
+  TOTP replay within the 30s window not burned.
 
 - **Two-step verification, mandatory on every login** (client request): TOTP via an
   authenticator app (`pragmarx/google2fa`), with 8 single-use recovery codes and a
