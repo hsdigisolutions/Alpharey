@@ -1031,6 +1031,30 @@ return [
         'install_hint' => 'Instálela en su teléfono para abrirla como una app.',
         // iOS has no install API — the manual route is the only honest option.
         'install_ios' => 'Para instalarla: pulse Compartir y luego «Añadir a pantalla de inicio».',
+        // Privacy notice — shown once (per version) before the first punch.
+        // Information duty, NOT consent (LOPDGDD art. 90 / RD-ley 8/2019);
+        // see docs/GDPR_WORKER_NOTICE.md. Retention/contact wording is
+        // deliberately general until the client's lawyer fixes the specifics.
+        'privacy' => [
+            'title' => 'Protección de datos',
+            'subtitle' => 'Antes de fichar, lea esta información',
+            'intro' => 'Esta aplicación registra su jornada laboral en la obra.',
+            'data_title' => 'Qué datos se recogen',
+            'data_location' => 'Su ubicación (GPS) al fichar la entrada y la salida.',
+            'data_selfie' => 'Una fotografía suya (selfie) al fichar la entrada.',
+            'data_time' => 'La fecha y la hora de cada fichaje.',
+            'why_title' => 'Para qué',
+            'why_body' => 'Para cumplir el registro de jornada obligatorio y confirmar su presencia en el centro de trabajo. La base es su relación laboral y las obligaciones legales de la empresa (RD-ley 8/2019; LOPDGDD art. 90). No se le pide su consentimiento: es información obligatoria.',
+            'who_title' => 'Quién los ve',
+            'who_body' => 'Únicamente el personal autorizado de su empresa, para la gestión de su jornada y su nómina.',
+            'retention_title' => 'Cuánto tiempo se conservan',
+            'retention_body' => 'El registro de jornada se conserva durante el plazo legal (4 años). La ubicación y la fotografía se conservan durante el tiempo imprescindible conforme a la política de conservación de su empresa.',
+            'rights_title' => 'Sus derechos',
+            'rights_body' => 'Puede solicitar el acceso, la rectificación o la supresión de sus datos, y presentar una reclamación ante la Agencia Española de Protección de Datos (AEPD). Para ejercerlos, diríjase a su empresa.',
+            'gps_note' => 'Si deniega la ubicación, su fichaje se registrará igualmente, indicando que no se pudo obtener.',
+            'ack' => 'He leído y entiendo esta información',
+            'acked_hint' => 'Ha confirmado la lectura de esta información.',
+        ],
     ],
 
     'two_factor' => [

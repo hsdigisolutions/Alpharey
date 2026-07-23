@@ -44,12 +44,17 @@ class WorkerController extends Controller
             'today' => $this->todayPayload($today),
             // The current month's calendar + figures for the dashboard below.
             'month' => $this->dashboard->forMonth($employee),
+            // Whether the worker still has to be shown the geolocation + selfie
+            // notice before any punch. When false the app blocks check-in
+            // behind the notice screen (the server refuses too — below).
+            'privacy_acknowledged' => $employee->hasAcknowledgedPrivacyNotice(),
         ]);
     }
 
     public function checkIn(PunchRequest $request): RedirectResponse
     {
         $employee = $this->resolveEmployee($request);
+        $this->requirePrivacyNotice($employee);
 
         $this->attendance->checkIn($employee, $request->location(), $request->file('photo'));
 
@@ -59,10 +64,23 @@ class WorkerController extends Controller
     public function checkOut(PunchRequest $request): RedirectResponse
     {
         $employee = $this->resolveEmployee($request);
+        $this->requirePrivacyNotice($employee);
 
         $this->attendance->checkOut($employee, $request->location());
 
         return back()->with('success', __('ui.worker.checked_out'));
+    }
+
+    /**
+     * Record that the worker read the geolocation + selfie notice. The screen
+     * blocks check-in until this is done; this is what unblocks it. Idempotent
+     * — a second acknowledgement just refreshes the timestamp/version.
+     */
+    public function acknowledgePrivacy(Request $request): RedirectResponse
+    {
+        $this->resolveEmployee($request)->acknowledgePrivacyNotice();
+
+        return back();
     }
 
     public function absence(Request $request): RedirectResponse
@@ -101,6 +119,18 @@ class WorkerController extends Controller
             'check_out' => $today->check_out,
             'hours' => $today->check_out !== null ? (float) $today->hours_worked : null,
         ];
+    }
+
+    /**
+     * Server-side half of the notice gate: a punch captures a GPS fix (and, on
+     * check-in, a selfie), so it must not proceed until the worker has been
+     * shown and acknowledged the current notice. The screen already blocks it,
+     * but UI hiding is never the only control (dev-skill Rule 2) — a crafted
+     * POST is refused with a 403.
+     */
+    protected function requirePrivacyNotice(Employee $employee): void
+    {
+        abort_unless($employee->hasAcknowledgedPrivacyNotice(), 403);
     }
 
     /**

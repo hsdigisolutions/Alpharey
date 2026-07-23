@@ -14,6 +14,7 @@ import { getLocation } from '@/composables/useGeolocation';
 import WorkerLayout from '@/Layouts/WorkerLayout.vue';
 import SelfieCapture from '@/Components/Worker/SelfieCapture.vue';
 import MonthCalendar from '@/Components/Worker/MonthCalendar.vue';
+import PrivacyNotice from '@/Components/Worker/PrivacyNotice.vue';
 import VButton from '@/Components/ui/VButton.vue';
 import VTextarea from '@/Components/ui/VTextarea.vue';
 
@@ -21,6 +22,10 @@ const props = defineProps({
     worker: { type: Object, required: true },
     today: { type: Object, required: true },
     month: { type: Object, required: true },
+    // False until the worker has been shown + acknowledged the current
+    // geolocation/selfie notice; while false the notice covers the screen.
+    // eslint-disable-next-line vue/prop-name-casing -- Inertia sends snake_case verbatim
+    privacy_acknowledged: { type: Boolean, default: true },
 });
 
 function eur(value) {
@@ -117,6 +122,10 @@ function submitAbsence() {
     <Head :title="$t('worker.title')" />
 
     <WorkerLayout :worker="worker">
+        <!-- Geolocation + selfie notice: covers the screen until the worker has
+             read it. The server also refuses a punch without it. -->
+        <PrivacyNotice v-if="!privacy_acknowledged" />
+
         <!-- Today's status banner -->
         <div class="mb-4 rounded-lg border border-line bg-surface-raised p-4 text-center shadow-card">
             <p v-if="today.state === 'none'" class="text-sm text-ink-soft">

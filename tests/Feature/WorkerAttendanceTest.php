@@ -21,7 +21,9 @@ use Illuminate\Support\Facades\Storage;
  */
 beforeEach(function (): void {
     $this->company = Company::factory()->create();
-    $this->employee = Employee::factory()->forCompany($this->company)->create([
+    // Pre-acknowledged: the notice gate has its own test (WorkerPrivacyNoticeTest);
+    // here we exercise the punch flow, which sits behind an acknowledged notice.
+    $this->employee = Employee::factory()->forCompany($this->company)->privacyAcknowledged()->create([
         'wage_type' => 'hourly', 'wage_rate' => '20',
     ]);
 

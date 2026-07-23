@@ -113,6 +113,7 @@ Route::middleware('guest')->group(function (): void {
 */
 Route::middleware(['auth', 'active', 'worker'])->prefix('worker')->group(function (): void {
     Route::get('/', [WorkerController::class, 'home'])->name('worker.home');
+    Route::post('/privacy-ack', [WorkerController::class, 'acknowledgePrivacy'])->name('worker.privacy-ack');
     Route::post('/check-in', [WorkerController::class, 'checkIn'])->name('worker.check-in');
     Route::post('/check-out', [WorkerController::class, 'checkOut'])->name('worker.check-out');
     Route::post('/absence', [WorkerController::class, 'absence'])->name('worker.absence');

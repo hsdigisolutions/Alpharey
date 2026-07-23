@@ -6,6 +6,7 @@ use App\Enums\PaymentMethod;
 use App\Enums\WageType;
 use App\Models\Company;
 use App\Models\Employee;
+use App\Support\WorkerPrivacyNotice;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
@@ -51,5 +52,18 @@ class EmployeeFactory extends Factory
     public function inactive(): static
     {
         return $this->state(fn () => ['active' => false]);
+    }
+
+    /**
+     * A worker who has already been shown and acknowledged the current
+     * geolocation/selfie notice — the state most worker-punch tests want,
+     * since a fresh worker is blocked behind the notice until they do.
+     */
+    public function privacyAcknowledged(): static
+    {
+        return $this->state(fn () => [
+            'privacy_notice_ack_at' => now(),
+            'privacy_notice_ack_version' => WorkerPrivacyNotice::VERSION,
+        ]);
     }
 }

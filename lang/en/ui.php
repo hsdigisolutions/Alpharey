@@ -1032,6 +1032,30 @@ return [
         'install_hint' => 'Install it on your phone to open it like an app.',
         // iOS has no install API — the manual route is the only honest option.
         'install_ios' => 'To install: tap Share, then "Add to Home Screen".',
+        // Privacy notice — shown once (per version) before the first punch.
+        // Information duty, NOT consent (LOPDGDD art. 90 / RD-ley 8/2019);
+        // see docs/GDPR_WORKER_NOTICE.md. Retention/contact wording is
+        // deliberately general until the client's lawyer fixes the specifics.
+        'privacy' => [
+            'title' => 'Data protection',
+            'subtitle' => 'Before you clock in, please read this',
+            'intro' => 'This app records your working time on site.',
+            'data_title' => 'What is collected',
+            'data_location' => 'Your location (GPS) when you clock in and out.',
+            'data_selfie' => 'A photo of you (selfie) when you clock in.',
+            'data_time' => 'The date and time of each punch.',
+            'why_title' => 'Why',
+            'why_body' => 'To meet the mandatory working-time record and confirm your presence at the workplace. The basis is your employment relationship and the company\'s legal obligations (RD-ley 8/2019; LOPDGDD art. 90). Your consent is not requested — this is mandatory information.',
+            'who_title' => 'Who sees it',
+            'who_body' => 'Only authorised staff at your company, to manage your working time and pay.',
+            'retention_title' => 'How long it is kept',
+            'retention_body' => 'The working-time record is kept for the legal period (4 years). Your location and photo are kept for the minimum time necessary, under your company\'s retention policy.',
+            'rights_title' => 'Your rights',
+            'rights_body' => 'You may request access to, correction or deletion of your data, and lodge a complaint with the Spanish Data Protection Agency (AEPD). To exercise them, contact your company.',
+            'gps_note' => 'If you deny location, your punch is still recorded, noting that it could not be obtained.',
+            'ack' => 'I have read and understand this information',
+            'acked_hint' => 'You have confirmed you read this information.',
+        ],
     ],
 
     'two_factor' => [

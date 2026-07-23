@@ -6,6 +6,7 @@ use App\Enums\PaymentMethod;
 use App\Enums\WageType;
 use App\Models\Concerns\Auditable;
 use App\Models\Concerns\BelongsToCompany;
+use App\Support\WorkerPrivacyNotice;
 use Database\Factories\EmployeeFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -29,6 +30,8 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $joining_date
  * @property Carbon|null $leaving_date
  * @property numeric-string|null $commission_percent
+ * @property Carbon|null $privacy_notice_ack_at
+ * @property int|null $privacy_notice_ack_version
  */
 class Employee extends Model
 {
@@ -83,6 +86,7 @@ class Employee extends Model
             'payment_method' => PaymentMethod::class,
             'joining_date' => 'date:Y-m-d',
             'leaving_date' => 'date:Y-m-d',
+            'privacy_notice_ack_at' => 'datetime',
             'active' => 'boolean',
             'is_contracted' => 'boolean',
             'has_driving_license' => 'boolean',
@@ -108,6 +112,28 @@ class Employee extends Model
         }
 
         return hash_hmac('sha256', strtoupper(preg_replace('/\s+/', '', $nif) ?? ''), (string) config('app.key'));
+    }
+
+    /**
+     * Has this worker been shown, and acknowledged, the CURRENT version of the
+     * geolocation + selfie privacy notice? Delegates to the single authority so
+     * a version bump re-gates everyone in one place.
+     */
+    public function hasAcknowledgedPrivacyNotice(): bool
+    {
+        return WorkerPrivacyNotice::acknowledged($this);
+    }
+
+    /**
+     * Record that the worker acknowledged reading the current notice, now.
+     * These columns are not mass-assignable (like is_current on Document) — the
+     * acknowledgement is a system fact, set here, and the write is audited.
+     */
+    public function acknowledgePrivacyNotice(): void
+    {
+        $this->privacy_notice_ack_at = now();
+        $this->privacy_notice_ack_version = WorkerPrivacyNotice::VERSION;
+        $this->save();
     }
 
     /**
