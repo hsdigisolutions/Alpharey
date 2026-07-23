@@ -3,15 +3,20 @@
  * The Worker PWA shell — deliberately NOT AppLayout.
  *
  * A worker holds a phone in one hand on a building site, often in gloves and
- * sunlight. So: one column, large touch targets, no sidebar, no global search,
- * no module navigation — there is nowhere else for them to go. The only
- * chrome is who they are and a way out.
+ * sunlight. So: one column, large touch targets, no sidebar, no navigation —
+ * there is nowhere else for them to go — and a LIGHT theme forced on, because
+ * a cream screen is far more readable in daylight than a dark one, and the
+ * phone's own dark-mode setting must not turn the work app unreadable.
+ *
+ * A live clock and today's full date sit at the top: the one thing a worker
+ * checks before punching is "what time is it, and is this today". They can
+ * only ever act on today — every punch the server writes is dated now().
  *
  * Padding uses env(safe-area-inset-*) so the installed app clears an iPhone
- * notch and home indicator instead of hiding content under them.
+ * notch and home indicator.
  */
-import { onMounted, onUnmounted, ref } from 'vue';
-import { router } from '@inertiajs/vue3';
+import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { router, usePage } from '@inertiajs/vue3';
 import { canPromptInstall, isIos, isStandalone, promptInstall } from '@/pwa';
 import VButton from '@/Components/ui/VButton.vue';
 
@@ -19,6 +24,21 @@ defineProps({
     worker: { type: Object, required: true },
 });
 
+const page = usePage();
+const locale = computed(() => (page.props.locale?.primary === 'en' ? 'en-GB' : 'es-ES'));
+
+// --- Live clock -------------------------------------------------------------
+const now = ref(new Date());
+let clock = null;
+
+const time = computed(() =>
+    now.value.toLocaleTimeString(locale.value, { hour: '2-digit', minute: '2-digit' }),
+);
+const dateLine = computed(() =>
+    now.value.toLocaleDateString(locale.value, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }),
+);
+
+// --- Install prompt ---------------------------------------------------------
 const showInstall = ref(false);
 const showIosHint = ref(false);
 
@@ -29,25 +49,27 @@ function refreshInstallState() {
 
         return;
     }
-
-    // Android/Chrome gives us a real prompt; iOS has no install API at all, so
-    // the only honest thing to offer there is the manual instruction.
     showInstall.value = canPromptInstall();
     showIosHint.value = isIos();
 }
 
-function onInstallable() {
-    refreshInstallState();
-}
-
 onMounted(() => {
+    // Force the LIGHT theme for the worker app, whatever the phone or the CRM
+    // toggle last set — a builder in sunlight needs the cream screen, not dark.
+    document.documentElement.classList.remove('dark');
+
+    // Tick the clock. Aligning to the top of the minute would be neater, but a
+    // plain 1s interval keeps the seconds-free display honest with no drift.
+    clock = window.setInterval(() => { now.value = new Date(); }, 1000);
+
     refreshInstallState();
-    window.addEventListener('pwa:installable', onInstallable);
+    window.addEventListener('pwa:installable', refreshInstallState);
     window.addEventListener('pwa:installed', refreshInstallState);
 });
 
 onUnmounted(() => {
-    window.removeEventListener('pwa:installable', onInstallable);
+    window.clearInterval(clock);
+    window.removeEventListener('pwa:installable', refreshInstallState);
     window.removeEventListener('pwa:installed', refreshInstallState);
 });
 
@@ -57,25 +79,27 @@ async function install() {
 }
 
 function logout() {
-    router.post('/logout');
+    // replace:true so the signed-out state takes the current history entry —
+    // the phone's back button must not walk back into the app after logout.
+    router.post('/logout', {}, { replace: true });
 }
 </script>
 
 <template>
-    <div class="min-h-screen bg-surface"
+    <div class="min-h-screen bg-surface text-ink"
         style="padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom)">
         <div class="mx-auto w-full max-w-md px-4 py-5">
-            <header class="mb-5 flex items-center gap-3">
-                <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-accent text-sm font-bold text-on-accent">AR</span>
+            <!-- Identity + logout -->
+            <header class="mb-4 flex items-center gap-3">
+                <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-accent text-sm font-bold text-on-accent shadow-sm">AR</span>
                 <div class="min-w-0 flex-1">
-                    <p class="truncate text-base font-semibold leading-tight text-ink">{{ worker.name }}</p>
+                    <p class="truncate text-base font-semibold leading-tight">{{ worker.name }}</p>
                     <p class="truncate text-xs text-ink-soft">
                         {{ worker.code }}<template v-if="worker.company"> · {{ worker.company }}</template>
                     </p>
                 </div>
-                <!-- 44px touch target (design skill mobile rule) -->
                 <button type="button"
-                    class="flex h-11 w-11 items-center justify-center rounded-md text-ink-soft hover:bg-surface-hover"
+                    class="flex h-11 w-11 items-center justify-center rounded-xl border border-line bg-surface-raised text-ink-soft transition active:scale-95 active:bg-surface-hover"
                     :aria-label="$t('common.logout')"
                     @click="logout">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
@@ -87,8 +111,15 @@ function logout() {
                 </button>
             </header>
 
+            <!-- Live clock + today's date: the "when am I" a worker checks
+                 before punching. This is the only day they can act on. -->
+            <div class="mb-5 rounded-2xl bg-sidebar px-5 py-4 text-center shadow-card">
+                <p class="tabular-nums text-4xl font-semibold tracking-tight text-white">{{ time }}</p>
+                <p class="mt-1 text-sm capitalize text-white/70">{{ dateLine }}</p>
+            </div>
+
             <!-- Install: a real prompt on Android, the manual route on iOS -->
-            <div v-if="showInstall" class="mb-4 rounded-lg border border-line bg-surface-raised p-3 shadow-card">
+            <div v-if="showInstall" class="mb-4 rounded-xl border border-line bg-surface-raised p-3 shadow-card">
                 <p class="mb-2 text-sm text-ink-soft"><Bilingual k="worker.install_hint" /></p>
                 <VButton class="w-full" @click="install">
                     <Bilingual k="worker.install" inline />
@@ -96,7 +127,7 @@ function logout() {
             </div>
 
             <div v-else-if="showIosHint"
-                class="mb-4 rounded-lg border border-line bg-surface-raised p-3 text-xs text-ink-soft shadow-card">
+                class="mb-4 rounded-xl border border-line bg-surface-raised p-3 text-xs text-ink-soft shadow-card">
                 <Bilingual k="worker.install_ios" />
             </div>
 

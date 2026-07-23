@@ -101,6 +101,17 @@ it('keeps the worker app closed to guests', function (): void {
     $this->get('/worker')->assertRedirect(route('login'));
 });
 
+it('lets a worker log out', function (): void {
+    // Regression: /logout once sat behind the 'not_worker' wall, so DenyWorkers
+    // redirected a worker back to their app before the session was cleared —
+    // the logout button looked dead. Logout must work for a worker like anyone.
+    $worker = workerFor($this->company);
+
+    $this->actingAs($worker)->post('/logout')->assertRedirect();
+
+    $this->assertGuest();
+});
+
 it('ties one login to exactly one employee', function (): void {
     // Sharing an account would put two people's attendance on one payslip.
     $worker = workerFor($this->company);

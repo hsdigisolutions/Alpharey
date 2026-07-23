@@ -21,9 +21,13 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="AlphaRey">
 
-    {{-- Apply the saved theme before first paint to avoid a flash --}}
+    {{-- Apply the saved theme before first paint to avoid a flash. The worker
+         PWA is ALWAYS light (readable in daylight on site), so it opts out of
+         dark here too — otherwise a phone in dark mode would flash dark before
+         the layout corrects it. --}}
     <script>
         (function () {
+            if (window.location.pathname.startsWith('/worker')) return;
             const theme = localStorage.getItem('theme');
             if (theme === 'dark' || (!theme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
                 document.documentElement.classList.add('dark');

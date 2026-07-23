@@ -43,9 +43,14 @@ const dotClass = {
 
             <div v-for="cell in month.calendar" :key="cell.day"
                 class="flex aspect-square flex-col items-center justify-center rounded-md"
-                :class="cell.status === 'none' ? 'bg-surface-sunken/60' : 'bg-surface-sunken'">
+                :class="[
+                    cell.status === 'none' ? 'bg-surface-sunken/60' : 'bg-surface-sunken',
+                    // The one day the worker can act on gets a coral ring so it
+                    // is unmistakable which cell 'today' is.
+                    cell.is_today ? 'ring-2 ring-accent' : '',
+                ]">
                 <span class="text-[11px] leading-none"
-                    :class="cell.status === 'none' ? 'text-muted' : 'text-ink'">
+                    :class="[cell.status === 'none' ? 'text-muted' : 'text-ink', cell.is_today ? 'font-bold text-accent' : '']">
                     {{ cell.day }}
                 </span>
                 <span v-if="cell.status !== 'none'"

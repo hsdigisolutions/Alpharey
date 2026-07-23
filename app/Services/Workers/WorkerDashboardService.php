@@ -76,6 +76,9 @@ class WorkerDashboardService
                 // and grey the weekend regardless of locale.
                 'weekday' => (int) $cursor->dayOfWeekIso - 1,
                 'status' => $status,
+                // The one day the worker can actually act on — highlighted, and
+                // it is the only date any punch ever writes to (server-enforced).
+                'is_today' => $cursor->isSameDay($today),
             ];
 
             $cursor->addDay();

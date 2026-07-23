@@ -126,11 +126,17 @@ Route::middleware(['auth', 'active', 'worker'])->prefix('worker')->group(functio
  */
 Route::view('/worker/offline', 'worker-offline')->name('worker.offline');
 
+// Logout must be reachable by EVERY authenticated account, whatever its role
+// or 2FA state — a worker, or a user still parked on the 2FA setup screen, has
+// to be able to sign out. It therefore carries only 'auth': putting it behind
+// 'not_worker' made DenyWorkers redirect a worker back to their app before the
+// session was ever cleared, so their logout button appeared to do nothing.
+Route::post('/logout', [AuthenticatedSessionController::class, 'destroy'])
+    ->middleware('auth')->name('logout');
+
 // 'not_worker' bounces a worker account back to their app rather than
 // leaving them at a 403 on a CRM screen they can never use.
 Route::middleware(['auth', 'active', 'two_factor', 'not_worker'])->group(function (): void {
-    Route::post('/logout', [AuthenticatedSessionController::class, 'destroy'])->name('logout');
-
     // Enrolment — RequireTwoFactor confines an un-enrolled user to these.
     Route::get('/two-factor/setup', [TwoFactorController::class, 'setup'])->name('two-factor.setup');
     Route::post('/two-factor/setup', [TwoFactorController::class, 'confirm'])->name('two-factor.confirm');
