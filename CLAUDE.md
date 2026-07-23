@@ -28,8 +28,20 @@ clean · production Vite build working.**
   calendar + present/absent/hours/earned. Admin sees location (Google Maps link),
   selfie (gated + audited route), and the absence reason on the attendance record.
   Service worker scoped to /worker only. Offline check-in deliberately OUT of v1.
-  **Open for the client: GDPR worker-geolocation notice + photo retention policy
-  (LOPDGDD art. 90 / RD 8/2019); the monthly-worker `earned` figure convention.**
+  A **pre-punch privacy notice** (LOPDGDD art. 90 / RD-ley 8/2019) now gates the
+  first check-in — an INFORMATION duty with an acknowledgement, NOT consent;
+  versioned (`WorkerPrivacyNotice::VERSION`) + audited + server-enforced; text in
+  `docs/GDPR_WORKER_NOTICE.md` for the client's lawyer. **Open for the client:
+  finalise the notice specifics (controller/DPO, selfie+GPS retention period,
+  rights contact, RAT/DPIA); the monthly-worker `earned` figure convention.**
+  Known edge: check-out across midnight not yet handled (day-shift crews
+  unaffected — flagged as a follow-up task).
+- **My Account (self-service, 2026-07-23)**: every CRM user reaches `/account`
+  from the header user menu. Edit own name only (email/role/company stay
+  admin-managed); password is a **request to a Super Admin**
+  (`password_reset_requested_at` flag → SA sends a reset link from the Permission
+  Matrix, never sees the password); own 2FA reconfigure + recovery-code regen
+  behind a `current_password` re-check. Workers never see it (no CRM session).
 
 ### Phase 9 done so far
 

@@ -1,11 +1,13 @@
 <?php
 
 use App\Enums\VatRate;
+use App\Http\Controllers\Account\AccountController;
 use App\Http\Controllers\Admin\AuditLogController;
 use App\Http\Controllers\Admin\OvertimePolicyController;
 use App\Http\Controllers\Admin\PermissionMatrixController;
 use App\Http\Controllers\Admin\SettingsController;
 use App\Http\Controllers\Admin\UserController;
+use App\Http\Controllers\Admin\UserPasswordResetController;
 use App\Http\Controllers\AdvanceController;
 use App\Http\Controllers\AttendanceController;
 use App\Http\Controllers\AttendanceImportExportController;
@@ -142,6 +144,15 @@ Route::middleware(['auth', 'active', 'two_factor', 'not_worker'])->group(functio
     Route::get('/two-factor/setup', [TwoFactorController::class, 'setup'])->name('two-factor.setup');
     Route::post('/two-factor/setup', [TwoFactorController::class, 'confirm'])->name('two-factor.confirm');
     Route::get('/two-factor/recovery', [TwoFactorController::class, 'recovery'])->name('two-factor.recovery');
+
+    // My Account — self-service profile + own 2FA (any authenticated CRM user).
+    // Name only; password is a request to a Super Admin; 2FA re-config behind a
+    // password re-check.
+    Route::get('/account', [AccountController::class, 'edit'])->name('account.edit');
+    Route::put('/account/profile', [AccountController::class, 'updateProfile'])->name('account.profile');
+    Route::post('/account/password-reset-request', [AccountController::class, 'requestPasswordReset'])->name('account.password-request');
+    Route::post('/account/two-factor/reconfigure', [AccountController::class, 'reconfigureTwoFactor'])->name('account.two-factor.reconfigure');
+    Route::post('/account/two-factor/recovery-codes', [AccountController::class, 'regenerateRecoveryCodes'])->name('account.two-factor.recovery-codes');
 
     // Screen 03 — Dashboard (Phase 8). Per selected company; SA without a
     // selection is redirected to Welcome to pick one.
@@ -358,6 +369,9 @@ Route::middleware(['auth', 'active', 'two_factor', 'not_worker'])->group(functio
         // Super Admin clears a user's second factor (lost phone) — guarded in
         // the controller, not just by the admin group.
         Route::post('/permissions/{user}/reset-2fa', [TwoFactorController::class, 'reset'])->name('two-factor.reset');
+        // Super Admin sends a password reset link — the fulfillment side of a
+        // user's My Account "request password reset" (SA-only, guarded there).
+        Route::post('/permissions/{user}/reset-password', [UserPasswordResetController::class, 'send'])->name('users.reset-password');
 
         Route::post('/users', [UserController::class, 'store'])->name('admin.users.store');
         Route::put('/users/{user}', [UserController::class, 'update'])->name('admin.users.update');

@@ -47,7 +47,7 @@ class PermissionMatrixController extends Controller
             )
             ->with('company:id,name')
             ->orderBy('name')
-            ->get(['id', 'name', 'email', 'role', 'active', 'company_id'])
+            ->get(['id', 'name', 'email', 'role', 'active', 'company_id', 'password_reset_requested_at'])
             ->map(fn (User $user): array => [
                 'id' => $user->id,
                 'name' => $user->name,
@@ -58,6 +58,8 @@ class PermissionMatrixController extends Controller
                 'company' => $user->company?->name,
                 // Only custom users have per-module rows; admins bypass the matrix
                 'editable' => $user->role === UserRole::User,
+                // The user raised a password-reset request awaiting a Super Admin.
+                'password_reset_requested' => $user->password_reset_requested_at !== null,
             ]);
 
         $selectedId = $request->integer('user') ?: null;

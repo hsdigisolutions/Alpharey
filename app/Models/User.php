@@ -25,6 +25,7 @@ use Illuminate\Support\Carbon;
  * @property string|null $two_factor_secret
  * @property list<string>|null $two_factor_recovery_codes
  * @property Carbon|null $two_factor_confirmed_at
+ * @property Carbon|null $password_reset_requested_at
  */
 class User extends Authenticatable
 {
@@ -78,6 +79,7 @@ class User extends Authenticatable
             'two_factor_secret' => 'encrypted',
             'two_factor_recovery_codes' => 'encrypted:array',
             'two_factor_confirmed_at' => 'datetime',
+            'password_reset_requested_at' => 'datetime',
         ];
     }
 

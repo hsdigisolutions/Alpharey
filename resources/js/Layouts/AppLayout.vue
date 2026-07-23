@@ -10,7 +10,7 @@
  * they render as muted, disabled rows.
  */
 import { computed, ref } from 'vue';
-import { router, usePage } from '@inertiajs/vue3';
+import { Link, router, usePage } from '@inertiajs/vue3';
 import AppIcon from '@/Components/AppIcon.vue';
 import VAvatar from '@/Components/ui/VAvatar.vue';
 import VDropdown from '@/Components/ui/VDropdown.vue';
@@ -277,6 +277,11 @@ function switchLocale() {
                             <p class="truncate text-sm font-medium">{{ page.props.auth.user.name }}</p>
                             <p class="truncate text-xs text-muted">{{ page.props.auth.user.email }}</p>
                         </div>
+                        <Link href="/account"
+                            class="flex w-full items-center gap-2 rounded-md px-3 py-2 text-start text-ink hover:bg-surface-sunken">
+                            <AppIcon name="user" class="h-4 w-4" />
+                            <Bilingual k="account.title" inline class="text-sm" />
+                        </Link>
                         <button type="button"
                             class="flex w-full items-center gap-2 rounded-md px-3 py-2 text-start text-ink hover:bg-surface-sunken"
                             @click="logout">

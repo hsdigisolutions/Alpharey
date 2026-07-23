@@ -81,6 +81,12 @@ it('refuses a second check-in on the same day', function (): void {
 });
 
 it('computes hours and pay on check-out from the frozen snapshot', function (): void {
+    // Anchor to a fixed morning hour so the +8h below never crosses midnight —
+    // otherwise, run late enough in the day, check-out lands on the NEXT date
+    // and finds no row to close (a real cross-midnight limitation, but not what
+    // this test is about). travelBack() at the end restores the real clock.
+    $this->travelTo(now()->startOfDay()->addHours(8));
+
     // Check in, then travel the clock forward and check out.
     $this->actingAs($this->worker)->post('/worker/check-in', ['denied' => true]);
 

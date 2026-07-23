@@ -148,6 +148,23 @@ class TwoFactorService
     }
 
     /**
+     * Issue a fresh set of recovery codes for an already-enrolled user, burning
+     * the old set. Used by the self-service "regenerate recovery codes" action;
+     * the secret and the enrolment are untouched, only the codes change.
+     *
+     * @return list<string>
+     */
+    public function regenerateRecoveryCodes(User $user): array
+    {
+        $codes = $this->generateRecoveryCodes();
+
+        $user->two_factor_recovery_codes = $codes;
+        $user->save();
+
+        return $codes;
+    }
+
+    /**
      * Clear a user's second factor — the Super Admin's "lost the phone" lever.
      * They are forced through enrolment again on their next login.
      */

@@ -12,6 +12,7 @@ import AppLayout from '@/Layouts/AppLayout.vue';
 import FormField from '@/Components/ui/FormField.vue';
 import VAlert from '@/Components/ui/VAlert.vue';
 import VAvatar from '@/Components/ui/VAvatar.vue';
+import VBadge from '@/Components/ui/VBadge.vue';
 import VButton from '@/Components/ui/VButton.vue';
 import VInput from '@/Components/ui/VInput.vue';
 import VModal from '@/Components/ui/VModal.vue';
@@ -116,6 +117,17 @@ function resetTwoFactor(user) {
     if (!window.confirm(`${user.name} — ${t('two_factor.reset_confirm')}`)) return;
 
     router.post(`/admin/permissions/${user.id}/reset-2fa`, {}, {
+        preserveScroll: true,
+        onSuccess: () => { showUserModal.value = false; },
+    });
+}
+
+// Super Admin fulfils a user's "request password reset": fires the reset-link
+// email (SA never sets the password) and clears the pending flag.
+function sendPasswordReset(user) {
+    if (!window.confirm(`${user.name} — ${t('permissions.password_reset_confirm')}`)) return;
+
+    router.post(`/admin/permissions/${user.id}/reset-password`, {}, {
         preserveScroll: true,
         onSuccess: () => { showUserModal.value = false; },
     });
@@ -333,11 +345,26 @@ function submitUser() {
                 <!-- Lost-phone lever (Super Admin only): clears the second
                      factor so the user re-enrols on their next login. Lives
                      here, not on every list row, where it read as a warning. -->
-                <div v-if="editingUser && isSuperAdmin" class="rounded-md border border-line bg-surface-sunken p-3">
-                    <p class="mb-2 text-xs text-muted"><Bilingual k="two_factor.reset_hint" /></p>
-                    <VButton variant="secondary" size="sm" @click="resetTwoFactor(editingUser)">
-                        <Bilingual k="two_factor.reset" inline />
-                    </VButton>
+                <div v-if="editingUser && isSuperAdmin" class="space-y-3 rounded-md border border-line bg-surface-sunken p-3">
+                    <div>
+                        <p class="mb-2 text-xs text-muted"><Bilingual k="two_factor.reset_hint" /></p>
+                        <VButton variant="secondary" size="sm" @click="resetTwoFactor(editingUser)">
+                            <Bilingual k="two_factor.reset" inline />
+                        </VButton>
+                    </div>
+                    <!-- Password reset lever (Super Admin only): fulfils the
+                         user's My Account request by emailing a reset link. -->
+                    <div class="border-t border-line pt-3">
+                        <div class="mb-2 flex items-center gap-2">
+                            <p class="text-xs text-muted"><Bilingual k="permissions.password_reset_hint" /></p>
+                            <VBadge v-if="editingUser.password_reset_requested" status="warn">
+                                <Bilingual k="permissions.password_requested" inline />
+                            </VBadge>
+                        </div>
+                        <VButton variant="secondary" size="sm" @click="sendPasswordReset(editingUser)">
+                            <Bilingual k="permissions.password_reset_send" inline />
+                        </VButton>
+                    </div>
                 </div>
             </form>
             <template #footer>
