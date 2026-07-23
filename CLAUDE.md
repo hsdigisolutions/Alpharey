@@ -9,6 +9,28 @@ launch — no new screens. Current: **496 Pest tests / 2912 assertions passing (
 skipped) · Pint clean · Larastan level 6 clean · `composer audit` + `npm audit`
 clean · production Vite build working.**
 
+### Post-Phase-9 client work (2026-07-22)
+
+- **Rebrand Verto5 → AlphaRey**: code, UI, emails, PDFs, the wordmark (text "AR"
+  treatment until a logo asset lands), and a data migration renaming the brand,
+  the `app_name` setting, and the 5 placeholder companies to the real names
+  (Contalex 365 · Alovar · Shizukani · Grupo Verto 5 · Malaga). The LEGACY system
+  stays "VertoCRM" — that's the thing being replaced, not our branding.
+- **Worker Mobile PWA (Phases A–E built; F is device QA + GDPR at cutover)**: an
+  installable phone app for site crews. New `Worker` role — exempt from 2FA
+  (client decision: email + password only), reaches NO CRM module (`EnsureWorker`
+  / `DenyWorkers` are the two halves of the wall). `employees.user_id` links a
+  login to one worker (the link neither schema had). Check-in captures a GPS fix
+  and a live selfie, check-out a fix; GPS is EVIDENCE not a gate — a refusal
+  flags `location_denied` and the punch still records. The wage side reuses
+  `AttendanceService`, so a punch and a clerk timesheet flow through the identical
+  snapshot path. Absence-with-reason writes an Absent row. Dashboard: month
+  calendar + present/absent/hours/earned. Admin sees location (Google Maps link),
+  selfie (gated + audited route), and the absence reason on the attendance record.
+  Service worker scoped to /worker only. Offline check-in deliberately OUT of v1.
+  **Open for the client: GDPR worker-geolocation notice + photo retention policy
+  (LOPDGDD art. 90 / RD 8/2019); the monthly-worker `earned` figure convention.**
+
 ### Phase 9 done so far
 
 - **Line-by-line review, passes 1–6 (2026-07-19/20)**: every app PHP file, all 87
