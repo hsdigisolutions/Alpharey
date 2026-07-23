@@ -13,13 +13,19 @@ import { t } from '@/translate';
 import { getLocation } from '@/composables/useGeolocation';
 import WorkerLayout from '@/Layouts/WorkerLayout.vue';
 import SelfieCapture from '@/Components/Worker/SelfieCapture.vue';
+import MonthCalendar from '@/Components/Worker/MonthCalendar.vue';
 import VButton from '@/Components/ui/VButton.vue';
 import VTextarea from '@/Components/ui/VTextarea.vue';
 
 const props = defineProps({
     worker: { type: Object, required: true },
     today: { type: Object, required: true },
+    month: { type: Object, required: true },
 });
+
+function eur(value) {
+    return `${Number(value ?? 0).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`;
+}
 
 const page = usePage();
 const flashError = computed(() => page.props.flash?.error);
@@ -181,6 +187,41 @@ function submitAbsence() {
         <div v-else class="rounded-lg border border-line bg-surface-raised p-5 text-center text-sm text-ink-soft shadow-card">
             <Bilingual k="worker.done_for_today" class="items-center" />
         </div>
+
+        <!-- ── Dashboard: this month ── -->
+        <section class="mt-6">
+            <h2 class="mb-3 text-sm font-semibold capitalize text-ink">{{ month.label }}</h2>
+
+            <!-- Summary figures -->
+            <div class="mb-4 grid grid-cols-2 gap-2">
+                <div class="rounded-lg border border-line bg-surface-raised p-3 text-center shadow-card">
+                    <p class="tabular-nums text-2xl font-semibold text-status-ok">{{ month.present }}</p>
+                    <p class="text-xs text-ink-soft"><Bilingual k="worker.days_present" class="items-center" /></p>
+                </div>
+                <div class="rounded-lg border border-line bg-surface-raised p-3 text-center shadow-card">
+                    <p class="tabular-nums text-2xl font-semibold text-status-danger">{{ month.absent }}</p>
+                    <p class="text-xs text-ink-soft"><Bilingual k="worker.days_absent" class="items-center" /></p>
+                </div>
+                <div class="rounded-lg border border-line bg-surface-raised p-3 text-center shadow-card">
+                    <p class="tabular-nums text-2xl font-semibold text-ink">{{ month.hours }}</p>
+                    <p class="text-xs text-ink-soft"><Bilingual k="worker.total_hours" class="items-center" /></p>
+                </div>
+                <div class="rounded-lg border border-line bg-surface-raised p-3 text-center shadow-card">
+                    <p class="tabular-nums text-2xl font-semibold text-accent">{{ eur(month.earned) }}</p>
+                    <p class="text-xs text-ink-soft"><Bilingual k="worker.earned" class="items-center" /></p>
+                </div>
+            </div>
+
+            <!-- Calendar -->
+            <div class="rounded-lg border border-line bg-surface-raised p-3 shadow-card">
+                <MonthCalendar :month="month" />
+                <div class="mt-3 flex flex-wrap justify-center gap-x-4 gap-y-1 border-t border-line pt-3 text-[11px] text-ink-soft">
+                    <span class="flex items-center gap-1.5"><span class="h-2 w-2 rounded-full bg-status-ok" /><Bilingual k="worker.legend_present" inline /></span>
+                    <span class="flex items-center gap-1.5"><span class="h-2 w-2 rounded-full bg-status-danger" /><Bilingual k="worker.legend_absent" inline /></span>
+                    <span class="flex items-center gap-1.5"><span class="h-2 w-2 rounded-full bg-surface-sunken ring-1 ring-line" /><Bilingual k="worker.legend_none" inline /></span>
+                </div>
+            </div>
+        </section>
 
         <!-- Absence sheet -->
         <div v-if="absenceOpen" class="fixed inset-0 z-40 flex items-end bg-black/40" @click.self="absenceOpen = false">

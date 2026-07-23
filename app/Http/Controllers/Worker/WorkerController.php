@@ -8,6 +8,7 @@ use App\Models\Attendance;
 use App\Models\Employee;
 use App\Models\Scopes\CompanyScope;
 use App\Services\Workers\WorkerAttendanceService;
+use App\Services\Workers\WorkerDashboardService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
@@ -24,7 +25,10 @@ use Inertia\Response;
  */
 class WorkerController extends Controller
 {
-    public function __construct(private readonly WorkerAttendanceService $attendance) {}
+    public function __construct(
+        private readonly WorkerAttendanceService $attendance,
+        private readonly WorkerDashboardService $dashboard,
+    ) {}
 
     public function home(Request $request): Response
     {
@@ -38,6 +42,8 @@ class WorkerController extends Controller
                 'company' => $employee->company?->name,
             ],
             'today' => $this->todayPayload($today),
+            // The current month's calendar + figures for the dashboard below.
+            'month' => $this->dashboard->forMonth($employee),
         ]);
     }
 

@@ -1009,6 +1009,14 @@ return [
         'already_checked_out' => 'Ya ha fichado la salida hoy / Already checked out today',
         'not_checked_in' => 'Debe fichar la entrada primero / You must check in first',
         'already_has_record' => 'Ya hay un registro para hoy / There is already a record for today',
+        // Dashboard (this month)
+        'days_present' => 'Días presente',
+        'days_absent' => 'Días ausente',
+        'total_hours' => 'Horas',
+        'earned' => 'Ganado',
+        'legend_present' => 'Presente',
+        'legend_absent' => 'Ausente',
+        'legend_none' => 'Sin registro',
         'install' => 'Instalar la aplicación',
         'install_hint' => 'Instálela en su teléfono para abrirla como una app.',
         // iOS has no install API — the manual route is the only honest option.
