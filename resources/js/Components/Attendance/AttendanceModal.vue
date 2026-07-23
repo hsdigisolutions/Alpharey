@@ -7,6 +7,7 @@
 import { computed, watch } from 'vue';
 import { router, useForm } from '@inertiajs/vue3';
 import FormField from '@/Components/ui/FormField.vue';
+import VBadge from '@/Components/ui/VBadge.vue';
 import VButton from '@/Components/ui/VButton.vue';
 import VCheckbox from '@/Components/ui/VCheckbox.vue';
 import VCurrencyInput from '@/Components/ui/VCurrencyInput.vue';
@@ -59,6 +60,13 @@ function destroy() {
     if (props.record?.id) {
         router.delete(`/attendance/${props.record.id}`, { preserveScroll: true, onSuccess: () => emit('close') });
     }
+}
+
+// A plain Google Maps link (client decision — no map tiles, so no CSP change).
+// Opens in a new tab; a fabricated coordinate simply opens the wrong place, so
+// this is never a security surface.
+function mapsUrl(loc) {
+    return `https://www.google.com/maps/search/?api=1&query=${loc.lat},${loc.lng}`;
 }
 </script>
 
@@ -122,6 +130,53 @@ function destroy() {
                 <VInput v-model="form.exception_reason" />
             </FormField>
             <FormField k="attendance.notes"><VTextarea v-model="form.notes" :rows="2" /></FormField>
+
+            <!-- Worker PWA capture: shown only for a phone punch. Read-only —
+                 an admin sees where/when the worker punched and their selfie,
+                 but the record itself is edited through the fields above. -->
+            <div v-if="record?.worker" class="rounded-md border border-line bg-surface-sunken p-3">
+                <div class="mb-2 flex items-center gap-2">
+                    <VBadge status="info"><Bilingual k="attendance.from_app" inline /></VBadge>
+                    <span v-if="record.worker.location_denied" class="text-xs text-status-warn">
+                        <Bilingual k="attendance.no_location" inline />
+                    </span>
+                </div>
+
+                <dl class="space-y-1.5 text-sm">
+                    <div v-if="record.worker.check_in" class="flex items-center justify-between gap-3">
+                        <dt class="text-ink-soft"><Bilingual k="attendance.punch_in_loc" inline /></dt>
+                        <dd>
+                            <a :href="mapsUrl(record.worker.check_in)" target="_blank" rel="noopener"
+                                class="text-accent underline-offset-2 hover:underline">
+                                <Bilingual k="attendance.view_map" inline />
+                            </a>
+                            <span v-if="record.worker.check_in.accuracy" class="ms-1 text-xs text-muted">±{{ Math.round(record.worker.check_in.accuracy) }}m</span>
+                        </dd>
+                    </div>
+                    <div v-if="record.worker.check_out" class="flex items-center justify-between gap-3">
+                        <dt class="text-ink-soft"><Bilingual k="attendance.punch_out_loc" inline /></dt>
+                        <dd>
+                            <a :href="mapsUrl(record.worker.check_out)" target="_blank" rel="noopener"
+                                class="text-accent underline-offset-2 hover:underline">
+                                <Bilingual k="attendance.view_map" inline />
+                            </a>
+                            <span v-if="record.worker.check_out.accuracy" class="ms-1 text-xs text-muted">±{{ Math.round(record.worker.check_out.accuracy) }}m</span>
+                        </dd>
+                    </div>
+                    <div v-if="record.worker.note" class="pt-1">
+                        <dt class="text-ink-soft"><Bilingual k="attendance.worker_note" inline /></dt>
+                        <dd class="mt-0.5 rounded bg-surface-raised px-2 py-1 text-sm">{{ record.worker.note }}</dd>
+                    </div>
+                </dl>
+
+                <!-- Selfie: fetched through the gated, audited route -->
+                <div v-if="record.worker.has_photo" class="mt-3">
+                    <a :href="`/attendance/${record.id}/selfie`" target="_blank" rel="noopener">
+                        <img :src="`/attendance/${record.id}/selfie`" alt=""
+                            class="h-28 w-28 rounded-md border border-line object-cover" />
+                    </a>
+                </div>
+            </div>
         </form>
         <template #footer>
             <VButton v-if="record?.id" variant="danger" size="sm" icon="trash" class="me-auto" @click="destroy">

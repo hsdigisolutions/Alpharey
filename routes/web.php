@@ -217,6 +217,8 @@ Route::middleware(['auth', 'active', 'two_factor', 'not_worker'])->group(functio
     Route::post('/attendance', [AttendanceController::class, 'store'])->name('attendance.store');
     Route::put('/attendance/{attendance}', [AttendanceController::class, 'update'])->name('attendance.update');
     Route::delete('/attendance/{attendance}', [AttendanceController::class, 'destroy'])->name('attendance.destroy');
+    // Worker PWA: the gated, audited check-in selfie (Phase E)
+    Route::get('/attendance/{attendance}/selfie', [AttendanceController::class, 'selfie'])->name('attendance.selfie');
 
     // Screen 24 — Measurements (company-owned)
     Route::get('/measurements', [MeasurementController::class, 'index'])->name('measurements.index');

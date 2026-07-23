@@ -674,6 +674,13 @@ return [
         'new' => 'New Entry',
         'edit' => 'Edit Attendance',
         'saved' => 'Asistencia guardada / Attendance saved',
+        // Worker PWA capture shown on the record (Phase E)
+        'from_app' => 'Checked in from the app',
+        'no_location' => 'No location',
+        'punch_in_loc' => 'Check-in location',
+        'punch_out_loc' => 'Check-out location',
+        'view_map' => 'View on map',
+        'worker_note' => 'Worker note',
         'deleted' => 'Asistencia eliminada / Attendance removed',
         'month' => 'Month',
         'employee' => 'Employee',

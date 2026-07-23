@@ -10,6 +10,7 @@ use App\Models\Employee;
 use App\Models\EmployeeDeployment;
 use App\Models\Project;
 use App\Services\Attendance\AttendanceService;
+use App\Services\Audit\AuditLogger;
 use App\Support\CurrentCompany;
 use App\Support\PeriodLock;
 use Illuminate\Http\RedirectResponse;
@@ -17,8 +18,10 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 use Inertia\Response;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
  * Screen 11 — Attendance calendar grid. Rows = employees, columns = days of
@@ -149,6 +152,27 @@ class AttendanceController extends Controller
     }
 
     /**
+     * The check-in selfie for one attendance row.
+     *
+     * A private file, so it is served ONLY through here: permission-checked
+     * (viewing attendance is the right to see it), tenant-scoped by route
+     * binding, and audited on every view — a photo of a person is exactly the
+     * kind of access that must leave a trail. Never a public URL.
+     */
+    public function selfie(Attendance $attendance, AuditLogger $audit): StreamedResponse
+    {
+        Gate::authorize('attendance.view');
+
+        $path = $attendance->check_in_photo_path;
+
+        abort_if($path === null || ! Storage::disk('local')->exists($path), 404);
+
+        $audit->log('viewed', $attendance, null, null, 'Check-in selfie', 'attendance');
+
+        return Storage::disk('local')->response($path);
+    }
+
+    /**
      * @return array<string, mixed>
      */
     private function payload(Attendance $attendance): array
@@ -174,6 +198,38 @@ class AttendanceController extends Controller
             'is_exception' => $attendance->is_exception,
             'exception_reason' => $attendance->exception_reason,
             'notes' => $attendance->notes,
+            // Worker PWA capture (Phase E). Present only on phone punches; the
+            // map link is built client-side from the coordinates, and the photo
+            // is fetched through the gated download route, never a public URL.
+            'worker' => $attendance->source === 'worker' ? [
+                'source' => $attendance->source,
+                'note' => $attendance->worker_note,
+                'location_denied' => $attendance->location_denied,
+                'check_in_at' => $attendance->check_in_at?->toDateTimeString(),
+                'check_out_at' => $attendance->check_out_at?->toDateTimeString(),
+                'check_in' => $this->coords($attendance->check_in_lat, $attendance->check_in_lng, $attendance->check_in_accuracy),
+                'check_out' => $this->coords($attendance->check_out_lat, $attendance->check_out_lng, $attendance->check_out_accuracy),
+                'has_photo' => $attendance->check_in_photo_path !== null,
+            ] : null,
+        ];
+    }
+
+    /**
+     * A coordinate triple for the client, or null when there is no fix.
+     * The columns are decimal casts, so their values arrive as numeric strings.
+     *
+     * @return array{lat: float, lng: float, accuracy: float|null}|null
+     */
+    private function coords(?string $lat, ?string $lng, float|string|null $accuracy): ?array
+    {
+        if ($lat === null || $lng === null) {
+            return null;
+        }
+
+        return [
+            'lat' => (float) $lat,
+            'lng' => (float) $lng,
+            'accuracy' => $accuracy !== null ? (float) $accuracy : null,
         ];
     }
 
