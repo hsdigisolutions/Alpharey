@@ -979,6 +979,37 @@ return [
     'worker' => [
         'title' => 'My Workday',
         'coming_soon' => 'Check-in will be available shortly',
+        // Check in / out
+        'check_in' => 'Check in',
+        'check_out' => 'Check out',
+        'checking_in' => 'Recording…',
+        'checked_in' => 'Entrada registrada / Checked in',
+        'checked_out' => 'Salida registrada / Checked out',
+        'status_none' => 'You have not checked in yet today',
+        'status_checked_in' => 'Checked in at :time',
+        'status_checked_out' => 'Day complete · :hours h',
+        'status_absent' => 'Marked absent today',
+        'entry' => 'In',
+        'exit' => 'Out',
+        'done_for_today' => 'Day finished. Nice work!',
+        // Location + camera
+        'getting_location' => 'Getting location…',
+        'location_off' => 'No location (permission denied). Your check-in will still be recorded.',
+        'camera_prompt' => 'Take a photo to check in',
+        'take_photo' => 'Take photo',
+        'retake' => 'Retake',
+        'camera_denied' => 'Could not open the camera. Check permissions.',
+        // Absence
+        'report_absence' => 'I am absent today — add reason',
+        'absence_reason' => 'Reason for absence',
+        'absence_placeholder' => 'e.g. Doctor appointment, illness…',
+        'absence_submit' => 'Submit absence',
+        'absence_saved' => 'Ausencia registrada / Absence recorded',
+        // Guards
+        'already_checked_in' => 'Ya ha fichado la entrada hoy / Already checked in today',
+        'already_checked_out' => 'Ya ha fichado la salida hoy / Already checked out today',
+        'not_checked_in' => 'Debe fichar la entrada primero / You must check in first',
+        'already_has_record' => 'Ya hay un registro para hoy / There is already a record for today',
         'install' => 'Install the app',
         'install_hint' => 'Install it on your phone to open it like an app.',
         // iOS has no install API — the manual route is the only honest option.

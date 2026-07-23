@@ -29,6 +29,16 @@ use Illuminate\Support\Carbon;
  * @property numeric-string $total_amount
  * @property bool $manual_wage_override
  * @property bool $is_paid
+ * @property Carbon|null $check_in_at
+ * @property Carbon|null $check_out_at
+ * @property numeric-string|null $check_in_lat
+ * @property numeric-string|null $check_in_lng
+ * @property numeric-string|null $check_out_lat
+ * @property numeric-string|null $check_out_lng
+ * @property string|null $check_in_photo_path
+ * @property bool $location_denied
+ * @property string|null $worker_note
+ * @property string $source
  */
 class Attendance extends Model
 {
@@ -68,6 +78,18 @@ class Attendance extends Model
             'manual_wage_override' => 'boolean',
             'is_paid' => 'boolean',
             'is_exception' => 'boolean',
+            // Worker PWA capture (set by WorkerAttendanceService, never mass
+            // assigned — a phone must not be able to POST a GPS coordinate into
+            // a field the clerk grid never touches).
+            'check_in_at' => 'datetime',
+            'check_out_at' => 'datetime',
+            'check_in_lat' => 'decimal:7',
+            'check_in_lng' => 'decimal:7',
+            'check_in_accuracy' => 'decimal:2',
+            'check_out_lat' => 'decimal:7',
+            'check_out_lng' => 'decimal:7',
+            'check_out_accuracy' => 'decimal:2',
+            'location_denied' => 'boolean',
         ];
     }
 

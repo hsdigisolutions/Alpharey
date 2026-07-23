@@ -978,6 +978,37 @@ return [
     'worker' => [
         'title' => 'Mi Jornada',
         'coming_soon' => 'El fichaje estará disponible en breve',
+        // Check in / out
+        'check_in' => 'Fichar entrada',
+        'check_out' => 'Fichar salida',
+        'checking_in' => 'Fichando…',
+        'checked_in' => 'Entrada registrada / Checked in',
+        'checked_out' => 'Salida registrada / Checked out',
+        'status_none' => 'Aún no ha fichado hoy',
+        'status_checked_in' => 'Entrada a las :time',
+        'status_checked_out' => 'Jornada completada · :hours h',
+        'status_absent' => 'Marcado como ausente hoy',
+        'entry' => 'Entrada',
+        'exit' => 'Salida',
+        'done_for_today' => 'Jornada finalizada. ¡Buen trabajo!',
+        // Location + camera
+        'getting_location' => 'Obteniendo ubicación…',
+        'location_off' => 'Sin ubicación (permiso denegado). Se registrará el fichaje igualmente.',
+        'camera_prompt' => 'Hágase una foto para fichar la entrada',
+        'take_photo' => 'Hacer foto',
+        'retake' => 'Repetir',
+        'camera_denied' => 'No se pudo abrir la cámara. Revise los permisos.',
+        // Absence
+        'report_absence' => 'Estoy ausente hoy — indicar motivo',
+        'absence_reason' => 'Motivo de la ausencia',
+        'absence_placeholder' => 'Ej.: Cita médica, enfermedad…',
+        'absence_submit' => 'Enviar ausencia',
+        'absence_saved' => 'Ausencia registrada / Absence recorded',
+        // Guards
+        'already_checked_in' => 'Ya ha fichado la entrada hoy / Already checked in today',
+        'already_checked_out' => 'Ya ha fichado la salida hoy / Already checked out today',
+        'not_checked_in' => 'Debe fichar la entrada primero / You must check in first',
+        'already_has_record' => 'Ya hay un registro para hoy / There is already a record for today',
         'install' => 'Instalar la aplicación',
         'install_hint' => 'Instálela en su teléfono para abrirla como una app.',
         // iOS has no install API — the manual route is the only honest option.
