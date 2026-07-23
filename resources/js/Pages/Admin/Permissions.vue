@@ -12,7 +12,6 @@ import AppLayout from '@/Layouts/AppLayout.vue';
 import FormField from '@/Components/ui/FormField.vue';
 import VAlert from '@/Components/ui/VAlert.vue';
 import VAvatar from '@/Components/ui/VAvatar.vue';
-import VBadge from '@/Components/ui/VBadge.vue';
 import VButton from '@/Components/ui/VButton.vue';
 import VInput from '@/Components/ui/VInput.vue';
 import VModal from '@/Components/ui/VModal.vue';
@@ -116,7 +115,10 @@ const isSuperAdmin = computed(() => page.props.auth?.user?.role === 'super_admin
 function resetTwoFactor(user) {
     if (!window.confirm(`${user.name} — ${t('two_factor.reset_confirm')}`)) return;
 
-    router.post(`/admin/permissions/${user.id}/reset-2fa`, {}, { preserveScroll: true });
+    router.post(`/admin/permissions/${user.id}/reset-2fa`, {}, {
+        preserveScroll: true,
+        onSuccess: () => { showUserModal.value = false; },
+    });
 }
 
 // --- User create/edit modal ---
@@ -179,33 +181,38 @@ function submitUser() {
                 <ul class="mt-2 space-y-0.5">
                     <li v-for="user in filteredUsers" :key="user.id">
                         <div role="button" tabindex="0"
-                            class="flex w-full cursor-pointer items-center gap-2.5 rounded-md px-2.5 py-2 text-start transition-colors"
+                            class="group flex w-full cursor-pointer items-center gap-2.5 rounded-md px-2.5 py-2 text-start transition-colors"
                             :class="user.id === props.selectedUser ? 'bg-accent-soft' : 'hover:bg-surface-hover'"
                             @click="selectUser(user)"
                             @keydown.enter="selectUser(user)">
                             <VAvatar :name="user.name" size="sm" />
+                            <!-- The name/email/company own the flexible space so the
+                                 name is never squeezed to nothing by the tags on the
+                                 right (which caused admin rows to look blank/faded). -->
                             <span class="min-w-0 flex-1">
-                                <span class="block truncate text-sm font-medium">{{ user.name }}</span>
+                                <span class="block truncate text-sm font-medium text-ink">{{ user.name }}</span>
                                 <span class="block truncate text-xs text-muted">{{ user.email }}</span>
                                 <!-- Shown for a Super Admin, who sees every company's users -->
                                 <span v-if="user.company" class="block truncate text-xs text-muted">{{ user.company }}</span>
                             </span>
-                            <VBadge v-if="!user.editable" status="accent">
-                                <Bilingual k="permissions.role_company_admin" inline />
-                            </VBadge>
-                            <span v-else-if="!user.active" class="h-2 w-2 rounded-full bg-status-danger" />
-                            <!-- Lost-phone lever: clears the second factor so the
-                                 user re-enrols on their next login. -->
-                            <button v-if="isSuperAdmin" type="button"
-                                class="rounded-sm p-1 text-muted hover:text-status-warn"
-                                :aria-label="`${user.name} — ${$t('two_factor.reset')}`"
-                                @click.stop="resetTwoFactor(user)">
-                                <AppIcon name="alert" class="h-3.5 w-3.5" />
-                            </button>
-                            <button type="button" class="rounded-sm p-1 text-muted hover:text-ink"
-                                :aria-label="`${user.name} — edit`" @click.stop="openEdit(user)">
-                                <AppIcon name="edit" class="h-3.5 w-3.5" />
-                            </button>
+
+                            <!-- Tags + actions: all shrink-0 so they can never grow
+                                 into the name column. The edit pencil (and, for an
+                                 admin's account, the whole role) is revealed on hover
+                                 to keep the resting list clean. -->
+                            <div class="flex shrink-0 items-center gap-1.5">
+                                <span v-if="!user.active" class="h-2 w-2 shrink-0 rounded-full bg-status-danger"
+                                    :title="$t('permissions.inactive')" />
+                                <span v-if="!user.editable"
+                                    class="shrink-0 rounded-sm bg-surface-sunken px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-ink-soft">
+                                    {{ $t('permissions.admin_tag') }}
+                                </span>
+                                <button type="button"
+                                    class="shrink-0 rounded-sm p-1 text-muted opacity-0 transition hover:text-ink group-hover:opacity-100 focus:opacity-100"
+                                    :aria-label="`${user.name} — ${$t('permissions.edit_user')}`" @click.stop="openEdit(user)">
+                                    <AppIcon name="edit" class="h-3.5 w-3.5" />
+                                </button>
+                            </div>
                         </div>
                     </li>
                 </ul>
@@ -322,6 +329,16 @@ function submitUser() {
                     <VToggle v-model="userForm.active" label="Activo / Active" size="sm" />
                     <Bilingual k="permissions.active" inline class="text-sm" />
                 </label>
+
+                <!-- Lost-phone lever (Super Admin only): clears the second
+                     factor so the user re-enrols on their next login. Lives
+                     here, not on every list row, where it read as a warning. -->
+                <div v-if="editingUser && isSuperAdmin" class="rounded-md border border-line bg-surface-sunken p-3">
+                    <p class="mb-2 text-xs text-muted"><Bilingual k="two_factor.reset_hint" /></p>
+                    <VButton variant="secondary" size="sm" @click="resetTwoFactor(editingUser)">
+                        <Bilingual k="two_factor.reset" inline />
+                    </VButton>
+                </div>
             </form>
             <template #footer>
                 <VButton variant="ghost" @click="showUserModal = false"><Bilingual k="common.cancel" inline /></VButton>

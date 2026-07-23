@@ -140,6 +140,9 @@ return [
         'locale' => 'Idioma',
         'password_hint' => 'Dejar en blanco para no cambiarla',
         'active' => 'Activo',
+        'inactive' => 'Inactivo',
+        // Compact tag on the user list; identical in both languages.
+        'admin_tag' => 'Admin',
         'admins_bypass' => 'Los administradores tienen acceso completo — la matriz no aplica',
         'module' => 'Módulo',
     ],
@@ -1046,6 +1049,7 @@ return [
         'recovery_intro' => 'Guarde estos códigos en un lugar seguro. Cada uno sirve una sola vez y le permitirá entrar si pierde el teléfono. No volverán a mostrarse.',
         'recovery_done' => 'Los he guardado',
         'reset' => 'Restablecer 2FA',
+        'reset_hint' => 'Si el usuario ha perdido el teléfono, esto borra su segundo factor y le pedirá configurarlo de nuevo al iniciar sesión.',
         'reset_done' => '2FA restablecido / Two-factor reset',
         'reset_confirm' => '¿Restablecer la verificación en dos pasos de este usuario?',
     ],

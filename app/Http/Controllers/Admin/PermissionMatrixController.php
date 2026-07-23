@@ -36,6 +36,11 @@ class PermissionMatrixController extends Controller
         // hid most of the directory from them. Company Admins stay confined to
         // their own company (tenancy, dev-skill Rule 1).
         $users = User::query()
+            // Workers reach no CRM module, so the permission matrix does not
+            // apply to them at all — they are managed from the employee record,
+            // never here. Listing them (tagged like an admin, no permissions to
+            // grant) only confuses the screen.
+            ->where('role', '!=', UserRole::Worker->value)
             ->when(
                 $actor !== null && ! $actor->isSuperAdmin(),
                 fn ($q) => $q->where('company_id', $companyId),
