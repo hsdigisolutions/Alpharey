@@ -33,13 +33,43 @@ The user/role/permission hierarchy was rebuilt:
 - `UserFactory::companyAdmin()` → calls `admin()`
 
 **PermissionMatrixController additions:**
-- `POST /admin/permissions/{user}/companies` — `assignCompany()`: SA assigns anywhere; Admin confined to own company
+- `POST /admin/permissions/{user}/companies` — `assignCompany()`: SA assigns anywhere; Admin within their own assigned companies
 - `DELETE /admin/permissions/{user}/companies/{company}` — `removeCompany()`: same scope rules
-- Both endpoints: guard against assigning SA via pivot (403); audit every change; update `company_id` if primary changes
-- Index now returns `assigned_companies` array + `availableCompanies` prop for the UI companies panel
+- Both endpoints: SA and Worker targets refused (403); audit every change; `company_id` follows the pivot when the primary changes
+- Index returns `assigned_companies` + `availableCompanies`; the Permissions.vue user modal has the assign/remove panel
 
-**Tests:** 8 new company-assignment tests in `tests/Feature/PermissionMatrixTest.php`; role strings
-updated across 35 test files; `SmokeTest` role assertion updated from `'user'` → `'manager'`.
+**Review pass (same day, post-rebuild) — what it caught and fixed:**
+- The rebuild had left the FRONTEND posting the old role strings — user create/edit
+  from Permissions.vue failed validation, `AppLayout`'s admin check hid the admin nav
+  from Admin-role users, the Settings notification matrix rendered dead columns, and
+  `notification_role_rules.role` rows were never renamed (second data migration added).
+- **The pivot was decorative — now it is the authority.** `CompanyScope` scopes
+  non-SA users through `CurrentCompany` (NOT bare `users.company_id`), and
+  `CurrentCompany` lets Admins/Managers select among pivot-assigned companies,
+  re-validating the session selection against the pivot on EVERY request.
+  `POST /company/{company}/switch` + a header switcher (rendered when the shared
+  `companies` prop holds >1 entry). `ModulePermissions` evaluates Manager rows
+  against the ACTIVE company — on the user's own requests only, so
+  `Gate::forUser()` on somebody else never reads the actor's session. Data scope
+  and permission scope resolve through the same source and cannot diverge (a real
+  divergence bug the `CompanySwitchTest` suite caught: gates followed a switch,
+  `CompanyScope` didn't).
+- **Invariant: every company-bound user appears on the pivot.** Seeded by the
+  rebuild migration, maintained by `UserController::store`, `UsersImporter`, and
+  assign/remove. The matrix writes grants to the BROWSED company when the target
+  is assigned to it — that is how a multi-company Manager gets per-company rights.
+- **SA role is LOCKED** — no demotion path, even for another SA (a demoted SA has
+  no company: limbo). Deactivate instead. Supersedes the earlier demote behavior.
+- `NotificationRules::recipients` includes pivot-assigned users; the fuzz suite
+  now covers Worker (denied all 144 abilities even with a stray matrix row).
+
+**Tests:** `CompanySwitchTest` (new, 6 tests) + additions across PermissionMatrix/
+AdminUsers/PermissionFuzz/NotificationRules/LegacyImporters tests.
+
+**Open (client decisions, not defects):** no UI path creates a NEW Super Admin
+(seeder/console only — "only SA creates SA" is currently "nobody via UI");
+whether Admins should get SA-tunable per-module restrictions (currently full
+bypass within assigned companies, the pre-rebuild behavior).
 
 ### Post-Phase-9 client work (2026-07-22)
 
