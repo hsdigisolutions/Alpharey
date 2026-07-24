@@ -52,8 +52,13 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->respond(function (Response $response, Throwable $e, Request $request) {
             $status = $response->getStatusCode();
 
-            if (! app()->environment(['local', 'testing'])
-                && in_array($status, [403, 404, 500, 503], true)) {
+            // 403 always renders the bilingual Inertia page — it is expected
+            // behaviour (a logged-in user hit a permission gate), not a dev
+            // error, so the debug page is never appropriate.
+            // 404/500/503 keep Laravel's debug page in local/testing.
+            if ($status === 403
+                || (! app()->environment(['local', 'testing'])
+                    && in_array($status, [404, 500, 503], true))) {
                 return Inertia::render('Error', ['status' => $status])
                     ->toResponse($request)
                     ->setStatusCode($status);

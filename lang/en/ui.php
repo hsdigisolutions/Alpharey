@@ -1538,6 +1538,7 @@ return [
     'errors' => [
         '403_title' => 'Access denied',
         '403_message' => 'You do not have permission to view this page.',
+        '403_contact' => 'Contact your administrator to request access to this module.',
         '404_title' => 'Page not found',
         '404_message' => 'The page you are looking for does not exist or was moved.',
         '500_title' => 'Server error',
@@ -1546,6 +1547,7 @@ return [
         '503_message' => 'We will be back in a few minutes.',
         '419_message' => 'Your session expired. Please try again.',
         'back_home' => 'Back to home',
+        'back_dashboard' => 'Back to dashboard',
     ],
 
 ];

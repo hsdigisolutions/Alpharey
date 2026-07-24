@@ -1539,6 +1539,7 @@ return [
     'errors' => [
         '403_title' => 'Acceso denegado',
         '403_message' => 'No tienes permiso para ver esta página.',
+        '403_contact' => 'Contacta con tu administrador para solicitar acceso a este módulo.',
         '404_title' => 'Página no encontrada',
         '404_message' => 'La página que buscas no existe o fue movida.',
         '500_title' => 'Error del servidor',
@@ -1547,6 +1548,7 @@ return [
         '503_message' => 'Volvemos en unos minutos.',
         '419_message' => 'La sesión ha caducado. Inténtalo de nuevo.',
         'back_home' => 'Volver al inicio',
+        'back_dashboard' => 'Volver al panel',
     ],
 
 ];
