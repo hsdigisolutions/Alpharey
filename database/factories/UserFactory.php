@@ -33,15 +33,14 @@ class UserFactory extends Factory
             'email' => fake()->unique()->safeEmail(),
             'email_verified_at' => now(),
             'password' => static::$password ??= Hash::make('password'),
-            'role' => UserRole::User,
+            'role' => UserRole::Manager,
             'company_id' => null,
             'locale' => 'es',
             'active' => true,
             'remember_token' => Str::random(10),
             // Two-step verification is mandatory (SECURITY.md §1), so a normal
             // account IS an enrolled one — a factory user without it would be
-            // half-configured and bounce off RequireTwoFactor. Tests that
-            // exercise enrolment itself use the pendingTwoFactor() state.
+            // half-configured and bounce off RequireTwoFactor.
             'two_factor_secret' => (new Google2FA)->generateSecretKey(),
             'two_factor_recovery_codes' => app(TwoFactorService::class)->generateRecoveryCodes(),
             'two_factor_confirmed_at' => now(),
@@ -49,8 +48,7 @@ class UserFactory extends Factory
     }
 
     /**
-     * A user who has not set up their second factor yet — the state every real
-     * account starts in, and the one the enrolment flow is built for.
+     * A user who has not set up their second factor yet.
      */
     public function pendingTwoFactor(): static
     {
@@ -61,9 +59,6 @@ class UserFactory extends Factory
         ]);
     }
 
-    /**
-     * Indicate that the model's email address should be unverified.
-     */
     public function unverified(): static
     {
         return $this->state(fn (array $attributes) => [
@@ -79,10 +74,31 @@ class UserFactory extends Factory
         ]);
     }
 
-    public function companyAdmin(): static
+    /**
+     * Admin role: broad management access, bypasses the permission matrix.
+     */
+    public function admin(): static
     {
         return $this->state(fn (array $attributes) => [
-            'role' => UserRole::CompanyAdmin,
+            'role' => UserRole::Admin,
+        ]);
+    }
+
+    /**
+     * @deprecated Use admin() — kept so existing tests compile unchanged.
+     */
+    public function companyAdmin(): static
+    {
+        return $this->admin();
+    }
+
+    /**
+     * Manager role: per-module permission rows, company-scoped.
+     */
+    public function manager(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'role' => UserRole::Manager,
         ]);
     }
 

@@ -10,9 +10,10 @@ use App\Models\UserModulePermission;
 /**
  * The module-permission engine (REQUIREMENTS.md §4, SECURITY.md §3).
  *
- *  - Super Admin      → everything, everywhere (via Gate::before)
- *  - Company Admin    → everything within their own company
- *  - Custom user      → per-action booleans on user_module_permissions
+ *  - Super Admin  → everything, everywhere (via Gate::before)
+ *  - Admin        → everything within their assigned company/companies
+ *  - Manager      → per-action booleans in user_module_permissions
+ *  - Worker       → nothing (PWA only)
  *
  * Checks query the table directly (no cross-request cache) so permission
  * changes take effect immediately, as the spec requires.
@@ -29,7 +30,7 @@ class ModulePermissions
             return true;
         }
 
-        // A worker reaches the PWA and nothing else. Refusing the role here
+        // Workers reach the PWA and nothing else.  Refusing the role here
         // rather than relying on an empty permission row means a matrix entry
         // created for one by mistake still grants nothing.
         if ($user->isWorker()) {
@@ -40,10 +41,13 @@ class ModulePermissions
             return false;
         }
 
-        if ($user->isCompanyAdmin()) {
+        // Admins bypass the per-module matrix — they have full access to all
+        // modules within their assigned company.
+        if ($user->isAdmin()) {
             return true;
         }
 
+        // Manager: evaluate the per-module row for their active company.
         return UserModulePermission::query()
             ->where('user_id', $user->id)
             ->where('company_id', $user->company_id)

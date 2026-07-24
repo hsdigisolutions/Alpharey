@@ -16,7 +16,7 @@ use Illuminate\Validation\ValidationException;
 beforeEach(function (): void {
     $this->company = Company::factory()->create();
     $this->admin = User::factory()->create([
-        'role' => UserRole::CompanyAdmin,
+        'role' => UserRole::Admin,
         'company_id' => $this->company->id,
     ]);
     $this->actingAs($this->admin);
@@ -308,7 +308,7 @@ it('refuses to issue kit to another company employee', function (): void {
 });
 
 it('denies inventory actions to a user without the permission', function (): void {
-    $plain = User::factory()->create(['role' => UserRole::User, 'company_id' => $this->company->id]);
+    $plain = User::factory()->create(['role' => UserRole::Manager, 'company_id' => $this->company->id]);
 
     $this->actingAs($plain)->get('/inventory')->assertForbidden();
     $this->actingAs($plain)->post("/inventory/items/{$this->item->id}/movements", [

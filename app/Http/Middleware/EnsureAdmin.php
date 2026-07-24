@@ -17,7 +17,7 @@ class EnsureAdmin
     {
         $user = $request->user();
 
-        if (! $user instanceof User || (! $user->isSuperAdmin() && ! $user->isCompanyAdmin())) {
+        if (! $user instanceof User || (! $user->isSuperAdmin() && ! $user->isAdmin())) {
             abort(403);
         }
 

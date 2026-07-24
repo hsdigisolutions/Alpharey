@@ -53,8 +53,8 @@ it('denies every ability to an inactive user, whatever the role', function (User
     }
 })->with([
     'super admin' => [UserRole::SuperAdmin],
-    'company admin' => [UserRole::CompanyAdmin],
-    'custom user' => [UserRole::User],
+    'company admin' => [UserRole::Admin],
+    'custom user' => [UserRole::Manager],
 ]);
 
 it('allows every ability to an active Super Admin', function (): void {
@@ -66,7 +66,7 @@ it('allows every ability to an active Super Admin', function (): void {
 });
 
 it('allows every ability to a Company Admin within their company', function (): void {
-    $admin = User::factory()->create(['role' => UserRole::CompanyAdmin, 'active' => true, 'company_id' => $this->company->id]);
+    $admin = User::factory()->create(['role' => UserRole::Admin, 'active' => true, 'company_id' => $this->company->id]);
 
     foreach (everyAbility() as $ability) {
         expect(Gate::forUser($admin)->allows($ability))->toBeTrue("company admin should be allowed {$ability}");
@@ -74,7 +74,7 @@ it('allows every ability to a Company Admin within their company', function (): 
 });
 
 it('denies every ability to a custom user with no grants', function (): void {
-    $user = User::factory()->create(['role' => UserRole::User, 'active' => true, 'company_id' => $this->company->id]);
+    $user = User::factory()->create(['role' => UserRole::Manager, 'active' => true, 'company_id' => $this->company->id]);
 
     foreach (everyAbility() as $ability) {
         expect(Gate::forUser($user)->allows($ability))->toBeFalse("ungranted custom user should be denied {$ability}");
@@ -82,7 +82,7 @@ it('denies every ability to a custom user with no grants', function (): void {
 });
 
 it('grants a custom user EXACTLY one ability and nothing else', function (): void {
-    $user = User::factory()->create(['role' => UserRole::User, 'active' => true, 'company_id' => $this->company->id]);
+    $user = User::factory()->create(['role' => UserRole::Manager, 'active' => true, 'company_id' => $this->company->id]);
 
     // Grant only employees.view.
     UserModulePermission::query()->create([
@@ -100,7 +100,7 @@ it('grants a custom user EXACTLY one ability and nothing else', function (): voi
 });
 
 it('does not let one action grant imply a sibling action on the same module', function (): void {
-    $user = User::factory()->create(['role' => UserRole::User, 'active' => true, 'company_id' => $this->company->id]);
+    $user = User::factory()->create(['role' => UserRole::Manager, 'active' => true, 'company_id' => $this->company->id]);
 
     // View on payroll must NOT confer edit/approve/export/download on payroll.
     UserModulePermission::query()->create([
@@ -119,7 +119,7 @@ it('does not let one action grant imply a sibling action on the same module', fu
 });
 
 it('ignores a grant when the custom user has no company', function (): void {
-    $user = User::factory()->create(['role' => UserRole::User, 'active' => true, 'company_id' => null]);
+    $user = User::factory()->create(['role' => UserRole::Manager, 'active' => true, 'company_id' => null]);
 
     // A dangling grant referencing a company the user is not in.
     UserModulePermission::query()->create([

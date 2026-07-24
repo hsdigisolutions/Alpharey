@@ -61,7 +61,7 @@ class UsersImporter extends AbstractImporter
                     'email' => $row->email,
                     // Temporary random secret — replaced below by the legacy hash
                     'password' => bin2hex(random_bytes(20)),
-                    'role' => $isAdmin ? UserRole::SuperAdmin : UserRole::User,
+                    'role' => $isAdmin ? UserRole::SuperAdmin : UserRole::Manager,
                     'company_id' => $isAdmin ? null : $defaultCompanyId,
                     'locale' => 'es',
                     'active' => ($row->status ?? 'active') === 'active',

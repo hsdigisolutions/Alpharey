@@ -41,7 +41,7 @@ it('updates my own name only, never my email or role', function (): void {
     $this->user->refresh();
     expect($this->user->name)->toBe('New Name')
         ->and($this->user->email)->toBe('me@example.com')
-        ->and($this->user->role)->toBe(UserRole::User);
+        ->and($this->user->role)->toBe(UserRole::Manager);
 });
 
 it('raises a password reset request and notifies every super admin', function (): void {

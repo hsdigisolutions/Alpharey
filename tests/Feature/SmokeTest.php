@@ -32,7 +32,7 @@ it('renders the dashboard shell for authenticated users', function (): void {
         ->assertInertia(fn (Assert $page) => $page
             ->component('Dashboard')
             ->where('auth.user.id', $user->id)
-            ->where('auth.user.role', 'user'));
+            ->where('auth.user.role', 'manager'));
 });
 
 it('answers the health check', function (): void {

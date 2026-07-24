@@ -17,7 +17,7 @@ use App\Services\Dashboard\TodayService;
 beforeEach(function (): void {
     $this->company = Company::factory()->create();
     $this->admin = User::factory()->create([
-        'role' => UserRole::CompanyAdmin,
+        'role' => UserRole::Admin,
         'company_id' => $this->company->id,
     ]);
 });
@@ -104,7 +104,7 @@ it('lists advances pending approval with the amount for a pay-viewer', function 
 });
 
 it('strips the advance amount for a user without pay permission', function (): void {
-    $plain = User::factory()->create(['role' => UserRole::User, 'company_id' => $this->company->id]);
+    $plain = User::factory()->create(['role' => UserRole::Manager, 'company_id' => $this->company->id]);
     // grant only leave.view so the page is reachable is not needed — today has no
     // module gate; but the pay figure must be hidden.
     $employee = Employee::factory()->create(['company_id' => $this->company->id]);

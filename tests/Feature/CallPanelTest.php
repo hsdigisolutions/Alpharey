@@ -9,7 +9,7 @@ use App\Models\User;
 beforeEach(function (): void {
     $this->company = Company::factory()->create();
     $this->admin = User::factory()->create([
-        'role' => UserRole::CompanyAdmin,
+        'role' => UserRole::Admin,
         'company_id' => $this->company->id,
     ]);
     $this->actingAs($this->admin);
@@ -191,7 +191,7 @@ it('does not leak another company call history through the selector', function (
 });
 
 it('denies the call panel to a user without the permission', function (): void {
-    $plain = User::factory()->create(['role' => UserRole::User, 'company_id' => $this->company->id]);
+    $plain = User::factory()->create(['role' => UserRole::Manager, 'company_id' => $this->company->id]);
 
     $this->actingAs($plain)->get('/calls')->assertForbidden();
     $this->actingAs($plain)->post('/calls', [

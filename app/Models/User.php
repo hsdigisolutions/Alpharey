@@ -8,6 +8,7 @@ use App\Notifications\BilingualResetPassword;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
@@ -92,6 +93,19 @@ class User extends Authenticatable
     }
 
     /**
+     * All companies this user has been assigned to (via the user_company pivot).
+     * For most users this is a single row matching their company_id; Super
+     * Admins and multi-company Managers may have several.
+     *
+     * @return BelongsToMany<Company, $this>
+     */
+    public function companies(): BelongsToMany
+    {
+        return $this->belongsToMany(Company::class, 'user_company')
+            ->withPivot('assigned_by', 'created_at');
+    }
+
+    /**
      * @return HasMany<UserModulePermission, $this>
      */
     public function modulePermissions(): HasMany
@@ -104,14 +118,21 @@ class User extends Authenticatable
         return $this->role === UserRole::SuperAdmin;
     }
 
-    public function sendPasswordResetNotification($token): void
+    /**
+     * Admin: broad access, bypasses the per-module permission matrix within
+     * their assigned companies.
+     */
+    public function isAdmin(): bool
     {
-        $this->notify(new BilingualResetPassword($token));
+        return $this->role === UserRole::Admin;
     }
 
-    public function isCompanyAdmin(): bool
+    /**
+     * Manager: company-level access governed by per-module permission rows.
+     */
+    public function isManager(): bool
     {
-        return $this->role === UserRole::CompanyAdmin;
+        return $this->role === UserRole::Manager;
     }
 
     public function isWorker(): bool
@@ -120,7 +141,20 @@ class User extends Authenticatable
     }
 
     /**
-     * The workforce record this login belongs to — set only for worker
+     * @deprecated Use isAdmin() — kept to avoid touching all callers at once.
+     */
+    public function isCompanyAdmin(): bool
+    {
+        return $this->isAdmin();
+    }
+
+    public function sendPasswordResetNotification($token): void
+    {
+        $this->notify(new BilingualResetPassword($token));
+    }
+
+    /**
+     * The workforce record this login belongs to — set only for Worker
      * accounts, which is what lets a phone punch land on the right payslip.
      *
      * @return HasOne<Employee, $this>

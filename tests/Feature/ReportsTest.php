@@ -12,7 +12,7 @@ use App\Services\Reports\ReportService;
 beforeEach(function (): void {
     $this->company = Company::factory()->create();
     $this->admin = User::factory()->create([
-        'role' => UserRole::CompanyAdmin,
+        'role' => UserRole::Admin,
         'company_id' => $this->company->id,
     ]);
 });
@@ -66,7 +66,7 @@ it('computes the financial net position from sales minus expenses', function ():
  * financial modules need their own view right too.
  */
 it('blocks the payroll report for a user who cannot view payroll', function (): void {
-    $user = User::factory()->create(['role' => UserRole::User, 'company_id' => $this->company->id]);
+    $user = User::factory()->create(['role' => UserRole::Manager, 'company_id' => $this->company->id]);
     UserModulePermission::query()->create([
         'user_id' => $user->id, 'company_id' => $this->company->id,
         'module' => 'reports', 'can_view' => true, 'can_export' => true,
@@ -83,7 +83,7 @@ it('blocks the payroll report for a user who cannot view payroll', function (): 
 });
 
 it('offers a payroll-less module list to a user without payroll rights', function (): void {
-    $user = User::factory()->create(['role' => UserRole::User, 'company_id' => $this->company->id]);
+    $user = User::factory()->create(['role' => UserRole::Manager, 'company_id' => $this->company->id]);
     UserModulePermission::query()->create([
         'user_id' => $user->id, 'company_id' => $this->company->id,
         'module' => 'reports', 'can_view' => true,

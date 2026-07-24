@@ -14,8 +14,11 @@ return [
     // Role names as shown in the header user menu.
     'roles' => [
         'super_admin' => 'Superadministrador',
-        'company_admin' => 'Admin de Empresa',
-        'user' => 'Usuario',
+        'admin' => 'Admin',
+        'manager' => 'Manager',
+        'worker' => 'Empleado',
+        // Legacy key kept for any transition code still reading it
+        'user' => 'Manager',
     ],
 
     'nav' => [
@@ -136,9 +139,17 @@ return [
         'edit_user' => 'Editar Usuario',
         'role' => 'Rol',
         'role_super_admin' => 'Super Admin',
-        'role_company_admin' => 'Admin de Empresa',
-        'role_user' => 'Usuario',
+        'role_admin' => 'Admin',
+        'role_manager' => 'Manager',
+        // Legacy aliases kept for any stale references
+        'role_company_admin' => 'Admin',
+        'role_user' => 'Manager',
         'locale' => 'Idioma',
+        'company_assigned' => 'Empresa asignada',
+        'company_removed' => 'Empresa eliminada',
+        'assign_company' => 'Asignar empresa',
+        'assigned_companies' => 'Empresas asignadas',
+        'no_companies' => 'Sin empresas asignadas',
         'password_hint' => 'Dejar en blanco para no cambiarla',
         'active' => 'Activo',
         'inactive' => 'Inactivo',
@@ -253,8 +264,10 @@ return [
         'health_queue' => 'Cola de trabajos',
         'health_mail' => 'Correo (SMTP)',
         'role_super_admin' => 'Super Admin',
-        'role_company_admin' => 'Admin de Empresa',
-        'role_user' => 'Usuario',
+        'role_admin' => 'Admin',
+        'role_manager' => 'Manager',
+        'role_company_admin' => 'Admin',
+        'role_user' => 'Manager',
         'ntype_document_expiry' => 'Vencimiento de documentos',
         'ntype_payroll_ready' => 'Nómina lista',
         'ntype_invoice_overdue' => 'Factura vencida',

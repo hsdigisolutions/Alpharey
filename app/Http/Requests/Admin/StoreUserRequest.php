@@ -13,13 +13,13 @@ class StoreUserRequest extends FormRequest
     {
         $user = $this->user();
 
-        return $user instanceof User && ($user->isSuperAdmin() || $user->isCompanyAdmin());
+        return $user instanceof User && ($user->isSuperAdmin() || $user->isAdmin());
     }
 
     /**
      * company_id is intentionally NOT accepted — the new user always joins
      * the active company context (tenancy Rule 1). Only the Super Admin may
-     * create Company Admins.
+     * create Admin users.
      *
      * @return array<string, array<int, mixed>>
      */
@@ -32,7 +32,7 @@ class StoreUserRequest extends FormRequest
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')],
             'password' => ['required', 'string', Password::min(8)],
-            'role' => ['required', Rule::in($actor->isSuperAdmin() ? ['company_admin', 'user'] : ['user'])],
+            'role' => ['required', Rule::in($actor->isSuperAdmin() ? ['admin', 'manager'] : ['manager'])],
             'locale' => ['required', Rule::in(['es', 'en'])],
         ];
     }

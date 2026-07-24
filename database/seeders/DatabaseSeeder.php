@@ -7,6 +7,7 @@ use App\Models\Brand;
 use App\Models\Company;
 use App\Models\User;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\DB;
 
 class DatabaseSeeder extends Seeder
 {
@@ -51,27 +52,38 @@ class DatabaseSeeder extends Seeder
 
         $first = $companies->first();
 
-        User::query()->firstOrCreate(
+        $adminUser = User::query()->firstOrCreate(
             ['email' => 'empresa1.admin@alpharey.local'],
             [
                 'name' => 'Admin Contalex 365',
                 'password' => 'password',
-                'role' => UserRole::CompanyAdmin,
+                'role' => UserRole::Admin,
                 'company_id' => $first->id,
                 'locale' => 'es',
             ],
         );
 
-        User::query()->firstOrCreate(
+        $managerUser = User::query()->firstOrCreate(
             ['email' => 'empresa1.user@alpharey.local'],
             [
-                'name' => 'Usuario Contalex 365',
+                'name' => 'Manager Contalex 365',
                 'password' => 'password',
-                'role' => UserRole::User,
+                'role' => UserRole::Manager,
                 'company_id' => $first->id,
                 'locale' => 'es',
             ],
         );
+
+        // Seed the user_company pivot for non-SA users
+        foreach ([$adminUser, $managerUser] as $u) {
+            if ($u->company_id !== null) {
+                DB::table('user_company')->insertOrIgnore([
+                    'user_id' => $u->id,
+                    'company_id' => $u->company_id,
+                    'created_at' => now(),
+                ]);
+            }
+        }
 
         // Reference data, not dummies: the 8 leave categories ship with the
         // product and are needed in production too.

@@ -139,6 +139,105 @@ it('still confines a Company Admin to their own company users', function (): voi
         ->assertInertia(fn (Assert $page) => $page->has('users', 2));
 });
 
+// ─── Company assignment ────────────────────────────────────────────────────
+
+it('super admin can assign any company to a manager', function (): void {
+    $sa = User::factory()->superAdmin()->create();
+    $target = User::factory()->forCompany($this->companyA)->create();
+
+    $this->actingAs($sa)
+        ->post("/admin/permissions/{$target->id}/companies", ['company_id' => $this->companyB->id])
+        ->assertRedirect();
+
+    $this->assertDatabaseHas('user_company', [
+        'user_id' => $target->id,
+        'company_id' => $this->companyB->id,
+        'assigned_by' => $sa->id,
+    ]);
+});
+
+it('admin can assign their own company to a manager', function (): void {
+    $target = User::factory()->forCompany($this->companyA)->create();
+
+    $this->actingAs($this->admin)
+        ->post("/admin/permissions/{$target->id}/companies", ['company_id' => $this->companyA->id])
+        ->assertRedirect();
+
+    $this->assertDatabaseHas('user_company', [
+        'user_id' => $target->id,
+        'company_id' => $this->companyA->id,
+    ]);
+});
+
+it('admin cannot assign a different company to a user', function (): void {
+    $target = User::factory()->forCompany($this->companyA)->create();
+
+    $this->actingAs($this->admin)
+        ->post("/admin/permissions/{$target->id}/companies", ['company_id' => $this->companyB->id])
+        ->assertForbidden();
+});
+
+it('nobody can assign a company to a super admin', function (): void {
+    $sa = User::factory()->superAdmin()->create();
+    $targetSa = User::factory()->superAdmin()->create();
+
+    $this->actingAs($sa)
+        ->post("/admin/permissions/{$targetSa->id}/companies", ['company_id' => $this->companyA->id])
+        ->assertForbidden();
+});
+
+it('manager cannot access the assign-company endpoint', function (): void {
+    $target = User::factory()->forCompany($this->companyA)->create();
+
+    $this->actingAs($this->staff)
+        ->post("/admin/permissions/{$target->id}/companies", ['company_id' => $this->companyA->id])
+        ->assertForbidden();
+});
+
+it('super admin can remove a company assignment', function (): void {
+    $sa = User::factory()->superAdmin()->create();
+    $target = User::factory()->forCompany($this->companyA)->create();
+    \Illuminate\Support\Facades\DB::table('user_company')->insert([
+        'user_id' => $target->id,
+        'company_id' => $this->companyA->id,
+        'created_at' => now(),
+    ]);
+
+    $this->actingAs($sa)
+        ->delete("/admin/permissions/{$target->id}/companies/{$this->companyA->id}")
+        ->assertRedirect();
+
+    $this->assertDatabaseMissing('user_company', [
+        'user_id' => $target->id,
+        'company_id' => $this->companyA->id,
+    ]);
+});
+
+it('removing the primary company sets the next pivot company as primary', function (): void {
+    $sa = User::factory()->superAdmin()->create();
+    $target = User::factory()->forCompany($this->companyA)->create();
+
+    // Ensure both assignments exist
+    \Illuminate\Support\Facades\DB::table('user_company')->insertOrIgnore([
+        ['user_id' => $target->id, 'company_id' => $this->companyA->id, 'created_at' => now()],
+        ['user_id' => $target->id, 'company_id' => $this->companyB->id, 'created_at' => now()],
+    ]);
+
+    $this->actingAs($sa)
+        ->delete("/admin/permissions/{$target->id}/companies/{$this->companyA->id}")
+        ->assertRedirect();
+
+    expect($target->fresh()->company_id)->toBe($this->companyB->id);
+});
+
+it('admin cannot remove a company they do not own', function (): void {
+    $target = User::factory()->forCompany($this->companyA)->create();
+
+    $this->actingAs($this->admin)
+        ->delete("/admin/permissions/{$target->id}/companies/{$this->companyB->id}")
+        ->assertForbidden();
+});
+
 it('lets a Super Admin save grants for another company user', function (): void {
     $sa = User::factory()->superAdmin()->create();
     $target = User::factory()->forCompany($this->companyB)->create();

@@ -69,7 +69,7 @@ function deploymentWithAttendance(int $days, float $rate = 100.0): EmployeeDeplo
 
 it('posts the internal expense on the HOST company, not the acting one', function (): void {
     // Act as the HOME company admin — the expense must still land on the host.
-    $homeAdmin = User::factory()->create(['role' => UserRole::CompanyAdmin, 'company_id' => $this->home->id]);
+    $homeAdmin = User::factory()->create(['role' => UserRole::Admin, 'company_id' => $this->home->id]);
     $this->actingAs($homeAdmin);
 
     $deployment = deploymentWithAttendance(3, 100.0);
@@ -87,7 +87,7 @@ it('posts the internal expense on the HOST company, not the acting one', functio
 });
 
 it('carries no vendor and no VAT (no inter-company VAT invoice — decision 2)', function (): void {
-    $this->actingAs(User::factory()->create(['role' => UserRole::CompanyAdmin, 'company_id' => $this->host->id]));
+    $this->actingAs(User::factory()->create(['role' => UserRole::Admin, 'company_id' => $this->host->id]));
 
     app(DeploymentChargeService::class)->generateCharge(deploymentWithAttendance(2, 50.0));
 
@@ -102,7 +102,7 @@ it('carries no vendor and no VAT (no inter-company VAT invoice — decision 2)',
 });
 
 it('does NOT double-charge the host when the engine runs again', function (): void {
-    $this->actingAs(User::factory()->create(['role' => UserRole::CompanyAdmin, 'company_id' => $this->host->id]));
+    $this->actingAs(User::factory()->create(['role' => UserRole::Admin, 'company_id' => $this->host->id]));
 
     $deployment = deploymentWithAttendance(3, 100.0);
     $service = app(DeploymentChargeService::class);
@@ -121,7 +121,7 @@ it('does NOT double-charge the host when the engine runs again', function (): vo
 });
 
 it('links the charge to the expense it posted', function (): void {
-    $this->actingAs(User::factory()->create(['role' => UserRole::CompanyAdmin, 'company_id' => $this->host->id]));
+    $this->actingAs(User::factory()->create(['role' => UserRole::Admin, 'company_id' => $this->host->id]));
 
     $charge = app(DeploymentChargeService::class)->generateCharge(deploymentWithAttendance(1, 80.0));
 
@@ -132,7 +132,7 @@ it('links the charge to the expense it posted', function (): void {
 });
 
 it('posts nothing for a non-Option-A arrangement', function (): void {
-    $this->actingAs(User::factory()->create(['role' => UserRole::CompanyAdmin, 'company_id' => $this->host->id]));
+    $this->actingAs(User::factory()->create(['role' => UserRole::Admin, 'company_id' => $this->host->id]));
 
     $deployment = deploymentWithAttendance(3, 100.0);
     // Force a non-A method past the request-layer guard to prove the engine
@@ -147,7 +147,7 @@ it('posts nothing for a non-Option-A arrangement', function (): void {
 });
 
 it('refuses an internal_deployment type submitted through the expense form', function (): void {
-    $admin = User::factory()->create(['role' => UserRole::CompanyAdmin, 'company_id' => $this->host->id]);
+    $admin = User::factory()->create(['role' => UserRole::Admin, 'company_id' => $this->host->id]);
 
     // A clerk must not be able to hand-create one — it would double-count in
     // the cross-company report.

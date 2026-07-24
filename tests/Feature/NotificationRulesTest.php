@@ -24,25 +24,25 @@ it('falls back to the coded default when no rule is stored', function (): void {
     // Deployment events default to SA + Company Admin; payroll only to CA.
     expect($rules->allows(NotificationType::DeploymentEvent, UserRole::SuperAdmin))->toBeTrue()
         ->and($rules->allows(NotificationType::PayrollReady, UserRole::SuperAdmin))->toBeFalse()
-        ->and($rules->allows(NotificationType::PayrollReady, UserRole::CompanyAdmin))->toBeTrue()
-        ->and($rules->allows(NotificationType::PayrollReady, UserRole::User))->toBeFalse();
+        ->and($rules->allows(NotificationType::PayrollReady, UserRole::Admin))->toBeTrue()
+        ->and($rules->allows(NotificationType::PayrollReady, UserRole::Manager))->toBeFalse();
 });
 
 it('lets a stored rule override the default', function (): void {
     NotificationRoleRule::query()->create([
         'notification_type' => NotificationType::PayrollReady->value,
-        'role' => UserRole::CompanyAdmin->value,
+        'role' => UserRole::Admin->value,
         'enabled' => false,
     ]);
 
-    expect(app(NotificationRules::class)->allows(NotificationType::PayrollReady, UserRole::CompanyAdmin))->toBeFalse();
+    expect(app(NotificationRules::class)->allows(NotificationType::PayrollReady, UserRole::Admin))->toBeFalse();
 });
 
 it('resolves recipients scoped to the company plus super admins', function (): void {
-    $admin = User::factory()->create(['role' => UserRole::CompanyAdmin, 'company_id' => $this->company->id, 'active' => true]);
+    $admin = User::factory()->create(['role' => UserRole::Admin, 'company_id' => $this->company->id, 'active' => true]);
     $sa = User::factory()->create(['role' => UserRole::SuperAdmin, 'company_id' => null, 'active' => true]);
     // An admin of ANOTHER company must not receive this company's alert.
-    $other = User::factory()->create(['role' => UserRole::CompanyAdmin, 'company_id' => Company::factory()->create()->id]);
+    $other = User::factory()->create(['role' => UserRole::Admin, 'company_id' => Company::factory()->create()->id]);
 
     $recipients = app(NotificationRules::class)->recipients(NotificationType::DeploymentEvent, $this->company->id);
     $ids = $recipients->pluck('id');
@@ -61,7 +61,7 @@ it('sends nothing when every role is disabled for a type', function (): void {
         ]);
     }
 
-    User::factory()->create(['role' => UserRole::CompanyAdmin, 'company_id' => $this->company->id]);
+    User::factory()->create(['role' => UserRole::Admin, 'company_id' => $this->company->id]);
 
     expect(app(NotificationRules::class)->recipients(NotificationType::PayrollReady, $this->company->id))->toHaveCount(0);
 });
@@ -75,8 +75,8 @@ it('notifies on a deployment lifecycle event through the matrix', function (): v
 
     $home = Company::factory()->create();
     $host = $this->company;
-    $hostAdmin = User::factory()->create(['role' => UserRole::CompanyAdmin, 'company_id' => $host->id]);
-    $homeAdmin = User::factory()->create(['role' => UserRole::CompanyAdmin, 'company_id' => $home->id]);
+    $hostAdmin = User::factory()->create(['role' => UserRole::Admin, 'company_id' => $host->id]);
+    $homeAdmin = User::factory()->create(['role' => UserRole::Admin, 'company_id' => $home->id]);
 
     $employee = Employee::factory()->create(['company_id' => $home->id]);
     $project = Project::factory()->create(['company_id' => $host->id]);
@@ -110,8 +110,8 @@ it('respects a disabled rule when a deployment event fires', function (): void {
     }
 
     $home = Company::factory()->create();
-    $hostAdmin = User::factory()->create(['role' => UserRole::CompanyAdmin, 'company_id' => $this->company->id]);
-    User::factory()->create(['role' => UserRole::CompanyAdmin, 'company_id' => $home->id]);
+    $hostAdmin = User::factory()->create(['role' => UserRole::Admin, 'company_id' => $this->company->id]);
+    User::factory()->create(['role' => UserRole::Admin, 'company_id' => $home->id]);
 
     $employee = Employee::factory()->create(['company_id' => $home->id]);
     $project = Project::factory()->create(['company_id' => $this->company->id]);
@@ -132,16 +132,16 @@ it('respects a disabled rule when a deployment event fires', function (): void {
 
 it('lets a Super Admin save the matrix but forbids others', function (): void {
     $sa = User::factory()->create(['role' => UserRole::SuperAdmin, 'company_id' => null]);
-    $ca = User::factory()->create(['role' => UserRole::CompanyAdmin, 'company_id' => $this->company->id]);
+    $ca = User::factory()->create(['role' => UserRole::Admin, 'company_id' => $this->company->id]);
 
     $payload = ['matrix' => [
-        ['type' => NotificationType::PayrollReady->value, 'roles' => ['company_admin' => false]],
+        ['type' => NotificationType::PayrollReady->value, 'roles' => ['admin' => false]],
     ]];
 
     $this->actingAs($ca)->put('/admin/settings/notifications', $payload)->assertForbidden();
 
     $this->actingAs($sa)->put('/admin/settings/notifications', $payload)->assertRedirect();
-    expect(NotificationRoleRule::query()->where('notification_type', 'payroll_ready')->where('role', 'company_admin')->value('enabled'))
+    expect(NotificationRoleRule::query()->where('notification_type', 'payroll_ready')->where('role', 'admin')->value('enabled'))
         ->toBe(false);
 });
 

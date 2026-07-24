@@ -12,7 +12,7 @@ beforeEach(function (): void {
 });
 
 it('groups results by module for a permitted user', function (): void {
-    $admin = User::factory()->create(['role' => UserRole::CompanyAdmin, 'company_id' => $this->company->id]);
+    $admin = User::factory()->create(['role' => UserRole::Admin, 'company_id' => $this->company->id]);
     Employee::factory()->create(['company_id' => $this->company->id, 'full_name' => 'Antonio Búscame']);
     Project::factory()->create(['company_id' => $this->company->id, 'name' => 'Obra Búscame']);
 
@@ -25,7 +25,7 @@ it('groups results by module for a permitted user', function (): void {
 });
 
 it('returns nothing for a term shorter than two characters', function (): void {
-    $admin = User::factory()->create(['role' => UserRole::CompanyAdmin, 'company_id' => $this->company->id]);
+    $admin = User::factory()->create(['role' => UserRole::Admin, 'company_id' => $this->company->id]);
     Employee::factory()->create(['company_id' => $this->company->id, 'full_name' => 'A']);
 
     $this->actingAs($admin)
@@ -36,7 +36,7 @@ it('returns nothing for a term shorter than two characters', function (): void {
 
 it('never searches a module the user cannot view', function (): void {
     // A plain user with ONLY projects.view — employees must not appear.
-    $user = User::factory()->create(['role' => UserRole::User, 'company_id' => $this->company->id]);
+    $user = User::factory()->create(['role' => UserRole::Manager, 'company_id' => $this->company->id]);
     UserModulePermission::query()->create([
         'user_id' => $user->id,
         'company_id' => $this->company->id,
@@ -56,7 +56,7 @@ it('never searches a module the user cannot view', function (): void {
 });
 
 it('only reaches the active company for tenant-scoped entities', function (): void {
-    $admin = User::factory()->create(['role' => UserRole::CompanyAdmin, 'company_id' => $this->company->id]);
+    $admin = User::factory()->create(['role' => UserRole::Admin, 'company_id' => $this->company->id]);
     $other = Company::factory()->create();
 
     Employee::factory()->create(['company_id' => $this->company->id, 'full_name' => 'Mío Único']);

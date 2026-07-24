@@ -28,8 +28,8 @@ enum NotificationType: string
     public function defaultRoles(): array
     {
         return match ($this) {
-            self::DeploymentEvent => [UserRole::SuperAdmin, UserRole::CompanyAdmin],
-            default => [UserRole::CompanyAdmin],
+            self::DeploymentEvent => [UserRole::SuperAdmin, UserRole::Admin],
+            default => [UserRole::Admin],
         };
     }
 }

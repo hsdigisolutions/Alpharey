@@ -26,7 +26,7 @@ use App\Models\Vendor;
 beforeEach(function (): void {
     $this->company = Company::factory()->create();
     $this->admin = User::factory()->create([
-        'role' => UserRole::CompanyAdmin,
+        'role' => UserRole::Admin,
         'company_id' => $this->company->id,
     ]);
 });
@@ -50,7 +50,7 @@ it('shows an employee payroll history to a wage viewer', function (): void {
 
 it('hides payroll entirely from a user without the wage right', function (): void {
     // A custom user granted employees.view but NOT payroll.view / employees.edit.
-    $user = User::factory()->create(['role' => UserRole::User, 'company_id' => $this->company->id]);
+    $user = User::factory()->create(['role' => UserRole::Manager, 'company_id' => $this->company->id]);
     UserModulePermission::query()->create([
         'user_id' => $user->id, 'company_id' => $this->company->id,
         'module' => 'employees', 'can_view' => true, 'granted_by' => $user->id,
@@ -112,7 +112,7 @@ it('shows a vendor only THIS company expenses to the shared vendor', function ()
 });
 
 it('withholds the client Facturas tab from a user without invoices.view', function (): void {
-    $user = User::factory()->create(['role' => UserRole::User, 'company_id' => $this->company->id]);
+    $user = User::factory()->create(['role' => UserRole::Manager, 'company_id' => $this->company->id]);
     UserModulePermission::query()->create([
         'user_id' => $user->id, 'company_id' => $this->company->id,
         'module' => 'clients', 'can_view' => true, 'granted_by' => $user->id,

@@ -51,9 +51,9 @@ class UserController extends Controller
         } else {
             $companyId = $this->contextCompanyId();
             abort_unless($user->company_id === $companyId, 404);
-            // Company Admins cannot modify other admins — Super Admin only
+            // Admins cannot modify other admins — Super Admin only
             abort_if(
-                $actor !== null && ! $actor->isSuperAdmin() && $user->role !== UserRole::User,
+                $actor !== null && ! $actor->isSuperAdmin() && $user->role !== UserRole::Manager,
                 403,
             );
         }

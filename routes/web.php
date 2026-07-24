@@ -366,6 +366,9 @@ Route::middleware(['auth', 'active', 'two_factor', 'not_worker'])->group(functio
     Route::prefix('admin')->middleware('admin')->group(function (): void {
         Route::get('/permissions', [PermissionMatrixController::class, 'index'])->name('permissions.index');
         Route::put('/permissions/{user}', [PermissionMatrixController::class, 'update'])->name('permissions.update');
+        // Company assignment for Admins and Managers (SA + Admin guarded in controller)
+        Route::post('/permissions/{user}/companies', [PermissionMatrixController::class, 'assignCompany'])->name('permissions.assign-company');
+        Route::delete('/permissions/{user}/companies/{company}', [PermissionMatrixController::class, 'removeCompany'])->name('permissions.remove-company');
         // Super Admin clears a user's second factor (lost phone) — guarded in
         // the controller, not just by the admin group.
         Route::post('/permissions/{user}/reset-2fa', [TwoFactorController::class, 'reset'])->name('two-factor.reset');

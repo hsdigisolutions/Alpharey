@@ -66,7 +66,7 @@ it('imports legacy users with role mapping and password hash carry-over', functi
 
     expect($admin->role)->toBe(UserRole::SuperAdmin)
         ->and($admin->company_id)->toBeNull()
-        ->and($staff->role)->toBe(UserRole::User)
+        ->and($staff->role)->toBe(UserRole::Manager)
         ->and($staff->company_id)->toBe(Company::query()->value('id'))
         ->and($staff->getAuthPassword())->toBe($legacyHash) // hash untouched
         ->and($inactive->active)->toBeFalse();

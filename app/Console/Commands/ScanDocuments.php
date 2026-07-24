@@ -269,7 +269,7 @@ class ScanDocuments extends Command
         $query = User::query()->where('active', true);
 
         if ($companyId !== null) {
-            $query->where('role', UserRole::CompanyAdmin->value)->where('company_id', $companyId);
+            $query->where('role', UserRole::Admin->value)->where('company_id', $companyId);
         } else {
             $query->where('role', UserRole::SuperAdmin->value);
         }

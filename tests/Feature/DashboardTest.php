@@ -16,7 +16,7 @@ beforeEach(function (): void {
     Cache::flush();
     $this->company = Company::factory()->create();
     $this->admin = User::factory()->create([
-        'role' => UserRole::CompanyAdmin,
+        'role' => UserRole::Admin,
         'company_id' => $this->company->id,
     ]);
 });

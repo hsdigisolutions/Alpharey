@@ -27,7 +27,7 @@ use Illuminate\Validation\ValidationException;
 beforeEach(function (): void {
     $this->company = Company::factory()->create();
     $this->admin = User::factory()->create([
-        'role' => UserRole::CompanyAdmin,
+        'role' => UserRole::Admin,
         'company_id' => $this->company->id,
     ]);
     $this->actingAs($this->admin);
@@ -365,7 +365,7 @@ it('ignores a company_id supplied in request input', function (): void {
 
 it('denies leave actions to a user without the permission', function (): void {
     $plain = User::factory()->create([
-        'role' => UserRole::User,
+        'role' => UserRole::Manager,
         'company_id' => $this->company->id,
     ]);
     $leave = leaveFor(['employee_id' => Employee::factory()->create(['company_id' => $this->company->id])->id]);

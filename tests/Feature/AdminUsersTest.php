@@ -15,7 +15,7 @@ it('creates a user inside the admin company, ignoring any company_id input', fun
         'name' => 'Nuevo Usuario',
         'email' => 'nuevo@alpharey.local',
         'password' => 'secret-123',
-        'role' => 'user',
+        'role' => 'manager',
         'locale' => 'es',
         'company_id' => $this->companyB->id, // malicious input — must be ignored
     ])->assertRedirect();
@@ -23,7 +23,7 @@ it('creates a user inside the admin company, ignoring any company_id input', fun
     $user = User::query()->where('email', 'nuevo@alpharey.local')->firstOrFail();
 
     expect($user->company_id)->toBe($this->companyA->id)
-        ->and($user->role)->toBe(UserRole::User);
+        ->and($user->role)->toBe(UserRole::Manager);
 });
 
 it('forbids company admins from creating other admins', function (): void {
@@ -31,7 +31,7 @@ it('forbids company admins from creating other admins', function (): void {
         'name' => 'Otro Admin',
         'email' => 'otro@alpharey.local',
         'password' => 'secret-123',
-        'role' => 'company_admin',
+        'role' => 'admin',
         'locale' => 'es',
     ])->assertSessionHasErrors('role');
 });
@@ -45,13 +45,13 @@ it('lets the super admin create company admins in the selected company', functio
         'name' => 'Admin Empresa',
         'email' => 'admin.empresa@alpharey.local',
         'password' => 'secret-123',
-        'role' => 'company_admin',
+        'role' => 'admin',
         'locale' => 'es',
     ])->assertRedirect();
 
     $created = User::query()->where('email', 'admin.empresa@alpharey.local')->firstOrFail();
 
-    expect($created->role)->toBe(UserRole::CompanyAdmin)
+    expect($created->role)->toBe(UserRole::Admin)
         ->and($created->company_id)->toBe($this->companyA->id);
 });
 
@@ -61,7 +61,7 @@ it('updates a user including deactivation', function (): void {
     $this->actingAs($this->admin)->put("/admin/users/{$target->id}", [
         'name' => $target->name,
         'email' => $target->email,
-        'role' => 'user',
+        'role' => 'manager',
         'locale' => 'en',
         'active' => false,
     ])->assertRedirect();
@@ -76,7 +76,7 @@ it('returns 404 for users of another company', function (): void {
     $this->actingAs($this->admin)->put("/admin/users/{$foreign->id}", [
         'name' => 'X',
         'email' => $foreign->email,
-        'role' => 'user',
+        'role' => 'manager',
         'locale' => 'es',
         'active' => true,
     ])->assertNotFound();
@@ -86,7 +86,7 @@ it('blocks editing yourself through the admin panel', function (): void {
     $this->actingAs($this->admin)->put("/admin/users/{$this->admin->id}", [
         'name' => 'Hacked',
         'email' => $this->admin->email,
-        'role' => 'user',
+        'role' => 'manager',
         'locale' => 'es',
         'active' => true,
     ])->assertStatus(422);
@@ -98,7 +98,7 @@ it('blocks company admins from editing other admins', function (): void {
     $this->actingAs($this->admin)->put("/admin/users/{$otherAdmin->id}", [
         'name' => 'X',
         'email' => $otherAdmin->email,
-        'role' => 'user',
+        'role' => 'manager',
         'locale' => 'es',
         'active' => true,
     ])->assertForbidden();
@@ -130,12 +130,12 @@ it('lets a super admin demote another super admin to user with a company context
     $this->put("/admin/users/{$otherSa->id}", [
         'name' => $otherSa->name,
         'email' => $otherSa->email,
-        'role' => 'user',
+        'role' => 'manager',
         'locale' => 'es',
         'active' => true,
     ])->assertRedirect();
 
-    expect($otherSa->fresh()->role)->toBe(UserRole::User);
+    expect($otherSa->fresh()->role)->toBe(UserRole::Manager);
 });
 
 it('forbids a company admin from editing a super admin', function (): void {
@@ -144,7 +144,7 @@ it('forbids a company admin from editing a super admin', function (): void {
     $this->actingAs($this->admin)->put("/admin/users/{$otherSa->id}", [
         'name' => 'Hacked SA',
         'email' => $otherSa->email,
-        'role' => 'user',
+        'role' => 'manager',
         'locale' => 'es',
         'active' => true,
     ])->assertForbidden();

@@ -60,14 +60,14 @@ it('404s a document that belongs to another company', function (): void {
     $foreignDoc = seedDocument($this->other);
 
     // A company admin of THIS company must not reach the other company's file.
-    $admin = User::factory()->create(['role' => UserRole::CompanyAdmin, 'company_id' => $this->company->id]);
+    $admin = User::factory()->create(['role' => UserRole::Admin, 'company_id' => $this->company->id]);
 
     $this->actingAs($admin)->get("/documents/{$foreignDoc->id}/download")->assertNotFound();
 });
 
 it('403s a document download for a user without the download right', function (): void {
     $doc = seedDocument($this->company);
-    $user = User::factory()->create(['role' => UserRole::User, 'company_id' => $this->company->id]);
+    $user = User::factory()->create(['role' => UserRole::Manager, 'company_id' => $this->company->id]);
 
     // View but NOT download.
     UserModulePermission::query()->create([
@@ -84,7 +84,7 @@ it('403s a document download for a user without the download right', function ()
 
 it('streams the document to an authorised same-company user', function (): void {
     $doc = seedDocument($this->company);
-    $admin = User::factory()->create(['role' => UserRole::CompanyAdmin, 'company_id' => $this->company->id]);
+    $admin = User::factory()->create(['role' => UserRole::Admin, 'company_id' => $this->company->id]);
 
     $this->actingAs($admin)->get("/documents/{$doc->id}/download")->assertOk();
 });
@@ -93,7 +93,7 @@ it('404s cleanly (no 500 leak) when the row exists but the file is gone', functi
     $doc = seedDocument($this->company);
     Storage::disk('local')->delete($doc->file_path);
 
-    $admin = User::factory()->create(['role' => UserRole::CompanyAdmin, 'company_id' => $this->company->id]);
+    $admin = User::factory()->create(['role' => UserRole::Admin, 'company_id' => $this->company->id]);
 
     $this->actingAs($admin)->get("/documents/{$doc->id}/download")->assertNotFound();
 });
@@ -123,7 +123,7 @@ it('404s a leave attachment that belongs to another company', function (): void 
     $leave->original_name = 'med.pdf';
     $leave->save();
 
-    $admin = User::factory()->create(['role' => UserRole::CompanyAdmin, 'company_id' => $this->company->id]);
+    $admin = User::factory()->create(['role' => UserRole::Admin, 'company_id' => $this->company->id]);
 
     $this->actingAs($admin)->get("/leave/{$leave->id}/attachment")->assertNotFound();
 });
