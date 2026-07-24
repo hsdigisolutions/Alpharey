@@ -193,6 +193,11 @@ function removeCompany(companyId) {
         { preserveScroll: true });
 }
 
+function deleteUser(user) {
+    if (!window.confirm(`${user.name}\n\n${t('permissions.delete_confirm')}`)) return;
+    router.delete(`/admin/users/${user.id}`, { preserveScroll: true });
+}
+
 function submitUser() {
     const options = {
         preserveScroll: true,
@@ -286,6 +291,12 @@ function submitUser() {
                                             :aria-label="`${user.name} — ${$t('permissions.edit_user')}`"
                                             @click.stop="openEdit(user)">
                                             <AppIcon name="edit" class="h-4 w-4" />
+                                        </button>
+                                        <button v-if="user.deletable" type="button"
+                                            class="rounded-sm p-1.5 text-muted transition hover:bg-status-danger-soft hover:text-status-danger"
+                                            :aria-label="`${user.name} — ${$t('permissions.delete_user')}`"
+                                            @click.stop="deleteUser(user)">
+                                            <AppIcon name="trash" class="h-4 w-4" />
                                         </button>
                                     </div>
                                 </td>

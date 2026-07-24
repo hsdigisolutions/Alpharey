@@ -75,6 +75,12 @@ class PermissionMatrixController extends Controller
                 ])->values()->all(),
                 // Only Managers have per-module rows; Admins bypass the matrix.
                 'editable' => $user->role === UserRole::Manager,
+                // Deletable: not self, not SA, not Worker; Admins can only delete Managers.
+                'deletable' => $actor !== null
+                    && $actor->id !== $user->id
+                    && ! $user->isSuperAdmin()
+                    && ! $user->isWorker()
+                    && ($actor->isSuperAdmin() || $user->role === UserRole::Manager),
                 'password_reset_requested' => $user->password_reset_requested_at !== null,
             ]);
 

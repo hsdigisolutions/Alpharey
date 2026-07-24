@@ -383,6 +383,7 @@ Route::middleware(['auth', 'active', 'two_factor', 'not_worker'])->group(functio
 
         Route::post('/users', [UserController::class, 'store'])->name('admin.users.store');
         Route::put('/users/{user}', [UserController::class, 'update'])->name('admin.users.update');
+        Route::delete('/users/{user}', [UserController::class, 'destroy'])->name('admin.users.destroy');
 
         Route::get('/audit-logs', [AuditLogController::class, 'index'])->name('audit-logs.index');
         Route::get('/audit-logs/export', [AuditLogController::class, 'export'])->name('audit-logs.export');

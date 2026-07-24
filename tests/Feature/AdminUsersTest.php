@@ -220,3 +220,55 @@ it('denies regular users the user management endpoints', function (): void {
 
     $this->actingAs($user)->post('/admin/users', [])->assertForbidden();
 });
+
+it('lets a super admin delete a manager', function (): void {
+    $sa = User::factory()->superAdmin()->create();
+    $target = User::factory()->forCompany($this->companyA)->create();
+
+    $this->actingAs($sa)->delete("/admin/users/{$target->id}")->assertRedirect();
+
+    $this->assertDatabaseMissing('users', ['id' => $target->id]);
+    // Pivot rows must be gone too (cascade)
+    $this->assertDatabaseMissing('user_company', ['user_id' => $target->id]);
+});
+
+it('lets an admin delete a manager in their company', function (): void {
+    $target = User::factory()->forCompany($this->companyA)->create();
+
+    $this->actingAs($this->admin)->delete("/admin/users/{$target->id}")->assertRedirect();
+
+    $this->assertDatabaseMissing('users', ['id' => $target->id]);
+});
+
+it('prevents deleting a super admin', function (): void {
+    $sa = User::factory()->superAdmin()->create();
+    $otherSa = User::factory()->superAdmin()->create();
+
+    $this->actingAs($sa)->delete("/admin/users/{$otherSa->id}")->assertForbidden();
+
+    $this->assertDatabaseHas('users', ['id' => $otherSa->id]);
+});
+
+it('prevents deleting yourself', function (): void {
+    $sa = User::factory()->superAdmin()->create();
+
+    $this->actingAs($sa)->delete("/admin/users/{$sa->id}")->assertStatus(422);
+
+    $this->assertDatabaseHas('users', ['id' => $sa->id]);
+});
+
+it('prevents an admin from deleting a manager in another company', function (): void {
+    $foreign = User::factory()->forCompany($this->companyB)->create();
+
+    $this->actingAs($this->admin)->delete("/admin/users/{$foreign->id}")->assertNotFound();
+
+    $this->assertDatabaseHas('users', ['id' => $foreign->id]);
+});
+
+it('prevents an admin from deleting another admin', function (): void {
+    $otherAdmin = User::factory()->companyAdmin()->forCompany($this->companyA)->create();
+
+    $this->actingAs($this->admin)->delete("/admin/users/{$otherAdmin->id}")->assertForbidden();
+
+    $this->assertDatabaseHas('users', ['id' => $otherAdmin->id]);
+});

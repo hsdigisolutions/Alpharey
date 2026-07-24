@@ -8,7 +8,9 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\StoreUserRequest;
 use App\Http\Requests\Admin\UpdateUserRequest;
 use App\Models\User;
+use App\Services\Audit\AuditLogger;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -91,5 +93,29 @@ class UserController extends Controller
         $user->update($data);
 
         return back()->with('success', __('ui.permissions.user_saved'));
+    }
+
+    public function destroy(Request $request, User $user): RedirectResponse
+    {
+        $actor = $request->user();
+
+        // Cannot delete yourself
+        abort_if($actor !== null && $actor->id === $user->id, 422, 'Cannot delete yourself.');
+        // Super Admin accounts are never hard-deleted — deactivate instead
+        abort_if($user->isSuperAdmin(), 403, 'Super Admin accounts cannot be deleted. Deactivate them instead.');
+        // Workers are managed via their employee record, not here
+        abort_if($user->isWorker(), 403, 'Worker accounts are managed via the employee record.');
+
+        if ($actor === null || ! $actor->isSuperAdmin()) {
+            $companyId = $this->contextCompanyId();
+            abort_unless($user->isAssignedToCompany($companyId), 404);
+            abort_if($user->role !== UserRole::Manager, 403);
+        }
+
+        // Capture the audit entry before the row disappears
+        app(AuditLogger::class)->log('deleted', $user);
+        $user->delete();
+
+        return back()->with('success', __('ui.permissions.user_deleted'));
     }
 }

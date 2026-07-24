@@ -166,6 +166,9 @@ return [
         'password_reset_confirm' => '¿Enviar un enlace de restablecimiento de contraseña a este usuario?',
         'password_reset_sent' => 'Enlace de restablecimiento enviado / Reset link sent',
         'password_requested' => 'Solicitado',
+        'delete_user' => 'Eliminar Usuario',
+        'delete_confirm' => 'Se eliminará el usuario y todos sus permisos de forma permanente. Esta acción no se puede deshacer.',
+        'user_deleted' => 'Usuario eliminado / User deleted',
     ],
 
     'account' => [
