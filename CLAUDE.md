@@ -2,12 +2,44 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Status: Phase 9 in progress — hardening (2026-07-20)
+## Status: Phase 9 in progress — hardening (2026-07-24)
 
 **Every screen 01–26 is built (Phase 8 complete).** Phase 9 is hardening, UAT, and
-launch — no new screens. Current: **496 Pest tests / 2912 assertions passing (1
+launch — no new screens. Current: **560 Pest tests / 3284 assertions passing (1
 skipped) · Pint clean · Larastan level 6 clean · `composer audit` + `npm audit`
 clean · production Vite build working.**
+
+### Role system rebuild (2026-07-24)
+
+The user/role/permission hierarchy was rebuilt:
+
+**4-tier hierarchy (replaces the old 3-tier):**
+- **`super_admin`** — God mode; bypasses all Gates via `Gate::before`; no one can
+  edit/delete/demote an SA except another SA; not bound to any company via the pivot.
+- **`admin`** (was `company_admin`) — Broad management access; bypasses the per-module
+  permission matrix for their assigned companies; can manage Managers within their company.
+- **`manager`** (was `user`) — Company-level access governed by `user_module_permissions`
+  per-module rows; SA or Admin can assign them to multiple companies.
+- **`worker`** — PWA only; sees own attendance/days/salary; no CRM access; exempt from 2FA.
+
+**`user_company` pivot table** (migration `2026_07_24_070916_rebuild_user_roles_and_add_user_company_pivot`):
+- Many-to-many between users and companies; columns: `id, user_id, company_id, assigned_by (nullable FK), created_at`
+- No `updated_at` — assignments are discrete events, never "updated"
+- Seeded from existing `users.company_id` on migration; `users.company_id` retained as the primary company
+- `User::companies()` relation uses `withPivot('assigned_by', 'created_at')` — NOT `withTimestamps()`
+
+**Backward-compat aliases kept** (deprecated, will be removed after all callers are updated):
+- `User::isCompanyAdmin()` → calls `isAdmin()`
+- `UserFactory::companyAdmin()` → calls `admin()`
+
+**PermissionMatrixController additions:**
+- `POST /admin/permissions/{user}/companies` — `assignCompany()`: SA assigns anywhere; Admin confined to own company
+- `DELETE /admin/permissions/{user}/companies/{company}` — `removeCompany()`: same scope rules
+- Both endpoints: guard against assigning SA via pivot (403); audit every change; update `company_id` if primary changes
+- Index now returns `assigned_companies` array + `availableCompanies` prop for the UI companies panel
+
+**Tests:** 8 new company-assignment tests in `tests/Feature/PermissionMatrixTest.php`; role strings
+updated across 35 test files; `SmokeTest` role assertion updated from `'user'` → `'manager'`.
 
 ### Post-Phase-9 client work (2026-07-22)
 
