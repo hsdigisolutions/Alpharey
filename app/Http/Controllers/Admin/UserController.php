@@ -60,14 +60,18 @@ class UserController extends Controller
             // Super Admins have no company — they sit outside the tenant scope.
             // Only another SA may edit them; the company-context guard is irrelevant.
             abort_unless($actor !== null && $actor->isSuperAdmin(), 403);
+        } elseif ($actor !== null && $actor->isSuperAdmin()) {
+            // The SA directory lists every company's users, so an SA edits any
+            // of them regardless of which company they happen to be browsing —
+            // requiring a primary-company match here 404'd the save for any
+            // multi-company user whose primary sat elsewhere.
         } else {
             $companyId = $this->contextCompanyId();
-            abort_unless($user->company_id === $companyId, 404);
+            // Primary OR pivot-assigned into the admin's company — the same
+            // membership rule as the Permission Matrix.
+            abort_unless($user->isAssignedToCompany($companyId), 404);
             // Admins cannot modify other admins — Super Admin only
-            abort_if(
-                $actor !== null && ! $actor->isSuperAdmin() && $user->role !== UserRole::Manager,
-                403,
-            );
+            abort_if($user->role !== UserRole::Manager, 403);
         }
 
         $data = [

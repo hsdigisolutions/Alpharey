@@ -3,6 +3,7 @@
 use App\Enums\UserRole;
 use App\Models\Company;
 use App\Models\User;
+use Illuminate\Support\Facades\DB;
 
 beforeEach(function (): void {
     $this->companyA = Company::factory()->create();
@@ -118,6 +119,45 @@ it('returns 404 for users of another company', function (): void {
         'locale' => 'es',
         'active' => true,
     ])->assertNotFound();
+});
+
+it('lets a super admin save a user whose primary company differs from the browsed one', function (): void {
+    $sa = User::factory()->superAdmin()->create();
+    $target = User::factory()->forCompany($this->companyB)->create();
+
+    // Browsing company A while saving a user whose primary is B — the SA
+    // directory shows every user, so the save must not 404 (found from the
+    // screen: edit + assign company + save bounced to a 404 page).
+    $this->actingAs($sa)->post("/welcome/{$this->companyA->id}/select");
+
+    $this->put("/admin/users/{$target->id}", [
+        'name' => 'Editado Por SA',
+        'email' => $target->email,
+        'role' => 'manager',
+        'locale' => 'es',
+        'active' => true,
+    ])->assertRedirect();
+
+    expect($target->fresh()->name)->toBe('Editado Por SA');
+});
+
+it('lets an admin edit a manager assigned into their company via the pivot', function (): void {
+    // Primary company B, assigned into the admin's company A on the pivot.
+    $target = User::factory()->forCompany($this->companyB)->create();
+    DB::table('user_company')->insert([
+        ['user_id' => $target->id, 'company_id' => $this->companyB->id, 'assigned_by' => null, 'created_at' => now()],
+        ['user_id' => $target->id, 'company_id' => $this->companyA->id, 'assigned_by' => null, 'created_at' => now()],
+    ]);
+
+    $this->actingAs($this->admin)->put("/admin/users/{$target->id}", [
+        'name' => 'Editado Por Admin',
+        'email' => $target->email,
+        'role' => 'manager',
+        'locale' => 'es',
+        'active' => true,
+    ])->assertRedirect();
+
+    expect($target->fresh()->name)->toBe('Editado Por Admin');
 });
 
 it('blocks editing yourself through the admin panel', function (): void {
