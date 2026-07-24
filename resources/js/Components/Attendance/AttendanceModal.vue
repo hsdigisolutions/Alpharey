@@ -169,11 +169,56 @@ function mapsUrl(loc) {
                     </div>
                 </dl>
 
-                <!-- Selfie: fetched through the gated, audited route -->
-                <div v-if="record.worker.has_photo" class="mt-3">
-                    <a :href="`/attendance/${record.id}/selfie`" target="_blank" rel="noopener">
-                        <img :src="`/attendance/${record.id}/selfie`" alt=""
-                            class="h-28 w-28 rounded-md border border-line object-cover" />
+                <!-- Check-in selfie with GPS watermark (phone punch only).
+                     Fetched through the gated, audited route — never a public URL.
+                     Overlaid timestamp + coordinates mimic the GPS-camera format
+                     so the admin sees the same proof the worker captured. -->
+                <div v-if="record.worker.has_photo" class="mt-3 overflow-hidden rounded-lg border border-line">
+                    <div class="relative bg-black">
+                        <img :src="`/attendance/${record.id}/selfie`" alt="Check-in selfie"
+                            class="w-full object-cover object-top"
+                            style="max-height: 340px;" />
+                        <!-- GPS-camera style overlay: dark gradient + data strip -->
+                        <div class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/60 to-transparent px-3 pb-3 pt-10">
+                            <div class="flex items-end gap-2.5">
+                                <!-- Location pin box (mini-map substitute — no external tile allowed by CSP) -->
+                                <div class="flex h-14 w-14 shrink-0 flex-col items-center justify-center rounded border border-white/20 bg-black/70">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+                                        stroke-linecap="round" stroke-linejoin="round"
+                                        class="h-6 w-6 text-white/80">
+                                        <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
+                                        <circle cx="12" cy="10" r="3" />
+                                    </svg>
+                                    <span class="mt-0.5 text-[8px] font-bold uppercase tracking-widest text-white/50">GPS</span>
+                                </div>
+                                <div class="min-w-0 flex-1 font-mono">
+                                    <!-- Coordinates -->
+                                    <p v-if="record.worker.check_in" class="text-sm font-semibold leading-tight text-white">
+                                        Lat {{ (+record.worker.check_in.lat).toFixed(6) }}°
+                                        Lng {{ (+record.worker.check_in.lng).toFixed(6) }}°
+                                    </p>
+                                    <p v-else class="text-xs text-yellow-300">GPS not captured</p>
+                                    <!-- Timestamp -->
+                                    <p v-if="record.worker.check_in_at" class="mt-0.5 text-[11px] text-white/80">
+                                        {{ record.worker.check_in_at }}
+                                    </p>
+                                    <!-- Accuracy -->
+                                    <p v-if="record.worker.check_in?.accuracy" class="text-[10px] text-white/60">
+                                        ±{{ Math.round(record.worker.check_in.accuracy) }}m
+                                    </p>
+                                </div>
+                                <!-- Branding badge -->
+                                <div class="shrink-0 text-right leading-none">
+                                    <p class="text-[9px] font-bold uppercase tracking-wider text-white/50">AlphaRey</p>
+                                    <p class="text-[8px] text-white/35">GPS Check-in</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- View full size link below the photo -->
+                    <a :href="`/attendance/${record.id}/selfie`" target="_blank" rel="noopener"
+                        class="flex items-center justify-center gap-1.5 bg-surface-sunken py-1.5 text-xs text-accent underline-offset-2 hover:underline">
+                        <Bilingual k="attendance.view_selfie_full" inline />
                     </a>
                 </div>
             </div>

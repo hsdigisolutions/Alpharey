@@ -717,6 +717,7 @@ return [
         'punch_in_loc' => 'Ubicación de entrada',
         'punch_out_loc' => 'Ubicación de salida',
         'view_map' => 'Ver en el mapa',
+        'view_selfie_full' => 'Ver tamaño completo',
         'worker_note' => 'Nota del empleado',
         'deleted' => 'Asistencia eliminada / Attendance removed',
         'month' => 'Mes',
