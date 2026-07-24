@@ -155,6 +155,9 @@ return [
         'admin_tag' => 'Admin',
         'admins_bypass' => 'Admins have full access — the matrix does not apply',
         'module' => 'Module',
+        'user' => 'User',
+        'status' => 'Status',
+        'manage' => 'Permissions',
         // Super Admin fulfils a user's My Account password-reset request.
         'password_reset_hint' => 'Send the user a link to reset their own password. You never see or set the password.',
         'password_reset_send' => 'Send reset link',

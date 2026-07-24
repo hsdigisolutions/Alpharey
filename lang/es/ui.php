@@ -157,6 +157,9 @@ return [
         'admin_tag' => 'Admin',
         'admins_bypass' => 'Los administradores tienen acceso completo — la matriz no aplica',
         'module' => 'Módulo',
+        'user' => 'Usuario',
+        'status' => 'Estado',
+        'manage' => 'Permisos',
         // Super Admin fulfils a user's My Account password-reset request.
         'password_reset_hint' => 'Enviar un enlace para que el usuario restablezca su contraseña. Usted no verá ni fijará la contraseña.',
         'password_reset_send' => 'Enviar enlace de restablecimiento',
