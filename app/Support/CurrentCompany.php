@@ -10,9 +10,14 @@ use Illuminate\Support\Facades\Session;
 /**
  * Resolves the active company for the request (SECURITY.md §2).
  *
- * The active company comes ONLY from the authenticated user, or — for the
- * Super Admin — from an explicit, session-stored selection made on the
- * Welcome screen. It is never read from request input.
+ * The active company comes ONLY from the authenticated user, or from an
+ * explicit, session-stored selection. It is never read from request input.
+ *
+ *  - Super Admin: any company, chosen on the Welcome screen (null = browse all)
+ *  - Admin / Manager: their primary company by default; when they hold several
+ *    assignments on the user_company pivot they may switch between them, and
+ *    the selection is validated against the pivot ON EVERY REQUEST — a stale
+ *    or forged session value falls back to the primary company.
  */
 class CurrentCompany
 {
@@ -30,10 +35,19 @@ class CurrentCompany
             return null;
         }
 
-        if ($user->isSuperAdmin()) {
-            $selected = Session::get(self::SESSION_KEY);
+        $selected = Session::get(self::SESSION_KEY);
+        $selectedId = is_numeric($selected) ? (int) $selected : null;
 
-            return is_numeric($selected) ? (int) $selected : null;
+        if ($user->isSuperAdmin()) {
+            return $selectedId;
+        }
+
+        // A non-SA selection only counts while the pivot still backs it —
+        // revoking an assignment invalidates the session choice immediately.
+        if ($selectedId !== null
+            && $selectedId !== $user->company_id
+            && $user->isAssignedToCompany($selectedId)) {
+            return $selectedId;
         }
 
         return $user->company_id;
@@ -47,18 +61,26 @@ class CurrentCompany
     }
 
     /**
-     * Store the Super Admin's explicit company selection. Non-super users
-     * are permanently bound to their own company and cannot switch.
+     * Store an explicit company selection. The Super Admin may select any
+     * company; everyone else only a company they are assigned to on the
+     * user_company pivot.
      */
     public function select(Company|int $company): void
     {
         $user = Auth::user();
+        $companyId = $company instanceof Company ? $company->id : $company;
 
-        if (! $user instanceof User || ! $user->isSuperAdmin()) {
-            abort(403, 'Only the Super Admin can switch companies.');
+        if (! $user instanceof User) {
+            abort(403);
         }
 
-        Session::put(self::SESSION_KEY, $company instanceof Company ? $company->id : $company);
+        if (! $user->isSuperAdmin()
+            && $companyId !== $user->company_id
+            && ! $user->isAssignedToCompany($companyId)) {
+            abort(403, 'You are not assigned to this company.');
+        }
+
+        Session::put(self::SESSION_KEY, $companyId);
     }
 
     public function clearSelection(): void

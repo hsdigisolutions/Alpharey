@@ -28,7 +28,8 @@ const props = defineProps({
 });
 
 // Notification matrix — deep-clone so toggles don't mutate the prop directly.
-const roles = ['super_admin', 'company_admin', 'user'];
+// Worker is deliberately absent: workers receive no CRM notifications.
+const roles = ['super_admin', 'admin', 'manager'];
 const matrixForm = useForm({
     matrix: (props.notificationMatrix ?? []).map((row) => ({ type: row.type, roles: { ...row.roles } })),
 });

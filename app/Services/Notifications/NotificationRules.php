@@ -59,9 +59,11 @@ class NotificationRules
             ->where('active', true)
             ->whereIn('role', $roles)
             ->where(function ($q) use ($companyId): void {
-                // Company Admins/users of THIS company, plus Super Admins
-                // (who have no company and see everything).
+                // Admins/Managers of THIS company — primary or assigned into
+                // it via the user_company pivot — plus Super Admins (who have
+                // no company and see everything).
                 $q->where('company_id', $companyId)
+                    ->orWhereHas('companies', fn ($c) => $c->where('companies.id', $companyId))
                     ->orWhere('role', UserRole::SuperAdmin->value);
             })
             ->get();

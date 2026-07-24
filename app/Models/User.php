@@ -141,6 +141,18 @@ class User extends Authenticatable
     }
 
     /**
+     * Is this user attached to the given company — either as their primary
+     * company or through the user_company pivot? This is THE membership test
+     * for company switching and matrix scoping; it reads the (request-cached)
+     * relation, so repeated checks cost a single query.
+     */
+    public function isAssignedToCompany(int $companyId): bool
+    {
+        return $this->company_id === $companyId
+            || $this->companies->contains('id', $companyId);
+    }
+
+    /**
      * @deprecated Use isAdmin() — kept to avoid touching all callers at once.
      */
     public function isCompanyAdmin(): bool

@@ -56,6 +56,19 @@ class HandleInertiaRequests extends Middleware
 
                 return $company === null ? null : ['id' => $company->id, 'name' => $company->name];
             })(),
+            // The companies an Admin/Manager may switch between (id + name
+            // only). More than one entry → the header renders the switcher.
+            // SA switches via Welcome; Workers have no CRM session at all.
+            'companies' => $user instanceof User && ! $user->isSuperAdmin() && ! $user->isWorker()
+                ? $user->companies
+                    ->map(fn ($c) => ['id' => $c->id, 'name' => $c->name])
+                    ->when(
+                        $user->company !== null && ! $user->companies->contains('id', $user->company_id),
+                        fn ($list) => $list->prepend(['id' => $user->company->id, 'name' => $user->company->name]),
+                    )
+                    ->values()
+                    ->all()
+                : [],
             // Full bilingual UI dictionary — both languages always ship because
             // every label renders Spanish + English (REQUIREMENTS.md §9).
             'lang' => [

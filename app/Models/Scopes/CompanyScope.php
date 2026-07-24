@@ -42,6 +42,11 @@ class CompanyScope implements Scope
             return;
         }
 
-        $builder->where($model->qualifyColumn('company_id'), $user->company_id);
+        // The ACTIVE company, not blindly the primary: a multi-company
+        // Admin/Manager who switched acts in the switched company, and
+        // CurrentCompany validates that selection against the user_company
+        // pivot on every request. Gates (ModulePermissions) resolve through
+        // the same source — data scope and permission scope cannot diverge.
+        $builder->where($model->qualifyColumn('company_id'), app(CurrentCompany::class)->id());
     }
 }

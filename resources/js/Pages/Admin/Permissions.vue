@@ -25,6 +25,7 @@ import VToggle from '@/Components/ui/VToggle.vue';
 const props = defineProps({
     users: { type: Array, required: true },
     matrix: { type: Array, required: true }, // [{module, actions: {view: bool applicable, …}}]
+    availableCompanies: { type: Array, default: () => [] },
     selectedUser: { type: Number, default: null },
     permissions: { type: Object, default: () => ({}) },
     copySourcePermissions: { type: Object, default: null },
@@ -138,7 +139,7 @@ const showUserModal = ref(false);
 const editingUser = ref(null);
 
 const userForm = useForm({
-    name: '', email: '', password: '', role: 'user', locale: 'es', active: true,
+    name: '', email: '', password: '', role: 'manager', locale: 'es', active: true,
 });
 
 function openCreate() {
@@ -154,10 +155,37 @@ function openEdit(user) {
     userForm.email = user.email;
     userForm.password = '';
     userForm.role = user.role;
-    userForm.locale = 'es';
+    userForm.locale = user.locale ?? 'es';
     userForm.active = user.active;
     userForm.clearErrors();
     showUserModal.value = true;
+}
+
+// The modal captures a snapshot; company assignment posts refresh the page
+// props, so the companies panel reads the LIVE row for the same user.
+const editingUserLive = computed(
+    () => props.users.find((u) => u.id === editingUser.value?.id) ?? editingUser.value,
+);
+
+// --- Company assignment (Super Admin anywhere; Admin within own companies) ---
+const companyToAssign = ref('');
+
+const assignableCompanies = computed(() => {
+    const assigned = new Set((editingUserLive.value?.assigned_companies ?? []).map((c) => c.id));
+    return props.availableCompanies.filter((c) => !assigned.has(c.id));
+});
+
+function assignCompany() {
+    if (!companyToAssign.value || !editingUser.value) return;
+    router.post(`/admin/permissions/${editingUser.value.id}/companies`,
+        { company_id: companyToAssign.value },
+        { preserveScroll: true, onSuccess: () => (companyToAssign.value = '') });
+}
+
+function removeCompany(companyId) {
+    if (!editingUser.value) return;
+    router.delete(`/admin/permissions/${editingUser.value.id}/companies/${companyId}`,
+        { preserveScroll: true });
 }
 
 function submitUser() {
@@ -204,8 +232,11 @@ function submitUser() {
                             <span class="min-w-0 flex-1">
                                 <span class="block truncate text-sm font-medium text-ink">{{ user.name }}</span>
                                 <span class="block truncate text-xs text-muted">{{ user.email }}</span>
-                                <!-- Shown for a Super Admin, who sees every company's users -->
-                                <span v-if="user.company" class="block truncate text-xs text-muted">{{ user.company }}</span>
+                                <!-- Every company the user is assigned to (primary + pivot) -->
+                                <span v-if="user.assigned_companies?.length" class="block truncate text-xs text-muted">
+                                    {{ user.assigned_companies.map((c) => c.name).join(' · ') }}
+                                </span>
+                                <span v-else-if="user.company" class="block truncate text-xs text-muted">{{ user.company }}</span>
                             </span>
 
                             <!-- Tags + actions: all shrink-0 so they can never grow
@@ -316,16 +347,19 @@ function submitUser() {
                 </FormField>
                 <div class="grid gap-4 sm:grid-cols-2">
                     <FormField k="permissions.role" :error="userForm.errors.role" required>
-                        <VSelect v-model="userForm.role">
-                            <!-- super_admin shown only when editing an existing SA — keeps their role
-                                 accessible without forcing a demotion just to edit email/password. -->
-                            <option v-if="$page.props.auth.user?.role === 'super_admin' && editingUser?.role === 'super_admin'" value="super_admin">
-                                {{ $tPair('permissions.role_super_admin') }}
-                            </option>
-                            <option value="user">{{ $tPair('permissions.role_user') }}</option>
-                            <option v-if="$page.props.auth.user?.role === 'super_admin'" value="company_admin">
-                                {{ $tPair('permissions.role_company_admin') }}
-                            </option>
+                        <VSelect v-model="userForm.role" :disabled="editingUser?.role === 'super_admin'">
+                            <!-- An SA's role is LOCKED server-side (no demotion path) — the
+                                 select renders their role read-only so email/password edits
+                                 still submit a valid value. -->
+                            <template v-if="editingUser?.role === 'super_admin'">
+                                <option value="super_admin">{{ $tPair('permissions.role_super_admin') }}</option>
+                            </template>
+                            <template v-else>
+                                <option value="manager">{{ $tPair('permissions.role_manager') }}</option>
+                                <option v-if="$page.props.auth.user?.role === 'super_admin'" value="admin">
+                                    {{ $tPair('permissions.role_admin') }}
+                                </option>
+                            </template>
                         </VSelect>
                     </FormField>
                     <FormField k="permissions.locale" :error="userForm.errors.locale" required>
@@ -346,6 +380,38 @@ function submitUser() {
                     <VToggle v-model="userForm.active" label="Activo / Active" size="sm" />
                     <Bilingual k="permissions.active" inline class="text-sm" />
                 </label>
+
+                <!-- Company assignments (Super Admin anywhere; Admin within
+                     their own companies). Immediate actions, not form fields:
+                     each add/remove posts and the chips refresh from props.
+                     Hidden for SA targets — they are never on the pivot. -->
+                <div v-if="editingUser && editingUser.role !== 'super_admin'"
+                    class="space-y-2 rounded-md border border-line bg-surface-sunken p-3">
+                    <p class="text-xs font-semibold text-ink-soft"><Bilingual k="permissions.assigned_companies" inline /></p>
+                    <div class="flex flex-wrap gap-1.5">
+                        <span v-for="c in editingUserLive?.assigned_companies ?? []" :key="c.id"
+                            class="inline-flex items-center gap-1 rounded-sm bg-surface-raised px-2 py-1 text-xs text-ink">
+                            {{ c.name }}
+                            <button v-if="(editingUserLive?.assigned_companies?.length ?? 0) > 1" type="button"
+                                class="text-muted transition hover:text-status-danger"
+                                :aria-label="`${c.name} — ${$t('common.delete')}`" @click="removeCompany(c.id)">
+                                <AppIcon name="x" class="h-3 w-3" />
+                            </button>
+                        </span>
+                        <span v-if="!(editingUserLive?.assigned_companies?.length)" class="text-xs text-muted">
+                            {{ $t('permissions.no_companies') }}
+                        </span>
+                    </div>
+                    <div v-if="assignableCompanies.length" class="flex items-center gap-1.5">
+                        <VSelect v-model="companyToAssign" class="w-full">
+                            <option value="">{{ $t('permissions.assign_company') }}</option>
+                            <option v-for="c in assignableCompanies" :key="c.id" :value="c.id">{{ c.name }}</option>
+                        </VSelect>
+                        <VButton variant="secondary" size="sm" :disabled="!companyToAssign" @click="assignCompany">
+                            <Bilingual k="permissions.assign_company" inline />
+                        </VButton>
+                    </div>
+                </div>
 
                 <!-- Lost-phone lever (Super Admin only): clears the second
                      factor so the user re-enrols on their next login. Lives

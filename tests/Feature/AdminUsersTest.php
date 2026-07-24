@@ -24,6 +24,44 @@ it('creates a user inside the admin company, ignoring any company_id input', fun
 
     expect($user->company_id)->toBe($this->companyA->id)
         ->and($user->role)->toBe(UserRole::Manager);
+
+    // The primary company is mirrored on the user_company pivot at creation
+    // — a user must never exist outside their own assignment list.
+    $this->assertDatabaseHas('user_company', [
+        'user_id' => $user->id,
+        'company_id' => $this->companyA->id,
+        'assigned_by' => $this->admin->id,
+    ]);
+});
+
+it('locks a super admin role — even another super admin cannot demote them', function (): void {
+    $actor = User::factory()->superAdmin()->create();
+    $target = User::factory()->superAdmin()->create();
+
+    $this->actingAs($actor)->put("/admin/users/{$target->id}", [
+        'name' => $target->name,
+        'email' => $target->email,
+        'role' => 'manager', // demotion attempt
+        'locale' => 'es',
+        'active' => true,
+    ])->assertSessionHasErrors('role');
+
+    expect($target->fresh()->role)->toBe(UserRole::SuperAdmin);
+});
+
+it('still lets a super admin edit another super admin keeping the role', function (): void {
+    $actor = User::factory()->superAdmin()->create();
+    $target = User::factory()->superAdmin()->create();
+
+    $this->actingAs($actor)->put("/admin/users/{$target->id}", [
+        'name' => 'Nombre Corregido',
+        'email' => $target->email,
+        'role' => 'super_admin',
+        'locale' => 'es',
+        'active' => true,
+    ])->assertRedirect();
+
+    expect($target->fresh()->name)->toBe('Nombre Corregido');
 });
 
 it('forbids company admins from creating other admins', function (): void {
@@ -120,23 +158,10 @@ it('lets a super admin edit another super admin without a company context', func
     expect($otherSa->fresh()->name)->toBe('Changed Name');
 });
 
-it('lets a super admin demote another super admin to user with a company context', function (): void {
-    $sa = User::factory()->superAdmin()->create();
-    $otherSa = User::factory()->superAdmin()->create();
-
-    // Select a company so the SA has a company context — should still work.
-    $this->actingAs($sa)->post("/welcome/{$this->companyA->id}/select");
-
-    $this->put("/admin/users/{$otherSa->id}", [
-        'name' => $otherSa->name,
-        'email' => $otherSa->email,
-        'role' => 'manager',
-        'locale' => 'es',
-        'active' => true,
-    ])->assertRedirect();
-
-    expect($otherSa->fresh()->role)->toBe(UserRole::Manager);
-});
+// NOTE (role rebuild, 2026-07-24): the earlier "SA demotes SA" behavior was
+// superseded — an SA role is now LOCKED (a demoted SA has no company and
+// lands in limbo; deactivate instead). Pinned by "locks a super admin role"
+// above.
 
 it('forbids a company admin from editing a super admin', function (): void {
     $otherSa = User::factory()->superAdmin()->create();

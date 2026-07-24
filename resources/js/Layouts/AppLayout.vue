@@ -32,7 +32,17 @@ const primaryNav = [
     { key: 'reports', icon: 'reports', href: '/reports' },
 ];
 
-const isAdmin = computed(() => ['super_admin', 'company_admin'].includes(page.props.auth.user?.role));
+const isAdmin = computed(() => ['super_admin', 'admin'].includes(page.props.auth.user?.role));
+
+// Multi-company Admins/Managers switch between their pivot-assigned
+// companies from the header (the server validates every switch).
+const assignedCompanies = computed(() => page.props.companies ?? []);
+
+function switchCompany(event) {
+    const id = Number(event.target.value);
+    if (!id || id === page.props.company?.id) return;
+    router.post(`/company/${id}/switch`);
+}
 
 const secondaryNav = computed(() => [
     { key: 'today', labelKey: 'nav.today', href: '/today' },
@@ -206,6 +216,19 @@ function switchLocale() {
                         <span v-if="page.props.company" class="max-w-36 truncate">{{ page.props.company.name }}</span>
                         <Bilingual v-else k="welcome.browsing_all" inline class="max-w-44 truncate text-xs" />
                     </a>
+                    <!-- Admin/Manager assigned to several companies: a real
+                         switcher in place of the static chip. -->
+                    <label v-else-if="assignedCompanies.length > 1"
+                        class="hidden items-center gap-1.5 rounded-md border border-line px-2 py-1 text-xs font-medium text-ink-soft hover:bg-surface-hover md:flex"
+                        :title="$t('welcome.switch_company')">
+                        <AppIcon name="companies" class="h-3.5 w-3.5 shrink-0" />
+                        <select :value="page.props.company?.id"
+                            class="max-w-36 cursor-pointer truncate border-0 bg-transparent py-0.5 pe-6 text-xs font-medium text-ink-soft focus:ring-accent"
+                            :aria-label="$tPair('welcome.switch_company')"
+                            @change="switchCompany">
+                            <option v-for="c in assignedCompanies" :key="c.id" :value="c.id">{{ c.name }}</option>
+                        </select>
+                    </label>
                     <span v-else-if="page.props.company"
                         class="hidden items-center gap-1.5 rounded-md border border-line px-2 py-1.5 text-xs font-medium text-ink-soft md:flex">
                         <AppIcon name="companies" class="h-3.5 w-3.5 shrink-0" />

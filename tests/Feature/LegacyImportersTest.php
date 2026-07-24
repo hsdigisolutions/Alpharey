@@ -70,6 +70,14 @@ it('imports legacy users with role mapping and password hash carry-over', functi
         ->and($staff->company_id)->toBe(Company::query()->value('id'))
         ->and($staff->getAuthPassword())->toBe($legacyHash) // hash untouched
         ->and($inactive->active)->toBeFalse();
+
+    // Company-bound imports are mirrored on the user_company pivot (the
+    // invariant every company-assignment surface relies on); SAs are not.
+    $this->assertDatabaseHas('user_company', [
+        'user_id' => $staff->id,
+        'company_id' => $staff->company_id,
+    ]);
+    $this->assertDatabaseMissing('user_company', ['user_id' => $admin->id]);
 });
 
 it('is idempotent across re-runs', function (): void {

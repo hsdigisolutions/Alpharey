@@ -21,6 +21,7 @@ use App\Http\Controllers\ClientController;
 use App\Http\Controllers\ColumnSettingsController;
 use App\Http\Controllers\CommissionController;
 use App\Http\Controllers\CompanyController;
+use App\Http\Controllers\CompanySwitchController;
 use App\Http\Controllers\ComplianceController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DeploymentController;
@@ -345,6 +346,10 @@ Route::middleware(['auth', 'active', 'two_factor', 'not_worker'])->group(functio
 
     // Per-user table column visibility (§10)
     Route::put('/column-settings', [ColumnSettingsController::class, 'update'])->name('column-settings.update');
+
+    // Multi-company Admins/Managers switch between their assigned companies
+    // (pivot-validated in CurrentCompany::select — 403 for anyone else).
+    Route::post('/company/{company}/switch', CompanySwitchController::class)->name('company.switch');
 
     // Bell
     Route::post('/notifications/read-all', [NotificationController::class, 'markAllRead'])->name('notifications.read-all');

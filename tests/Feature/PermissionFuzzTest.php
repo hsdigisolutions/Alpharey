@@ -53,9 +53,32 @@ it('denies every ability to an inactive user, whatever the role', function (User
     }
 })->with([
     'super admin' => [UserRole::SuperAdmin],
-    'company admin' => [UserRole::Admin],
-    'custom user' => [UserRole::Manager],
+    'admin' => [UserRole::Admin],
+    'manager' => [UserRole::Manager],
+    'worker' => [UserRole::Worker],
 ]);
+
+it('denies every ability to a worker — even with a stray permission row', function (): void {
+    $worker = User::factory()->create([
+        'role' => UserRole::Worker,
+        'active' => true,
+        'company_id' => $this->company->id,
+    ]);
+
+    // A matrix row created for a worker by mistake must still grant nothing:
+    // ModulePermissions refuses the role before it ever reads the table.
+    UserModulePermission::query()->create([
+        'user_id' => $worker->id,
+        'company_id' => $this->company->id,
+        'module' => Module::Employees->value,
+        'can_view' => true,
+        'granted_by' => $worker->id,
+    ]);
+
+    foreach (everyAbility() as $ability) {
+        expect(Gate::forUser($worker)->allows($ability))->toBeFalse("worker should be denied {$ability}");
+    }
+});
 
 it('allows every ability to an active Super Admin', function (): void {
     $sa = User::factory()->create(['role' => UserRole::SuperAdmin, 'active' => true, 'company_id' => null]);

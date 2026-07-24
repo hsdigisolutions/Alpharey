@@ -26,7 +26,7 @@ const props = defineProps({
 });
 
 const page = usePage();
-const canSeeWage = computed(() => ['super_admin', 'company_admin'].includes(page.props.auth.user?.role));
+const canSeeWage = computed(() => ['super_admin', 'admin'].includes(page.props.auth.user?.role));
 
 const days = computed(() => Array.from({ length: props.daysInMonth }, (_, i) => i + 1));
 

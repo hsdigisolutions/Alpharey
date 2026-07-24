@@ -1,8 +1,10 @@
 <?php
 
+use App\Enums\UserRole;
 use App\Models\Company;
 use App\Models\User;
 use App\Models\UserModulePermission;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Inertia\Testing\AssertableInertia as Assert;
 
@@ -197,7 +199,7 @@ it('manager cannot access the assign-company endpoint', function (): void {
 it('super admin can remove a company assignment', function (): void {
     $sa = User::factory()->superAdmin()->create();
     $target = User::factory()->forCompany($this->companyA)->create();
-    \Illuminate\Support\Facades\DB::table('user_company')->insert([
+    DB::table('user_company')->insert([
         'user_id' => $target->id,
         'company_id' => $this->companyA->id,
         'created_at' => now(),
@@ -218,7 +220,7 @@ it('removing the primary company sets the next pivot company as primary', functi
     $target = User::factory()->forCompany($this->companyA)->create();
 
     // Ensure both assignments exist
-    \Illuminate\Support\Facades\DB::table('user_company')->insertOrIgnore([
+    DB::table('user_company')->insertOrIgnore([
         ['user_id' => $target->id, 'company_id' => $this->companyA->id, 'created_at' => now()],
         ['user_id' => $target->id, 'company_id' => $this->companyB->id, 'created_at' => now()],
     ]);
@@ -236,6 +238,44 @@ it('admin cannot remove a company they do not own', function (): void {
     $this->actingAs($this->admin)
         ->delete("/admin/permissions/{$target->id}/companies/{$this->companyB->id}")
         ->assertForbidden();
+});
+
+it('refuses to assign a company to a worker account', function (): void {
+    $sa = User::factory()->superAdmin()->create();
+    $worker = User::factory()->forCompany($this->companyA)->create(['role' => UserRole::Worker]);
+
+    // A worker's company comes from their employee record, never the pivot.
+    $this->actingAs($sa)
+        ->post("/admin/permissions/{$worker->id}/companies", ['company_id' => $this->companyB->id])
+        ->assertForbidden();
+
+    $this->assertDatabaseMissing('user_company', ['user_id' => $worker->id]);
+});
+
+it('lets an admin see and grant a manager assigned into their company via the pivot', function (): void {
+    // Manager whose PRIMARY company is B, assigned into A on the pivot.
+    $manager = User::factory()->forCompany($this->companyB)->create();
+    DB::table('user_company')->insert([
+        ['user_id' => $manager->id, 'company_id' => $this->companyB->id, 'assigned_by' => null, 'created_at' => now()],
+        ['user_id' => $manager->id, 'company_id' => $this->companyA->id, 'assigned_by' => null, 'created_at' => now()],
+    ]);
+
+    // Visible in A's directory…
+    $this->actingAs($this->admin)->get('/admin/permissions')
+        ->assertInertia(fn (Assert $page) => $page->has('users', 3)); // admin + staff + the pivot-assigned manager
+
+    // …and grantable: the rows land on the ADMIN's company (A), which is
+    // exactly how a secondary company's rights are given.
+    $this->actingAs($this->admin)->put("/admin/permissions/{$manager->id}", [
+        'permissions' => [['module' => 'employees', 'can_view' => true]],
+    ])->assertRedirect();
+
+    $this->assertDatabaseHas('user_module_permissions', [
+        'user_id' => $manager->id,
+        'company_id' => $this->companyA->id,
+        'module' => 'employees',
+        'can_view' => true,
+    ]);
 });
 
 it('lets a Super Admin save grants for another company user', function (): void {

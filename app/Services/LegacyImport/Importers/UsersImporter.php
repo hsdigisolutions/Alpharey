@@ -6,6 +6,7 @@ use App\Enums\UserRole;
 use App\Models\Company;
 use App\Models\User;
 use App\Services\LegacyImport\AbstractImporter;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Legacy users → new users (DATA_MIGRATION.md §3.2).
@@ -71,6 +72,17 @@ class UsersImporter extends AbstractImporter
                 // passwords). Base-query update bypasses the hashed cast,
                 // which would reject hashes with a different cost setting.
                 User::query()->whereKey($user->id)->update(['password' => $row->password]);
+
+                // Mirror the primary company on the user_company pivot —
+                // every company-bound user must appear there (the invariant
+                // the Permission Matrix companies panel relies on).
+                if (! $isAdmin) {
+                    DB::table('user_company')->insertOrIgnore([
+                        'user_id' => $user->id,
+                        'company_id' => $defaultCompanyId,
+                        'created_at' => now(),
+                    ]);
+                }
 
                 $this->recordMapping($row->id, $user->id);
                 $this->imported++;

@@ -12,6 +12,7 @@ use App\Models\Project;
 use App\Models\User;
 use App\Notifications\SystemNotification;
 use App\Services\Notifications\NotificationRules;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
 
 beforeEach(function (): void {
@@ -50,6 +51,27 @@ it('resolves recipients scoped to the company plus super admins', function (): v
     expect($ids)->toContain($admin->id)
         ->and($ids)->toContain($sa->id)
         ->and($ids)->not->toContain($other->id);
+});
+
+it('reaches users assigned into the company via the user_company pivot', function (): void {
+    // Primary company elsewhere, but assigned INTO this company on the pivot
+    // — they can act in it, so its alerts are theirs too.
+    $assigned = User::factory()->create([
+        'role' => UserRole::Admin,
+        'company_id' => Company::factory()->create()->id,
+        'active' => true,
+    ]);
+    DB::table('user_company')->insert([
+        'user_id' => $assigned->id,
+        'company_id' => $this->company->id,
+        'created_at' => now(),
+    ]);
+
+    $ids = app(NotificationRules::class)
+        ->recipients(NotificationType::DeploymentEvent, $this->company->id)
+        ->pluck('id');
+
+    expect($ids)->toContain($assigned->id);
 });
 
 it('sends nothing when every role is disabled for a type', function (): void {

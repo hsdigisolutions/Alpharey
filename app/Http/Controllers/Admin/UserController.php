@@ -9,6 +9,7 @@ use App\Http\Requests\Admin\StoreUserRequest;
 use App\Http\Requests\Admin\UpdateUserRequest;
 use App\Models\User;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Support\Facades\DB;
 
 /**
  * User management within the active company (Permission Matrix screen).
@@ -23,16 +24,27 @@ class UserController extends Controller
     {
         $companyId = $this->contextCompanyId();
 
-        User::query()->create([
-            'name' => $request->validated('name'),
-            'email' => $request->validated('email'),
-            'password' => $request->validated('password'),
-            'role' => $request->validated('role'),
-            'locale' => $request->validated('locale'),
-            'active' => true,
-            // Always the active company context — never request input (Rule 1)
-            'company_id' => $companyId,
-        ]);
+        DB::transaction(function () use ($request, $companyId): void {
+            $user = User::query()->create([
+                'name' => $request->validated('name'),
+                'email' => $request->validated('email'),
+                'password' => $request->validated('password'),
+                'role' => $request->validated('role'),
+                'locale' => $request->validated('locale'),
+                'active' => true,
+                // Always the active company context — never request input (Rule 1)
+                'company_id' => $companyId,
+            ]);
+
+            // The primary company is always mirrored on the user_company
+            // pivot — "sees only assigned companies" holds from day one.
+            DB::table('user_company')->insert([
+                'user_id' => $user->id,
+                'company_id' => $companyId,
+                'assigned_by' => $request->user()?->id,
+                'created_at' => now(),
+            ]);
+        });
 
         return back()->with('success', __('ui.permissions.user_saved'));
     }

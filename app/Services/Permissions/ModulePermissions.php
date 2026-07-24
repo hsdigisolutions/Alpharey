@@ -6,6 +6,8 @@ use App\Enums\Module;
 use App\Enums\PermissionAction;
 use App\Models\User;
 use App\Models\UserModulePermission;
+use App\Support\CurrentCompany;
+use Illuminate\Support\Facades\Auth;
 
 /**
  * The module-permission engine (REQUIREMENTS.md §4, SECURITY.md §3).
@@ -47,10 +49,20 @@ class ModulePermissions
             return true;
         }
 
-        // Manager: evaluate the per-module row for their active company.
+        // Manager: evaluate the per-module row for the company they are
+        // ACTING in. The session-selected company (multi-company managers)
+        // only ever applies to the user's own requests — a Gate::forUser()
+        // check on somebody else must not read the actor's session — and
+        // CurrentCompany validates the selection against the pivot.
+        $companyId = $user->company_id;
+
+        if (Auth::id() === $user->id) {
+            $companyId = app(CurrentCompany::class)->id() ?? $companyId;
+        }
+
         return UserModulePermission::query()
             ->where('user_id', $user->id)
-            ->where('company_id', $user->company_id)
+            ->where('company_id', $companyId)
             ->where('module', $module->value)
             ->where($action->column(), true)
             ->exists();

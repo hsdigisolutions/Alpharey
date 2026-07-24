@@ -12,6 +12,7 @@ use App\Models\Company;
 use App\Models\User;
 use App\Models\UserModulePermission;
 use App\Services\Audit\AuditLogger;
+use App\Support\CurrentCompany;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -42,26 +43,30 @@ class PermissionMatrixController extends Controller
 
         $actor = $request->user();
 
-        // Super Admin sees every user (cross-company directory).
-        // Admin sees only users in their own company.
+        // Super Admin sees every user (cross-company directory). Admin sees
+        // the users of their active company — primary OR assigned into it
+        // via the user_company pivot (multi-company managers).
         $users = User::query()
             ->where('role', '!=', UserRole::Worker->value)
             ->when(
                 $actor !== null && ! $actor->isSuperAdmin(),
-                fn ($q) => $q->where('company_id', $companyId),
+                fn ($q) => $q->where(fn ($qq) => $qq
+                    ->where('company_id', $companyId)
+                    ->orWhereHas('companies', fn ($c) => $c->where('companies.id', $companyId))),
             )
             ->with([
                 'company:id,name',
                 'companies:id,name',
             ])
             ->orderBy('name')
-            ->get(['id', 'name', 'email', 'role', 'active', 'company_id', 'password_reset_requested_at'])
+            ->get(['id', 'name', 'email', 'role', 'active', 'company_id', 'locale', 'password_reset_requested_at'])
             ->map(fn (User $user): array => [
                 'id' => $user->id,
                 'name' => $user->name,
                 'email' => $user->email,
                 'role' => $user->role->value,
                 'active' => $user->active,
+                'locale' => $user->locale,
                 'company' => $user->company?->name,
                 // All companies this user is assigned to (for the companies panel)
                 'assigned_companies' => $user->companies->map(fn (Company $c): array => [
@@ -73,11 +78,15 @@ class PermissionMatrixController extends Controller
                 'password_reset_requested' => $user->password_reset_requested_at !== null,
             ]);
 
-        // All companies available for assignment (SA sees all; Admin sees their own only)
+        // All companies available for assignment (SA sees all; an Admin only
+        // the companies they are themselves assigned to)
         $availableCompanies = Company::query()
             ->when(
                 $actor !== null && ! $actor->isSuperAdmin(),
-                fn ($q) => $q->where('id', $companyId),
+                fn ($q) => $q->whereIn(
+                    'id',
+                    $actor->companies->pluck('id')->push($actor->company_id)->filter()->unique(),
+                ),
             )
             ->orderBy('name')
             ->get(['id', 'name'])
@@ -98,19 +107,25 @@ class PermissionMatrixController extends Controller
     }
 
     /**
-     * The company whose module-permission rows apply to a user.
-     * For SA browsing any user that is the USER's own company; for everyone
-     * else it can only ever be their own.
+     * The company whose module-permission rows apply to a user on this
+     * screen. Rows are per (user, company): when the target is assigned to
+     * the ACTIVE company (primary or pivot) the grid reads/writes that
+     * company's rows — that is what lets an Admin grant a multi-company
+     * Manager rights in a secondary company. Otherwise (a Super Admin
+     * browsing a company the target is not part of) fall back to the
+     * target's primary company.
      */
-    private function companyOfUser(int $userId, int $fallbackCompanyId): int
+    private function companyOfUser(int $userId, int $contextCompanyId): int
     {
-        $actor = request()->user();
+        $user = User::query()->find($userId);
 
-        if ($actor === null || ! $actor->isSuperAdmin()) {
-            return $fallbackCompanyId;
+        if ($user === null) {
+            return $contextCompanyId;
         }
 
-        return User::query()->whereKey($userId)->value('company_id') ?? $fallbackCompanyId;
+        return $user->isAssignedToCompany($contextCompanyId)
+            ? $contextCompanyId
+            : ($user->company_id ?? $contextCompanyId);
     }
 
     /**
@@ -121,11 +136,19 @@ class PermissionMatrixController extends Controller
         $actor = $request->user();
 
         if ($actor !== null && $actor->isSuperAdmin()) {
-            abort_if($user->company_id === null, 422, 'This user belongs to no company.');
-            $companyId = $user->company_id;
+            // Rows land on the browsed company when the target is assigned to
+            // it (that is how a secondary company's rights are granted);
+            // otherwise on the target's own primary company.
+            $selected = app(CurrentCompany::class)->id();
+            $companyId = ($selected !== null && $user->isAssignedToCompany($selected))
+                ? $selected
+                : $user->company_id;
+            abort_if($companyId === null, 422, 'This user belongs to no company.');
         } else {
             $companyId = $this->contextCompanyId();
-            abort_unless($user->company_id === $companyId, 404);
+            // Primary OR pivot-assigned into the admin's company — same
+            // membership rule as the user list above.
+            abort_unless($user->isAssignedToCompany($companyId), 404);
         }
 
         abort_unless($user->role === UserRole::Manager, 422, 'Only Manager-role users have per-module permissions.');
@@ -166,14 +189,16 @@ class PermissionMatrixController extends Controller
 
         abort_unless($actor instanceof User && ($actor->isSuperAdmin() || $actor->isAdmin()), 403);
         abort_if($user->isSuperAdmin(), 403, 'Super Admins are not bound to companies via the pivot.');
+        // A worker's company comes from their employee record, never from here.
+        abort_if($user->isWorker(), 403, 'Worker accounts belong to their employee record.');
 
         $companyId = (int) $request->validate([
             'company_id' => ['required', 'integer', 'exists:companies,id'],
         ])['company_id'];
 
-        // Admins may only assign within their own company
+        // Admins may only assign within companies they are themselves part of
         if (! $actor->isSuperAdmin()) {
-            abort_unless($companyId === $actor->company_id, 403);
+            abort_unless($actor->isAssignedToCompany($companyId), 403);
         }
 
         DB::table('user_company')->insertOrIgnore([
@@ -202,10 +227,11 @@ class PermissionMatrixController extends Controller
 
         abort_unless($actor instanceof User && ($actor->isSuperAdmin() || $actor->isAdmin()), 403);
         abort_if($user->isSuperAdmin(), 403);
+        abort_if($user->isWorker(), 403);
 
-        // Admins may only remove within their own company
+        // Admins may only remove within companies they are themselves part of
         if (! $actor->isSuperAdmin()) {
-            abort_unless($company->id === $actor->company_id, 403);
+            abort_unless($actor->isAssignedToCompany($company->id), 403);
         }
 
         DB::table('user_company')

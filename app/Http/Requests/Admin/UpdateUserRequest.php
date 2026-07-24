@@ -30,11 +30,14 @@ class UpdateUserRequest extends FormRequest
         return [
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($target->id)],
-            // When editing a SA the role field must at minimum allow keeping
-            // them as super_admin (e.g. to change only their email or password).
+            // A Super Admin's role is LOCKED: nobody — not even another SA —
+            // demotes one through this form (a demoted SA would be left with
+            // no company: limbo). Deactivate the account instead. Editing an
+            // SA therefore only ever keeps role = super_admin, which still
+            // lets another SA fix their name/email/password.
             'role' => ['required', Rule::in(
                 $actor->isSuperAdmin()
-                    ? ($target->isSuperAdmin() ? ['super_admin', 'admin', 'manager'] : ['admin', 'manager'])
+                    ? ($target->isSuperAdmin() ? ['super_admin'] : ['admin', 'manager'])
                     : ['manager']
             )],
             'locale' => ['required', Rule::in(['es', 'en'])],
