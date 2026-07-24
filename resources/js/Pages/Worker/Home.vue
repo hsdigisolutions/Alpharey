@@ -129,7 +129,7 @@ function submitAbsence() {
         <!-- Today's status banner -->
         <div class="mb-4 rounded-lg border border-line bg-surface-raised p-4 text-center shadow-card">
             <p v-if="today.state === 'none'" class="text-sm text-ink-soft">
-                <Bilingual k="worker.status_none" class="items-center" />
+                {{ $t('worker.status_none') }}
             </p>
             <p v-else-if="today.state === 'checked_in'" class="text-sm font-medium text-status-ok">
                 {{ $t('worker.status_checked_in').replace(':time', today.check_in) }}
@@ -138,7 +138,7 @@ function submitAbsence() {
                 {{ $t('worker.status_checked_out').replace(':hours', today.hours ?? 0) }}
             </p>
             <p v-else-if="today.state === 'absent'" class="text-sm font-medium text-status-warn">
-                <Bilingual k="worker.status_absent" class="items-center" />
+                {{ $t('worker.status_absent') }}
             </p>
         </div>
 
@@ -149,36 +149,34 @@ function submitAbsence() {
         <!-- STATE: nothing yet today → check in (or report absence) -->
         <template v-if="today.state === 'none'">
             <div v-if="!cameraOpen" class="space-y-3">
-                <VButton class="w-full" size="lg" @click="beginCheckIn">
-                    <Bilingual k="worker.check_in" inline />
-                </VButton>
+                <VButton class="w-full" size="lg" @click="beginCheckIn">{{ $t('worker.check_in') }}</VButton>
                 <button type="button" class="w-full py-2 text-sm text-ink-soft underline-offset-2 hover:underline"
                     @click="absenceOpen = true">
-                    <Bilingual k="worker.report_absence" inline />
+                    {{ $t('worker.report_absence') }}
                 </button>
             </div>
 
             <!-- Selfie step -->
             <div v-else class="space-y-3">
-                <p class="text-center text-sm text-ink-soft">
-                    <Bilingual v-if="!cameraFailed" k="worker.camera_prompt" class="items-center" />
-                    <Bilingual v-else k="worker.camera_denied" class="items-center text-status-warn" />
+                <p class="text-center text-sm"
+                    :class="cameraFailed ? 'text-status-warn' : 'text-ink-soft'">
+                    {{ cameraFailed ? $t('worker.camera_denied') : $t('worker.camera_prompt') }}
                 </p>
 
                 <SelfieCapture v-if="!cameraFailed" ref="camera" @captured="onCaptured" @error="onCameraError" />
 
                 <VButton v-if="!photoBlob && !cameraFailed" class="w-full" size="lg" @click="camera.capture()">
-                    <Bilingual k="worker.take_photo" inline />
+                    {{ $t('worker.take_photo') }}
                 </VButton>
 
                 <template v-else>
                     <p v-if="statusLine" class="text-center text-xs text-muted">{{ statusLine }}</p>
                     <VButton class="w-full" size="lg" :loading="busy" @click="submitCheckIn">
-                        <Bilingual k="worker.check_in" inline />
+                        {{ $t('worker.check_in') }}
                     </VButton>
                     <button v-if="!cameraFailed" type="button" class="w-full py-2 text-sm text-ink-soft"
                         @click="beginCheckIn">
-                        <Bilingual k="worker.retake" inline />
+                        {{ $t('worker.retake') }}
                     </button>
                 </template>
             </div>
@@ -188,13 +186,13 @@ function submitAbsence() {
         <template v-else-if="today.state === 'checked_in'">
             <p v-if="statusLine" class="mb-2 text-center text-xs text-muted">{{ statusLine }}</p>
             <VButton variant="secondary" class="w-full" size="lg" :loading="busy" @click="checkOut">
-                <Bilingual k="worker.check_out" inline />
+                {{ $t('worker.check_out') }}
             </VButton>
         </template>
 
         <!-- STATE: done or absent → nothing more to do today -->
         <div v-else class="rounded-lg border border-line bg-surface-raised p-5 text-center text-sm text-ink-soft shadow-card">
-            <Bilingual k="worker.done_for_today" class="items-center" />
+            {{ $t('worker.done_for_today') }}
         </div>
 
         <!-- ── Dashboard: this month ── -->
@@ -205,19 +203,19 @@ function submitAbsence() {
             <div class="mb-4 grid grid-cols-2 gap-2">
                 <div class="rounded-lg border border-line bg-surface-raised p-3 text-center shadow-card">
                     <p class="tabular-nums text-2xl font-semibold text-status-ok">{{ month.present }}</p>
-                    <p class="text-xs text-ink-soft"><Bilingual k="worker.days_present" class="items-center" /></p>
+                    <p class="text-xs text-ink-soft">{{ $t('worker.days_present') }}</p>
                 </div>
                 <div class="rounded-lg border border-line bg-surface-raised p-3 text-center shadow-card">
                     <p class="tabular-nums text-2xl font-semibold text-status-danger">{{ month.absent }}</p>
-                    <p class="text-xs text-ink-soft"><Bilingual k="worker.days_absent" class="items-center" /></p>
+                    <p class="text-xs text-ink-soft">{{ $t('worker.days_absent') }}</p>
                 </div>
                 <div class="rounded-lg border border-line bg-surface-raised p-3 text-center shadow-card">
                     <p class="tabular-nums text-2xl font-semibold text-ink">{{ month.hours }}</p>
-                    <p class="text-xs text-ink-soft"><Bilingual k="worker.total_hours" class="items-center" /></p>
+                    <p class="text-xs text-ink-soft">{{ $t('worker.total_hours') }}</p>
                 </div>
                 <div class="rounded-lg border border-line bg-surface-raised p-3 text-center shadow-card">
                     <p class="tabular-nums text-2xl font-semibold text-accent">{{ eur(month.earned) }}</p>
-                    <p class="text-xs text-ink-soft"><Bilingual k="worker.earned" class="items-center" /></p>
+                    <p class="text-xs text-ink-soft">{{ $t('worker.earned') }}</p>
                 </div>
             </div>
 
@@ -225,9 +223,9 @@ function submitAbsence() {
             <div class="rounded-lg border border-line bg-surface-raised p-3 shadow-card">
                 <MonthCalendar :month="month" />
                 <div class="mt-3 flex flex-wrap justify-center gap-x-4 gap-y-1 border-t border-line pt-3 text-[11px] text-ink-soft">
-                    <span class="flex items-center gap-1.5"><span class="h-2 w-2 rounded-full bg-status-ok" /><Bilingual k="worker.legend_present" inline /></span>
-                    <span class="flex items-center gap-1.5"><span class="h-2 w-2 rounded-full bg-status-danger" /><Bilingual k="worker.legend_absent" inline /></span>
-                    <span class="flex items-center gap-1.5"><span class="h-2 w-2 rounded-full bg-surface-sunken ring-1 ring-line" /><Bilingual k="worker.legend_none" inline /></span>
+                    <span class="flex items-center gap-1.5"><span class="h-2 w-2 rounded-full bg-status-ok" />{{ $t('worker.legend_present') }}</span>
+                    <span class="flex items-center gap-1.5"><span class="h-2 w-2 rounded-full bg-status-danger" />{{ $t('worker.legend_absent') }}</span>
+                    <span class="flex items-center gap-1.5"><span class="h-2 w-2 rounded-full bg-surface-sunken ring-1 ring-line" />{{ $t('worker.legend_none') }}</span>
                 </div>
             </div>
         </section>
@@ -236,16 +234,16 @@ function submitAbsence() {
         <div v-if="absenceOpen" class="fixed inset-0 z-40 flex items-end bg-black/40" @click.self="absenceOpen = false">
             <div class="w-full rounded-t-xl bg-surface-raised p-5 shadow-overlay"
                 style="padding-bottom: calc(1.25rem + env(safe-area-inset-bottom))">
-                <h2 class="mb-3 text-base font-semibold"><Bilingual k="worker.absence_reason" /></h2>
+                <h2 class="mb-3 text-base font-semibold">{{ $t('worker.absence_reason') }}</h2>
                 <form @submit.prevent="submitAbsence">
                     <VTextarea v-model="absenceForm.note" :rows="3" :placeholder="$t('worker.absence_placeholder')" />
                     <p v-if="absenceForm.errors.note" class="mt-1 text-xs text-status-danger">{{ absenceForm.errors.note }}</p>
                     <div class="mt-4 flex gap-2">
                         <VButton variant="ghost" class="flex-1" type="button" @click="absenceOpen = false">
-                            <Bilingual k="common.cancel" inline />
+                            {{ $t('common.cancel') }}
                         </VButton>
                         <VButton class="flex-1" type="submit" :loading="absenceForm.processing">
-                            <Bilingual k="worker.absence_submit" inline />
+                            {{ $t('worker.absence_submit') }}
                         </VButton>
                     </div>
                 </form>

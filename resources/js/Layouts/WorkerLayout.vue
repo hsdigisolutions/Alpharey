@@ -25,7 +25,16 @@ defineProps({
 });
 
 const page = usePage();
-const locale = computed(() => (page.props.locale?.primary === 'en' ? 'en-GB' : 'es-ES'));
+const primary = computed(() => page.props.locale?.primary ?? 'es');
+const locale = computed(() => (primary.value === 'en' ? 'en-GB' : 'es-ES'));
+
+// The worker app shows ONE language at a time (a stacked bilingual label is too
+// cramped on a phone held in gloves), with this toggle to switch the whole app.
+function setLang(lang) {
+    if (lang !== primary.value) {
+        router.post('/locale', { locale: lang }, { preserveScroll: true });
+    }
+}
 
 // --- Live clock -------------------------------------------------------------
 const now = ref(new Date());
@@ -98,8 +107,17 @@ function logout() {
                         {{ worker.code }}<template v-if="worker.company"> · {{ worker.company }}</template>
                     </p>
                 </div>
+                <!-- Language switch: whole app flips ES ↔ EN -->
+                <div class="flex shrink-0 overflow-hidden rounded-lg border border-line text-xs font-semibold">
+                    <button type="button" class="px-2.5 py-1.5 transition"
+                        :class="primary === 'es' ? 'bg-accent text-on-accent' : 'text-ink-soft active:bg-surface-hover'"
+                        @click="setLang('es')">ES</button>
+                    <button type="button" class="px-2.5 py-1.5 transition"
+                        :class="primary === 'en' ? 'bg-accent text-on-accent' : 'text-ink-soft active:bg-surface-hover'"
+                        @click="setLang('en')">EN</button>
+                </div>
                 <button type="button"
-                    class="flex h-11 w-11 items-center justify-center rounded-xl border border-line bg-surface-raised text-ink-soft transition active:scale-95 active:bg-surface-hover"
+                    class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-line bg-surface-raised text-ink-soft transition active:scale-95 active:bg-surface-hover"
                     :aria-label="$t('common.logout')"
                     @click="logout">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
@@ -120,15 +138,13 @@ function logout() {
 
             <!-- Install: a real prompt on Android, the manual route on iOS -->
             <div v-if="showInstall" class="mb-4 rounded-xl border border-line bg-surface-raised p-3 shadow-card">
-                <p class="mb-2 text-sm text-ink-soft"><Bilingual k="worker.install_hint" /></p>
-                <VButton class="w-full" @click="install">
-                    <Bilingual k="worker.install" inline />
-                </VButton>
+                <p class="mb-2 text-sm text-ink-soft">{{ $t('worker.install_hint') }}</p>
+                <VButton class="w-full" @click="install">{{ $t('worker.install') }}</VButton>
             </div>
 
             <div v-else-if="showIosHint"
                 class="mb-4 rounded-xl border border-line bg-surface-raised p-3 text-xs text-ink-soft shadow-card">
-                <Bilingual k="worker.install_ios" />
+                {{ $t('worker.install_ios') }}
             </div>
 
             <main>
