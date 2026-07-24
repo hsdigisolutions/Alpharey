@@ -104,6 +104,52 @@ it('blocks company admins from editing other admins', function (): void {
     ])->assertForbidden();
 });
 
+it('lets a super admin edit another super admin without a company context', function (): void {
+    $sa = User::factory()->superAdmin()->create();
+    $otherSa = User::factory()->superAdmin()->create();
+
+    // SA has no active company selected — must not 404 when editing another SA.
+    $this->actingAs($sa)->put("/admin/users/{$otherSa->id}", [
+        'name' => 'Changed Name',
+        'email' => $otherSa->email,
+        'role' => 'super_admin',
+        'locale' => 'en',
+        'active' => true,
+    ])->assertRedirect();
+
+    expect($otherSa->fresh()->name)->toBe('Changed Name');
+});
+
+it('lets a super admin demote another super admin to user with a company context', function (): void {
+    $sa = User::factory()->superAdmin()->create();
+    $otherSa = User::factory()->superAdmin()->create();
+
+    // Select a company so the SA has a company context — should still work.
+    $this->actingAs($sa)->post("/welcome/{$this->companyA->id}/select");
+
+    $this->put("/admin/users/{$otherSa->id}", [
+        'name' => $otherSa->name,
+        'email' => $otherSa->email,
+        'role' => 'user',
+        'locale' => 'es',
+        'active' => true,
+    ])->assertRedirect();
+
+    expect($otherSa->fresh()->role)->toBe(UserRole::User);
+});
+
+it('forbids a company admin from editing a super admin', function (): void {
+    $otherSa = User::factory()->superAdmin()->create();
+
+    $this->actingAs($this->admin)->put("/admin/users/{$otherSa->id}", [
+        'name' => 'Hacked SA',
+        'email' => $otherSa->email,
+        'role' => 'user',
+        'locale' => 'es',
+        'active' => true,
+    ])->assertForbidden();
+});
+
 it('denies regular users the user management endpoints', function (): void {
     $user = User::factory()->forCompany($this->companyA)->create();
 

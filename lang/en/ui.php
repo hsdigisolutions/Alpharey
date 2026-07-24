@@ -135,6 +135,7 @@ return [
         'new_user' => 'New User',
         'edit_user' => 'Edit User',
         'role' => 'Role',
+        'role_super_admin' => 'Super Admin',
         'role_company_admin' => 'Company Admin',
         'role_user' => 'User',
         'locale' => 'Language',

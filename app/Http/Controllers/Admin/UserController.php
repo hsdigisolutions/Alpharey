@@ -39,17 +39,24 @@ class UserController extends Controller
 
     public function update(UpdateUserRequest $request, User $user): RedirectResponse
     {
-        $companyId = $this->contextCompanyId();
         $actor = $request->user();
 
-        abort_unless($user->company_id === $companyId, 404);
         // Nobody edits themselves through the admin panel (lockout/escalation guard)
         abort_if($actor !== null && $actor->id === $user->id, 422, 'Use your own profile settings.');
-        // Company Admins cannot modify other admins — Super Admin only
-        abort_if(
-            $actor !== null && ! $actor->isSuperAdmin() && $user->role !== UserRole::User,
-            403,
-        );
+
+        if ($user->role === UserRole::SuperAdmin) {
+            // Super Admins have no company — they sit outside the tenant scope.
+            // Only another SA may edit them; the company-context guard is irrelevant.
+            abort_unless($actor !== null && $actor->isSuperAdmin(), 403);
+        } else {
+            $companyId = $this->contextCompanyId();
+            abort_unless($user->company_id === $companyId, 404);
+            // Company Admins cannot modify other admins — Super Admin only
+            abort_if(
+                $actor !== null && ! $actor->isSuperAdmin() && $user->role !== UserRole::User,
+                403,
+            );
+        }
 
         $data = [
             'name' => $request->validated('name'),

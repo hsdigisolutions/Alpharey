@@ -317,6 +317,11 @@ function submitUser() {
                 <div class="grid gap-4 sm:grid-cols-2">
                     <FormField k="permissions.role" :error="userForm.errors.role" required>
                         <VSelect v-model="userForm.role">
+                            <!-- super_admin shown only when editing an existing SA — keeps their role
+                                 accessible without forcing a demotion just to edit email/password. -->
+                            <option v-if="$page.props.auth.user?.role === 'super_admin' && editingUser?.role === 'super_admin'" value="super_admin">
+                                {{ $tPair('permissions.role_super_admin') }}
+                            </option>
                             <option value="user">{{ $tPair('permissions.role_user') }}</option>
                             <option v-if="$page.props.auth.user?.role === 'super_admin'" value="company_admin">
                                 {{ $tPair('permissions.role_company_admin') }}

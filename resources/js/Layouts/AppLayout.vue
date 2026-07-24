@@ -62,8 +62,12 @@ function markAllRead() {
     router.post('/notifications/read-all', {}, { preserveScroll: true, preserveState: false });
 }
 
-function markRead(id) {
-    router.post(`/notifications/${id}/read`, {}, { preserveScroll: true, preserveState: false });
+function markRead(id, url) {
+    router.post(`/notifications/${id}/read`, {}, {
+        preserveScroll: !url,
+        preserveState: !url,
+        onSuccess: () => { if (url) router.visit(url); },
+    });
 }
 
 // Four most-used destinations; the fifth slot is the "Más" button below, which
@@ -234,8 +238,8 @@ function switchLocale() {
                             </div>
                             <button v-for="item in notificationItems" :key="item.id" type="button"
                                 class="flex w-full items-start gap-2 border-b border-line px-3 py-2.5 text-start last:border-0 hover:bg-surface-sunken"
-                                :class="{ 'bg-accent-soft/40': !item.read }"
-                                @click="markRead(item.id)">
+                                :class="{ 'bg-accent-soft/40': !item.read, 'cursor-pointer': item.data.url }"
+                                @click="markRead(item.id, item.data.url)">
                                 <span class="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full"
                                     :class="item.read ? 'bg-transparent' : 'bg-accent'" />
                                 <span class="min-w-0 flex-1">
