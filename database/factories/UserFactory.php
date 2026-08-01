@@ -102,6 +102,18 @@ class UserFactory extends Factory
         ]);
     }
 
+    /**
+     * Worker role: PWA only, no CRM access, exempt from 2FA in practice
+     * (EnsureWorker wall). Still enrolled so RequireTwoFactor doesn't intercept
+     * CRM routes if the guard somehow passes.
+     */
+    public function worker(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'role' => UserRole::Worker,
+        ]);
+    }
+
     public function forCompany(Company $company): static
     {
         return $this->state(fn (array $attributes) => [

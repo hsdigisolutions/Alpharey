@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Enums\FuelType;
 use App\Enums\VehicleOwnership;
+use App\Enums\VehicleType;
 use App\Models\Concerns\Auditable;
 use App\Models\Concerns\BelongsToCompany;
 use Database\Factories\VehicleFactory;
@@ -24,10 +25,13 @@ use Illuminate\Support\Carbon;
  * @property int $company_id
  * @property string $plate_number
  * @property VehicleOwnership $ownership
+ * @property VehicleType|null $vehicle_type
  * @property FuelType|null $fuel_type
  * @property bool $active
+ * @property bool $is_available
  * @property Carbon|null $insurance_expiry_date
  * @property Carbon|null $ita_expiry_date
+ * @property Carbon|null $road_tax_expiry_date
  * @property Carbon|null $purchase_date
  * @property Carbon|null $last_oil_change_date
  * @property Carbon|null $next_service_date
@@ -49,12 +53,12 @@ class Vehicle extends Model
 
     /** @var list<string> */
     protected $fillable = [
-        'plate_number', 'brand', 'model', 'year', 'ownership',
+        'plate_number', 'vehicle_type', 'brand', 'model', 'year', 'ownership',
         'assigned_employee_id', 'active', 'fuel_type', 'color', 'vin_number',
         'insurance_policy_number', 'insurance_expiry_date', 'ita_expiry_date',
-        'purchase_date', 'current_mileage', 'last_oil_change_mileage',
-        'last_oil_change_date', 'oil_change_interval_km', 'next_service_date',
-        'last_tyre_change_date', 'last_tyre_change_mileage',
+        'road_tax_expiry_date', 'purchase_date', 'current_mileage',
+        'last_oil_change_mileage', 'last_oil_change_date', 'oil_change_interval_km',
+        'next_service_date', 'last_tyre_change_date', 'last_tyre_change_mileage',
         'maintenance_notes', 'notes',
     ];
 
@@ -62,11 +66,14 @@ class Vehicle extends Model
     {
         return [
             'ownership' => VehicleOwnership::class,
+            'vehicle_type' => VehicleType::class,
             'fuel_type' => FuelType::class,
             'active' => 'boolean',
+            'is_available' => 'boolean',
             'year' => 'integer',
             'insurance_expiry_date' => 'date:Y-m-d',
             'ita_expiry_date' => 'date:Y-m-d',
+            'road_tax_expiry_date' => 'date:Y-m-d',
             'purchase_date' => 'date:Y-m-d',
             'last_oil_change_date' => 'date:Y-m-d',
             'next_service_date' => 'date:Y-m-d',
@@ -122,5 +129,47 @@ class Vehicle extends Model
     public function mileageHistory(): HasMany
     {
         return $this->hasMany(VehicleMileageHistory::class)->orderByDesc('recorded_at');
+    }
+
+    /**
+     * @return HasMany<VehicleDailyAssignment, $this>
+     */
+    public function dailyAssignments(): HasMany
+    {
+        return $this->hasMany(VehicleDailyAssignment::class)->orderByDesc('assigned_date');
+    }
+
+    /**
+     * @return HasMany<VehicleFine, $this>
+     */
+    public function fines(): HasMany
+    {
+        return $this->hasMany(VehicleFine::class)->orderByDesc('fine_date');
+    }
+
+    /**
+     * @return HasMany<VehicleFuelRecord, $this>
+     */
+    public function fuelRecords(): HasMany
+    {
+        return $this->hasMany(VehicleFuelRecord::class)->orderByDesc('fuel_date');
+    }
+
+    /**
+     * @return HasMany<VehicleSession, $this>
+     */
+    public function sessions(): HasMany
+    {
+        return $this->hasMany(VehicleSession::class)->orderByDesc('taken_at');
+    }
+
+    /**
+     * The open session (a worker currently has the vehicle), or null.
+     *
+     * @return HasMany<VehicleSession, $this>
+     */
+    public function openSession(): HasMany
+    {
+        return $this->hasMany(VehicleSession::class)->whereNull('returned_at');
     }
 }

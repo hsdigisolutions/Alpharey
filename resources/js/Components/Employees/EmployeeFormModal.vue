@@ -30,7 +30,7 @@ const blank = {
     active: true, is_contracted: false, default_check_in: '09:00', default_check_out: '17:00',
     wage_type: '', wage_rate: null, base_salary: null, daily_wage: null, per_meter_rate: null,
     commission_percent: null, payment_method: '', iban: '', bank_name: '',
-    has_driving_license: false, has_company_vehicle: false, notes: '',
+    has_driving_license: false, has_company_vehicle: false, can_use_vehicles: false, notes: '',
 };
 
 const form = useForm({ ...blank });
@@ -117,6 +117,7 @@ const paymentMethods = ['bank_transfer', 'cash', 'cash_via_supervisor'];
                 <div class="mt-3 flex flex-wrap gap-6">
                     <VCheckbox v-model="form.active"><Bilingual k="employees.active" inline class="text-sm" /></VCheckbox>
                     <VCheckbox v-model="form.is_contracted"><Bilingual k="employees.is_contracted" inline class="text-sm" /></VCheckbox>
+                    <VCheckbox v-model="form.can_use_vehicles"><Bilingual k="employees.can_use_vehicles" inline class="text-sm" /></VCheckbox>
                 </div>
             </section>
 

@@ -28,6 +28,7 @@ class VehicleCompliance
     public const EXPIRY_FIELDS = [
         'insurance' => 'insurance_expiry_date',
         'ita' => 'ita_expiry_date',
+        'road_tax' => 'road_tax_expiry_date',
     ];
 
     public function __construct(private readonly DocumentStatus $documents) {}

@@ -4,10 +4,17 @@ namespace App\Http\Controllers;
 
 use App\Enums\FuelType;
 use App\Enums\VehicleOwnership;
+use App\Enums\VehicleType;
 use App\Http\Controllers\Admin\Concerns\ResolvesCompanyContext;
+use App\Http\Requests\StoreDailyAssignmentRequest;
+use App\Http\Requests\StoreFineRequest;
+use App\Http\Requests\StoreFuelRequest;
 use App\Http\Requests\StoreVehicleRequest;
 use App\Models\Employee;
 use App\Models\Vehicle;
+use App\Models\VehicleDailyAssignment;
+use App\Models\VehicleFine;
+use App\Models\VehicleFuelRecord;
 use App\Models\VehicleMaintenanceHistory;
 use App\Services\Vehicles\VehicleCompliance;
 use App\Services\Vehicles\VehicleService;
@@ -53,6 +60,7 @@ class VehicleController extends Controller
             'employees' => Employee::query()->orderBy('full_name')->get(['id', 'full_name']),
             'ownerships' => array_map(fn (VehicleOwnership $o): string => $o->value, VehicleOwnership::cases()),
             'fuelTypes' => array_map(fn (FuelType $f): string => $f->value, FuelType::cases()),
+            'vehicleTypes' => array_map(fn (VehicleType $t): string => $t->value, VehicleType::cases()),
             'can' => [
                 // Permission-only: shown to anyone who may create. The Vue gate
                 // routes a company-less Super Admin to the picker; store() sets
@@ -73,6 +81,10 @@ class VehicleController extends Controller
             'history.employee:id,full_name',
             'maintenanceHistory.creator:id,name',
             'mileageHistory.updatedBy:id,name',
+            'dailyAssignments.employee:id,full_name',
+            'dailyAssignments.creator:id,name',
+            'fines.employee:id,full_name',
+            'fuelRecords.employee:id,full_name',
         ]);
 
         return Inertia::render('Vehicles/Show', [
@@ -106,6 +118,7 @@ class VehicleController extends Controller
                 'maintenance_date' => $m->maintenance_date->toDateString(),
                 'vehicle_km' => $m->vehicle_km,
                 'description' => $m->description,
+                'vendor_name' => $m->vendor_name,
                 'tyre_position' => $m->tyre_position,
                 'cost' => $m->cost !== null ? (float) $m->cost : null,
                 'created_by' => $m->creator?->name,
@@ -115,6 +128,38 @@ class VehicleController extends Controller
                 'mileage_value' => $m->mileage_value,
                 'recorded_at' => $m->recorded_at->toDateString(),
                 'updated_by' => $m->updatedBy?->name,
+            ])->values(),
+            'daily_assignments' => $vehicle->dailyAssignments->map(fn ($d): array => [
+                'id' => $d->id,
+                'assigned_date' => $d->assigned_date->toDateString(),
+                'employee_id' => $d->employee_id,
+                'employee' => $d->employee?->full_name,
+                'notes' => $d->notes,
+                'created_by' => $d->creator?->name,
+            ])->values(),
+            'fines' => $vehicle->fines->map(fn ($f): array => [
+                'id' => $f->id,
+                'fine_date' => $f->fine_date->toDateString(),
+                'amount' => (float) $f->amount,
+                'description' => $f->description,
+                'authority' => $f->authority,
+                'employee' => $f->employee?->full_name,
+                'employee_id' => $f->employee_id,
+                'charged_to' => $f->charged_to,
+                'paid' => $f->paid,
+                'paid_at' => $f->paid_at?->toDateString(),
+                'has_expense' => $f->expense_id !== null,
+            ])->values(),
+            'fuel_records' => $vehicle->fuelRecords->map(fn ($r): array => [
+                'id' => $r->id,
+                'fuel_date' => $r->fuel_date->toDateString(),
+                'litres' => (float) $r->litres,
+                'cost_per_litre' => (float) $r->cost_per_litre,
+                'total_cost' => (float) $r->total_cost,
+                'mileage_at_fill' => $r->mileage_at_fill,
+                'payment_method' => $r->payment_method,
+                'employee' => $r->employee?->full_name,
+                'notes' => $r->notes,
             ])->values(),
             'employees' => Employee::query()->orderBy('full_name')->get(['id', 'full_name']),
             'can' => [
@@ -177,6 +222,7 @@ class VehicleController extends Controller
             'maintenance_date' => ['required', 'date'],
             'vehicle_km' => ['nullable', 'integer', 'min:0'],
             'description' => ['nullable', 'string', 'max:2000'],
+            'vendor_name' => ['nullable', 'string', 'max:100'],
             'tyre_position' => ['nullable', 'string', 'max:50'],
             'cost' => ['nullable', 'numeric', 'min:0'],
         ]);
@@ -213,6 +259,57 @@ class VehicleController extends Controller
         return back()->with('success', __('ui.vehicles.mileage_logged'));
     }
 
+    public function storeDailyAssignment(StoreDailyAssignmentRequest $request, Vehicle $vehicle): RedirectResponse
+    {
+        $this->vehicles->logDailyAssignment($vehicle, $request->string('assigned_date')->value(), $request->validated());
+
+        return back()->with('success', __('ui.vehicles.daily_assignment_saved'));
+    }
+
+    public function destroyDailyAssignment(Vehicle $vehicle, VehicleDailyAssignment $assignment): RedirectResponse
+    {
+        Gate::authorize('vehicles.edit');
+        abort_unless($assignment->vehicle_id === $vehicle->id, 404);
+
+        $this->vehicles->deleteDailyAssignment($assignment);
+
+        return back()->with('success', __('ui.vehicles.daily_assignment_deleted'));
+    }
+
+    public function storeFine(StoreFineRequest $request, Vehicle $vehicle): RedirectResponse
+    {
+        $this->vehicles->logFine($vehicle, $request->validated());
+
+        return back()->with('success', __('ui.vehicles.fine_saved'));
+    }
+
+    public function destroyFine(Vehicle $vehicle, VehicleFine $fine): RedirectResponse
+    {
+        Gate::authorize('vehicles.edit');
+        abort_unless($fine->vehicle_id === $vehicle->id, 404);
+
+        $this->vehicles->deleteFine($fine);
+
+        return back()->with('success', __('ui.vehicles.fine_deleted'));
+    }
+
+    public function storeFuel(StoreFuelRequest $request, Vehicle $vehicle): RedirectResponse
+    {
+        $this->vehicles->logFuel($vehicle, $request->validated());
+
+        return back()->with('success', __('ui.vehicles.fuel_saved'));
+    }
+
+    public function destroyFuel(Vehicle $vehicle, VehicleFuelRecord $fuelRecord): RedirectResponse
+    {
+        Gate::authorize('vehicles.edit');
+        abort_unless($fuelRecord->vehicle_id === $vehicle->id, 404);
+
+        $this->vehicles->deleteFuel($fuelRecord);
+
+        return back()->with('success', __('ui.vehicles.fuel_deleted'));
+    }
+
     /**
      * @return Builder<Vehicle>
      */
@@ -239,6 +336,7 @@ class VehicleController extends Controller
         return [
             'id' => $v->id,
             'plate_number' => $v->plate_number,
+            'vehicle_type' => $v->vehicle_type?->value,
             'brand' => $v->brand,
             'model' => $v->model,
             'year' => $v->year,
@@ -248,9 +346,10 @@ class VehicleController extends Controller
             'fuel_type' => $v->fuel_type?->value,
             'ita_expiry_date' => $v->ita_expiry_date?->toDateString(),
             'insurance_expiry_date' => $v->insurance_expiry_date?->toDateString(),
+            'road_tax_expiry_date' => $v->road_tax_expiry_date?->toDateString(),
             'current_mileage' => $v->current_mileage,
             'active' => $v->active,
-            // the row indicator — worst of the two expiries
+            // worst of all three expiries (insurance, ITV, road tax)
             'compliance' => $this->compliance->worst($v),
         ];
     }

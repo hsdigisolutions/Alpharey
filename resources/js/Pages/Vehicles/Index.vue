@@ -28,6 +28,7 @@ const props = defineProps({
     employees: { type: Array, required: true },
     ownerships: { type: Array, required: true },
     fuelTypes: { type: Array, required: true },
+    vehicleTypes: { type: Array, required: true },
     can: { type: Object, required: true },
 });
 
@@ -42,10 +43,10 @@ function apply(extra = {}) {
 
 const showModal = ref(false);
 const blank = {
-    plate_number: '', brand: '', model: '', year: null, ownership: 'company',
+    plate_number: '', vehicle_type: '', brand: '', model: '', year: null, ownership: 'company',
     assigned_employee_id: '', active: true, fuel_type: '', color: '',
     vin_number: '', insurance_policy_number: '', insurance_expiry_date: null,
-    ita_expiry_date: null, purchase_date: null, current_mileage: null,
+    ita_expiry_date: null, road_tax_expiry_date: null, purchase_date: null, current_mileage: null,
 };
 const form = useForm({ ...blank });
 
@@ -61,6 +62,7 @@ function submit() {
         ...d,
         assigned_employee_id: d.assigned_employee_id || null,
         fuel_type: d.fuel_type || null,
+        vehicle_type: d.vehicle_type || null,
     })).post('/vehicles', {
         preserveScroll: true,
         onSuccess: () => (showModal.value = false),
@@ -138,6 +140,12 @@ const columns = [
                 <FormField k="vehicles.year" :error="form.errors.year">
                     <VInput v-model="form.year" type="number" />
                 </FormField>
+                <FormField k="vehicles.vehicle_type" :error="form.errors.vehicle_type">
+                    <VSelect v-model="form.vehicle_type">
+                        <option value="">—</option>
+                        <option v-for="t in vehicleTypes" :key="t" :value="t">{{ $t(`vehicles.vehicle_type_${t}`) }}</option>
+                    </VSelect>
+                </FormField>
                 <FormField k="vehicles.fuel_type" :error="form.errors.fuel_type">
                     <VSelect v-model="form.fuel_type">
                         <option value="">—</option>
@@ -162,6 +170,9 @@ const columns = [
                 </FormField>
                 <FormField k="vehicles.ita_expiry_date" :error="form.errors.ita_expiry_date">
                     <VDateInput v-model="form.ita_expiry_date" />
+                </FormField>
+                <FormField k="vehicles.road_tax_expiry_date" :error="form.errors.road_tax_expiry_date">
+                    <VDateInput v-model="form.road_tax_expiry_date" />
                 </FormField>
                 <FormField k="vehicles.purchase_date" :error="form.errors.purchase_date">
                     <VDateInput v-model="form.purchase_date" />

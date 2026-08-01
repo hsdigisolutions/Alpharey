@@ -5,9 +5,11 @@ namespace App\Services\Payroll;
 use App\Enums\AdvanceStatus;
 use App\Enums\PaymentMethod;
 use App\Enums\PayrollStatus;
+use App\Enums\WorkerExpenseStatus;
 use App\Models\Advance;
 use App\Models\LockedPeriod;
 use App\Models\Payroll;
+use App\Models\WorkerExpense;
 use App\Support\PeriodLock;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -66,6 +68,16 @@ class PayrollWorkflow
                 ->where('payroll_month', $payroll->month)
                 ->where('status', AdvanceStatus::Approved->value)
                 ->update(['status' => AdvanceStatus::Deducted->value]);
+
+            // Worker PWA expenses included in this payroll are stamped so a
+            // recalculation does not double-count them.
+            WorkerExpense::query()->withoutGlobalScopes()
+                ->where('employee_id', $payroll->employee_id)
+                ->where('status', WorkerExpenseStatus::Approved->value)
+                ->whereNull('payroll_id')
+                ->whereMonth('date', substr($payroll->month, 5, 2))
+                ->whereYear('date', substr($payroll->month, 0, 4))
+                ->update(['payroll_id' => $payroll->id]);
 
             return $payroll;
         });

@@ -6,6 +6,7 @@
  */
 import { computed, watch } from 'vue';
 import { router, useForm } from '@inertiajs/vue3';
+import AppIcon from '@/Components/AppIcon.vue';
 import FormField from '@/Components/ui/FormField.vue';
 import VBadge from '@/Components/ui/VBadge.vue';
 import VButton from '@/Components/ui/VButton.vue';
@@ -221,6 +222,23 @@ function mapsUrl(loc) {
                         <Bilingual k="attendance.view_selfie_full" inline />
                     </a>
                 </div>
+            </div>
+
+            <!-- Voice / text note captured at check-out (Feature 1). Read-only.
+                 The audio streams through the gated, audited download route. -->
+            <div v-if="record?.voice_note" class="rounded-md border border-line bg-surface-sunken p-3">
+                <div class="mb-2 flex items-center gap-2">
+                    <AppIcon name="mic" class="h-4 w-4 text-ink-soft" />
+                    <Bilingual k="attendance.voice_note" inline class="text-sm font-medium" />
+                    <span v-if="record.voice_note.duration_seconds" class="text-xs text-muted">
+                        {{ record.voice_note.duration_seconds }}s
+                    </span>
+                </div>
+                <p v-if="record.voice_note.text_note"
+                    class="rounded bg-surface-raised px-2 py-1 text-sm">{{ record.voice_note.text_note }}</p>
+                <audio v-if="record.voice_note.has_audio" controls preload="none"
+                    :src="`/attendance/voice-notes/${record.voice_note.id}/download`"
+                    class="mt-2 w-full"></audio>
             </div>
         </form>
         <template #footer>

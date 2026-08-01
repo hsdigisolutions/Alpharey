@@ -11,6 +11,7 @@ use Database\Factories\AttendanceFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Support\Carbon;
 
 /**
@@ -107,5 +108,13 @@ class Attendance extends Model
     public function project(): BelongsTo
     {
         return $this->belongsTo(Project::class);
+    }
+
+    /**
+     * @return HasOne<AttendanceVoiceNote, $this>
+     */
+    public function voiceNote(): HasOne
+    {
+        return $this->hasOne(AttendanceVoiceNote::class);
     }
 }

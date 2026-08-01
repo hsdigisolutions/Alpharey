@@ -141,7 +141,7 @@ const monthLabel = computed(() => {
                                 <template v-else>{{ emp.designation ?? '—' }}</template>
                             </span>
                         </td>
-                        <td v-for="day in days" :key="day" class="p-0.5 text-center">
+                        <td v-for="day in days" :key="day" class="relative p-0.5 text-center">
                             <button type="button"
                                 class="h-8 w-8 rounded-sm text-[10px] font-semibold transition-colors"
                                 :class="grid[emp.id]?.[day]
@@ -151,6 +151,10 @@ const monthLabel = computed(() => {
                                 @click="openCell(emp.id, day)">
                                 {{ grid[emp.id]?.[day] ? grid[emp.id][day].hours : '' }}
                             </button>
+                            <!-- Worker left a voice/text note on this day -->
+                            <AppIcon v-if="grid[emp.id]?.[day]?.has_voice_note" name="mic"
+                                class="pointer-events-none absolute end-0.5 top-0.5 h-2.5 w-2.5 text-ink-soft"
+                                :title="$t('attendance.voice_note')" />
                         </td>
                     </tr>
                 </tbody>

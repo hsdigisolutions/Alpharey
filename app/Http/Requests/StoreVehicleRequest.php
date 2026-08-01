@@ -4,6 +4,7 @@ namespace App\Http\Requests;
 
 use App\Enums\FuelType;
 use App\Enums\VehicleOwnership;
+use App\Enums\VehicleType;
 use App\Models\Employee;
 use App\Support\CurrentCompany;
 use Illuminate\Foundation\Http\FormRequest;
@@ -36,6 +37,7 @@ class StoreVehicleRequest extends FormRequest
                     ->where('company_id', app(CurrentCompany::class)->id())
                     ->ignore($vehicle?->id),
             ],
+            'vehicle_type' => ['nullable', Rule::enum(VehicleType::class)],
             'brand' => ['nullable', 'string', 'max:60'],
             'model' => ['nullable', 'string', 'max:60'],
             'year' => ['nullable', 'integer', 'min:1900', 'max:'.(now()->year + 1)],
@@ -48,6 +50,7 @@ class StoreVehicleRequest extends FormRequest
             'insurance_policy_number' => ['nullable', 'string', 'max:60'],
             'insurance_expiry_date' => ['nullable', 'date'],
             'ita_expiry_date' => ['nullable', 'date'],
+            'road_tax_expiry_date' => ['nullable', 'date'],
             'purchase_date' => ['nullable', 'date'],
             'current_mileage' => ['nullable', 'integer', 'min:0'],
             'last_oil_change_mileage' => ['nullable', 'integer', 'min:0'],

@@ -11,6 +11,7 @@ use App\Http\Controllers\Admin\UserPasswordResetController;
 use App\Http\Controllers\AdvanceController;
 use App\Http\Controllers\AttendanceController;
 use App\Http\Controllers\AttendanceImportExportController;
+use App\Http\Controllers\AttendanceVoiceNoteController;
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Auth\NewPasswordController;
 use App\Http\Controllers\Auth\PasswordResetLinkController;
@@ -49,7 +50,11 @@ use App\Http\Controllers\VehicleController;
 use App\Http\Controllers\VendorController;
 use App\Http\Controllers\WelcomeController;
 use App\Http\Controllers\Worker\WorkerController;
+use App\Http\Controllers\Worker\WorkerExpenseController;
+use App\Http\Controllers\Worker\WorkerVehicleController;
+use App\Http\Controllers\Worker\WorkerVoiceNoteController;
 use App\Http\Controllers\WorkerAccessController;
+use App\Http\Controllers\WorkerExpenseAdminController;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -120,6 +125,19 @@ Route::middleware(['auth', 'active', 'worker'])->prefix('worker')->group(functio
     Route::post('/check-in', [WorkerController::class, 'checkIn'])->name('worker.check-in');
     Route::post('/check-out', [WorkerController::class, 'checkOut'])->name('worker.check-out');
     Route::post('/absence', [WorkerController::class, 'absence'])->name('worker.absence');
+
+    // Feature 1 — voice / text note at checkout
+    Route::post('/voice-note', [WorkerVoiceNoteController::class, 'store'])->name('worker.voice-note.store');
+    Route::get('/voice-notes/{voiceNote}/download', [WorkerVoiceNoteController::class, 'download'])->name('worker.voice-note.download');
+
+    // Feature 2 — worker expense submission
+    Route::post('/expenses', [WorkerExpenseController::class, 'store'])->name('worker.expense.store');
+
+    // Feature 4 — vehicle sessions
+    Route::get('/vehicles', [WorkerVehicleController::class, 'index'])->name('worker.vehicles');
+    Route::post('/vehicles/{vehicle}/take', [WorkerVehicleController::class, 'take'])->name('worker.vehicles.take');
+    Route::post('/vehicle-sessions/{session}/fuel', [WorkerVehicleController::class, 'logFuel'])->name('worker.vehicle-sessions.fuel');
+    Route::post('/vehicle-sessions/{session}/return', [WorkerVehicleController::class, 'returnVehicle'])->name('worker.vehicle-sessions.return');
 });
 
 /*
@@ -264,6 +282,15 @@ Route::middleware(['auth', 'active', 'two_factor', 'not_worker'])->group(functio
     Route::post('/expenses/{expense}/approve', [ExpenseController::class, 'approve'])->name('expenses.approve');
     Route::delete('/expenses/{expense}', [ExpenseController::class, 'destroy'])->name('expenses.destroy');
 
+    // Feature 2 — Worker PWA expense review (admin)
+    Route::get('/worker-expenses', [WorkerExpenseAdminController::class, 'index'])->name('worker-expenses.index');
+    Route::post('/worker-expenses/{workerExpense}/approve', [WorkerExpenseAdminController::class, 'approve'])->name('worker-expenses.approve');
+    Route::post('/worker-expenses/{workerExpense}/reject', [WorkerExpenseAdminController::class, 'reject'])->name('worker-expenses.reject');
+    Route::get('/worker-expenses/{workerExpense}/receipt', [WorkerExpenseAdminController::class, 'downloadReceipt'])->name('worker-expenses.receipt');
+
+    // Feature 1 — Voice note admin download
+    Route::get('/attendance/voice-notes/{voiceNote}/download', [AttendanceVoiceNoteController::class, 'download'])->name('attendance.voice-note.download');
+
     // Screen 19 — Commission reports (finalizing is a one-way door)
     Route::get('/commissions', [CommissionController::class, 'index'])->name('commissions.index');
     Route::post('/commissions/generate', [CommissionController::class, 'generate'])->name('commissions.generate');
@@ -326,6 +353,12 @@ Route::middleware(['auth', 'active', 'two_factor', 'not_worker'])->group(functio
     Route::post('/vehicles/{vehicle}/maintenance', [VehicleController::class, 'storeMaintenance'])->name('vehicles.maintenance.store');
     Route::delete('/vehicles/{vehicle}/maintenance/{maintenance}', [VehicleController::class, 'destroyMaintenance'])->name('vehicles.maintenance.destroy');
     Route::post('/vehicles/{vehicle}/mileage', [VehicleController::class, 'storeMileage'])->name('vehicles.mileage.store');
+    Route::post('/vehicles/{vehicle}/daily-assignments', [VehicleController::class, 'storeDailyAssignment'])->name('vehicles.daily-assignments.store');
+    Route::delete('/vehicles/{vehicle}/daily-assignments/{assignment}', [VehicleController::class, 'destroyDailyAssignment'])->name('vehicles.daily-assignments.destroy');
+    Route::post('/vehicles/{vehicle}/fines', [VehicleController::class, 'storeFine'])->name('vehicles.fines.store');
+    Route::delete('/vehicles/{vehicle}/fines/{fine}', [VehicleController::class, 'destroyFine'])->name('vehicles.fines.destroy');
+    Route::post('/vehicles/{vehicle}/fuel', [VehicleController::class, 'storeFuel'])->name('vehicles.fuel.store');
+    Route::delete('/vehicles/{vehicle}/fuel/{fuelRecord}', [VehicleController::class, 'destroyFuel'])->name('vehicles.fuel.destroy');
 
     // Screen 22 — Leave management (Phase 7). Approving books the days into
     // the attendance grid, so these go through LeaveService, not the model.

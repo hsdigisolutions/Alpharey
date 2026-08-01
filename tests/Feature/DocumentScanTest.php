@@ -5,6 +5,7 @@ use App\Models\Document;
 use App\Models\Employee;
 use App\Models\User;
 use App\Notifications\DocumentAlertNotification;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Notification;
 
 beforeEach(function (): void {
@@ -37,11 +38,15 @@ it('alerts company admins at exactly 30 days before expiry', function (): void {
 });
 
 it('does not alert on a non-milestone day', function (): void {
+    // Pin to the 15th so the scan's first-of-month monthly sweep does not fire
+    // and the 45-day expiry is not a 30/60/90-day milestone from this date.
+    Carbon::setTestNow(now()->setDay(15));
     scanDoc($this->employee, ['expiry_date' => now()->addDays(45)->toDateString()]);
 
     $this->artisan('verto:scan-documents');
 
     Notification::assertNothingSent();
+    Carbon::setTestNow();
 });
 
 it('sends a critical alert on the expiry day itself', function (): void {
@@ -55,9 +60,11 @@ it('sends a critical alert on the expiry day itself', function (): void {
 });
 
 it('never alerts on an exempt document', function (): void {
+    Carbon::setTestNow(now()->setDay(15));
     scanDoc($this->employee, ['expiry_date' => now()->addDays(30)->toDateString(), 'is_exempt' => true]);
 
     $this->artisan('verto:scan-documents');
 
     Notification::assertNothingSent();
+    Carbon::setTestNow();
 });

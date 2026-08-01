@@ -2,11 +2,14 @@
 
 namespace App\Http\Controllers\Worker;
 
+use App\Enums\AdvanceStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Worker\PunchRequest;
+use App\Models\Advance;
 use App\Models\Attendance;
 use App\Models\Employee;
 use App\Models\Scopes\CompanyScope;
+use App\Models\WorkerExpense;
 use App\Services\Workers\WorkerAttendanceService;
 use App\Services\Workers\WorkerDashboardService;
 use Illuminate\Http\RedirectResponse;
@@ -40,6 +43,7 @@ class WorkerController extends Controller
                 'name' => $employee->full_name,
                 'code' => $employee->employee_code,
                 'company' => $employee->company?->name,
+                'can_use_vehicles' => $employee->can_use_vehicles,
             ],
             'today' => $this->todayPayload($today),
             // The current month's calendar + figures for the dashboard below.
@@ -48,6 +52,11 @@ class WorkerController extends Controller
             // notice before any punch. When false the app blocks check-in
             // behind the notice screen (the server refuses too — below).
             'privacy_acknowledged' => $employee->hasAcknowledgedPrivacyNotice(),
+            // Feature 3 — pending advance deductions visible on the dashboard.
+            'pending_advances' => $this->pendingAdvances($employee),
+            // Feature 2 — recent expense submissions (last 5) so the worker can
+            // see the status of what they sent.
+            'recent_expenses' => $this->recentExpenses($employee),
         ]);
     }
 
@@ -97,6 +106,51 @@ class WorkerController extends Controller
     }
 
     /**
+     * Approved advances that have not yet been deducted from payroll. Amounts
+     * are encrypted; we decrypt here for the worker's OWN data (no gate needed
+     * — this is the worker reading their own pay data).
+     *
+     * @return list<array{amount: float, reason: string|null}>
+     */
+    private function pendingAdvances(Employee $employee): array
+    {
+        return Advance::query()
+            ->withoutGlobalScope(CompanyScope::class)
+            ->where('employee_id', $employee->id)
+            ->where('status', AdvanceStatus::Approved->value)
+            ->latest('request_date')
+            ->get()
+            ->map(fn (Advance $a) => [
+                'amount' => (float) $a->getAttribute('amount'),
+                'reason' => $a->reason,
+                'payroll_month' => $a->payroll_month,
+            ])
+            ->all();
+    }
+
+    /**
+     * The worker's last 5 expense submissions with their current status.
+     *
+     * @return list<array{date: string, amount: float, category: string, status: string}>
+     */
+    private function recentExpenses(Employee $employee): array
+    {
+        return WorkerExpense::query()
+            ->withoutGlobalScope(CompanyScope::class)
+            ->where('employee_id', $employee->id)
+            ->latest()
+            ->limit(5)
+            ->get()
+            ->map(fn (WorkerExpense $e) => [
+                'date' => $e->date->toDateString(),
+                'amount' => (float) $e->amount,
+                'category' => $e->category,
+                'status' => $e->status->value,
+            ])
+            ->all();
+    }
+
+    /**
      * Today's status for the home screen — enough for the button to know what
      * it should offer next. No pay figure here; that lives on the dashboard
      * behind its own shaping (Phase D).
@@ -115,6 +169,7 @@ class WorkerController extends Controller
 
         return [
             'state' => $today->check_out !== null ? 'checked_out' : 'checked_in',
+            'attendance_id' => $today->id,
             'check_in' => $today->check_in,
             'check_out' => $today->check_out,
             'hours' => $today->check_out !== null ? (float) $today->hours_worked : null,

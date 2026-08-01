@@ -7,6 +7,7 @@ use App\Enums\BillingMethod;
 use App\Enums\DeploymentStatus;
 use App\Enums\PayrollStatus;
 use App\Enums\WageType;
+use App\Enums\WorkerExpenseStatus;
 use App\Models\Advance;
 use App\Models\Attendance;
 use App\Models\Employee;
@@ -15,6 +16,7 @@ use App\Models\Expense;
 use App\Models\Measurement;
 use App\Models\Payroll;
 use App\Models\Scopes\CompanyScope;
+use App\Models\WorkerExpense;
 use App\Support\PeriodLock;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
@@ -136,7 +138,8 @@ class PayrollService
         $daysAmount = $wageType === WageType::Daily ? $baseEarned : 0.0;
         $hoursAmount = $wageType === WageType::Hourly ? $baseEarned : 0.0;
 
-        $reimbursements = $this->reimbursementsFor($employee->id, $month);
+        $reimbursements = $this->reimbursementsFor($employee->id, $month)
+            + $this->pwaExpensesFor($employee->id, $month);
         $projectExpenses = $this->projectExpensesFor($employee->id, $month);
 
         $gross = $baseSalary + $daysAmount + $hoursAmount + $overtimePay
@@ -249,6 +252,22 @@ class PayrollService
             ->where('approved', true)
             ->whereBetween('date', [$start, $end])
             ->sum('total'), 2);
+    }
+
+    /**
+     * Approved worker-PWA expenses submitted for this month. Folded into the
+     * reimbursements line on the payslip.
+     */
+    private function pwaExpensesFor(int $employeeId, string $month): float
+    {
+        [$start, $end] = $this->bounds($month);
+
+        return round((float) WorkerExpense::query()->withoutGlobalScopes()
+            ->where('employee_id', $employeeId)
+            ->where('status', WorkerExpenseStatus::Approved->value)
+            ->whereNull('payroll_id')
+            ->whereBetween('date', [$start, $end])
+            ->sum('amount'), 2);
     }
 
     /**

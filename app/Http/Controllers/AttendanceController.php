@@ -6,6 +6,7 @@ use App\Enums\DeploymentStatus;
 use App\Http\Requests\Attendance\StoreAttendanceRequest;
 use App\Http\Requests\Attendance\UpdateAttendanceRequest;
 use App\Models\Attendance;
+use App\Models\AttendanceVoiceNote;
 use App\Models\Employee;
 use App\Models\EmployeeDeployment;
 use App\Models\Project;
@@ -67,6 +68,14 @@ class AttendanceController extends Controller
             ->with('project:id,name')
             ->get();
 
+        // Which of these attendance rows carry a worker voice/text note — a
+        // single query keyed by attendance_id so the grid can show a mic marker
+        // without an N+1. Scoped to the same company as the rows above.
+        $notedAttendanceIds = AttendanceVoiceNote::query()
+            ->whereIn('attendance_id', $records->pluck('id'))
+            ->pluck('attendance_id')
+            ->flip();
+
         // grid[employee_id][day] = cell
         $grid = [];
         foreach ($records as $record) {
@@ -76,6 +85,7 @@ class AttendanceController extends Controller
                 'status' => $record->status->value,
                 'hours' => (float) $record->hours_worked,
                 'project' => $record->project?->name,
+                'has_voice_note' => $notedAttendanceIds->has($record->id),
             ];
         }
 
@@ -179,6 +189,12 @@ class AttendanceController extends Controller
     {
         $canSeeWage = Gate::allows('payroll.view') || Gate::allows('employees.edit');
 
+        // The worker's check-out note (Feature 1). The audio itself is streamed
+        // through the gated, audited download route — never inlined here.
+        $voiceNote = AttendanceVoiceNote::query()
+            ->where('attendance_id', $attendance->id)
+            ->first();
+
         return [
             'id' => $attendance->id,
             'employee_id' => $attendance->employee_id,
@@ -210,6 +226,14 @@ class AttendanceController extends Controller
                 'check_in' => $this->coords($attendance->check_in_lat, $attendance->check_in_lng, $attendance->check_in_accuracy),
                 'check_out' => $this->coords($attendance->check_out_lat, $attendance->check_out_lng, $attendance->check_out_accuracy),
                 'has_photo' => $attendance->check_in_photo_path !== null,
+            ] : null,
+            // Voice/text note captured at check-out. Independent of the worker
+            // capture block above (a note can exist without GPS/selfie data).
+            'voice_note' => $voiceNote !== null ? [
+                'id' => $voiceNote->id,
+                'text_note' => $voiceNote->text_note,
+                'has_audio' => $voiceNote->audio_path !== null,
+                'duration_seconds' => $voiceNote->duration_seconds,
             ] : null,
         ];
     }

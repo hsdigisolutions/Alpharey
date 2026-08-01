@@ -32,7 +32,7 @@ class VehicleMaintenanceHistory extends Model
     /** @var list<string> */
     protected $fillable = [
         'vehicle_id', 'maintenance_type', 'maintenance_date', 'vehicle_km',
-        'description', 'tyre_position', 'cost',
+        'description', 'vendor_name', 'tyre_position', 'cost',
     ];
 
     protected function casts(): array

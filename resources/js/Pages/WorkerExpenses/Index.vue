@@ -1,0 +1,153 @@
+<script setup>
+import { ref } from 'vue';
+import { Head, router, useForm } from '@inertiajs/vue3';
+import AppLayout from '@/Layouts/AppLayout.vue';
+import Bilingual from '@/Components/Bilingual.vue';
+import VButton from '@/Components/ui/VButton.vue';
+import VBadge from '@/Components/ui/VBadge.vue';
+import VModal from '@/Components/ui/VModal.vue';
+import VTextarea from '@/Components/ui/VTextarea.vue';
+import VPagination from '@/Components/ui/VPagination.vue';
+
+const props = defineProps({
+    expenses: { type: Object, required: true },
+    can: { type: Object, default: () => ({}) },
+});
+
+function eur(v) {
+    return `${Number(v ?? 0).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`;
+}
+
+function statusVariant(status) {
+    return { pending: 'warn', approved: 'ok', rejected: 'danger' }[status] ?? 'neutral';
+}
+
+// ── Reject modal ─────────────────────────────────────────────────────────────
+const rejectTarget = ref(null);
+const rejectForm = useForm({ reason: '' });
+
+function openReject(expense) {
+    rejectTarget.value = expense;
+    rejectForm.reset();
+}
+
+function submitReject() {
+    rejectForm.post(route('worker-expenses.reject', rejectTarget.value.id), {
+        onSuccess: () => { rejectTarget.value = null; rejectForm.reset(); },
+    });
+}
+
+// ── Approve ──────────────────────────────────────────────────────────────────
+function approve(expense) {
+    router.post(route('worker-expenses.approve', expense.id));
+}
+</script>
+
+<template>
+    <Head :title="$tPair('worker_expenses.title')" />
+
+    <AppLayout>
+        <div class="mb-6 flex items-center justify-between">
+            <h1 class="text-title font-semibold text-ink">
+                <Bilingual k="worker_expenses.title" />
+            </h1>
+        </div>
+
+        <!-- Table -->
+        <div class="overflow-x-auto rounded-lg border border-line shadow-card">
+            <table class="w-full text-left text-sm">
+                <thead class="bg-surface-sunken text-[11px] font-medium uppercase tracking-wide text-muted">
+                    <tr>
+                        <th class="px-4 py-3"><Bilingual k="worker_expenses.employee" inline /></th>
+                        <th class="px-4 py-3"><Bilingual k="worker_expenses.date" inline /></th>
+                        <th class="px-4 py-3 text-right"><Bilingual k="worker_expenses.amount" inline /></th>
+                        <th class="px-4 py-3"><Bilingual k="worker_expenses.category" inline /></th>
+                        <th class="px-4 py-3"><Bilingual k="worker_expenses.description" inline /></th>
+                        <th class="px-4 py-3 text-center"><Bilingual k="worker_expenses.receipt" inline /></th>
+                        <th class="px-4 py-3 text-center"><Bilingual k="worker_expenses.status_label" inline /></th>
+                        <th v-if="can.approve" class="px-4 py-3 text-center"><Bilingual k="common.actions" inline /></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr v-if="!expenses.data.length">
+                        <td :colspan="can.approve ? 8 : 7" class="px-4 py-8 text-center text-sm text-muted">
+                            <Bilingual k="worker_expenses.empty" />
+                        </td>
+                    </tr>
+                    <tr v-for="e in expenses.data" :key="e.id"
+                        class="border-t border-line bg-surface-raised hover:bg-surface-hover">
+                        <td class="px-4 py-3">
+                            <p class="font-medium text-ink">{{ e.employee?.full_name }}</p>
+                            <p class="text-xs text-muted">{{ e.employee?.employee_code }}</p>
+                        </td>
+                        <td class="px-4 py-3 tabular-nums text-ink-soft">{{ e.date }}</td>
+                        <td class="px-4 py-3 text-right tabular-nums font-medium text-ink">{{ eur(e.amount) }}</td>
+                        <td class="px-4 py-3 text-ink-soft">
+                            <Bilingual :k="'worker.expense_cat_' + e.category" inline />
+                        </td>
+                        <td class="max-w-xs px-4 py-3">
+                            <p class="truncate text-ink-soft">{{ e.description || '—' }}</p>
+                            <p v-if="e.rejection_reason" class="mt-1 text-xs text-status-danger">
+                                {{ e.rejection_reason }}
+                            </p>
+                        </td>
+                        <td class="px-4 py-3 text-center">
+                            <a v-if="e.has_receipt"
+                                :href="route('worker-expenses.receipt', e.id)"
+                                target="_blank"
+                                class="text-xs text-accent underline-offset-2 hover:underline">
+                                <Bilingual k="worker_expenses.view_receipt" inline />
+                            </a>
+                            <span v-else class="text-xs text-muted">—</span>
+                        </td>
+                        <td class="px-4 py-3 text-center">
+                            <VBadge :variant="statusVariant(e.status)">
+                                <Bilingual :k="'worker_expenses.status_' + e.status" inline />
+                            </VBadge>
+                            <p v-if="e.payroll_id" class="mt-1 text-[10px] text-muted">
+                                <Bilingual k="worker_expenses.in_payroll" inline />
+                            </p>
+                        </td>
+                        <td v-if="can.approve" class="px-4 py-3 text-center">
+                            <template v-if="e.status === 'pending'">
+                                <div class="flex items-center justify-center gap-2">
+                                    <VButton size="sm" @click="approve(e)">
+                                        <Bilingual k="worker_expenses.approve" inline />
+                                    </VButton>
+                                    <VButton size="sm" variant="ghost" class="text-status-danger" @click="openReject(e)">
+                                        <Bilingual k="worker_expenses.reject" inline />
+                                    </VButton>
+                                </div>
+                            </template>
+                            <span v-else class="text-xs text-muted">
+                                {{ e.approved_by ? `${$t('worker_expenses.by')} ${e.approved_by}` : '—' }}
+                            </span>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <VPagination :links="expenses.links" class="mt-4" />
+
+        <!-- Reject modal -->
+        <VModal :open="!!rejectTarget" title-key="worker_expenses.reject_title" size="sm"
+            @close="rejectTarget = null">
+            <form @submit.prevent="submitReject" class="space-y-4">
+                <VTextarea v-model="rejectForm.reason" :rows="3"
+                    :placeholder="$t('worker_expenses.reject_reason_placeholder')" />
+                <p v-if="rejectForm.errors.reason" class="text-xs text-status-danger">
+                    {{ rejectForm.errors.reason }}
+                </p>
+                <div class="flex gap-2">
+                    <VButton variant="ghost" class="flex-1" type="button" @click="rejectTarget = null">
+                        <Bilingual k="common.cancel" inline />
+                    </VButton>
+                    <VButton class="flex-1" type="submit" :loading="rejectForm.processing">
+                        <Bilingual k="worker_expenses.reject_confirm" inline />
+                    </VButton>
+                </div>
+            </form>
+        </VModal>
+    </AppLayout>
+</template>

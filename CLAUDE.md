@@ -2,12 +2,125 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Status: Phase 9 in progress — hardening (2026-07-24)
+## Status: Phase 9 in progress — hardening (2026-08-01)
 
 **Every screen 01–26 is built (Phase 8 complete).** Phase 9 is hardening, UAT, and
-launch — no new screens. Current: **560 Pest tests / 3284 assertions passing (1
+launch — no new screens. Current: **638 Pest tests / 3810 assertions passing (1
 skipped) · Pint clean · Larastan level 6 clean · `composer audit` + `npm audit`
 clean · production Vite build working.**
+
+### Vehicle module extension (2026-07-30)
+
+The vehicles screen (Screen 21) was extended with 9 new features. Migration:
+`2026_07_28_000001_extend_vehicle_module.php`.
+
+**New fields on `vehicles`:** `vehicle_type` (enum: car/van/truck/motorcycle/other,
+`App\Enums\VehicleType`) and `road_tax_expiry_date` (date). Both optional. Both shown
+in the create/edit modal and in the Show info tab.
+
+**`vehicle_daily_assignments` table** (Feature 2 — MOST CRITICAL): one row per
+(vehicle, date); UNIQUE constraint; `updateOrCreate` so same-date re-entry replaces
+rather than stacks. `VehicleService::logDailyAssignment()` / `deleteDailyAssignment()`.
+`driverOnDate()` queries this table to auto-populate fine's employee. Routes:
+`POST /vehicles/{v}/daily-assignments` · `DELETE …/{assignment}`.
+
+**`vehicle_fines` table** (Feature 3): `charged_to` = `company` | `employee`. When
+`company`, `VehicleService::logFine()` auto-creates an `Expense` (type `Other`,
+`PaymentStatus::Unpaid`) on the vehicle's company (never the session) and stores the
+`expense_id` FK. Deleting the fine cascades-deletes the expense. Driver is auto-resolved
+from the daily assignment log when `employee_id` is not supplied. Routes:
+`POST /vehicles/{v}/fines` · `DELETE …/{fine}`.
+
+**`vehicle_fuel_records` table** (Feature 5): `total_cost` stored verbatim from the
+form (not recomputed) to preserve receipt-level rounding. Routes:
+`POST /vehicles/{v}/fuel` · `DELETE …/{fuelRecord}`.
+
+**`VehicleCompliance` extended**: `road_tax` added to `EXPIRY_FIELDS` constant alongside
+`insurance` and `ita`. `worst()` now grades all three; the 90/60/30 + expiry-day
+`verto:scan-documents` sweep hits road_tax automatically at zero new scheduler code.
+A missing expiry is `neutral` — `worst()` now returns `neutral` when any expiry is
+unset and the others are fine.
+
+**`VehicleMaintenanceHistory`** (Feature 4): `vendor_name` column added (string 100,
+nullable). Shown in the maintenance tab and the log-maintenance modal.
+
+**Show.vue rebuilt** with 6 tabs: info · assignments · maintenance · fuel · fines ·
+mileage. Info tab has cost summary cards (maintenance total / fuel total / fines total)
+and three compliance expiry cards (insurance / ITV / road tax). Assignments tab has two
+sub-sections: long-term history + daily assignment log.
+
+**Form requests added**: `StoreDailyAssignmentRequest`, `StoreFineRequest`,
+`StoreFuelRequest`. **Factories added**: `VehicleDailyAssignmentFactory`,
+`VehicleFineFactory`, `VehicleFuelRecordFactory`.
+
+**Tests**: `VehicleExtensionTest` (27 tests / 61 assertions) covering all new features,
+tenancy isolation, and permission gates. One existing test in `VehicleTest` updated
+(`is comfortably ok when both expiries are far out` → now sets all three expiries
+because adding road_tax changed the `worst()` semantics for a vehicle with two-of-three
+set).
+
+### Worker PWA feature extensions (2026-08-01)
+
+Three capabilities added on top of the Phases A–E core (check-in/check-out/attendance/
+dashboard). Migration: `2026_07_30_000001_add_worker_features.php`. Tests:
+`WorkerFeaturesTest` (25 tests / 78 assertions).
+
+**Voice/text notes at check-out** (`AttendanceVoiceNote`): one note per attendance row
+(upsert on `attendance_id` — a second post overwrites, never stacks). Worker posts text
++ optional audio clip (≤5 min / 5 MB, stored on private disk under
+`attendance-voice-notes/{company}/{employee}/`). CRM admin downloads via
+`AttendanceVoiceNoteController` (gate: `attendance.view`, audited). Worker downloads
+their own note via `WorkerVoiceNoteController`. Audio validation uses
+`mimetypes:audio/webm,...` NOT `mimes:webm` — `audio/webm` maps to extension `weba`
+under `mimes:`, causing silent false rejections. Routes: `POST /worker/attendance/{id}/note` ·
+`GET /worker/voice-notes/{note}/download`.
+
+**Worker vehicle sessions** (`VehicleSession`, `VehicleSessionService`): worker takes /
+returns a company vehicle. `takeVehicle()` sets `vehicles.is_available = false`;
+`returnVehicle()` closes the session (sets `returned_at`, computes `km_driven`, restores
+availability). `logFuel()` records litres mid-session. `resolveRouteBinding` on
+`VehicleSession` bypasses `CompanyScope` — workers have no CRM session so the scope
+yields 0 rows; ownership is validated in the controller via
+`abort_unless($session->employee_id === $employee->id, 403)`. Routes:
+`POST /worker/vehicles/{v}/take` · `POST /worker/vehicle-sessions/{s}/fuel` ·
+`POST /worker/vehicle-sessions/{s}/return`.
+
+**Worker expenses + admin management** (`WorkerExpense`, `WorkerExpenseStatus`):
+worker submits receipt photos at check-out; `receipt_path` is NOT mass-assignable (same
+pattern as `AttendanceVoiceNote::audio_path`). CRM admin approves / rejects / downloads
+receipts via `WorkerExpenseAdminController` (gates: `expenses.view` / `expenses.approve`).
+Approved expenses are summed into the payroll `reimbursements` line for the month
+(`PayrollService::pwaExpensesFor`, approved + date-in-month). Admin page:
+`Pages/WorkerExpenses/Index.vue`. Worker page: `Pages/Worker/Home.vue` expense panel.
+
+**Review pass (2026-08-01) — what it caught and fixed:**
+- **Feature 4 was unreachable in production.** `employees.can_use_vehicles` (the PWA
+  vehicle-module gate) had no grant path — it was `$fillable` but absent from
+  `StoreEmployeeRequest` rules and the employee form, so `validated()` never carried it
+  and every worker stayed `false` forever. Fixed: rule added (Update inherits), a
+  `VCheckbox` added to `EmployeeFormModal.vue` next to `active`, bilingual
+  `employees.can_use_vehicles` key. Pinned by two `EmployeesTest` cases (grant/revoke +
+  default-off).
+- **Worker's own voice-note download was not audited** (Rule 10 says every private-file
+  download is). Added the `AuditLogger` `viewed` entry to `WorkerVoiceNoteController`,
+  matching the admin route. Two new `WorkerFeaturesTest` cases cover the worker download
+  (own → 200 + audited; another worker same-company → 403).
+- **Tenancy re-verified:** admin voice-note + expense routes are scoped by `CompanyScope`
+  on route-model binding (cross-company → 404); worker vehicle-session / voice-note /
+  expense actions drop the scope but re-check `employee_id` ownership (→ 403). Payroll,
+  advance deduction, and net-pay math confirmed correct.
+- **Admin voice-note surfacing — now built.** `AttendanceController::index` loads the
+  set of attendance ids carrying a note (one query, keyed by `attendance_id`, no N+1) and
+  each grid cell gets `has_voice_note`; `Pages/Attendance/Index.vue` renders a small
+  `mic` marker (new `AppIcon` glyph) in the corner of those cells. The cell edit modal
+  (`AttendanceModal.vue`) shows the text note and an `<audio controls preload="none">`
+  pointing at the gated download route — so the admin plays the clip / reads the note in
+  place. `payload()` carries `voice_note {id, text_note, has_audio, duration_seconds}`.
+  Pinned by two `WorkerFeaturesTest` cases (grid cell flag + edit payload). **Still needs
+  a real-device / staging browser pass** to confirm audio playback across phones.
+- PWA expenses fold into the payslip `reimbursements` line rather than a separate line
+  (matches the documented breakdown); rejection shows on the worker dashboard by pull —
+  there is no push notification (no push infra in v1).
 
 ### Role system rebuild (2026-07-24)
 

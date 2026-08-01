@@ -25,6 +25,7 @@ use Illuminate\Support\Carbon;
  * @property string|null $nif
  * @property string|null $nif_hash
  * @property bool $active
+ * @property bool $can_use_vehicles
  * @property WageType|null $wage_type
  * @property PaymentMethod|null $payment_method
  * @property Carbon|null $joining_date
@@ -58,7 +59,8 @@ class Employee extends Model
         'default_check_out', 'wage_type', 'wage_rate', 'base_salary',
         'daily_wage', 'per_meter_rate', 'commission_percent', 'payment_method',
         'overtime_policy_id', 'supervisor_overtime_policy_id', 'iban',
-        'bank_name', 'has_driving_license', 'has_company_vehicle', 'notes',
+        'bank_name', 'has_driving_license', 'has_company_vehicle',
+        'can_use_vehicles', 'notes',
     ];
 
     /**
@@ -91,6 +93,7 @@ class Employee extends Model
             'is_contracted' => 'boolean',
             'has_driving_license' => 'boolean',
             'has_company_vehicle' => 'boolean',
+            'can_use_vehicles' => 'boolean',
             'commission_percent' => 'decimal:2',
         ];
     }

@@ -11,6 +11,7 @@ use App\Models\VehicleMaintenanceHistory;
 use App\Notifications\DocumentAlertNotification;
 use App\Services\Vehicles\VehicleCompliance;
 use App\Services\Vehicles\VehicleService;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Validation\ValidationException;
 
@@ -53,11 +54,12 @@ it('treats an unknown expiry as a gap, not as compliant', function (): void {
         ->and(app(VehicleCompliance::class)->worst($vehicle))->toBe('neutral');
 });
 
-it('is comfortably ok when both expiries are far out', function (): void {
+it('is comfortably ok when all three expiries are far out', function (): void {
     $vehicle = Vehicle::factory()->create([
         'company_id' => $this->company->id,
         'insurance_expiry_date' => now()->addDays(200)->toDateString(),
         'ita_expiry_date' => now()->addDays(200)->toDateString(),
+        'road_tax_expiry_date' => now()->addDays(200)->toDateString(),
     ]);
 
     expect(app(VehicleCompliance::class)->worst($vehicle))->toBe('ok');
@@ -99,6 +101,9 @@ it('alerts on the expiry day itself', function (): void {
 
 it('stays quiet on a day that is not a milestone', function (): void {
     Notification::fake();
+    // Pin to the 15th so the scan's first-of-month monthly sweep does not fire
+    // and the 45-day expiry is not a 30/60/90-day milestone from this date.
+    Carbon::setTestNow(now()->setDay(15));
 
     Vehicle::factory()->create([
         'company_id' => $this->company->id,
@@ -109,10 +114,12 @@ it('stays quiet on a day that is not a milestone', function (): void {
     $this->artisan('verto:scan-documents')->assertSuccessful();
 
     Notification::assertNothingSent();
+    Carbon::setTestNow();
 });
 
 it('does not chase an inactive vehicle', function (): void {
     Notification::fake();
+    Carbon::setTestNow(now()->setDay(15));
 
     Vehicle::factory()->create([
         'company_id' => $this->company->id,
@@ -124,6 +131,7 @@ it('does not chase an inactive vehicle', function (): void {
     $this->artisan('verto:scan-documents')->assertSuccessful();
 
     Notification::assertNothingSent();
+    Carbon::setTestNow();
 });
 
 /**

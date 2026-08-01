@@ -54,6 +54,9 @@ class StoreEmployeeRequest extends FormRequest
             'bank_name' => ['nullable', 'string', 'max:100'],
             'has_driving_license' => ['boolean'],
             'has_company_vehicle' => ['boolean'],
+            // Grants this worker the PWA vehicle module (take/return company
+            // vehicles). Distinct from has_company_vehicle (an HR data flag).
+            'can_use_vehicles' => ['boolean'],
             'notes' => ['nullable', 'string', 'max:5000'],
         ];
     }

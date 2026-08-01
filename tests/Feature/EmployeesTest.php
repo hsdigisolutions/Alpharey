@@ -52,6 +52,38 @@ it('creates an employee with a generated code and records wage history', functio
         ->and($employee->getAttribute('wage_rate'))->toBe('14.5');
 });
 
+it('grants and revokes the PWA vehicle-access flag through the employee form', function (): void {
+    // Grant on create — the flag is what unlocks the worker vehicle module.
+    $this->actingAs($this->admin)->post('/employees', [
+        'full_name' => 'Conductor Uno',
+        'wage_type' => 'daily',
+        'active' => true,
+        'can_use_vehicles' => true,
+    ])->assertRedirect();
+
+    $employee = Employee::query()->where('full_name', 'Conductor Uno')->firstOrFail();
+    expect($employee->can_use_vehicles)->toBeTrue();
+
+    // Revoke on update.
+    $this->actingAs($this->admin)->put("/employees/{$employee->id}", [
+        'full_name' => $employee->full_name,
+        'can_use_vehicles' => false,
+    ])->assertRedirect();
+
+    expect($employee->fresh()->can_use_vehicles)->toBeFalse();
+});
+
+it('defaults the PWA vehicle-access flag off when the form omits it', function (): void {
+    $this->actingAs($this->admin)->post('/employees', [
+        'full_name' => 'Sin Vehiculo',
+        'wage_type' => 'daily',
+        'active' => true,
+    ])->assertRedirect();
+
+    expect(Employee::query()->where('full_name', 'Sin Vehiculo')->firstOrFail()->can_use_vehicles)
+        ->toBeFalse();
+});
+
 it('encrypts NIF at rest and keeps it searchable via the blind index', function (): void {
     $this->actingAs($this->admin)->post('/employees', [
         'full_name' => 'Búsqueda NIF',
