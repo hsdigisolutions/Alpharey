@@ -67,7 +67,7 @@ class WorkerController extends Controller
 
         $this->attendance->checkIn($employee, $request->location(), $request->file('photo'));
 
-        return back()->with('success', __('ui.worker.checked_in'));
+        return redirect()->route('worker.home')->with('success', __('ui.worker.checked_in'));
     }
 
     public function checkOut(PunchRequest $request): RedirectResponse
@@ -77,7 +77,7 @@ class WorkerController extends Controller
 
         $this->attendance->checkOut($employee, $request->location());
 
-        return back()->with('success', __('ui.worker.checked_out'));
+        return redirect()->route('worker.home')->with('success', __('ui.worker.checked_out'));
     }
 
     /**
@@ -89,7 +89,7 @@ class WorkerController extends Controller
     {
         $this->resolveEmployee($request)->acknowledgePrivacyNotice();
 
-        return back();
+        return redirect()->route('worker.home');
     }
 
     public function absence(Request $request): RedirectResponse
@@ -102,7 +102,7 @@ class WorkerController extends Controller
 
         $this->attendance->reportAbsence($employee, $validated['note']);
 
-        return back()->with('success', __('ui.worker.absence_saved'));
+        return redirect()->route('worker.home')->with('success', __('ui.worker.absence_saved'));
     }
 
     /**

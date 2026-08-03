@@ -23,6 +23,7 @@ const statusKey = computed(() => (known.includes(props.status) ? props.status : 
 // Show the full app shell for 403 when the user is authenticated so they can
 // navigate back to a module they do have access to without losing context.
 const showInApp = computed(() => props.status === 403 && !!page.props.auth?.user);
+const homeUrl = computed(() => page.props.auth?.user?.role === 'worker' ? '/worker' : '/');
 </script>
 
 <template>
@@ -59,7 +60,7 @@ const showInApp = computed(() => props.status === 403 && !!page.props.auth?.user
         <p class="mt-2 max-w-sm text-sm text-ink-soft">
             <Bilingual :k="`errors.${statusKey}_message`" class="items-center" />
         </p>
-        <a href="/"
+        <a :href="homeUrl"
             class="mt-6 rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-on-accent hover:bg-accent-hover transition-colors">
             <Bilingual k="errors.back_home" inline />
         </a>

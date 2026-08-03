@@ -59,6 +59,31 @@ class AttendanceService
     }
 
     /**
+     * Create an attendance row for a worker punch. The employee is already
+     * verified by the WorkerController — bypass resolveEmployee() which
+     * requires a CRM session (CurrentCompany) that workers do not have.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    public function createForWorker(Employee $employee, array $data): Attendance
+    {
+        return DB::transaction(function () use ($employee, $data): Attendance {
+            $attendance = new Attendance($data);
+            $attendance->company_id = $employee->company_id;
+
+            $this->lock->assertOpen($employee->company_id, $attendance->date);
+
+            $this->applySnapshots($attendance, $employee);
+            $this->recompute($attendance);
+            $attendance->save();
+
+            $this->log($attendance, 'created');
+
+            return $attendance;
+        });
+    }
+
+    /**
      * @param  array<string, mixed>  $data
      */
     public function update(Attendance $attendance, array $data): Attendance

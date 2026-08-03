@@ -415,12 +415,15 @@ describe('Feature 4 – vehicle sessions', function () {
 
     it('worker can take an available vehicle', function () {
         [$user, $employee, $company] = workerWithEmployee(['can_use_vehicles' => true]);
-        $vehicle = Vehicle::factory()->for($company)->create(['active' => true, 'is_available' => true]);
+        $vehicle = Vehicle::factory()->for($company)->create([
+            'active' => true,
+            'is_available' => true,
+            'current_mileage' => 12500,
+        ]);
 
         $this->actingAs($user)
             ->post("/worker/vehicles/{$vehicle->id}/take", [
                 'starting_mileage' => 12500,
-                'starting_fuel_level' => 80,
             ])
             ->assertRedirect();
 
@@ -460,14 +463,19 @@ describe('Feature 4 – vehicle sessions', function () {
         $session = VehicleSession::factory()->for($vehicle)->for($employee)->for($company)->create([
             'taken_at' => now(),
             'returned_at' => null,
-            'fuel_added_litres' => 0,
         ]);
 
         $this->actingAs($user)
-            ->post("/worker/vehicle-sessions/{$session->id}/fuel", ['litres' => 35.5])
+            ->post("/worker/vehicle-sessions/{$session->id}/fuel", ['amount' => 48.50])
             ->assertRedirect();
 
-        expect($session->fresh()->fuel_added_litres)->toBe('35.50');
+        // logFuel now creates a WorkerExpense (fuel refill as an expense)
+        expect(\App\Models\WorkerExpense::query()
+            ->withoutGlobalScope(\App\Models\Scopes\CompanyScope::class)
+            ->where('employee_id', $employee->id)
+            ->where('category', 'fuel')
+            ->exists()
+        )->toBeTrue();
     });
 
     it('worker cannot log fuel on another worker session', function () {
@@ -480,7 +488,7 @@ describe('Feature 4 – vehicle sessions', function () {
         ]);
 
         $this->actingAs($user)
-            ->post("/worker/vehicle-sessions/{$session->id}/fuel", ['litres' => 20])
+            ->post("/worker/vehicle-sessions/{$session->id}/fuel", ['amount' => 20])
             ->assertForbidden();
     });
 

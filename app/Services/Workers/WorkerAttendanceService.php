@@ -63,9 +63,10 @@ class WorkerAttendanceService
         $photoPath = $this->storePhoto($employee, $photo);
 
         return DB::transaction(function () use ($employee, $today, $location, $photoPath): Attendance {
-            // AttendanceService freezes the wage snapshot and computes the day.
-            // company_id comes from the worker's own company context inside it.
-            $attendance = $this->attendance->create([
+            // createForWorker() bypasses resolveEmployee() which requires a CRM
+            // session (CurrentCompany) that workers never have. The employee is
+            // already verified by WorkerController — pass it directly.
+            $attendance = $this->attendance->createForWorker($employee, [
                 'employee_id' => $employee->id,
                 'date' => $today,
                 'mode' => AttendanceMode::Hourly->value,
@@ -142,7 +143,7 @@ class WorkerAttendanceService
         return DB::transaction(function () use ($employee, $today, $note): Attendance {
             // Absent = zero hours and zero pay; manual override so the wage
             // recompute leaves the total at 0 rather than deriving it.
-            $attendance = $this->attendance->create([
+            $attendance = $this->attendance->createForWorker($employee, [
                 'employee_id' => $employee->id,
                 'date' => $today,
                 'mode' => AttendanceMode::ProjectBased->value,

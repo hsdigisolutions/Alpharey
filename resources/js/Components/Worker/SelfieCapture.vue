@@ -69,7 +69,7 @@ function capture() {
 
 onBeforeUnmount(stop);
 
-defineExpose({ start, stop });
+defineExpose({ start, stop, capture });
 </script>
 
 <template>

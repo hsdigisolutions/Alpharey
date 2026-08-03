@@ -63,11 +63,15 @@ function destroy() {
     }
 }
 
-// A plain Google Maps link (client decision — no map tiles, so no CSP change).
-// Opens in a new tab; a fabricated coordinate simply opens the wrong place, so
-// this is never a security surface.
+// Drop a pin at exact coordinates. The ?q= format is the most reliable way to
+// place a marker — the search/?api=1&query= form sometimes resolves as a text
+// search and can miss the pin. z=16 gives a street-level zoom on open.
 function mapsUrl(loc) {
-    return `https://www.google.com/maps/search/?api=1&query=${loc.lat},${loc.lng}`;
+    return `https://maps.google.com/maps?q=${loc.lat},${loc.lng}&z=16`;
+}
+
+function formatCoords(loc) {
+    return `${(+loc.lat).toFixed(5)}°N, ${(+loc.lng).toFixed(5)}°E`;
 }
 </script>
 
@@ -144,24 +148,26 @@ function mapsUrl(loc) {
                 </div>
 
                 <dl class="space-y-1.5 text-sm">
-                    <div v-if="record.worker.check_in" class="flex items-center justify-between gap-3">
+                    <div v-if="record.worker.check_in" class="flex items-start justify-between gap-3">
                         <dt class="text-ink-soft"><Bilingual k="attendance.punch_in_loc" inline /></dt>
-                        <dd>
+                        <dd class="text-right">
                             <a :href="mapsUrl(record.worker.check_in)" target="_blank" rel="noopener"
                                 class="text-accent underline-offset-2 hover:underline">
                                 <Bilingual k="attendance.view_map" inline />
                             </a>
                             <span v-if="record.worker.check_in.accuracy" class="ms-1 text-xs text-muted">±{{ Math.round(record.worker.check_in.accuracy) }}m</span>
+                            <p class="mt-0.5 font-mono text-[11px] text-muted">{{ formatCoords(record.worker.check_in) }}</p>
                         </dd>
                     </div>
-                    <div v-if="record.worker.check_out" class="flex items-center justify-between gap-3">
+                    <div v-if="record.worker.check_out" class="flex items-start justify-between gap-3">
                         <dt class="text-ink-soft"><Bilingual k="attendance.punch_out_loc" inline /></dt>
-                        <dd>
+                        <dd class="text-right">
                             <a :href="mapsUrl(record.worker.check_out)" target="_blank" rel="noopener"
                                 class="text-accent underline-offset-2 hover:underline">
                                 <Bilingual k="attendance.view_map" inline />
                             </a>
                             <span v-if="record.worker.check_out.accuracy" class="ms-1 text-xs text-muted">±{{ Math.round(record.worker.check_out.accuracy) }}m</span>
+                            <p class="mt-0.5 font-mono text-[11px] text-muted">{{ formatCoords(record.worker.check_out) }}</p>
                         </dd>
                     </div>
                     <div v-if="record.worker.note" class="pt-1">

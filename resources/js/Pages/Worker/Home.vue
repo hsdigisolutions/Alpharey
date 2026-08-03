@@ -7,7 +7,7 @@
  * out, or report an absence. The screen shows exactly one primary action at a
  * time based on today's state from the server.
  */
-import { computed, ref } from 'vue';
+import { computed, nextTick, ref } from 'vue';
 import { Head, router, useForm, usePage } from '@inertiajs/vue3';
 import { t } from '@/translate';
 import { getLocation } from '@/composables/useGeolocation';
@@ -52,6 +52,7 @@ async function beginCheckIn() {
     cameraFailed.value = false;
     photoBlob.value = null;
     cameraOpen.value = true;
+    await nextTick(); // wait for SelfieCapture to mount before calling start()
     await camera.value?.start();
 }
 
