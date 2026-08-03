@@ -43,6 +43,7 @@ class WorkerVehicleController extends Controller
                 'brand' => $v->brand,
                 'model' => $v->model,
                 'fuel_type' => $v->fuel_type?->value,
+                'current_mileage' => $v->current_mileage,
                 'is_available' => $v->is_available,
                 'taken_by' => $v->openSession->first()?->employee?->full_name,
             ]);
@@ -54,14 +55,22 @@ class WorkerVehicleController extends Controller
             ->with('vehicle:id,plate_number,brand,model')
             ->first();
 
+        $fuelExpenseCount = $mySession
+            ? \App\Models\WorkerExpense::query()
+                ->withoutGlobalScope(\App\Models\Scopes\CompanyScope::class)
+                ->where('employee_id', $employee->id)
+                ->where('category', 'fuel')
+                ->where('date', '>=', $mySession->taken_at->toDateString())
+                ->count()
+            : 0;
+
         return Inertia::render('Worker/Vehicles', [
             'vehicles' => $vehicles,
             'my_session' => $mySession ? [
                 'id' => $mySession->id,
                 'taken_at' => $mySession->taken_at,
                 'starting_mileage' => $mySession->starting_mileage,
-                'starting_fuel_level' => $mySession->starting_fuel_level,
-                'fuel_added_litres' => $mySession->fuel_added_litres,
+                'fuel_expenses_count' => $fuelExpenseCount,
                 'vehicle' => [
                     'id' => $mySession->vehicle->id,
                     'plate_number' => $mySession->vehicle->plate_number,
@@ -90,16 +99,16 @@ class WorkerVehicleController extends Controller
             ->where('company_id', $employee->company_id)
             ->findOrFail($vehicle->id);
 
+        $minMileage = (int) ($vehicle->current_mileage ?? 0);
         $validated = $request->validate([
-            'starting_mileage' => ['required', 'integer', 'min:0'],
-            'starting_fuel_level' => ['nullable', 'integer', 'min:0', 'max:100'],
+            'starting_mileage' => ['required', 'integer', "min:{$minMileage}"],
         ]);
 
         $this->service->take(
             $vehicle,
             $employee,
             (int) $validated['starting_mileage'],
-            isset($validated['starting_fuel_level']) ? (int) $validated['starting_fuel_level'] : null,
+            null,
         );
 
         return back()->with('success', __('ui.worker_vehicles.taken'));
@@ -112,10 +121,29 @@ class WorkerVehicleController extends Controller
         abort_unless((int) $session->employee_id === $employee->id, 403);
 
         $validated = $request->validate([
-            'litres' => ['required', 'numeric', 'min:0.1', 'max:300'],
+            'amount'      => ['required', 'numeric', 'min:0.01', 'max:9999.99'],
+            'description' => ['nullable', 'string', 'max:500'],
+            'receipt'     => ['nullable', 'file', 'mimes:jpg,jpeg,png,pdf,webp', 'max:5120'],
         ]);
 
-        $this->service->logFuel($session, (float) $validated['litres']);
+        $expense = new \App\Models\WorkerExpense([
+            'employee_id' => $employee->id,
+            'date'        => now()->toDateString(),
+            'amount'      => $validated['amount'],
+            'category'    => 'fuel',
+            'description' => $validated['description'] ?? '',
+        ]);
+        $expense->company_id = $employee->company_id;
+
+        if ($request->hasFile('receipt')) {
+            $path = $request->file('receipt')->store(
+                "worker-expense-receipts/{$employee->company_id}/{$employee->id}",
+                'local',
+            );
+            $expense->receipt_path = $path === false ? null : $path;
+        }
+
+        $expense->save();
 
         return back()->with('success', __('ui.worker_vehicles.fuel_logged'));
     }
@@ -128,14 +156,13 @@ class WorkerVehicleController extends Controller
 
         $validated = $request->validate([
             'ending_mileage' => ['required', 'integer', 'min:0'],
-            'ending_fuel_level' => ['nullable', 'integer', 'min:0', 'max:100'],
-            'return_notes' => ['nullable', 'string', 'max:500'],
+            'return_notes'   => ['nullable', 'string', 'max:500'],
         ]);
 
         $this->service->returnVehicle(
             $session,
             (int) $validated['ending_mileage'],
-            isset($validated['ending_fuel_level']) ? (int) $validated['ending_fuel_level'] : null,
+            null,
             $validated['return_notes'] ?? null,
         );
 

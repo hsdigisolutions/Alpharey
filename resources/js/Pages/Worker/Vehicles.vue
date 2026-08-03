@@ -46,12 +46,12 @@ onUnmounted(() => {
 
 // ── Take sheet ───────────────────────────────────────────────────────────────
 const takeTarget = ref(null);  // { id, plate }
-const takeForm = ref({ starting_mileage: '', starting_fuel_level: '' });
+const takeForm = ref({ starting_mileage: '' });
 const takeBusy = ref(false);
 
 function openTake(vehicle) {
     takeTarget.value = vehicle;
-    takeForm.value = { starting_mileage: '', starting_fuel_level: '' };
+    takeForm.value = { starting_mileage: vehicle.current_mileage ?? '' };
 }
 
 function submitTake() {
@@ -63,7 +63,7 @@ function submitTake() {
 
 // ── Return sheet ─────────────────────────────────────────────────────────────
 const returnOpen = ref(false);
-const returnForm = ref({ ending_mileage: '', ending_fuel_level: '', return_notes: '' });
+const returnForm = ref({ ending_mileage: '', return_notes: '' });
 const returnBusy = ref(false);
 
 function submitReturn() {
@@ -73,15 +73,32 @@ function submitReturn() {
     });
 }
 
-// ── Fuel log sheet ───────────────────────────────────────────────────────────
+// ── Fuel expense sheet ───────────────────────────────────────────────────────
 const fuelOpen = ref(false);
-const fuelLitres = ref('');
+const fuelForm = ref({ amount: '', description: '', receipt: null });
 const fuelBusy = ref(false);
+const fuelReceiptLabel = ref('');
+
+function onFuelReceipt(e) {
+    const file = e.target.files?.[0];
+    fuelForm.value.receipt = file ?? null;
+    fuelReceiptLabel.value = file?.name ?? '';
+}
 
 function submitFuel() {
     fuelBusy.value = true;
-    router.post(`/worker/vehicle-sessions/${props.my_session?.id}/fuel`, { litres: fuelLitres.value }, {
-        onFinish: () => { fuelBusy.value = false; fuelOpen.value = false; fuelLitres.value = ''; },
+    const data = new FormData();
+    data.append('amount', fuelForm.value.amount);
+    data.append('description', fuelForm.value.description);
+    if (fuelForm.value.receipt) data.append('receipt', fuelForm.value.receipt);
+    router.post(`/worker/vehicle-sessions/${props.my_session?.id}/fuel`, data, {
+        forceFormData: true,
+        onFinish: () => {
+            fuelBusy.value = false;
+            fuelOpen.value = false;
+            fuelForm.value = { amount: '', description: '', receipt: null };
+            fuelReceiptLabel.value = '';
+        },
     });
 }
 </script>
@@ -96,24 +113,53 @@ function submitFuel() {
             <span class="text-sm font-medium text-ink">{{ $t('worker_vehicles.title') }}</span>
         </div>
 
-        <!-- Active session banner -->
-        <div v-if="my_session" class="mb-4 rounded-lg border border-accent bg-accent-soft p-4 shadow-card">
-            <p class="text-sm font-semibold text-accent">{{ $t('worker_vehicles.active_session') }}</p>
-            <p class="mt-1 text-sm text-ink">
-                {{ my_session.vehicle?.plate_number }} &mdash; {{ $t('worker_vehicles.taken_at') }}: {{ my_session.taken_at }}
-            </p>
-            <div class="mt-3 flex gap-2">
-                <VButton variant="secondary" class="flex-1" size="sm" @click="fuelOpen = true">
+        <!-- ── Active session view: shown exclusively when the worker has a vehicle ── -->
+        <div v-if="my_session" class="space-y-4">
+            <!-- Vehicle identity card -->
+            <div class="rounded-lg border border-accent bg-accent-soft p-4 shadow-card">
+                <div class="flex items-start justify-between gap-3">
+                    <div>
+                        <p class="text-lg font-bold text-ink">{{ my_session.vehicle?.plate_number }}</p>
+                        <p class="text-sm text-ink-soft">{{ my_session.vehicle?.brand }} {{ my_session.vehicle?.model }}</p>
+                    </div>
+                    <span class="inline-block rounded-full bg-accent px-2.5 py-0.5 text-xs font-semibold text-on-accent">
+                        {{ $t('worker_vehicles.mine') }}
+                    </span>
+                </div>
+            </div>
+
+            <!-- Session details -->
+            <div class="rounded-lg border border-line bg-surface-raised p-4 shadow-card">
+                <p class="mb-3 text-xs font-semibold uppercase tracking-wide text-muted">{{ $t('worker_vehicles.active_session') }}</p>
+                <dl class="space-y-2 text-sm">
+                    <div class="flex justify-between gap-3">
+                        <dt class="text-ink-soft">{{ $t('worker_vehicles.taken_at') }}</dt>
+                        <dd class="font-medium text-ink">{{ my_session.taken_at }}</dd>
+                    </div>
+                    <div class="flex justify-between gap-3">
+                        <dt class="text-ink-soft">{{ $t('worker_vehicles.starting_mileage') }}</dt>
+                        <dd class="font-medium text-ink">{{ my_session.starting_mileage }} km</dd>
+                    </div>
+                    <div v-if="my_session.fuel_expenses_count" class="flex justify-between gap-3">
+                        <dt class="text-ink-soft">{{ $t('worker_vehicles.log_fuel') }}</dt>
+                        <dd class="font-medium text-ink">{{ my_session.fuel_expenses_count }} {{ $t('worker_vehicles.fuel_expense_submitted') }}</dd>
+                    </div>
+                </dl>
+            </div>
+
+            <!-- Actions -->
+            <div class="flex gap-3">
+                <VButton variant="secondary" class="flex-1" @click="fuelOpen = true">
                     {{ $t('worker_vehicles.log_fuel') }}
                 </VButton>
-                <VButton class="flex-1" size="sm" @click="returnOpen = true">
+                <VButton class="flex-1" @click="returnOpen = true">
                     {{ $t('worker_vehicles.return') }}
                 </VButton>
             </div>
         </div>
 
-        <!-- Vehicle list -->
-        <div class="space-y-3">
+        <!-- ── Vehicle list: shown only when no active session ── -->
+        <div v-else class="space-y-3">
             <div v-if="!vehicles.length" class="rounded-lg border border-line bg-surface-raised p-5 text-center text-sm text-ink-soft shadow-card">
                 {{ $t('worker_vehicles.no_vehicles') }}
             </div>
@@ -125,25 +171,17 @@ function submitFuel() {
                         <p class="font-medium text-ink">{{ v.plate_number }}</p>
                         <p class="text-sm text-ink-soft">{{ v.brand }} {{ v.model }}</p>
                     </div>
-
-                    <!-- Availability indicator -->
-                    <div class="shrink-0 text-right">
-                        <span v-if="my_session?.vehicle?.id === v.id" class="inline-block rounded-full bg-accent-soft px-2 py-0.5 text-xs text-accent">
-                            {{ $t('worker_vehicles.mine') }}
-                        </span>
-                        <span v-else-if="v.is_available"
-                            class="inline-block rounded-full bg-status-ok-soft px-2 py-0.5 text-xs text-status-ok">
-                            {{ $t('worker_vehicles.available') }}
-                        </span>
-                        <span v-else
-                            class="inline-block rounded-full bg-status-danger-soft px-2 py-0.5 text-xs text-status-danger">
-                            {{ $t('worker_vehicles.unavailable') }}
-                        </span>
-                    </div>
+                    <span v-if="v.is_available"
+                        class="inline-block rounded-full bg-status-ok-soft px-2 py-0.5 text-xs text-status-ok">
+                        {{ $t('worker_vehicles.available') }}
+                    </span>
+                    <span v-else
+                        class="inline-block rounded-full bg-status-danger-soft px-2 py-0.5 text-xs text-status-danger">
+                        {{ $t('worker_vehicles.unavailable') }}
+                    </span>
                 </div>
 
-                <!-- Take button (only if available and worker has no open session) -->
-                <VButton v-if="v.is_available && !my_session" variant="secondary" size="sm" class="mt-3 w-full"
+                <VButton v-if="v.is_available" variant="secondary" size="sm" class="mt-3 w-full"
                     @click="openTake(v)">
                     {{ $t('worker_vehicles.take') }}
                 </VButton>
@@ -160,11 +198,11 @@ function submitFuel() {
                 <form @submit.prevent="submitTake" class="space-y-3">
                     <div>
                         <label class="mb-1 block text-xs text-ink-soft">{{ $t('worker_vehicles.starting_mileage') }} *</label>
-                        <VInput v-model="takeForm.starting_mileage" type="number" min="0" required />
-                    </div>
-                    <div>
-                        <label class="mb-1 block text-xs text-ink-soft">{{ $t('worker_vehicles.starting_fuel') }} (%)</label>
-                        <VInput v-model="takeForm.starting_fuel_level" type="number" min="0" max="100" placeholder="{{ $t('worker_vehicles.optional') }}" />
+                        <VInput v-model="takeForm.starting_mileage" type="number"
+                            :min="takeTarget.current_mileage ?? 0" required />
+                        <p v-if="takeTarget.current_mileage" class="mt-0.5 text-xs text-muted">
+                            {{ $t('worker_vehicles.current_mileage') }}: {{ takeTarget.current_mileage }} km
+                        </p>
                     </div>
                     <div class="flex gap-2 pt-1">
                         <VButton variant="ghost" class="flex-1" type="button" @click="takeTarget = null">
@@ -186,15 +224,16 @@ function submitFuel() {
                 <form @submit.prevent="submitReturn" class="space-y-3">
                     <div>
                         <label class="mb-1 block text-xs text-ink-soft">{{ $t('worker_vehicles.ending_mileage') }} *</label>
-                        <VInput v-model="returnForm.ending_mileage" type="number" min="0" required />
-                    </div>
-                    <div>
-                        <label class="mb-1 block text-xs text-ink-soft">{{ $t('worker_vehicles.ending_fuel') }} (%)</label>
-                        <VInput v-model="returnForm.ending_fuel_level" type="number" min="0" max="100" />
+                        <VInput v-model="returnForm.ending_mileage" type="number"
+                            :min="my_session?.starting_mileage ?? 0" required />
+                        <p v-if="my_session?.starting_mileage" class="mt-0.5 text-xs text-muted">
+                            {{ $t('worker_vehicles.starting_mileage') }}: {{ my_session.starting_mileage }} km
+                        </p>
                     </div>
                     <div>
                         <label class="mb-1 block text-xs text-ink-soft">{{ $t('worker_vehicles.return_notes') }}</label>
-                        <VTextarea v-model="returnForm.return_notes" :rows="2" />
+                        <VTextarea v-model="returnForm.return_notes" :rows="2"
+                            :placeholder="$t('worker_vehicles.optional')" />
                     </div>
                     <div class="flex gap-2 pt-1">
                         <VButton variant="ghost" class="flex-1" type="button" @click="returnOpen = false">
@@ -208,15 +247,36 @@ function submitFuel() {
             </div>
         </div>
 
-        <!-- Fuel log sheet -->
+        <!-- Fuel expense sheet -->
         <div v-if="fuelOpen" class="fixed inset-0 z-40 flex items-end bg-black/40" @click.self="fuelOpen = false">
             <div class="w-full rounded-t-xl bg-surface-raised p-5 shadow-overlay"
                 style="padding-bottom: calc(1.25rem + env(safe-area-inset-bottom))">
-                <h2 class="mb-4 text-base font-semibold">{{ $t('worker_vehicles.log_fuel') }}</h2>
+                <h2 class="mb-1 text-base font-semibold">{{ $t('worker_vehicles.log_fuel') }}</h2>
+                <p class="mb-4 text-xs text-muted">{{ $t('worker_vehicles.fuel_expense_hint') }}</p>
                 <form @submit.prevent="submitFuel" class="space-y-3">
+                    <!-- Price -->
                     <div>
-                        <label class="mb-1 block text-xs text-ink-soft">{{ $t('worker_vehicles.fuel_litres') }} *</label>
-                        <VInput v-model="fuelLitres" type="number" step="0.01" min="0.1" required />
+                        <label class="mb-1 block text-xs text-ink-soft">{{ $t('worker_vehicles.fuel_amount') }} (€) *</label>
+                        <VInput v-model="fuelForm.amount" type="number" step="0.01" min="0.01" required />
+                    </div>
+                    <!-- Notes -->
+                    <div>
+                        <label class="mb-1 block text-xs text-ink-soft">{{ $t('worker_vehicles.fuel_notes') }}</label>
+                        <VTextarea v-model="fuelForm.description" :rows="2"
+                            :placeholder="$t('worker_vehicles.optional')" />
+                    </div>
+                    <!-- Receipt upload -->
+                    <div>
+                        <label class="mb-1 block text-xs text-ink-soft">{{ $t('worker_vehicles.fuel_receipt') }}</label>
+                        <label class="flex cursor-pointer items-center gap-3 rounded-md border border-line-strong bg-surface-sunken px-3 py-2.5 text-sm text-ink-soft hover:bg-surface-hover">
+                            <svg class="h-5 w-5 shrink-0" fill="none" stroke="currentColor" stroke-width="1.6"
+                                viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">
+                                <rect x="3" y="3" width="18" height="18" rx="2" /><path d="M3 9h18M9 21V9" />
+                            </svg>
+                            <span class="truncate">{{ fuelReceiptLabel || $t('worker_vehicles.upload_receipt') }}</span>
+                            <input type="file" class="sr-only" accept="image/*,application/pdf"
+                                @change="onFuelReceipt" />
+                        </label>
                     </div>
                     <div class="flex gap-2 pt-1">
                         <VButton variant="ghost" class="flex-1" type="button" @click="fuelOpen = false">

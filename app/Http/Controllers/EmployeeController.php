@@ -100,7 +100,7 @@ class EmployeeController extends Controller
                 'id', 'employee_code', 'full_name', 'email', 'mobile', 'phone', 'city', 'address',
                 'department', 'designation', 'team_leader_id', 'active', 'is_contracted',
                 'default_check_in', 'default_check_out', 'commission_percent',
-                'has_driving_license', 'has_company_vehicle', 'notes',
+                'has_driving_license', 'has_company_vehicle', 'can_use_vehicles', 'notes',
             ]), [
                 'joining_date' => $employee->joining_date?->toDateString(),
                 'leaving_date' => $employee->leaving_date?->toDateString(),
