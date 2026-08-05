@@ -36,7 +36,7 @@ it('classifies an expired document as danger', function (): void {
 });
 
 it('classifies a document expiring inside the warn window as warn', function (): void {
-    $document = makeDoc($this->employee, ['expiry_date' => now()->addDays(20)->toDateString()]);
+    $document = makeDoc($this->employee, ['expiry_date' => now()->addDays(45)->toDateString()]);
 
     [$status] = app(DocumentStatus::class)->of($document);
 

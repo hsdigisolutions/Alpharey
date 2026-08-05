@@ -34,7 +34,7 @@ watch(() => filters.search, () => { clearTimeout(timer); timer = setTimeout(() =
 function apply(extra = {}) { router.get('/vendors', { ...filters, ...extra }, { preserveScroll: true, preserveState: true }); }
 
 const showForm = ref(false);
-const blank = { name: '', company_name: '', nif: '', phone: '', email: '', city: '', address: '', active: true, notes: '' };
+const blank = { name: '', company_name: '', nif: '', phone: '', email: '', city: '', address: '', payment_terms: '', active: true, notes: '' };
 const form = useForm({ ...blank });
 function submit() {
     form.post('/vendors', { preserveScroll: true, onSuccess: () => { showForm.value = false; form.reset(); } });
@@ -86,6 +86,7 @@ const columns = [
                 <FormField k="vendors.phone"><VInput v-model="form.phone" /></FormField>
                 <FormField k="vendors.email"><VInput v-model="form.email" type="email" /></FormField>
                 <FormField k="vendors.city"><VInput v-model="form.city" /></FormField>
+                <FormField k="vendors.payment_terms" class="sm:col-span-2"><VInput v-model="form.payment_terms" /></FormField>
                 <VCheckbox v-model="form.active"><Bilingual k="vendors.active" inline class="text-sm" /></VCheckbox>
             </form>
             <template #footer>

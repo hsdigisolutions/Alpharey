@@ -87,6 +87,10 @@ function exportMonth() {
     window.location.href = `/attendance/export?month=${props.month}`;
 }
 
+function downloadTemplate() {
+    window.location.href = '/attendance/template';
+}
+
 const monthLabel = computed(() => {
     const [y, m] = props.month.split('-').map(Number);
     return new Intl.DateTimeFormat(page.props.locale.primary === 'es' ? 'es-ES' : 'en-GB',
@@ -99,6 +103,9 @@ const monthLabel = computed(() => {
     <AppLayout>
         <VPageHeader k="attendance.title">
             <VButton v-if="can.export" variant="secondary" size="sm" icon="export" @click="exportMonth">Excel</VButton>
+            <VButton v-if="can.create" variant="secondary" size="sm" @click="downloadTemplate">
+                <Bilingual k="attendance.template" inline />
+            </VButton>
             <VButton v-if="can.create" icon="plus" @click="openCreate">
                 <Bilingual k="attendance.new" inline />
             </VButton>

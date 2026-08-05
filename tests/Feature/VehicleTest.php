@@ -30,7 +30,7 @@ beforeEach(function (): void {
 it('grades insurance and ITV on the documents traffic light', function (): void {
     $vehicle = Vehicle::factory()->create([
         'company_id' => $this->company->id,
-        'insurance_expiry_date' => now()->addDays(15)->toDateString(),  // inside 90 -> warn
+        'insurance_expiry_date' => now()->addDays(45)->toDateString(),  // inside 90 but outside 30 -> warn
         'ita_expiry_date' => now()->subDay()->toDateString(),           // past -> danger
     ]);
 

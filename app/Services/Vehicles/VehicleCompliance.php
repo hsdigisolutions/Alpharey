@@ -55,6 +55,10 @@ class VehicleCompliance
             return ['danger', $daysLeft];
         }
 
+        if ($daysLeft <= $this->documents->dangerDays()) {
+            return ['danger', $daysLeft];
+        }
+
         if ($daysLeft <= $this->documents->warnDays()) {
             return ['warn', $daysLeft];
         }

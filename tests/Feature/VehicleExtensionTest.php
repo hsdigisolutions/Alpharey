@@ -63,7 +63,7 @@ it('grades road_tax on the traffic light', function (): void {
         'company_id' => $this->company->id,
         'insurance_expiry_date' => now()->addDays(200)->toDateString(),
         'ita_expiry_date' => now()->addDays(200)->toDateString(),
-        'road_tax_expiry_date' => now()->addDays(15)->toDateString(),
+        'road_tax_expiry_date' => now()->addDays(45)->toDateString(),
     ]);
 
     $compliance = app(VehicleCompliance::class);

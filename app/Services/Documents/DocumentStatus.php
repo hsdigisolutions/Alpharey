@@ -27,6 +27,18 @@ class DocumentStatus
     }
 
     /**
+     * Danger threshold in days (the narrowest of the set — default 30).
+     * Anything at or below this before expiry is graded 'danger', not 'warn',
+     * so a document expiring in 2 days doesn't look merely amber.
+     */
+    public function dangerDays(): int
+    {
+        $days = $this->settings->get('documents.warn_days', [90, 60, 30]);
+
+        return is_array($days) && $days !== [] ? min(array_map(intval(...), $days)) : 30;
+    }
+
+    /**
      * @return array{0: string, 1: int|null} status + days remaining
      */
     public function of(Document $document): array
@@ -54,6 +66,10 @@ class DocumentStatus
         $daysLeft = (int) now()->startOfDay()->diffInDays($expiry->startOfDay(), false);
 
         if ($daysLeft < 0) {
+            return ['danger', $daysLeft];
+        }
+
+        if ($daysLeft <= $this->dangerDays()) {
             return ['danger', $daysLeft];
         }
 
