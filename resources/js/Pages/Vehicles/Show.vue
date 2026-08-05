@@ -5,6 +5,7 @@
  */
 import { computed, ref } from 'vue';
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
+import { t } from '@/translate';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import FormField from '@/Components/ui/FormField.vue';
 import VBadge from '@/Components/ui/VBadge.vue';
@@ -163,7 +164,7 @@ const infoRows = [
 const vehicleRow = computed(() => ({
     ...props.vehicle,
     vehicle_type_label: props.vehicle.vehicle_type
-        ? `${$t('vehicles.vehicle_type_' + props.vehicle.vehicle_type)}`
+        ? `${t('vehicles.vehicle_type_' + props.vehicle.vehicle_type)}`
         : null,
 }));
 
