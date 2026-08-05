@@ -7,6 +7,7 @@
  */
 import { computed, reactive } from 'vue';
 import { Head, router } from '@inertiajs/vue3';
+import { route } from 'ziggy-js';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import VPageHeader from '@/Components/ui/VPageHeader.vue';
 import VCard from '@/Components/ui/VCard.vue';

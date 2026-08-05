@@ -6,6 +6,7 @@
  */
 import { computed } from 'vue';
 import { Head, router } from '@inertiajs/vue3';
+import { route } from 'ziggy-js';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import AppIcon from '@/Components/AppIcon.vue';
 import VPageHeader from '@/Components/ui/VPageHeader.vue';

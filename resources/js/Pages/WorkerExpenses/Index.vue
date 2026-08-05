@@ -1,6 +1,7 @@
 <script setup>
 import { ref } from 'vue';
 import { Head, router, useForm } from '@inertiajs/vue3';
+import { route } from 'ziggy-js';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import Bilingual from '@/Components/Bilingual.vue';
 import VButton from '@/Components/ui/VButton.vue';

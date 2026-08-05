@@ -13,7 +13,11 @@ const form = useForm({ code: '' });
 
 function submit() {
     form.post('/two-factor/challenge', {
-        onFinish: () => form.reset('code'),
+        onError: () => {
+            // Clear the field value so the user must retype, but preserve the
+            // error message (form.reset() also clears errors, so set directly).
+            form.code = '';
+        },
     });
 }
 </script>
