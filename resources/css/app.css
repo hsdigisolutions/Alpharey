@@ -105,8 +105,8 @@
 
     --color-ink: #f0ede8;
     --color-ink-soft: #b8b4ac;
-    --color-muted: #6b6963;
-    --color-faint: #55534c;
+    --color-muted: #a8a5a0;   /* light enough to read on dark surfaces */
+    --color-faint: #6b6963;
 
     --color-line: #2e2c28;
     --color-line-strong: #3e3c38;

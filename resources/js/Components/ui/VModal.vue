@@ -29,10 +29,25 @@ function onKeydown(event) {
 onMounted(() => document.addEventListener('keydown', onKeydown));
 onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown));
 
+// iOS Safari: position:fixed body pattern prevents the page from scrolling
+// behind the modal while allowing the modal's own overflow-y-auto to work.
+let savedScrollY = 0;
 watch(
     () => props.open,
     (open) => {
-        document.documentElement.classList.toggle('overflow-hidden', open);
+        if (open) {
+            savedScrollY = window.scrollY;
+            document.body.style.position = 'fixed';
+            document.body.style.top = `-${savedScrollY}px`;
+            document.body.style.width = '100%';
+            document.body.style.overflow = 'hidden';
+        } else {
+            document.body.style.position = '';
+            document.body.style.top = '';
+            document.body.style.width = '';
+            document.body.style.overflow = '';
+            window.scrollTo(0, savedScrollY);
+        }
     },
 );
 </script>

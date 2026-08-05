@@ -84,6 +84,7 @@ class AuditLogController extends Controller
                 'id', 'timestamp', 'user_name', 'user_email', 'action', 'module',
                 'entity_name', 'model_type', 'model_id', 'description',
                 'old_values', 'new_values', 'ip_address', 'request_method',
+                'request_url', 'user_agent',
             ]);
 
             $query->chunk(500, function ($logs) use ($handle): void {
@@ -103,6 +104,8 @@ class AuditLogController extends Controller
                         json_encode($log->new_values),
                         $log->ip_address,
                         $log->request_method,
+                        $log->request_url,
+                        $log->user_agent,
                     ]);
                 }
             });

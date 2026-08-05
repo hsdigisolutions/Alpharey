@@ -80,11 +80,19 @@ class ReportController extends Controller
         $module = $this->resolveModule($request);
         abort_unless($this->canSee($module), 403);
 
-        $report = $this->reports->for($module, $this->filters($request));
+        $rawFilters = $this->filters($request);
+        $report = $this->reports->for($module, $rawFilters);
+
+        // Resolve the default range so the PDF header always shows the actual
+        // period queried (not "— → —" when the user hasn't set a date).
+        $pdfFilters = [
+            'from' => $rawFilters['from'] ?? now()->startOfYear()->toDateString(),
+            'to' => $rawFilters['to'] ?? now()->toDateString(),
+        ];
 
         return Pdf::loadView('exports.report-pdf', [
             'module' => $module,
-            'filters' => $this->filters($request),
+            'filters' => $pdfFilters,
             'report' => $report,
             'company' => app(CurrentCompany::class)->get()?->name,
         ])->download("report-{$module}-".now()->format('Ymd').'.pdf');
