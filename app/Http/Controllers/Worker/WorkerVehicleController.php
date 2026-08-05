@@ -7,6 +7,7 @@ use App\Models\Employee;
 use App\Models\Scopes\CompanyScope;
 use App\Models\Vehicle;
 use App\Models\VehicleSession;
+use App\Models\WorkerExpense;
 use App\Services\Workers\VehicleSessionService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -56,8 +57,8 @@ class WorkerVehicleController extends Controller
             ->first();
 
         $fuelExpenseCount = $mySession
-            ? \App\Models\WorkerExpense::query()
-                ->withoutGlobalScope(\App\Models\Scopes\CompanyScope::class)
+            ? WorkerExpense::query()
+                ->withoutGlobalScope(CompanyScope::class)
                 ->where('employee_id', $employee->id)
                 ->where('category', 'fuel')
                 ->where('date', '>=', $mySession->taken_at->toDateString())
@@ -121,16 +122,16 @@ class WorkerVehicleController extends Controller
         abort_unless((int) $session->employee_id === $employee->id, 403);
 
         $validated = $request->validate([
-            'amount'      => ['required', 'numeric', 'min:0.01', 'max:9999.99'],
+            'amount' => ['required', 'numeric', 'min:0.01', 'max:9999.99'],
             'description' => ['nullable', 'string', 'max:500'],
-            'receipt'     => ['nullable', 'file', 'mimes:jpg,jpeg,png,pdf,webp', 'max:5120'],
+            'receipt' => ['nullable', 'file', 'mimes:jpg,jpeg,png,pdf,webp', 'max:5120'],
         ]);
 
-        $expense = new \App\Models\WorkerExpense([
+        $expense = new WorkerExpense([
             'employee_id' => $employee->id,
-            'date'        => now()->toDateString(),
-            'amount'      => $validated['amount'],
-            'category'    => 'fuel',
+            'date' => now()->toDateString(),
+            'amount' => $validated['amount'],
+            'category' => 'fuel',
             'description' => $validated['description'] ?? '',
         ]);
         $expense->company_id = $employee->company_id;
@@ -156,7 +157,7 @@ class WorkerVehicleController extends Controller
 
         $validated = $request->validate([
             'ending_mileage' => ['required', 'integer', 'min:0'],
-            'return_notes'   => ['nullable', 'string', 'max:500'],
+            'return_notes' => ['nullable', 'string', 'max:500'],
         ]);
 
         $this->service->returnVehicle(

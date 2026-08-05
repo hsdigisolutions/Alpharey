@@ -9,9 +9,8 @@ import { router, usePage } from '@inertiajs/vue3';
  * (a real support report) — every company-owned page shows the button and
  * calls this on click. When a company is active it returns true and the form
  * opens as normal; when none is (only ever a Super Admin browsing all), it
- * sends them to the company picker instead of opening a form that would bounce
- * on submit. Company Admins and Users always have a company, so for them this
- * is a no-op that always returns true.
+ * shows a brief message and sends them to the company picker. Company Admins
+ * and Users always have a company, so for them this is a no-op that returns true.
  *
  * @returns {boolean} true when it is safe to proceed; false when it redirected
  */
@@ -21,6 +20,14 @@ export function ensureCompanySelected() {
     if (page.props.company) {
         return true;
     }
+
+    const locale = page.props.locale?.primary ?? 'es';
+    const msg = page.props.lang?.[locale]?.welcome?.select_company_first
+        ?? (locale === 'es'
+            ? 'Seleccione primero una empresa para continuar.'
+            : 'Please select a company first to continue.');
+    // eslint-disable-next-line no-alert
+    window.alert(msg);
 
     router.visit('/welcome');
 

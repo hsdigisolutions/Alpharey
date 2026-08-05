@@ -44,6 +44,15 @@ function switchCompany(event) {
     router.post(`/company/${id}/switch`);
 }
 
+function switchCompanySA(event) {
+    const id = Number(event.target.value);
+    if (!id) {
+        router.get('/welcome');
+    } else if (id !== page.props.company?.id) {
+        router.post(`/company/${id}/switch`);
+    }
+}
+
 const secondaryNav = computed(() => [
     { key: 'today', labelKey: 'nav.today', href: '/today' },
     { key: 'vendors', labelKey: 'nav.vendors', href: '/vendors' },
@@ -206,16 +215,22 @@ function switchLocale() {
                 <VGlobalSearch />
 
                 <div class="ms-auto flex items-center gap-1.5">
-                    <!-- Active company context: SA gets a switch link to Welcome -->
                     <!-- Company context chip: from md up only — below that it
                          crowds the global search into an unreadable sliver. -->
-                    <a v-if="page.props.auth.user?.role === 'super_admin'" href="/welcome"
-                        class="hidden items-center gap-1.5 rounded-md border border-line px-2 py-1.5 text-xs font-medium text-ink-soft hover:bg-surface-hover md:flex"
+                    <!-- SA gets all companies from the server — shown as a dropdown
+                         with a "Browse all" first option so they can deselect. -->
+                    <label v-if="page.props.auth.user?.role === 'super_admin'"
+                        class="hidden items-center gap-1.5 rounded-md border border-line px-2 py-1 text-xs font-medium text-ink-soft hover:bg-surface-hover md:flex"
                         :title="$t('welcome.switch_company')">
                         <AppIcon name="companies" class="h-3.5 w-3.5 shrink-0" />
-                        <span v-if="page.props.company" class="max-w-36 truncate">{{ page.props.company.name }}</span>
-                        <Bilingual v-else k="welcome.browsing_all" inline class="max-w-44 truncate text-xs" />
-                    </a>
+                        <select :value="page.props.company?.id ?? ''"
+                            class="max-w-36 cursor-pointer truncate border-0 bg-transparent py-0.5 pe-6 text-xs font-medium text-ink-soft focus:ring-accent"
+                            :aria-label="$tPair('welcome.switch_company')"
+                            @change="switchCompanySA">
+                            <option value="">{{ $t('welcome.all_companies') }}</option>
+                            <option v-for="c in assignedCompanies" :key="c.id" :value="c.id">{{ c.name }}</option>
+                        </select>
+                    </label>
                     <!-- Admin/Manager assigned to several companies: a real
                          switcher in place of the static chip. -->
                     <label v-else-if="assignedCompanies.length > 1"

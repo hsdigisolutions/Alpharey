@@ -88,6 +88,8 @@ return [
         'stats_invoices' => 'Facturas pendientes',
         'stats_deployments' => 'Despliegues activos',
         'browsing_all' => 'Viendo todas las empresas',
+        'all_companies' => 'Todas las empresas',
+        'select_company_first' => 'Seleccione primero una empresa para continuar.',
         'switch_company' => 'Cambiar de empresa',
     ],
 

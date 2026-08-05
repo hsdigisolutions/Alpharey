@@ -87,6 +87,8 @@ return [
         'stats_invoices' => 'Pending invoices',
         'stats_deployments' => 'Active deployments',
         'browsing_all' => 'Viewing all companies',
+        'all_companies' => 'All companies',
+        'select_company_first' => 'Please select a company first to continue.',
         'switch_company' => 'Switch company',
     ],
 

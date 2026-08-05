@@ -11,6 +11,7 @@ use App\Models\Payroll;
 use App\Services\Audit\AuditLogger;
 use App\Services\Payroll\PayrollService;
 use App\Services\Payroll\PayrollWorkflow;
+use App\Support\PeriodLock;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -101,6 +102,8 @@ class PayrollController extends Controller
     {
         Gate::authorize('payroll.edit');
 
+        app(PeriodLock::class)->assertOpen($payroll->company_id, $payroll->month);
+
         $validated = $request->validate([
             'payment_method' => ['nullable', Rule::enum(PaymentMethod::class)],
         ]);
@@ -121,6 +124,8 @@ class PayrollController extends Controller
     public function adjust(Request $request, Payroll $payroll, PayrollService $service): RedirectResponse
     {
         Gate::authorize('payroll.edit');
+
+        app(PeriodLock::class)->assertOpen($payroll->company_id, $payroll->month);
 
         abort_if($payroll->status === PayrollStatus::Paid, 422, 'Paid payroll cannot be adjusted.');
 

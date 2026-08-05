@@ -8,6 +8,7 @@ use App\Models\Attendance;
 use App\Models\AttendanceVoiceNote;
 use App\Models\Company;
 use App\Models\Employee;
+use App\Models\Scopes\CompanyScope;
 use App\Models\User;
 use App\Models\Vehicle;
 use App\Models\VehicleSession;
@@ -470,8 +471,8 @@ describe('Feature 4 – vehicle sessions', function () {
             ->assertRedirect();
 
         // logFuel now creates a WorkerExpense (fuel refill as an expense)
-        expect(\App\Models\WorkerExpense::query()
-            ->withoutGlobalScope(\App\Models\Scopes\CompanyScope::class)
+        expect(WorkerExpense::query()
+            ->withoutGlobalScope(CompanyScope::class)
             ->where('employee_id', $employee->id)
             ->where('category', 'fuel')
             ->exists()
