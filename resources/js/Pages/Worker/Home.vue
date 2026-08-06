@@ -17,8 +17,6 @@ import MonthCalendar from '@/Components/Worker/MonthCalendar.vue';
 import PrivacyNotice from '@/Components/Worker/PrivacyNotice.vue';
 import VButton from '@/Components/ui/VButton.vue';
 import VTextarea from '@/Components/ui/VTextarea.vue';
-import VInput from '@/Components/ui/VInput.vue';
-import VSelect from '@/Components/ui/VSelect.vue';
 
 const props = defineProps({
     worker: { type: Object, required: true },
@@ -29,9 +27,6 @@ const props = defineProps({
     // Feature 3 — advances
     // eslint-disable-next-line vue/prop-name-casing
     pending_advances: { type: Array, default: () => [] },
-    // Feature 2 — expenses
-    // eslint-disable-next-line vue/prop-name-casing
-    recent_expenses: { type: Array, default: () => [] },
 });
 
 function eur(value) {
@@ -96,8 +91,6 @@ function openCheckOut() {
     audioBlob.value = null;
     audioDuration.value = null;
     isRecording.value = false;
-    expenseForm.reset();
-    receiptFile.value = null;
     checkOutOpen.value = true;
 }
 
@@ -108,21 +101,12 @@ async function submitCheckOut() {
 
     const loc = await getLocation();
 
-    // Capture note + expense data now — page reloads on success and the refs
+    // Capture note data now — page reloads on success and the refs
     // may update; local consts survive the closure.
     const hasNote = !!(noteTextForm.text_note || audioBlob.value);
     const capturedNoteText = noteTextForm.text_note;
     const capturedAudio = audioBlob.value;
     const capturedAudioDuration = audioDuration.value;
-
-    const hasExpense = !!(expenseForm.amount);
-    const capturedExpense = {
-        date: expenseForm.date,
-        amount: expenseForm.amount,
-        category: expenseForm.category,
-        description: expenseForm.description,
-        receipt: receiptFile.value,
-    };
 
     router.post('/worker/check-out', {
         lat: loc.lat,
@@ -140,15 +124,6 @@ async function submitCheckOut() {
                     nd.append('duration_seconds', String(capturedAudioDuration ?? 0));
                 }
                 router.post('/worker/voice-note', nd, { forceFormData: true, preserveScroll: true });
-            }
-            if (hasExpense) {
-                const ed = new FormData();
-                ed.append('date', capturedExpense.date);
-                ed.append('amount', capturedExpense.amount);
-                ed.append('category', capturedExpense.category);
-                if (capturedExpense.description) ed.append('description', capturedExpense.description);
-                if (capturedExpense.receipt) ed.append('receipt', capturedExpense.receipt);
-                router.post('/worker/expenses', ed, { forceFormData: true, preserveScroll: true });
             }
         },
         onFinish: () => {
@@ -207,18 +182,6 @@ function stopRecording() {
 
 const noteTextForm = useForm({ attendance_id: null, text_note: '', duration_seconds: null });
 
-// --- Feature 2: Worker expense submission ---
-const expenseForm = useForm({
-    date: new Date().toISOString().slice(0, 10),
-    amount: '',
-    category: 'other',
-    description: '',
-});
-const receiptFile = ref(null);
-
-function onReceiptChange(e) {
-    receiptFile.value = e.target.files[0] ?? null;
-}
 
 </script>
 
@@ -253,11 +216,12 @@ function onReceiptChange(e) {
         <!-- STATE: nothing yet today → check in (or report absence) -->
         <template v-if="today.state === 'none'">
             <div v-if="!cameraOpen" class="space-y-3">
-                <VButton class="w-full" size="lg" @click="beginCheckIn">{{ $t('worker.check_in') }}</VButton>
-                <button type="button" class="w-full py-2 text-sm text-ink-soft underline-offset-2 hover:underline"
-                    @click="absenceOpen = true">
+                <VButton class="w-full rounded-xl text-lg font-semibold" size="lg" @click="beginCheckIn">
+                    {{ $t('worker.check_in') }}
+                </VButton>
+                <VButton variant="danger" size="lg" class="w-full rounded-xl" @click="absenceOpen = true">
                     {{ $t('worker.report_absence') }}
-                </button>
+                </VButton>
             </div>
 
             <!-- Selfie step -->
@@ -319,23 +283,6 @@ function onReceiptChange(e) {
                     class="flex items-center justify-between text-sm">
                     <span class="text-ink-soft">{{ adv.payroll_month ?? '—' }}</span>
                     <span class="tabular-nums font-medium text-status-warn">{{ eur(adv.amount) }}</span>
-                </li>
-            </ul>
-        </div>
-
-        <!-- Feature 2: Recent expenses summary -->
-        <div v-if="recent_expenses.length" class="mt-4 rounded-lg border border-line bg-surface-raised p-4 shadow-card">
-            <p class="mb-2 text-sm font-semibold text-ink">{{ $t('worker.my_expenses') }}</p>
-            <ul class="space-y-1">
-                <li v-for="exp in recent_expenses" :key="exp.date + exp.amount"
-                    class="flex items-center justify-between text-sm">
-                    <span class="text-ink-soft">{{ exp.date }}</span>
-                    <span class="tabular-nums text-ink">{{ eur(exp.amount) }}</span>
-                    <span :class="{
-                        'text-status-warn': exp.status === 'pending',
-                        'text-status-ok': exp.status === 'approved',
-                        'text-status-danger': exp.status === 'rejected',
-                    }" class="text-xs">{{ $t('worker_expenses.status_' + exp.status) }}</span>
                 </li>
             </ul>
         </div>
@@ -422,37 +369,6 @@ function onReceiptChange(e) {
                     </template>
                 </div>
                 <VTextarea v-model="noteTextForm.text_note" :rows="2" :placeholder="$t('worker.note_text_placeholder')" class="mb-4" />
-
-                <!-- Expense section -->
-                <p class="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">{{ $t('worker.add_expense') }}</p>
-                <div class="space-y-3 mb-5">
-                    <div class="grid grid-cols-2 gap-3">
-                        <div>
-                            <label class="mb-1 block text-xs text-ink-soft">{{ $t('worker.expense_amount') }}</label>
-                            <VInput v-model="expenseForm.amount" type="number" step="0.01" min="0.01" placeholder="0.00" />
-                        </div>
-                        <div>
-                            <label class="mb-1 block text-xs text-ink-soft">{{ $t('worker.expense_category') }}</label>
-                            <VSelect v-model="expenseForm.category">
-                                <option value="transport">{{ $t('worker.expense_cat_transport') }}</option>
-                                <option value="materials">{{ $t('worker.expense_cat_materials') }}</option>
-                                <option value="tools">{{ $t('worker.expense_cat_tools') }}</option>
-                                <option value="food">{{ $t('worker.expense_cat_food') }}</option>
-                                <option value="other">{{ $t('worker.expense_cat_other') }}</option>
-                            </VSelect>
-                        </div>
-                    </div>
-                    <div>
-                        <label class="mb-1 block text-xs text-ink-soft">{{ $t('worker.expense_description') }}</label>
-                        <VTextarea v-model="expenseForm.description" :rows="2" :placeholder="$t('worker.expense_desc_placeholder')" />
-                    </div>
-                    <div>
-                        <label class="mb-1 block text-xs text-ink-soft">{{ $t('worker.expense_receipt') }}</label>
-                        <input type="file" accept="image/*,application/pdf"
-                            class="block w-full text-sm text-ink-soft file:mr-3 file:rounded-md file:border-0 file:bg-accent-soft file:px-3 file:py-1 file:text-sm file:text-accent"
-                            @change="onReceiptChange" />
-                    </div>
-                </div>
 
                 <div class="flex gap-2">
                     <VButton variant="ghost" class="flex-1" type="button" @click="checkOutOpen = false">

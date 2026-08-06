@@ -18,6 +18,7 @@ const variants = {
 };
 
 const sizes = {
+    lg: 'px-5 py-4 text-base gap-2',
     md: 'px-3.5 py-2 text-sm gap-2',
     sm: 'px-2.5 py-1.5 text-xs gap-1.5',
 };
