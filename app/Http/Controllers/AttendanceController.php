@@ -86,6 +86,7 @@ class AttendanceController extends Controller
                 'hours' => (float) $record->hours_worked,
                 'project' => $record->project?->name,
                 'has_voice_note' => $notedAttendanceIds->has($record->id),
+                'location_mismatch' => (bool) $record->location_mismatch,
             ];
         }
 
@@ -221,6 +222,7 @@ class AttendanceController extends Controller
                 'source' => $attendance->source,
                 'note' => $attendance->worker_note,
                 'location_denied' => $attendance->location_denied,
+                'location_mismatch' => $attendance->location_mismatch,
                 'check_in_at' => $attendance->check_in_at?->toDateTimeString(),
                 'check_out_at' => $attendance->check_out_at?->toDateTimeString(),
                 'check_in' => $this->coords($attendance->check_in_lat, $attendance->check_in_lng, $attendance->check_in_accuracy),

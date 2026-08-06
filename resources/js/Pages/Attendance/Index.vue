@@ -162,6 +162,10 @@ const monthLabel = computed(() => {
                             <AppIcon v-if="grid[emp.id]?.[day]?.has_voice_note" name="mic"
                                 class="pointer-events-none absolute end-0.5 top-0.5 h-2.5 w-2.5 text-ink-soft"
                                 :title="$t('attendance.voice_note')" />
+                            <!-- Check-out location > 500 m from check-in location -->
+                            <AppIcon v-if="grid[emp.id]?.[day]?.location_mismatch" name="alert"
+                                class="pointer-events-none absolute start-0.5 top-0.5 h-2.5 w-2.5 text-status-warn"
+                                :title="$t('attendance.location_mismatch')" />
                         </td>
                     </tr>
                 </tbody>

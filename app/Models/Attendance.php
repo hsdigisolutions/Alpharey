@@ -38,6 +38,7 @@ use Illuminate\Support\Carbon;
  * @property numeric-string|null $check_out_lng
  * @property string|null $check_in_photo_path
  * @property bool $location_denied
+ * @property bool|null $location_mismatch
  * @property string|null $worker_note
  * @property string $source
  */
@@ -91,6 +92,7 @@ class Attendance extends Model
             'check_out_lng' => 'decimal:7',
             'check_out_accuracy' => 'decimal:2',
             'location_denied' => 'boolean',
+            'location_mismatch' => 'boolean',
         ];
     }
 

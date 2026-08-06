@@ -117,6 +117,7 @@ class WorkerAttendanceService
 
             $attendance->check_out_at = now();
             $this->applyLocation($attendance, 'check_out', $location);
+            $this->applyMismatch($attendance, $location);
             $attendance->save();
 
             return $attendance;
@@ -193,6 +194,46 @@ class WorkerAttendanceService
         if ($location['accuracy'] !== null) {
             $attendance->setAttribute("{$prefix}_accuracy", (string) $location['accuracy']);
         }
+    }
+
+    /**
+     * Flag when check-out GPS is > 500 m from check-in GPS. Null when either
+     * fix is unavailable (location_denied or no coordinates). GPS is evidence,
+     * not a gate — the punch stands regardless.
+     *
+     * @param  array{lat: float|null, lng: float|null, accuracy: float|null, denied: bool}  $location
+     */
+    private function applyMismatch(Attendance $attendance, array $location): void
+    {
+        if ($location['denied'] || $location['lat'] === null || $location['lng'] === null) {
+            return;
+        }
+
+        if ($attendance->check_in_lat === null || $attendance->check_in_lng === null) {
+            return;
+        }
+
+        $metres = $this->haversine(
+            (float) $attendance->check_in_lat,
+            (float) $attendance->check_in_lng,
+            $location['lat'],
+            $location['lng'],
+        );
+
+        $attendance->location_mismatch = $metres > 500;
+    }
+
+    /** Haversine great-circle distance in metres. */
+    private function haversine(float $lat1, float $lng1, float $lat2, float $lng2): float
+    {
+        $r = 6371000.0;
+        $phi1 = deg2rad($lat1);
+        $phi2 = deg2rad($lat2);
+        $dPhi = deg2rad($lat2 - $lat1);
+        $dLambda = deg2rad($lng2 - $lng1);
+        $a = sin($dPhi / 2) ** 2 + cos($phi1) * cos($phi2) * sin($dLambda / 2) ** 2;
+
+        return 2.0 * $r * asin(sqrt($a));
     }
 
     private function storePhoto(Employee $employee, ?UploadedFile $photo): ?string

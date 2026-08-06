@@ -153,6 +153,9 @@ function formatCoords(loc) {
                     <span v-if="record.worker.location_denied" class="text-xs text-status-warn">
                         <Bilingual k="attendance.no_location" inline />
                     </span>
+                    <span v-if="record.worker.location_mismatch" class="text-xs text-status-warn font-medium">
+                        ⚠ <Bilingual k="attendance.location_mismatch" inline />
+                    </span>
                 </div>
 
                 <dl class="space-y-1.5 text-sm">

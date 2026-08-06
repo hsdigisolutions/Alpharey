@@ -746,6 +746,7 @@ return [
         'view_selfie_full' => 'Ver tamaño completo',
         'worker_note' => 'Nota del empleado',
         'voice_note' => 'Nota de voz',
+        'location_mismatch' => 'Fichaje fuera de ubicación (+500 m)',
         'deleted' => 'Asistencia eliminada / Attendance removed',
         'month' => 'Mes',
         'employee' => 'Empleado',

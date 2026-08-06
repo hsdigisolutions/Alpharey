@@ -745,6 +745,7 @@ return [
         'view_selfie_full' => 'View full size',
         'worker_note' => 'Worker note',
         'voice_note' => 'Voice note',
+        'location_mismatch' => 'Clocked out >500 m from check-in location',
         'deleted' => 'Asistencia eliminada / Attendance removed',
         'month' => 'Month',
         'employee' => 'Employee',

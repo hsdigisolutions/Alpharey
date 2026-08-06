@@ -44,7 +44,7 @@ const COUNTRIES = [
     { dial: '+374', flag: '🇦🇲', name: 'Armenia' },
     { dial: '+995', flag: '🇬🇪', name: 'Georgia' },
     // North America
-    { dial: '+1',   flag: '🇺🇸', name: 'USA / Canada' },
+    { dial: '+1',   flag: '🇺🇸', name: 'USA & Canada' },
     // Latin America
     { dial: '+52',  flag: '🇲🇽', name: 'México' },
     { dial: '+57',  flag: '🇨🇴', name: 'Colombia' },
