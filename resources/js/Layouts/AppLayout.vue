@@ -126,6 +126,13 @@ function toggleSidebar() {
     localStorage.setItem('sidebar-collapsed', collapsed.value ? '1' : '0');
 }
 
+function isActive(href) {
+    if (!href) return false;
+    return page.url === href
+        || page.url.startsWith(href + '/')
+        || page.url.startsWith(href + '?');
+}
+
 function switchLocale() {
     const next = page.props.locale.primary === 'es' ? 'en' : 'es';
     router.post('/locale', { locale: next }, { preserveScroll: true });
@@ -161,8 +168,10 @@ function switchLocale() {
                         :class="[
                             collapsed ? 'justify-center px-0' : '',
                             item.href
-                                ? 'bg-accent font-medium text-on-accent'
-                                : 'cursor-default text-sidebar-ink opacity-60',
+                                ? isActive(item.href)
+                                    ? 'bg-accent font-medium text-on-accent'
+                                    : 'text-sidebar-ink hover:bg-sidebar-hover hover:text-white'
+                                : 'cursor-default text-sidebar-ink opacity-50',
                         ]"
                         :title="item.href ? undefined : `${$t('common.coming_soon')}`"
                     >
@@ -347,7 +356,9 @@ function switchLocale() {
                     :is="item.href ? 'a' : 'div'"
                     :href="item.href ?? undefined"
                     class="flex min-h-11 min-w-0 flex-1 flex-col items-center gap-0.5 py-2"
-                    :class="item.href ? 'text-accent-hover' : 'text-muted opacity-70'"
+                    :class="item.href
+                        ? isActive(item.href) ? 'text-accent' : 'text-muted hover:text-ink-soft'
+                        : 'text-muted opacity-70'"
                 >
                     <AppIcon :name="item.icon" class="h-5 w-5 shrink-0" />
                     <Bilingual :k="`nav.${item.key}`" class="w-full items-center px-0.5 text-center text-[0.6rem] leading-tight [&>span]:block [&>span]:truncate" />
