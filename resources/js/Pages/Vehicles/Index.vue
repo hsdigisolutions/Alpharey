@@ -40,8 +40,12 @@ let ticker;
 onMounted(() => { ticker = setInterval(() => { now.value = Date.now(); }, 30000); });
 onBeforeUnmount(() => clearInterval(ticker));
 
+function toUtc(dt) {
+    return /^\d{4}-\d{2}-\d{2} /.test(dt) ? new Date(dt.replace(' ', 'T') + 'Z') : new Date(dt);
+}
+
 function elapsed(takenAt) {
-    const secs = Math.floor((now.value - new Date(takenAt)) / 1000);
+    const secs = Math.floor((now.value - toUtc(takenAt)) / 1000);
     const h = Math.floor(secs / 3600);
     const m = Math.floor((secs % 3600) / 60);
     if (h === 0) return `${m}m`;
@@ -50,12 +54,12 @@ function elapsed(takenAt) {
 
 function timeOnly(dt) {
     if (!dt) return '—';
-    return dt.slice(11, 16); // "HH:MM" from "YYYY-MM-DD HH:MM:SS"
+    return toUtc(dt).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', hour12: false });
 }
 
 function sessionDuration(takenAt, returnedAt) {
     if (!takenAt || !returnedAt) return '—';
-    const secs = Math.floor((new Date(returnedAt) - new Date(takenAt)) / 1000);
+    const secs = Math.floor((toUtc(returnedAt) - toUtc(takenAt)) / 1000);
     const d = Math.floor(secs / 86400);
     const h = Math.floor((secs % 86400) / 3600);
     const m = Math.floor((secs % 3600) / 60);

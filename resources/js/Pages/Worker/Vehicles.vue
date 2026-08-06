@@ -14,7 +14,7 @@
  *   5. Return sheet: ending mileage + optional notes → POST /worker/vehicles/{session}/return.
  *   6. Fuel log: open session → "Log fuel" sheet → POST /worker/vehicles/{session}/fuel.
  */
-import { onMounted, onUnmounted, ref, watch } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { Head, router } from '@inertiajs/vue3';
 import WorkerLayout from '@/Layouts/WorkerLayout.vue';
 import VButton from '@/Components/ui/VButton.vue';
@@ -51,9 +51,20 @@ onUnmounted(() => {
 const elapsed = ref('00:00:00');
 let swTimer = null;
 
+function toUtc(dt) {
+    if (!dt) return new Date(0);
+    return /^\d{4}-\d{2}-\d{2} /.test(dt) ? new Date(dt.replace(' ', 'T') + 'Z') : new Date(dt);
+}
+
+const takenAtFormatted = computed(() => {
+    const dt = props.my_session?.taken_at;
+    if (!dt) return '—';
+    return toUtc(dt).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', hour12: false });
+});
+
 function startStopwatch() {
     clearInterval(swTimer);
-    const start = new Date(props.my_session.taken_at);
+    const start = toUtc(props.my_session.taken_at);
     function tick() {
         const diff = Math.max(0, Math.floor((Date.now() - start.getTime()) / 1000));
         const h = Math.floor(diff / 3600).toString().padStart(2, '0');
@@ -154,27 +165,17 @@ function submitFuel() {
                 </div>
             </div>
 
-            <!-- Session details -->
-            <div class="rounded-lg border border-line bg-surface-raised p-4 shadow-card">
-                <p class="mb-3 text-xs font-semibold uppercase tracking-wide text-muted">{{ $t('worker_vehicles.active_session') }}</p>
-                <dl class="space-y-2 text-sm">
-                    <div class="flex justify-between gap-3">
-                        <dt class="text-ink-soft">{{ $t('worker_vehicles.elapsed_time') }}</dt>
-                        <dd class="tabular-nums font-bold text-accent">{{ elapsed }}</dd>
-                    </div>
-                    <div class="flex justify-between gap-3">
-                        <dt class="text-ink-soft">{{ $t('worker_vehicles.taken_at') }}</dt>
-                        <dd class="font-medium text-ink">{{ my_session.taken_at }}</dd>
-                    </div>
-                    <div class="flex justify-between gap-3">
-                        <dt class="text-ink-soft">{{ $t('worker_vehicles.starting_mileage') }}</dt>
-                        <dd class="font-medium text-ink">{{ my_session.starting_mileage }} km</dd>
-                    </div>
-                    <div v-if="my_session.fuel_expenses_count" class="flex justify-between gap-3">
-                        <dt class="text-ink-soft">{{ $t('worker_vehicles.log_fuel') }}</dt>
-                        <dd class="font-medium text-ink">{{ my_session.fuel_expenses_count }} {{ $t('worker_vehicles.fuel_expense_submitted') }}</dd>
-                    </div>
-                </dl>
+            <!-- Session details: no labels, just the key numbers -->
+            <div class="rounded-lg border border-line bg-surface-raised p-4 shadow-card text-center">
+                <p class="mb-2 text-4xl font-bold tabular-nums text-accent">{{ elapsed }}</p>
+                <div class="flex items-center justify-center gap-3 text-sm text-ink-soft tabular-nums">
+                    <span>{{ takenAtFormatted }}</span>
+                    <span class="opacity-40">·</span>
+                    <span>{{ my_session.starting_mileage != null ? Number(my_session.starting_mileage).toLocaleString() + ' km' : '—' }}</span>
+                </div>
+                <p v-if="my_session.fuel_expenses_count" class="mt-2 text-xs text-ink-soft">
+                    {{ my_session.fuel_expenses_count }} {{ $t('worker_vehicles.fuel_expense_submitted') }}
+                </p>
             </div>
 
             <!-- Actions -->
