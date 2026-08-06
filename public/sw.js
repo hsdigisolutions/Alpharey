@@ -14,7 +14,7 @@
  *
  * Bump CACHE_VERSION to retire every old cache on the next deploy.
  */
-const CACHE_VERSION = 'alpharey-worker-v1';
+const CACHE_VERSION = 'alpharey-worker-v2';
 const OFFLINE_URL = '/worker/offline';
 
 // The shell: enough to paint something branded without the network.

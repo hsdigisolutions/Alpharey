@@ -139,6 +139,7 @@ function isActive(href) {
 
 function switchLocale() {
     const next = page.props.locale.primary === 'es' ? 'en' : 'es';
+    localStorage.setItem('ar-locale', next);
     router.post('/locale', { locale: next }, { preserveScroll: true });
 }
 

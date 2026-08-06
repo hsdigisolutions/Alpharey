@@ -26,7 +26,7 @@ function lookup(locale, key) {
     return key.split('.').reduce((node, part) => (node ?? {})[part], dict) ?? key;
 }
 
-const primary = computed(() => lookup(page.props.locale.primary, props.k));
+const primary = computed(() => lookup(page.props.locale?.primary ?? 'es', props.k));
 </script>
 
 <template>

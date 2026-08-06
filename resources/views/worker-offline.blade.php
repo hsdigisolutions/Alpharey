@@ -34,7 +34,6 @@
         }
         h1 { margin: 0 0 .5rem; font-size: 1.125rem; }
         p { margin: 0 0 1.25rem; font-size: .875rem; color: var(--ink-soft); line-height: 1.5; }
-        .en { display: block; font-size: .8em; opacity: .6; }
         button {
             width: 100%; padding: .75rem 1rem; min-height: 44px; font: inherit; font-weight: 600;
             color: #fff; background: var(--accent); border: 0; border-radius: 8px; cursor: pointer;
@@ -44,14 +43,29 @@
 <body>
     <div class="card">
         <div class="mark">AR</div>
-        <h1>Sin conexión <span class="en">No connection</span></h1>
-        <p>
-            No se ha podido conectar. El fichaje necesita conexión a internet.
-            <span class="en">Could not connect. Checking in requires an internet connection.</span>
-        </p>
-        <button type="button" onclick="location.replace('/worker')">
-            Reintentar <span class="en">Retry</span>
-        </button>
+        <h1 id="ttl"></h1>
+        <p id="msg"></p>
+        <button type="button" id="btn" onclick="location.reload()"></button>
     </div>
+    <script>
+        var es = {
+            title: 'Sin conexión',
+            msg: 'No se ha podido conectar. El fichaje necesita conexión a internet.',
+            btn: 'Reintentar'
+        };
+        var en = {
+            title: 'No connection',
+            msg: 'Could not connect. Checking in requires an internet connection.',
+            btn: 'Retry'
+        };
+        var stored = null;
+        try { stored = localStorage.getItem('ar-locale'); } catch(e) {}
+        var lang = stored || (navigator.language && navigator.language.startsWith('es') ? 'es' : 'en');
+        var t = lang === 'es' ? es : en;
+        document.getElementById('ttl').textContent = t.title;
+        document.getElementById('msg').textContent = t.msg;
+        document.getElementById('btn').textContent = t.btn;
+        document.documentElement.lang = lang;
+    </script>
 </body>
 </html>

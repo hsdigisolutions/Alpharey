@@ -104,18 +104,18 @@ class WorkerVehicleController extends Controller
         ]);
     }
 
-    public function take(Request $request, Vehicle $vehicle): RedirectResponse
+    public function take(Request $request, int $vehicle): RedirectResponse
     {
         $employee = $this->resolveEmployee($request);
 
         abort_unless($employee->can_use_vehicles, 403);
 
-        // Scope-drop needed: the vehicle belongs to the employee's company but
-        // the CompanyScope requires a session selection workers don't have.
+        // Route model binding is bypassed (raw int) because CompanyScope requires
+        // a CRM session that workers don't have. Ownership verified here instead.
         $vehicle = Vehicle::query()
             ->withoutGlobalScope(CompanyScope::class)
             ->where('company_id', $employee->company_id)
-            ->findOrFail($vehicle->id);
+            ->findOrFail($vehicle);
 
         $minMileage = (int) ($vehicle->current_mileage ?? 0);
         $validated = $request->validate([
