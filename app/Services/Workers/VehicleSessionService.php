@@ -3,6 +3,7 @@
 namespace App\Services\Workers;
 
 use App\Models\Employee;
+use App\Models\Scopes\CompanyScope;
 use App\Models\Vehicle;
 use App\Models\VehicleSession;
 use Illuminate\Support\Facades\DB;
@@ -33,6 +34,7 @@ class VehicleSessionService
         }
 
         $open = VehicleSession::query()
+            ->withoutGlobalScope(CompanyScope::class)
             ->where('employee_id', $employee->id)
             ->whereNull('returned_at')
             ->exists();
@@ -105,7 +107,11 @@ class VehicleSessionService
             $session->return_notes = $notes;
             $session->save();
 
-            $vehicle = $session->vehicle;
+            // Load without CompanyScope — workers have no CRM session so the
+            // scope yields NULL and the relation returns null for them.
+            $vehicle = Vehicle::query()
+                ->withoutGlobalScope(CompanyScope::class)
+                ->findOrFail($session->vehicle_id);
             $vehicle->is_available = true;
             // Update the vehicle's current mileage if the return mileage is higher.
             if ($vehicle->current_mileage === null || $endingMileage > $vehicle->current_mileage) {
