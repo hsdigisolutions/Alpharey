@@ -36,7 +36,13 @@ class WorkerVehicleController extends Controller
             ->withoutGlobalScope(CompanyScope::class)
             ->where('company_id', $employee->company_id)
             ->where('active', true)
-            ->with(['openSession.employee:id,full_name'])
+            ->with(['openSession' => fn ($q) => $q
+                ->withoutGlobalScope(CompanyScope::class)
+                ->with(['employee' => fn ($eq) => $eq
+                    ->withoutGlobalScope(CompanyScope::class)
+                    ->select('id', 'full_name'),
+                ]),
+            ])
             ->orderBy('plate_number')
             ->get()
             ->map(fn (Vehicle $v) => [
@@ -54,7 +60,10 @@ class WorkerVehicleController extends Controller
             ->withoutGlobalScope(CompanyScope::class)
             ->where('employee_id', $employee->id)
             ->whereNull('returned_at')
-            ->with('vehicle:id,plate_number,brand,model')
+            ->with(['vehicle' => fn ($q) => $q
+                ->withoutGlobalScope(CompanyScope::class)
+                ->select('id', 'plate_number', 'brand', 'model'),
+            ])
             ->first();
 
         $fuelExpenseCount = $mySession
