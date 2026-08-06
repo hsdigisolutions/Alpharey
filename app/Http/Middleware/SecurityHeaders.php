@@ -21,12 +21,11 @@ class SecurityHeaders
         $response->headers->set('X-Frame-Options', 'DENY');
         $response->headers->set('X-Content-Type-Options', 'nosniff');
         $response->headers->set('Referrer-Policy', 'strict-origin-when-cross-origin');
-        // geolocation=(self) — the Worker PWA captures a GPS fix on check-in
-        // and check-out. It was an EMPTY allow-list, which forbids the API to
-        // every origin including our own, so navigator.geolocation would have
-        // failed on every page. Camera is likewise self-only (the check-in
-        // selfie); microphone stays fully denied — nothing here records audio.
-        $response->headers->set('Permissions-Policy', 'camera=(self), microphone=(), geolocation=(self)');
+        // camera=(self) — check-in selfie. geolocation=(self) — GPS punch.
+        // microphone=(self) — worker voice note at check-out. All three are
+        // restricted to our own origin; the user still has to grant the browser
+        // permission prompt — (self) only allows the page to ask, not auto-grant.
+        $response->headers->set('Permissions-Policy', 'camera=(self), microphone=(self), geolocation=(self)');
 
         if ($request->secure()) {
             $response->headers->set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
