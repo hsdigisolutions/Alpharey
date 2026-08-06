@@ -329,6 +329,8 @@ Route::middleware(['auth', 'active', 'two_factor', 'not_worker'])->group(functio
     // employee Llamadas tab, with follow-up triage on top.
     Route::get('/calls', [CallPanelController::class, 'index'])->name('calls.index');
     Route::post('/calls', [CallPanelController::class, 'store'])->name('calls.store');
+    Route::get('/calls/{call}/download', [CallPanelController::class, 'download'])->name('calls.download');
+    Route::patch('/calls/{call}/label', [CallPanelController::class, 'rename'])->name('calls.rename');
 
     // Screen 23 — Inventory (Phase 7). Every stock change goes through
     // StockMovementService: the ledger and the item counters move together.

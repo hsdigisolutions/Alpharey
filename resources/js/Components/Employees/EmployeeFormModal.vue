@@ -12,6 +12,7 @@ import VCheckbox from '@/Components/ui/VCheckbox.vue';
 import VCurrencyInput from '@/Components/ui/VCurrencyInput.vue';
 import VDateInput from '@/Components/ui/VDateInput.vue';
 import VInput from '@/Components/ui/VInput.vue';
+import VPhoneInput from '@/Components/ui/VPhoneInput.vue';
 import VModal from '@/Components/ui/VModal.vue';
 import VSelect from '@/Components/ui/VSelect.vue';
 import VTextarea from '@/Components/ui/VTextarea.vue';
@@ -80,7 +81,7 @@ const paymentMethods = ['bank_transfer', 'cash', 'cash_via_supervisor'];
                         <VInput v-model="form.email" type="email" />
                     </FormField>
                     <FormField k="employees.mobile" :error="form.errors.mobile">
-                        <VInput v-model="form.mobile" />
+                        <VPhoneInput v-model="form.mobile" />
                     </FormField>
                     <FormField k="employees.city" :error="form.errors.city">
                         <VInput v-model="form.city" />
@@ -129,7 +130,7 @@ const paymentMethods = ['bank_transfer', 'cash', 'cash_via_supervisor'];
                         <VSelect v-model="form.wage_type">
                             <option value="">—</option>
                             <option v-for="type in wageTypes" :key="type" :value="type">
-                                {{ $t(`employees.wage_${type}`) }} / {{ $t(`employees.wage_${type}`) }}
+                                {{ $t(`employees.wage_${type}`) }}
                             </option>
                         </VSelect>
                     </FormField>
@@ -152,7 +153,7 @@ const paymentMethods = ['bank_transfer', 'cash', 'cash_via_supervisor'];
                         <VSelect v-model="form.payment_method">
                             <option value="">—</option>
                             <option v-for="method in paymentMethods" :key="method" :value="method">
-                                {{ $t(`employees.pm_${method}`) }} / {{ $t(`employees.pm_${method}`) }}
+                                {{ $t(`employees.pm_${method}`) }}
                             </option>
                         </VSelect>
                     </FormField>

@@ -14,6 +14,7 @@ import VAlert from '@/Components/ui/VAlert.vue';
 import VBadge from '@/Components/ui/VBadge.vue';
 import VButton from '@/Components/ui/VButton.vue';
 import VCard from '@/Components/ui/VCard.vue';
+import VConfirmDialog from '@/Components/ui/VConfirmDialog.vue';
 import VCurrencyInput from '@/Components/ui/VCurrencyInput.vue';
 import VEmptyState from '@/Components/ui/VEmptyState.vue';
 import VSelect from '@/Components/ui/VSelect.vue';
@@ -65,10 +66,17 @@ const contactCards = [
     { k: 'projects.coordinator', name: props.project.coordinator },
 ];
 
+const confirm = ref({ open: false, message: '', fn: null });
+function askDelete(message, fn) { confirm.value = { open: true, message, fn }; }
+function runDelete() { confirm.value.fn?.(); confirm.value.open = false; }
+
 // workers
 const workerForm = useForm({ employee_id: '', project_rate: null });
 function addWorker() { workerForm.post(`/projects/${props.project.id}/workers`, { preserveScroll: true, onSuccess: () => workerForm.reset() }); }
-function removeWorker(id) { router.delete(`/projects/${props.project.id}/workers/${id}`, { preserveScroll: true }); }
+function removeWorker(worker) {
+    askDelete(worker.name ?? '',
+        () => router.delete(`/projects/${props.project.id}/workers/${worker.id}`, { preserveScroll: true }));
+}
 
 // immutable notes
 const noteForm = useForm({ type: 'internal', body: '', noted_at: null });
@@ -76,7 +84,10 @@ function addNote() { noteForm.post(`/projects/${props.project.id}/remarks`, { pr
 
 const noteStatus = { internal: 'neutral', client_call: 'info', client_email: 'accent', meeting: 'warn', message: 'neutral' };
 
-function destroy() { router.delete(`/projects/${props.project.id}`); }
+function destroy() {
+    askDelete(props.project.name,
+        () => router.delete(`/projects/${props.project.id}`));
+}
 </script>
 
 <template>
@@ -128,7 +139,7 @@ function destroy() { router.delete(`/projects/${props.project.id}`); }
                                 <td class="px-4 py-2.5 text-ink-soft">{{ w.designation ?? '—' }}</td>
                                 <td class="tabular-nums px-4 py-2.5 text-ink-soft">{{ canSeeWages ? (w.project_rate ?? '—') : '•••' }}</td>
                                 <td class="px-4 py-2.5 text-end">
-                                    <button v-if="can.edit" type="button" class="text-xs text-status-danger hover:underline" @click="removeWorker(w.id)">
+                                    <button v-if="can.edit" type="button" class="text-xs text-status-danger hover:underline" @click="removeWorker(w)">
                                         <Bilingual k="documents.delete" inline />
                                     </button>
                                 </td>
@@ -197,5 +208,6 @@ function destroy() { router.delete(`/projects/${props.project.id}`); }
         </div>
 
         <ProjectFormModal :open="showEdit" :project="project" :clients="clients" :vat-options="vatOptions" @close="showEdit = false" />
+        <VConfirmDialog :open="confirm.open" :message="confirm.message" @confirm="runDelete" @cancel="confirm.open = false" />
     </AppLayout>
 </template>

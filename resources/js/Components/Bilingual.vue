@@ -27,19 +27,12 @@ function lookup(locale, key) {
 }
 
 const primary = computed(() => lookup(page.props.locale.primary, props.k));
-const secondary = computed(() => lookup(page.props.locale.secondary, props.k));
 </script>
 
 <template>
     <!-- Secondary line inherits currentColor at reduced opacity so the pair
          stays legible on any background: cream page, coral button, dark
          sidebar (design-skill rule: never colors that work in one mode). -->
-    <span v-if="inline" class="whitespace-nowrap">
-        <span>{{ primary }}</span>
-        <span class="ms-1.5 text-[0.8em] opacity-60">{{ secondary }}</span>
-    </span>
-    <span v-else class="flex flex-col leading-tight">
-        <span>{{ primary }}</span>
-        <span class="text-[0.72em] opacity-60">{{ secondary }}</span>
-    </span>
+    <span v-if="inline">{{ primary }}</span>
+    <span v-else>{{ primary }}</span>
 </template>

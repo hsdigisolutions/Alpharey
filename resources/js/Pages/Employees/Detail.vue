@@ -15,6 +15,7 @@ import VAvatar from '@/Components/ui/VAvatar.vue';
 import VBadge from '@/Components/ui/VBadge.vue';
 import VButton from '@/Components/ui/VButton.vue';
 import VCard from '@/Components/ui/VCard.vue';
+import VConfirmDialog from '@/Components/ui/VConfirmDialog.vue';
 import VDateInput from '@/Components/ui/VDateInput.vue';
 import VEmptyState from '@/Components/ui/VEmptyState.vue';
 import VInput from '@/Components/ui/VInput.vue';
@@ -41,6 +42,10 @@ const tab = ref('info');
 const showEdit = ref(false);
 const showDelete = ref(false);
 
+const confirm = ref({ open: false, message: '', fn: null });
+function askDelete(message, fn) { confirm.value = { open: true, message, fn }; }
+function runDelete() { confirm.value.fn?.(); confirm.value.open = false; }
+
 // --- Mobile app access (Worker PWA) ---
 const showAppAccess = ref(false);
 
@@ -57,9 +62,8 @@ function submitAppAccess() {
 }
 
 function revokeAppAccess() {
-    if (!window.confirm(t('worker_access.revoke_confirm'))) return;
-
-    router.delete(`/employees/${props.employee.id}/app-access`, { preserveScroll: true });
+    askDelete(props.appAccess.email ?? props.employee.full_name,
+        () => router.delete(`/employees/${props.employee.id}/app-access`, { preserveScroll: true }));
 }
 
 // Authoritative from the server (payroll.view || employees.edit), not a guess.
@@ -114,7 +118,7 @@ function submitNote() {
     });
 }
 function deleteNote(id) {
-    router.delete(`/employees/${props.employee.id}/notes/${id}`, { preserveScroll: true });
+    askDelete('', () => router.delete(`/employees/${props.employee.id}/notes/${id}`, { preserveScroll: true }));
 }
 
 /* calls */
@@ -127,7 +131,8 @@ function submitCall() {
 }
 
 function destroy() {
-    router.delete(`/employees/${props.employee.id}`);
+    askDelete(props.employee.full_name,
+        () => router.delete(`/employees/${props.employee.id}`));
 }
 </script>
 
@@ -173,7 +178,7 @@ function destroy() {
                         </div>
                     </dl>
                     <div v-if="can.delete" class="mt-4 border-t border-line pt-4">
-                        <VButton variant="danger" size="sm" icon="trash" @click="showDelete = true">
+                        <VButton variant="danger" size="sm" icon="trash" @click="destroy">
                             <Bilingual k="employees.delete_title" inline />
                         </VButton>
                     </div>
@@ -277,7 +282,7 @@ function destroy() {
                         <FormField k="employees.note_type">
                             <VSelect v-model="noteForm.type">
                                 <option v-for="t in ['general', 'reminder', 'issue', 'call']" :key="t" :value="t">
-                                    {{ $t(`employees.note_${t}`) }} / {{ $t(`employees.note_${t}`) }}
+                                    {{ $t(`employees.note_${t}`) }}
                                 </option>
                             </VSelect>
                         </FormField>
@@ -324,13 +329,7 @@ function destroy() {
 
         <EmployeeFormModal :open="showEdit" :employee="employee" :can-see-wages="canSeeWages" @close="showEdit = false" />
 
-        <VModal :open="showDelete" title-key="employees.delete_title" size="sm" @close="showDelete = false">
-            <p class="text-sm text-ink-soft"><Bilingual k="employees.delete_hint" /></p>
-            <template #footer>
-                <VButton variant="ghost" @click="showDelete = false"><Bilingual k="common.cancel" inline /></VButton>
-                <VButton variant="danger" @click="destroy"><Bilingual k="employees.delete_title" inline /></VButton>
-            </template>
-        </VModal>
+        <VConfirmDialog :open="confirm.open" :message="confirm.message" @confirm="runDelete" @cancel="confirm.open = false" />
 
         <!-- Grant / reset mobile app access -->
         <VModal :open="showAppAccess"

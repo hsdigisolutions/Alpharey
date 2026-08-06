@@ -11,6 +11,7 @@ import FormField from '@/Components/ui/FormField.vue';
 import VBadge from '@/Components/ui/VBadge.vue';
 import VButton from '@/Components/ui/VButton.vue';
 import VCard from '@/Components/ui/VCard.vue';
+import VConfirmDialog from '@/Components/ui/VConfirmDialog.vue';
 import VInput from '@/Components/ui/VInput.vue';
 import VModal from '@/Components/ui/VModal.vue';
 import VPageHeader from '@/Components/ui/VPageHeader.vue';
@@ -95,7 +96,14 @@ function savePolicy() {
     const opts = { preserveScroll: true, onSuccess: () => (showPolicy.value = false) };
     editingPolicy.value ? policyForm.put(`/admin/overtime-policies/${editingPolicy.value.id}`, opts) : policyForm.post('/admin/overtime-policies', opts);
 }
-function deletePolicy(p) { router.delete(`/admin/overtime-policies/${p.id}`, { preserveScroll: true }); }
+const confirm = ref({ open: false, message: '', fn: null });
+function askDelete(message, fn) { confirm.value = { open: true, message, fn }; }
+function runDelete() { confirm.value.fn?.(); confirm.value.open = false; }
+
+function deletePolicy(p) {
+    askDelete(p.name ?? '',
+        () => router.delete(`/admin/overtime-policies/${p.id}`, { preserveScroll: true }));
+}
 </script>
 
 <template>
@@ -295,5 +303,6 @@ function deletePolicy(p) { router.delete(`/admin/overtime-policies/${p.id}`, { p
                 <VButton type="submit" form="ot-form" :loading="policyForm.processing"><Bilingual k="common.save" inline /></VButton>
             </template>
         </VModal>
+        <VConfirmDialog :open="confirm.open" :message="confirm.message" @confirm="runDelete" @cancel="confirm.open = false" />
     </AppLayout>
 </template>

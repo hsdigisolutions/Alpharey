@@ -328,6 +328,9 @@ return [
         'upload_camera' => 'Usar cámara',
         'empty_title' => 'Sin registros',
         'empty_message' => 'No hay datos que mostrar todavía.',
+        'confirm_delete_title' => '¿Confirmar eliminación?',
+        'confirm_delete_body' => 'Esta acción no se puede deshacer.',
+        'delete' => 'Eliminar',
     ],
 
     'table' => [
@@ -830,6 +833,23 @@ return [
         'stat_calls_today' => 'Llamadas hoy',
         'stat_pending_follow_ups' => 'Seguimientos pendientes',
         'stat_not_contacted' => 'Sin contactar esta semana',
+        'remarks_placeholder' => 'Resultado de la llamada, acuerdo alcanzado...',
+        'voice_note' => 'Nota de voz',
+        'voice_note_optional' => 'Nota de voz (opcional)',
+        'record' => 'Grabar',
+        'stop_recording' => 'Detener',
+        'clear_recording' => 'Eliminar grabación',
+        'mic_denied' => 'Acceso al micrófono denegado',
+        'attachment' => 'Adjunto',
+        'attachment_optional' => 'Adjunto (opcional)',
+        'download' => 'Descargar',
+        'rename' => 'Renombrar',
+        'renamed' => 'Nombre actualizado / Label updated',
+        'label_placeholder' => 'Nombre del archivo...',
+        'whatsapp' => 'WhatsApp',
+        'call' => 'Llamar',
+        'copy_number' => 'Copiar número',
+        'number_copied' => 'Número copiado',
     ],
 
     'inventory' => [

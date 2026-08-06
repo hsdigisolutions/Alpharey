@@ -16,6 +16,7 @@ import AppLayout from '@/Layouts/AppLayout.vue';
 import FormField from '@/Components/ui/FormField.vue';
 import VBadge from '@/Components/ui/VBadge.vue';
 import VButton from '@/Components/ui/VButton.vue';
+import VConfirmDialog from '@/Components/ui/VConfirmDialog.vue';
 import VDateInput from '@/Components/ui/VDateInput.vue';
 import VEmptyState from '@/Components/ui/VEmptyState.vue';
 import VInput from '@/Components/ui/VInput.vue';
@@ -115,8 +116,13 @@ function submit() {
     editingId.value ? payload.put(`/invoices/${editingId.value}`, opts) : payload.post('/invoices', opts);
 }
 
+const confirm = ref({ open: false, message: '', fn: null });
+function askDelete(message, fn) { confirm.value = { open: true, message, fn }; }
+function runDelete() { confirm.value.fn?.(); confirm.value.open = false; }
+
 function destroy(row) {
-    router.delete(`/invoices/${row.id}`, { preserveScroll: true });
+    askDelete(row.reference ?? row.number ?? '',
+        () => router.delete(`/invoices/${row.id}`, { preserveScroll: true }));
 }
 
 /* ---------- live preview of the server's arithmetic ---------- */
@@ -359,5 +365,6 @@ const columns = computed(() => [
                 </VButton>
             </template>
         </VSlideOver>
+        <VConfirmDialog :open="confirm.open" :message="confirm.message" @confirm="runDelete" @cancel="confirm.open = false" />
     </AppLayout>
 </template>

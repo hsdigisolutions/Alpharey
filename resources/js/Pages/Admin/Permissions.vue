@@ -14,6 +14,7 @@ import VAlert from '@/Components/ui/VAlert.vue';
 import VAvatar from '@/Components/ui/VAvatar.vue';
 import VBadge from '@/Components/ui/VBadge.vue';
 import VButton from '@/Components/ui/VButton.vue';
+import VConfirmDialog from '@/Components/ui/VConfirmDialog.vue';
 import VInput from '@/Components/ui/VInput.vue';
 import VModal from '@/Components/ui/VModal.vue';
 import VPageHeader from '@/Components/ui/VPageHeader.vue';
@@ -32,6 +33,10 @@ const props = defineProps({
 });
 
 const actionOrder = ['view', 'create', 'edit', 'delete', 'upload', 'download', 'export', 'approve'];
+
+const confirm = ref({ open: false, message: '', fn: null });
+function askDelete(message, fn) { confirm.value = { open: true, message, fn }; }
+function runDelete() { confirm.value.fn?.(); confirm.value.open = false; }
 
 const search = ref('');
 const filteredUsers = computed(() =>
@@ -189,13 +194,15 @@ function assignCompany() {
 
 function removeCompany(companyId) {
     if (!editingUser.value) return;
-    router.delete(`/admin/permissions/${editingUser.value.id}/companies/${companyId}`,
-        { preserveScroll: true });
+    const company = props.availableCompanies.find((c) => c.id === companyId);
+    askDelete(company?.name ?? '',
+        () => router.delete(`/admin/permissions/${editingUser.value.id}/companies/${companyId}`,
+            { preserveScroll: true }));
 }
 
 function deleteUser(user) {
-    if (!window.confirm(`${user.name}\n\n${t('permissions.delete_confirm')}`)) return;
-    router.delete(`/admin/users/${user.id}`, { preserveScroll: true });
+    askDelete(user.name,
+        () => router.delete(`/admin/users/${user.id}`, { preserveScroll: true }));
 }
 
 function submitUser() {
@@ -487,5 +494,6 @@ function submitUser() {
                 </VButton>
             </template>
         </VModal>
+        <VConfirmDialog :open="confirm.open" :message="confirm.message" @confirm="runDelete" @cancel="confirm.open = false" />
     </AppLayout>
 </template>

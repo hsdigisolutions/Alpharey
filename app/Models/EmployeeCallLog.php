@@ -12,6 +12,11 @@ use Illuminate\Support\Carbon;
  * @property Carbon $called_at
  * @property Carbon|null $follow_up_date
  * @property string|null $remarks
+ * @property string|null $voice_note_path
+ * @property string|null $voice_note_label
+ * @property string|null $attachment_path
+ * @property string|null $attachment_original_name
+ * @property string|null $attachment_label
  */
 class EmployeeCallLog extends Model
 {
@@ -21,7 +26,14 @@ class EmployeeCallLog extends Model
     public string $auditModule = 'call_panel';
 
     /** @var list<string> */
-    protected $fillable = ['called_at', 'remarks', 'follow_up_date'];
+    protected $fillable = ['called_at', 'remarks', 'follow_up_date', 'voice_note_label', 'attachment_label'];
+
+    /** Paths must never reach the client or the audit log. */
+    /** @var list<string> */
+    protected $hidden = ['voice_note_path', 'attachment_path'];
+
+    /** @var list<string> */
+    public array $auditExclude = ['voice_note_path', 'attachment_path'];
 
     protected function casts(): array
     {

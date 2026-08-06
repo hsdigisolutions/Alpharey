@@ -13,6 +13,7 @@ import VBadge from '@/Components/ui/VBadge.vue';
 import VButton from '@/Components/ui/VButton.vue';
 import VCheckbox from '@/Components/ui/VCheckbox.vue';
 import VDateInput from '@/Components/ui/VDateInput.vue';
+import VConfirmDialog from '@/Components/ui/VConfirmDialog.vue';
 import VFileDrop from '@/Components/ui/VFileDrop.vue';
 import VInput from '@/Components/ui/VInput.vue';
 import VModal from '@/Components/ui/VModal.vue';
@@ -91,8 +92,13 @@ function download(doc) {
     window.location.href = `/documents/${doc.id}/download`;
 }
 
+const confirm = ref({ open: false, message: '', fn: null });
+function askDelete(message, fn) { confirm.value = { open: true, message, fn }; }
+function runDelete() { confirm.value.fn?.(); confirm.value.open = false; }
+
 function removeDoc(doc) {
-    router.delete(`/documents/${doc.id}`, { preserveScroll: true });
+    askDelete(doc.name ?? doc.original_name ?? '',
+        () => router.delete(`/documents/${doc.id}`, { preserveScroll: true }));
 }
 </script>
 
@@ -243,4 +249,6 @@ function removeDoc(doc) {
             </template>
         </VModal>
     </div>
+
+    <VConfirmDialog :open="confirm.open" :message="confirm.message" @confirm="runDelete" @cancel="confirm.open = false" />
 </template>

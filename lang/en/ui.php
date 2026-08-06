@@ -326,6 +326,9 @@ return [
         'upload_camera' => 'Use camera',
         'empty_title' => 'No records',
         'empty_message' => 'There is no data to show yet.',
+        'confirm_delete_title' => 'Confirm deletion',
+        'confirm_delete_body' => 'This action cannot be undone.',
+        'delete' => 'Delete',
     ],
 
     'table' => [
@@ -829,6 +832,23 @@ return [
         'stat_calls_today' => 'Calls today',
         'stat_pending_follow_ups' => 'Pending follow-ups',
         'stat_not_contacted' => 'Not contacted this week',
+        'remarks_placeholder' => 'Outcome of the call, agreement reached...',
+        'voice_note' => 'Voice note',
+        'voice_note_optional' => 'Voice note (optional)',
+        'record' => 'Record',
+        'stop_recording' => 'Stop',
+        'clear_recording' => 'Discard recording',
+        'mic_denied' => 'Microphone access denied',
+        'attachment' => 'Attachment',
+        'attachment_optional' => 'Attachment (optional)',
+        'download' => 'Download',
+        'rename' => 'Rename',
+        'renamed' => 'Label updated',
+        'label_placeholder' => 'File name...',
+        'whatsapp' => 'WhatsApp',
+        'call' => 'Call',
+        'copy_number' => 'Copy number',
+        'number_copied' => 'Copied!',
     ],
 
     'inventory' => [

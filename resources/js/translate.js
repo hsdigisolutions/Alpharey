@@ -26,19 +26,9 @@ export function t(key) {
 }
 
 /**
- * "Primary / Secondary" on one line — for aria-labels and titles that must
- * still carry both languages but cannot contain markup.
+ * Resolves a ui.* key in the user's primary language only.
+ * Kept as a separate export so callers don't need updating.
  */
 export function tPair(key) {
-    const page = usePage();
-    const primary = page.props.locale?.primary ?? 'es';
-    const secondary = page.props.locale?.secondary ?? 'en';
-
-    const first = lookup(page.props.lang?.[primary], key);
-    const second = lookup(page.props.lang?.[secondary], key);
-
-    if (first === undefined) return key;
-    if (second === undefined || first === second) return first;
-
-    return `${first} / ${second}`;
+    return t(key);
 }

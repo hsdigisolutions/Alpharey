@@ -18,6 +18,7 @@ import PrivacyNotice from '@/Components/Worker/PrivacyNotice.vue';
 import VButton from '@/Components/ui/VButton.vue';
 import VTextarea from '@/Components/ui/VTextarea.vue';
 import VInput from '@/Components/ui/VInput.vue';
+import VSelect from '@/Components/ui/VSelect.vue';
 
 const props = defineProps({
     worker: { type: Object, required: true },
@@ -459,14 +460,13 @@ function submitExpense() {
 
                     <div>
                         <label class="mb-1 block text-xs text-ink-soft">{{ $t('worker.expense_category') }}</label>
-                        <select v-model="expenseForm.category"
-                            class="w-full rounded-md border border-line-strong bg-surface-sunken px-3 py-2 text-sm text-ink">
+                        <VSelect v-model="expenseForm.category">
                             <option value="transport">{{ $t('worker.expense_cat_transport') }}</option>
                             <option value="materials">{{ $t('worker.expense_cat_materials') }}</option>
                             <option value="tools">{{ $t('worker.expense_cat_tools') }}</option>
                             <option value="food">{{ $t('worker.expense_cat_food') }}</option>
                             <option value="other">{{ $t('worker.expense_cat_other') }}</option>
-                        </select>
+                        </VSelect>
                     </div>
 
                     <div>

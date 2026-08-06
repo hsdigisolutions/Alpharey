@@ -4,6 +4,7 @@
  * (REQUIREMENTS.md §10).
  */
 import AppIcon from '@/Components/AppIcon.vue';
+import VSelect from '@/Components/ui/VSelect.vue';
 
 defineProps({
     page: { type: Number, default: 1 },
@@ -19,13 +20,12 @@ defineEmits(['update:page', 'update:perPage']);
     <div class="flex flex-wrap items-center justify-between gap-3 pt-3 text-sm text-ink-soft">
         <label class="flex items-center gap-2">
             <Bilingual k="table.per_page" inline class="text-xs" />
-            <select :value="perPage"
-                class="rounded-md border border-line bg-surface-raised px-2 py-1 text-xs"
-                @change="$emit('update:perPage', Number($event.target.value))">
+            <VSelect :model-value="perPage"
+                @update:model-value="(v) => $emit('update:perPage', Number(v))">
                 <option :value="25">25</option>
                 <option :value="50">50</option>
                 <option :value="100">100</option>
-            </select>
+            </VSelect>
         </label>
 
         <p class="tabular-nums text-xs text-muted">{{ total }} <Bilingual k="table.records" inline class="text-xs" /></p>

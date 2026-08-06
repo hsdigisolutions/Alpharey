@@ -12,6 +12,7 @@ import VAvatar from '@/Components/ui/VAvatar.vue';
 import VBadge from '@/Components/ui/VBadge.vue';
 import VButton from '@/Components/ui/VButton.vue';
 import VCard from '@/Components/ui/VCard.vue';
+import VConfirmDialog from '@/Components/ui/VConfirmDialog.vue';
 import VEmptyState from '@/Components/ui/VEmptyState.vue';
 import VInput from '@/Components/ui/VInput.vue';
 import VSelect from '@/Components/ui/VSelect.vue';
@@ -57,11 +58,18 @@ const infoRows = [
     { k: 'clients.payment_terms', v: props.client.payment_terms },
 ];
 
+const confirm = ref({ open: false, message: '', fn: null });
+function askDelete(message, fn) { confirm.value = { open: true, message, fn }; }
+function runDelete() { confirm.value.fn?.(); confirm.value.open = false; }
+
 const contactForm = useForm({ name: '', designation: '', email: '', phone: '', alternate_phone: '' });
 function addContact() {
     contactForm.post(`/clients/${props.client.id}/contacts`, { preserveScroll: true, onSuccess: () => contactForm.reset() });
 }
-function delContact(id) { router.delete(`/clients/${props.client.id}/contacts/${id}`, { preserveScroll: true }); }
+function delContact(contact) {
+    askDelete(contact.name ?? '',
+        () => router.delete(`/clients/${props.client.id}/contacts/${contact.id}`, { preserveScroll: true }));
+}
 
 const commForm = useForm({ type: 'call', body: '', logged_at: null });
 function addComm() {
@@ -108,7 +116,7 @@ const statusBadge = { active: 'ok', in_progress: 'info', completed: 'ok', cancel
                         <VTimelineItem v-for="c in contacts" :key="c.id" :time="c.designation ?? '—'" :author="c.name">
                             {{ c.email ?? '' }} {{ c.phone ? '· ' + c.phone : '' }}
                             <template v-if="can.edit" #attachment>
-                                <button type="button" class="text-xs text-status-danger hover:underline" @click="delContact(c.id)">
+                                <button type="button" class="text-xs text-status-danger hover:underline" @click="delContact(c)">
                                     <Bilingual k="documents.delete" inline />
                                 </button>
                             </template>
@@ -176,7 +184,7 @@ const statusBadge = { active: 'ok', in_progress: 'info', completed: 'ok', cancel
                         <FormField k="clients.tab_communication">
                             <VSelect v-model="commForm.type">
                                 <option v-for="t in ['call','meeting','email','note']" :key="t" :value="t">
-                                    {{ $t(`clients.comm_${t}`) }} / {{ $t(`clients.comm_${t}`) }}
+                                    {{ $t(`clients.comm_${t}`) }}
                                 </option>
                             </VSelect>
                         </FormField>
@@ -188,5 +196,6 @@ const statusBadge = { active: 'ok', in_progress: 'info', completed: 'ok', cancel
         </div>
 
         <ClientFormModal :open="showEdit" :client="client" @close="showEdit = false" />
+        <VConfirmDialog :open="confirm.open" :message="confirm.message" @confirm="runDelete" @cancel="confirm.open = false" />
     </AppLayout>
 </template>

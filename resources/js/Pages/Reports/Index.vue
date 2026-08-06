@@ -15,6 +15,7 @@ import VButton from '@/Components/ui/VButton.vue';
 import VEmptyState from '@/Components/ui/VEmptyState.vue';
 import AppIcon from '@/Components/AppIcon.vue';
 import { t } from '@/translate';
+import VSelect from '@/Components/ui/VSelect.vue';
 
 const props = defineProps({
     module: { type: String, required: true },
@@ -86,10 +87,9 @@ const tableColumns = computed(() => (table.value ? Object.keys(table.value[0]) :
             <div class="flex flex-wrap items-end gap-3">
                 <label class="flex flex-col gap-1">
                     <span class="text-xs font-medium text-ink-soft">{{ $t('reports.module') }}</span>
-                    <select v-model="form.module" @change="apply"
-                        class="rounded-md border border-line-strong bg-surface-sunken px-3 py-1.5 text-sm text-ink focus:border-accent focus:outline-none">
+                    <VSelect v-model="form.module" @update:model-value="apply">
                         <option v-for="m in modules" :key="m" :value="m">{{ t(`reports.mod_${m}`) }}</option>
-                    </select>
+                    </VSelect>
                 </label>
                 <label class="flex flex-col gap-1">
                     <span class="text-xs font-medium text-ink-soft">{{ $t('reports.date_from') }}</span>

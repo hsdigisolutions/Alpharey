@@ -18,6 +18,7 @@ import FormField from '@/Components/ui/FormField.vue';
 import VBadge from '@/Components/ui/VBadge.vue';
 import VButton from '@/Components/ui/VButton.vue';
 import VCheckbox from '@/Components/ui/VCheckbox.vue';
+import VConfirmDialog from '@/Components/ui/VConfirmDialog.vue';
 import VDateInput from '@/Components/ui/VDateInput.vue';
 import VEmptyState from '@/Components/ui/VEmptyState.vue';
 import VInput from '@/Components/ui/VInput.vue';
@@ -94,8 +95,13 @@ function approve(row, value) {
     router.post(`/expenses/${row.id}/approve`, { approved: value }, { preserveScroll: true });
 }
 
+const confirm = ref({ open: false, message: '', fn: null });
+function askDelete(message, fn) { confirm.value = { open: true, message, fn }; }
+function runDelete() { confirm.value.fn?.(); confirm.value.open = false; }
+
 function destroy(row) {
-    router.delete(`/expenses/${row.id}`, { preserveScroll: true });
+    askDelete(row.description ?? row.vendor ?? '',
+        () => router.delete(`/expenses/${row.id}`, { preserveScroll: true }));
 }
 
 /* A worker project expense is paid back through payroll — say so in the form. */
@@ -301,5 +307,6 @@ const columns = [
                 </VButton>
             </template>
         </VModal>
+        <VConfirmDialog :open="confirm.open" :message="confirm.message" @confirm="runDelete" @cancel="confirm.open = false" />
     </AppLayout>
 </template>

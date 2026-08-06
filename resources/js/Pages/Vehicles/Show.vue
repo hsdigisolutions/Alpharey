@@ -11,6 +11,7 @@ import FormField from '@/Components/ui/FormField.vue';
 import VBadge from '@/Components/ui/VBadge.vue';
 import VButton from '@/Components/ui/VButton.vue';
 import VCard from '@/Components/ui/VCard.vue';
+import VConfirmDialog from '@/Components/ui/VConfirmDialog.vue';
 import VDateInput from '@/Components/ui/VDateInput.vue';
 import VEmptyState from '@/Components/ui/VEmptyState.vue';
 import VInput from '@/Components/ui/VInput.vue';
@@ -35,6 +36,10 @@ const props = defineProps({
 });
 
 const tab = ref('info');
+
+const confirm = ref({ open: false, message: '', fn: null });
+function askDelete(message, fn) { confirm.value = { open: true, message, fn }; }
+function runDelete() { confirm.value.fn?.(); confirm.value.open = false; }
 const tabs = computed(() => [
     { key: 'info', labelKey: 'vehicles.tab_info' },
     { key: 'assignments', labelKey: 'vehicles.tab_assignments', count: props.history.length + props.daily_assignments.length },
@@ -66,7 +71,8 @@ function saveDaily() {
         });
 }
 function deleteDaily(d) {
-    router.delete(`/vehicles/${props.vehicle.id}/daily-assignments/${d.id}`, { preserveScroll: true });
+    askDelete(d.assigned_date ?? '',
+        () => router.delete(`/vehicles/${props.vehicle.id}/daily-assignments/${d.id}`, { preserveScroll: true }));
 }
 
 /* ─────────────────────────── Maintenance ───────────────────────────────── */
@@ -82,7 +88,8 @@ function saveMaintenance() {
     });
 }
 function deleteMaintenance(m) {
-    router.delete(`/vehicles/${props.vehicle.id}/maintenance/${m.id}`, { preserveScroll: true });
+    askDelete(m.maintenance_type ?? '',
+        () => router.delete(`/vehicles/${props.vehicle.id}/maintenance/${m.id}`, { preserveScroll: true }));
 }
 
 /* ─────────────────────────── Fuel ─────────────────────────────────────── */
@@ -103,7 +110,8 @@ function saveFuel() {
     });
 }
 function deleteFuel(r) {
-    router.delete(`/vehicles/${props.vehicle.id}/fuel/${r.id}`, { preserveScroll: true });
+    askDelete(r.fuel_date ?? '',
+        () => router.delete(`/vehicles/${props.vehicle.id}/fuel/${r.id}`, { preserveScroll: true }));
 }
 const fuelPaymentMethods = ['cash', 'card', 'company_card'];
 const fuelTotal = computed(() =>
@@ -126,7 +134,8 @@ function saveFine() {
     });
 }
 function deleteFine(f) {
-    router.delete(`/vehicles/${props.vehicle.id}/fines/${f.id}`, { preserveScroll: true });
+    askDelete(f.description ?? '',
+        () => router.delete(`/vehicles/${props.vehicle.id}/fines/${f.id}`, { preserveScroll: true }));
 }
 const finesTotal = computed(() =>
     props.fines.reduce((s, f) => s + (f.amount ?? 0), 0).toFixed(2));
@@ -630,5 +639,7 @@ const mileageColumns = [
                 </VButton>
             </template>
         </VModal>
+
+        <VConfirmDialog :open="confirm.open" :message="confirm.message" @confirm="runDelete" @cancel="confirm.open = false" />
     </AppLayout>
 </template>

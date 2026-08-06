@@ -9,7 +9,7 @@
  * Non-dashboard destinations activate in their build phases — until then
  * they render as muted, disabled rows.
  */
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { Link, router, usePage } from '@inertiajs/vue3';
 import AppIcon from '@/Components/AppIcon.vue';
 import VAvatar from '@/Components/ui/VAvatar.vue';
@@ -38,14 +38,12 @@ const isAdmin = computed(() => ['super_admin', 'admin'].includes(page.props.auth
 // companies from the header (the server validates every switch).
 const assignedCompanies = computed(() => page.props.companies ?? []);
 
-function switchCompany(event) {
-    const id = Number(event.target.value);
+function switchCompany(id) {
     if (!id || id === page.props.company?.id) return;
     router.post(`/company/${id}/switch`);
 }
 
-function switchCompanySA(event) {
-    const id = Number(event.target.value);
+function switchCompanySA(id) {
     if (!id) {
         router.get('/welcome');
     } else if (id !== page.props.company?.id) {
@@ -54,21 +52,26 @@ function switchCompanySA(event) {
 }
 
 const secondaryNav = computed(() => [
-    { key: 'today', labelKey: 'nav.today', href: '/today' },
-    { key: 'vendors', labelKey: 'nav.vendors', href: '/vendors' },
-    { key: 'vehicles', labelKey: 'nav.vehicles', href: '/vehicles' },
-    { key: 'proposals', labelKey: 'nav.proposals', href: '/proposals' },
-    { key: 'commissions', labelKey: 'nav.commissions', href: '/commissions' },
-    { key: 'expenses', labelKey: 'nav.expenses', href: '/expenses' },
-    { key: 'leave', labelKey: 'nav.leave', href: '/leave' },
-    { key: 'inventory', labelKey: 'nav.inventory', href: '/inventory' },
-    { key: 'measurements', labelKey: 'nav.measurements', href: '/measurements' },
-    { key: 'deployments', labelKey: 'nav.deployments', href: '/deployments' },
-    { key: 'compliance', labelKey: 'nav.compliance', href: '/compliance' },
-    { key: 'permissions', labelKey: 'permissions.title', href: isAdmin.value ? '/admin/permissions' : null },
-    { key: 'audit_logs', labelKey: 'nav.audit_logs', href: isAdmin.value ? '/admin/audit-logs' : null },
-    { key: 'settings', labelKey: 'nav.settings', href: isAdmin.value ? '/admin/settings' : null },
+    { key: 'today', labelKey: 'nav.today', icon: 'calendar', href: '/today' },
+    { key: 'vendors', labelKey: 'nav.vendors', icon: 'euro', href: '/vendors' },
+    { key: 'vehicles', labelKey: 'nav.vehicles', icon: 'vehicles', href: '/vehicles' },
+    { key: 'proposals', labelKey: 'nav.proposals', icon: 'file', href: '/proposals' },
+    { key: 'commissions', labelKey: 'nav.commissions', icon: 'commissions', href: '/commissions' },
+    { key: 'expenses', labelKey: 'nav.expenses', icon: 'expenses', href: '/expenses' },
+    { key: 'leave', labelKey: 'nav.leave', icon: 'leave', href: '/leave' },
+    { key: 'inventory', labelKey: 'nav.inventory', icon: 'inventory', href: '/inventory' },
+    { key: 'measurements', labelKey: 'nav.measurements', icon: 'edit', href: '/measurements' },
+    { key: 'deployments', labelKey: 'nav.deployments', icon: 'deployments', href: '/deployments' },
+    { key: 'compliance', labelKey: 'nav.compliance', icon: 'check', href: '/compliance' },
+    { key: 'permissions', labelKey: 'permissions.title', icon: 'lock', href: isAdmin.value ? '/admin/permissions' : null },
+    { key: 'audit_logs', labelKey: 'nav.audit_logs', icon: 'eye', href: isAdmin.value ? '/admin/audit-logs' : null },
+    { key: 'settings', labelKey: 'nav.settings', icon: 'settings', href: isAdmin.value ? '/admin/settings' : null },
 ]);
+
+const anySecondaryActive = computed(() => secondaryNav.value.some(item => item.href && isActive(item.href)));
+const moreOpen = ref(localStorage.getItem('sidebar-more-open') === '1');
+watch(anySecondaryActive, (v) => { if (v) moreOpen.value = true; }, { immediate: true });
+watch(moreOpen, (v) => localStorage.setItem('sidebar-more-open', v ? '1' : '0'));
 
 function logout() {
     router.post('/logout');
@@ -151,14 +154,11 @@ function switchLocale() {
         <aside class="fixed inset-y-0 start-0 z-30 hidden h-screen flex-col bg-sidebar transition-[width] duration-200 md:flex"
             :class="collapsed ? 'w-14' : 'w-60'">
             <div class="flex items-center gap-2.5 border-b border-white/5 px-3 py-4" :class="collapsed ? 'justify-center px-0' : 'px-4'">
-                <!-- Text wordmark until the real AlphaRey logo asset arrives:
-                     an "AR" monogram badge plus Alpha|Rey with the accent on
-                     the second half, mirroring the old treatment. -->
                 <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-accent text-sm font-bold text-on-accent shadow-sm">AR</span>
                 <span v-if="!collapsed" class="text-base font-semibold tracking-tight text-white">Alpha<span class="text-accent">Rey</span></span>
             </div>
 
-            <nav class="flex-1 space-y-0.5 overflow-y-auto px-2 pb-2">
+            <nav class="sidebar-nav flex-1 space-y-0.5 overflow-y-auto px-2 pb-2">
                 <template v-for="item in primaryNav" :key="item.key">
                     <component
                         v-if="!item.superAdminOnly || page.props.auth.user?.role === 'super_admin'"
@@ -179,32 +179,40 @@ function switchLocale() {
                         <Bilingual v-if="!collapsed" :k="`nav.${item.key}`" class="text-sm" />
                     </component>
                 </template>
-            </nav>
 
-            <!-- Secondary modules + collapse -->
-            <div class="space-y-0.5 border-t border-white/10 p-2">
-                <VDropdown align="start" width="w-64">
-                    <template #trigger="{ toggle }">
-                        <button type="button"
-                            class="flex w-full items-center gap-3 rounded-md px-2.5 py-2 text-sidebar-ink transition-colors duration-150 hover:bg-sidebar-hover hover:text-white"
-                            :class="collapsed ? 'justify-center px-0' : ''"
-                            @click="toggle">
-                            <AppIcon name="apps" class="h-5 w-5 shrink-0" />
-                            <Bilingual v-if="!collapsed" k="nav.apps" class="text-sm" />
-                        </button>
-                    </template>
-                    <div class="grid grid-cols-2 gap-0.5">
+                <!-- More Modules accordion -->
+                <div class="mt-1 border-t border-white/10 pt-1">
+                    <button type="button"
+                        class="flex w-full items-center gap-3 rounded-md px-2.5 py-2 text-sidebar-ink transition-colors duration-150 hover:bg-sidebar-hover hover:text-white"
+                        :class="collapsed ? 'justify-center px-0' : ''"
+                        @click="moreOpen = !moreOpen">
+                        <AppIcon name="apps" class="h-5 w-5 shrink-0" />
+                        <template v-if="!collapsed">
+                            <Bilingual k="nav.apps" inline class="flex-1 text-sm" />
+                            <AppIcon :name="moreOpen ? 'chevron-up' : 'chevron-down'" class="h-4 w-4 shrink-0 opacity-60" />
+                        </template>
+                    </button>
+
+                    <div v-show="moreOpen && !collapsed" class="mt-0.5 space-y-0.5">
                         <component v-for="item in secondaryNav" :key="item.key"
                             :is="item.href ? 'a' : 'div'"
                             :href="item.href ?? undefined"
-                            class="rounded-md px-2.5 py-2"
-                            :class="item.href ? 'text-ink hover:bg-surface-sunken' : 'cursor-default text-muted opacity-70'"
+                            class="flex items-center gap-3 rounded-md px-2.5 py-1.5 transition-colors duration-150"
+                            :class="item.href
+                                ? isActive(item.href)
+                                    ? 'bg-accent font-medium text-on-accent'
+                                    : 'text-sidebar-ink hover:bg-sidebar-hover hover:text-white'
+                                : 'cursor-default text-sidebar-ink opacity-50'"
                             :title="item.href ? undefined : $t('common.coming_soon')">
-                            <Bilingual :k="item.labelKey" class="text-xs" />
+                            <AppIcon :name="item.icon" class="h-4 w-4 shrink-0" />
+                            <Bilingual :k="item.labelKey" inline class="text-sm" />
                         </component>
                     </div>
-                </VDropdown>
+                </div>
+            </nav>
 
+            <!-- Collapse toggle -->
+            <div class="space-y-0.5 border-t border-white/10 p-2">
                 <button type="button"
                     class="flex w-full items-center gap-3 rounded-md px-2.5 py-2 text-sidebar-ink transition-colors duration-150 hover:bg-sidebar-hover hover:text-white"
                     :class="collapsed ? 'justify-center px-0' : ''"
@@ -226,37 +234,79 @@ function switchLocale() {
                 <div class="ms-auto flex items-center gap-1.5">
                     <!-- Company context chip: from md up only — below that it
                          crowds the global search into an unreadable sliver. -->
-                    <!-- SA gets all companies from the server — shown as a dropdown
-                         with a "Browse all" first option so they can deselect. -->
-                    <label v-if="page.props.auth.user?.role === 'super_admin'"
-                        class="hidden items-center gap-1.5 rounded-md border border-line px-2 py-1 text-xs font-medium text-ink-soft hover:bg-surface-hover md:flex"
-                        :title="$t('welcome.switch_company')">
-                        <AppIcon name="companies" class="h-3.5 w-3.5 shrink-0" />
-                        <select :value="page.props.company?.id ?? ''"
-                            class="max-w-36 cursor-pointer truncate border-0 bg-transparent py-0.5 pe-6 text-xs font-medium text-ink-soft focus:ring-accent"
-                            :aria-label="$tPair('welcome.switch_company')"
-                            @change="switchCompanySA">
-                            <option value="">{{ $t('welcome.all_companies') }}</option>
-                            <option v-for="c in assignedCompanies" :key="c.id" :value="c.id">{{ c.name }}</option>
-                        </select>
-                    </label>
-                    <!-- Admin/Manager assigned to several companies: a real
-                         switcher in place of the static chip. -->
-                    <label v-else-if="assignedCompanies.length > 1"
-                        class="hidden items-center gap-1.5 rounded-md border border-line px-2 py-1 text-xs font-medium text-ink-soft hover:bg-surface-hover md:flex"
-                        :title="$t('welcome.switch_company')">
-                        <AppIcon name="companies" class="h-3.5 w-3.5 shrink-0" />
-                        <select :value="page.props.company?.id"
-                            class="max-w-36 cursor-pointer truncate border-0 bg-transparent py-0.5 pe-6 text-xs font-medium text-ink-soft focus:ring-accent"
-                            :aria-label="$tPair('welcome.switch_company')"
-                            @change="switchCompany">
-                            <option v-for="c in assignedCompanies" :key="c.id" :value="c.id">{{ c.name }}</option>
-                        </select>
-                    </label>
+                    <!-- SA gets all companies from the server — styled custom dropdown. -->
+                    <VDropdown v-if="page.props.auth.user?.role === 'super_admin'"
+                        class="hidden md:block"
+                        align="end"
+                        width="w-52">
+                        <template #trigger="{ toggle, open }">
+                            <button type="button"
+                                class="flex items-center gap-1.5 rounded-md border border-line px-2.5 py-1.5 text-xs font-medium text-ink-soft transition hover:border-line-strong hover:bg-surface-hover"
+                                :class="open ? 'border-line-strong bg-surface-hover' : ''"
+                                @click="toggle">
+                                <AppIcon name="companies" class="h-3.5 w-3.5 shrink-0 text-muted" />
+                                <span class="max-w-32 truncate">
+                                    {{ page.props.company?.name ?? $t('welcome.all_companies') }}
+                                </span>
+                                <AppIcon name="chevron-down" class="h-3 w-3 shrink-0 text-muted transition-transform"
+                                    :class="open ? 'rotate-180' : ''" />
+                            </button>
+                        </template>
+                        <template #default="{ close }">
+                            <!-- All companies option (SA only) -->
+                            <button type="button"
+                                class="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition hover:bg-surface-hover"
+                                :class="!page.props.company ? 'text-accent font-medium' : 'text-ink-soft'"
+                                @click="switchCompanySA(null); close()">
+                                <AppIcon name="companies" class="h-3.5 w-3.5 shrink-0" />
+                                <span class="flex-1 truncate">{{ $t('welcome.all_companies') }}</span>
+                                <AppIcon v-if="!page.props.company" name="check" class="h-3.5 w-3.5 text-accent" />
+                            </button>
+                            <div class="my-1 border-t border-line" />
+                            <button v-for="c in assignedCompanies" :key="c.id"
+                                type="button"
+                                class="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition hover:bg-surface-hover"
+                                :class="page.props.company?.id === c.id ? 'text-accent font-medium' : 'text-ink'"
+                                @click="switchCompanySA(c.id); close()">
+                                <span class="flex-1 truncate">{{ c.name }}</span>
+                                <AppIcon v-if="page.props.company?.id === c.id" name="check" class="h-3.5 w-3.5 text-accent" />
+                            </button>
+                        </template>
+                    </VDropdown>
+
+                    <!-- Admin/Manager assigned to several companies: styled custom dropdown. -->
+                    <VDropdown v-else-if="assignedCompanies.length > 1"
+                        class="hidden md:block"
+                        align="end"
+                        width="w-52">
+                        <template #trigger="{ toggle, open }">
+                            <button type="button"
+                                class="flex items-center gap-1.5 rounded-md border border-line px-2.5 py-1.5 text-xs font-medium text-ink-soft transition hover:border-line-strong hover:bg-surface-hover"
+                                :class="open ? 'border-line-strong bg-surface-hover' : ''"
+                                @click="toggle">
+                                <AppIcon name="companies" class="h-3.5 w-3.5 shrink-0 text-muted" />
+                                <span class="max-w-32 truncate">{{ page.props.company?.name }}</span>
+                                <AppIcon name="chevron-down" class="h-3 w-3 shrink-0 text-muted transition-transform"
+                                    :class="open ? 'rotate-180' : ''" />
+                            </button>
+                        </template>
+                        <template #default="{ close }">
+                            <button v-for="c in assignedCompanies" :key="c.id"
+                                type="button"
+                                class="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition hover:bg-surface-hover"
+                                :class="page.props.company?.id === c.id ? 'text-accent font-medium' : 'text-ink'"
+                                @click="switchCompany(c.id); close()">
+                                <span class="flex-1 truncate">{{ c.name }}</span>
+                                <AppIcon v-if="page.props.company?.id === c.id" name="check" class="h-3.5 w-3.5 text-accent" />
+                            </button>
+                        </template>
+                    </VDropdown>
+
+                    <!-- Single company — static chip, no dropdown needed. -->
                     <span v-else-if="page.props.company"
-                        class="hidden items-center gap-1.5 rounded-md border border-line px-2 py-1.5 text-xs font-medium text-ink-soft md:flex">
-                        <AppIcon name="companies" class="h-3.5 w-3.5 shrink-0" />
-                        <span class="max-w-36 truncate">{{ page.props.company.name }}</span>
+                        class="hidden items-center gap-1.5 rounded-md border border-line px-2.5 py-1.5 text-xs font-medium text-ink-soft md:flex">
+                        <AppIcon name="companies" class="h-3.5 w-3.5 shrink-0 text-muted" />
+                        <span class="max-w-32 truncate">{{ page.props.company.name }}</span>
                     </span>
 
                     <!-- Notifications (visual — wired in Phase 2) -->
@@ -396,3 +446,19 @@ function switchLocale() {
         </div>
     </div>
 </template>
+
+<style scoped>
+.sidebar-nav::-webkit-scrollbar {
+    width: 2px;
+}
+.sidebar-nav::-webkit-scrollbar-track {
+    background: transparent;
+}
+.sidebar-nav::-webkit-scrollbar-thumb {
+    background: rgba(212, 149, 106, 0.35);
+    border-radius: 2px;
+}
+.sidebar-nav::-webkit-scrollbar-thumb:hover {
+    background: rgba(212, 149, 106, 0.7);
+}
+</style>

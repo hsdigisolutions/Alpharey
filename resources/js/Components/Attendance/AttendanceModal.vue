@@ -4,13 +4,14 @@
  * hours from check-in/out; project-based takes manual hours. The day total
  * is computed server-side from the frozen wage snapshot unless overridden.
  */
-import { computed, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { router, useForm } from '@inertiajs/vue3';
 import AppIcon from '@/Components/AppIcon.vue';
 import FormField from '@/Components/ui/FormField.vue';
 import VBadge from '@/Components/ui/VBadge.vue';
 import VButton from '@/Components/ui/VButton.vue';
 import VCheckbox from '@/Components/ui/VCheckbox.vue';
+import VConfirmDialog from '@/Components/ui/VConfirmDialog.vue';
 import VCurrencyInput from '@/Components/ui/VCurrencyInput.vue';
 import VDateInput from '@/Components/ui/VDateInput.vue';
 import VInput from '@/Components/ui/VInput.vue';
@@ -57,10 +58,17 @@ function submit() {
     props.record?.id ? payload.put(`/attendance/${props.record.id}`, opts) : payload.post('/attendance', opts);
 }
 
+const confirmDelete = ref(false);
+
 function destroy() {
     if (props.record?.id) {
-        router.delete(`/attendance/${props.record.id}`, { preserveScroll: true, onSuccess: () => emit('close') });
+        confirmDelete.value = true;
     }
+}
+
+function doDestroy() {
+    confirmDelete.value = false;
+    router.delete(`/attendance/${props.record.id}`, { preserveScroll: true, onSuccess: () => emit('close') });
 }
 
 // Drop a pin at exact coordinates. The ?q= format is the most reliable way to
@@ -255,4 +263,11 @@ function formatCoords(loc) {
             <VButton type="submit" form="att-form" :loading="form.processing"><Bilingual k="common.save" inline /></VButton>
         </template>
     </VModal>
+
+    <VConfirmDialog
+        :open="confirmDelete"
+        :message="record ? `${record.employee ?? ''} — ${record.date ?? ''}` : ''"
+        @confirm="doDestroy"
+        @cancel="confirmDelete = false"
+    />
 </template>

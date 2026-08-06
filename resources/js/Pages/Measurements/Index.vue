@@ -10,6 +10,7 @@ import AppLayout from '@/Layouts/AppLayout.vue';
 import FormField from '@/Components/ui/FormField.vue';
 import VBadge from '@/Components/ui/VBadge.vue';
 import VButton from '@/Components/ui/VButton.vue';
+import VConfirmDialog from '@/Components/ui/VConfirmDialog.vue';
 import VDateInput from '@/Components/ui/VDateInput.vue';
 import VEmptyState from '@/Components/ui/VEmptyState.vue';
 import VInput from '@/Components/ui/VInput.vue';
@@ -54,8 +55,15 @@ function submit() {
     const opts = { preserveScroll: true, onSuccess: () => (showModal.value = false) };
     editing.value ? payload.put(`/measurements/${editing.value.id}`, opts) : payload.post('/measurements', opts);
 }
+const confirm = ref({ open: false, message: '', fn: null });
+function askDelete(message, fn) { confirm.value = { open: true, message, fn }; }
+function runDelete() { confirm.value.fn?.(); confirm.value.open = false; }
+
 function approve(m, value) { router.post(`/measurements/${m.id}/approve`, { approved: value }, { preserveScroll: true }); }
-function destroy(m) { router.delete(`/measurements/${m.id}`, { preserveScroll: true }); }
+function destroy(m) {
+    askDelete(m.date ?? '',
+        () => router.delete(`/measurements/${m.id}`, { preserveScroll: true }));
+}
 
 const columns = [
     { key: 'date', labelKey: 'measurements.date' },
@@ -141,5 +149,6 @@ const columns = [
                 <VButton type="submit" form="meas-form" :loading="form.processing"><Bilingual k="common.save" inline /></VButton>
             </template>
         </VModal>
+        <VConfirmDialog :open="confirm.open" :message="confirm.message" @confirm="runDelete" @cancel="confirm.open = false" />
     </AppLayout>
 </template>
