@@ -31,6 +31,7 @@ const props = defineProps({
     daily_assignments: { type: Array, required: true },
     fines: { type: Array, required: true },
     fuel_records: { type: Array, required: true },
+    sessions: { type: Array, required: true },
     employees: { type: Array, required: true },
     can: { type: Object, required: true },
 });
@@ -47,6 +48,7 @@ const tabs = computed(() => [
     { key: 'fuel', labelKey: 'vehicles.tab_fuel', count: props.fuel_records.length },
     { key: 'fines', labelKey: 'vehicles.tab_fines', count: props.fines.length },
     { key: 'mileage', labelKey: 'vehicles.tab_mileage', count: props.mileage.length },
+    { key: 'sessions', labelKey: 'vehicles.tab_sessions', count: props.sessions.length },
 ]);
 
 /* ──────────────────────────── Assign (long-term) ───────────────────────── */
@@ -224,6 +226,16 @@ const mileageColumns = [
     { key: 'value', labelKey: 'vehicles.mileage_value', align: 'end' },
     { key: 'recorded_at', labelKey: 'vehicles.recorded_at' },
     { key: 'by', labelKey: 'vehicles.updated_by' },
+];
+const sessionColumns = [
+    { key: 'employee', labelKey: 'employees.title' },
+    { key: 'taken_at', labelKey: 'vehicles.session_taken_at' },
+    { key: 'returned_at', labelKey: 'vehicles.session_returned_at' },
+    { key: 'start', labelKey: 'vehicles.starting_mileage', align: 'end' },
+    { key: 'end', labelKey: 'vehicles.ending_mileage', align: 'end' },
+    { key: 'km', labelKey: 'vehicles.session_km_driven', align: 'end' },
+    { key: 'status', labelKey: 'vehicles.session_status' },
+    { key: 'notes', labelKey: 'vehicles.session_notes' },
 ];
 </script>
 
@@ -445,7 +457,7 @@ const mileageColumns = [
         </template>
 
         <!-- ══════════ Tab: Kilometraje ══════════ -->
-        <template v-else>
+        <template v-else-if="tab === 'mileage'">
             <div class="flex justify-end pb-3">
                 <VButton v-if="can.edit" icon="plus" size="sm" @click="showMileage = true">
                     <Bilingual k="vehicles.log_mileage" inline />
@@ -458,6 +470,27 @@ const mileageColumns = [
                     <td class="px-3 py-2.5 text-sm text-ink-soft">{{ m.updated_by ?? '—' }}</td>
                 </tr>
                 <template v-if="mileage.length === 0" #empty><VEmptyState icon="vehicles" /></template>
+            </VTable>
+        </template>
+
+        <!-- ══════════ Tab: Sesiones de empleado ══════════ -->
+        <template v-else>
+            <VTable :columns="sessionColumns">
+                <tr v-for="s in sessions" :key="s.id" class="hover:bg-surface-hover">
+                    <td class="px-3 py-2.5 text-sm font-medium">{{ s.employee ?? '—' }}</td>
+                    <td class="tabular-nums px-3 py-2.5 text-sm">{{ s.taken_at }}</td>
+                    <td class="tabular-nums px-3 py-2.5 text-sm text-ink-soft">{{ s.returned_at ?? '—' }}</td>
+                    <td class="tabular-nums px-3 py-2.5 text-end text-sm">{{ s.starting_mileage }} km</td>
+                    <td class="tabular-nums px-3 py-2.5 text-end text-sm">{{ s.ending_mileage != null ? s.ending_mileage + ' km' : '—' }}</td>
+                    <td class="tabular-nums px-3 py-2.5 text-end text-sm font-medium">{{ s.km_driven != null ? s.km_driven + ' km' : '—' }}</td>
+                    <td class="px-3 py-2.5 text-sm">
+                        <VBadge :status="s.open ? 'warn' : 'ok'">
+                            <Bilingual :k="s.open ? 'vehicles.session_open' : 'vehicles.session_closed'" inline />
+                        </VBadge>
+                    </td>
+                    <td class="px-3 py-2.5 text-sm text-ink-soft">{{ s.return_notes ?? '—' }}</td>
+                </tr>
+                <template v-if="sessions.length === 0" #empty><VEmptyState icon="vehicles" /></template>
             </VTable>
         </template>
 

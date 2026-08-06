@@ -85,6 +85,7 @@ class VehicleController extends Controller
             'dailyAssignments.creator:id,name',
             'fines.employee:id,full_name',
             'fuelRecords.employee:id,full_name',
+            'sessions.employee:id,full_name',
         ]);
 
         return Inertia::render('Vehicles/Show', [
@@ -160,6 +161,17 @@ class VehicleController extends Controller
                 'payment_method' => $r->payment_method,
                 'employee' => $r->employee?->full_name,
                 'notes' => $r->notes,
+            ])->values(),
+            'sessions' => $vehicle->sessions->map(fn ($s): array => [
+                'id' => $s->id,
+                'employee' => $s->employee?->full_name,
+                'taken_at' => $s->taken_at->toDateTimeString(),
+                'returned_at' => $s->returned_at?->toDateTimeString(),
+                'starting_mileage' => $s->starting_mileage,
+                'ending_mileage' => $s->ending_mileage,
+                'km_driven' => $s->km_driven,
+                'return_notes' => $s->return_notes,
+                'open' => $s->isOpen(),
             ])->values(),
             'employees' => Employee::query()->orderBy('full_name')->get(['id', 'full_name']),
             'can' => [
