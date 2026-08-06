@@ -1669,6 +1669,7 @@ return [
         'overtime_pay' => 'Overtime Pay',
         'gross' => 'Gross Pay',
         'advance_deductions' => 'Advance Deductions',
+        'fine_deductions' => 'Vehicle Fines',
         'other_deductions' => 'Other Deductions',
         'manual_additions' => 'Manual Additions',
         'net_pay' => 'NET PAY',

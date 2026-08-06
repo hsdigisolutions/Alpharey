@@ -76,6 +76,12 @@
             <td>Anticipos</td>
             <td class="amount">− {{ $eur($payroll->advance_deductions) }}</td>
         </tr>
+        @if((float)($payroll->fine_deductions ?? 0) > 0)
+        <tr>
+            <td>Multas de vehículo</td>
+            <td class="amount">− {{ $eur($payroll->fine_deductions) }}</td>
+        </tr>
+        @endif
         <tr>
             <td>Otras deducciones</td>
             <td class="amount">− {{ $eur($payroll->other_deductions) }}</td>

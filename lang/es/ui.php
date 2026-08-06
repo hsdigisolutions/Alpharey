@@ -1670,6 +1670,7 @@ return [
         'overtime_pay' => 'Horas extra',
         'gross' => 'Salario bruto',
         'advance_deductions' => 'Anticipos',
+        'fine_deductions' => 'Multas de vehículo',
         'other_deductions' => 'Otras deducciones',
         'manual_additions' => 'Añadidos manuales',
         'net_pay' => 'NETO A PAGAR',

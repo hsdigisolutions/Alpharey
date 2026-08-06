@@ -271,6 +271,7 @@ class PayrollController extends Controller
             'project_expenses' => $money('project_expenses'),
             'gross_pay' => $money('gross_pay'),
             'advance_deductions' => $money('advance_deductions'),
+            'fine_deductions' => $money('fine_deductions'),
             'other_deductions' => $money('other_deductions'),
             'manual_additions' => $money('manual_additions'),
             'net_amount' => $money('net_amount'),

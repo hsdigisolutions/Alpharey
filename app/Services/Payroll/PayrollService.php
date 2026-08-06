@@ -16,6 +16,7 @@ use App\Models\Expense;
 use App\Models\Measurement;
 use App\Models\Payroll;
 use App\Models\Scopes\CompanyScope;
+use App\Models\VehicleFine;
 use App\Models\WorkerExpense;
 use App\Support\PeriodLock;
 use Illuminate\Support\Carbon;
@@ -146,12 +147,13 @@ class PayrollService
             + $reimbursements + $projectExpenses;
 
         $advances = $this->advanceDeductionsFor($employee->id, $month);
+        $fineDeductions = $this->vehicleFinesFor($employee->id, $month);
 
         // Clerk-entered adjustments survive a recalculation.
         $otherDeductions = (float) ($existing?->getAttribute('other_deductions') ?? 0);
         $manualAdditions = (float) ($existing?->getAttribute('manual_additions') ?? 0);
 
-        $net = $gross - $advances - $otherDeductions + $manualAdditions;
+        $net = $gross - $advances - $fineDeductions - $otherDeductions + $manualAdditions;
 
         $payroll = $existing ?? new Payroll(['employee_id' => $employee->id, 'month' => $month]);
         $payroll->company_id = $companyId;
@@ -172,6 +174,7 @@ class PayrollService
         $payroll->project_expenses = (string) round($projectExpenses, 2);
         $payroll->gross_pay = (string) round($gross, 2);
         $payroll->advance_deductions = (string) round($advances, 2);
+        $payroll->fine_deductions = (string) round($fineDeductions, 2);
         $payroll->other_deductions = (string) round($otherDeductions, 2);
         $payroll->manual_additions = (string) round($manualAdditions, 2);
         $payroll->net_amount = (string) round($net, 2);
@@ -282,6 +285,23 @@ class PayrollService
             ->get();
 
         return round((float) $advances->sum(fn (Advance $a) => (float) $a->getAttribute('amount')), 2);
+    }
+
+    /**
+     * Vehicle fines charged to the employee in this month — auto-deducted from
+     * net pay so the admin does not have to enter them manually in other_deductions.
+     * Only fines with charged_to = 'employee' are deducted; company-charged fines
+     * create an Expense on the company and never touch the payslip.
+     */
+    private function vehicleFinesFor(int $employeeId, string $month): float
+    {
+        [$start, $end] = $this->bounds($month);
+
+        return round((float) VehicleFine::query()->withoutGlobalScopes()
+            ->where('employee_id', $employeeId)
+            ->where('charged_to', 'employee')
+            ->whereBetween('fine_date', [$start, $end])
+            ->sum('amount'), 2);
     }
 
     /**

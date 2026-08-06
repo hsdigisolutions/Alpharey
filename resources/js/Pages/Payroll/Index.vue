@@ -249,6 +249,10 @@ const columns = [
                         <dt><Bilingual k="payroll.advance_deductions" inline /></dt>
                         <dd>− {{ eur(breakdown.advance_deductions) }}</dd>
                     </div>
+                    <div v-if="breakdown.fine_deductions" class="flex justify-between gap-4 text-status-danger">
+                        <dt><Bilingual k="payroll.fine_deductions" inline /></dt>
+                        <dd>− {{ eur(breakdown.fine_deductions) }}</dd>
+                    </div>
                     <div class="flex justify-between gap-4 text-status-danger">
                         <dt><Bilingual k="payroll.other_deductions" inline /></dt>
                         <dd>− {{ eur(breakdown.other_deductions) }}</dd>

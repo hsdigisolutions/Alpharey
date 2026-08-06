@@ -62,13 +62,13 @@ class CallPanelController extends Controller
         Gate::authorize('call_panel.create');
 
         $validated = $request->validate([
-            'employee_id'      => ['required', 'integer'],
-            'called_at'        => ['nullable', 'date'],
-            'remarks'          => ['required', 'string', 'max:2000'],
-            'follow_up_date'   => ['nullable', 'date'],
-            'voice_note'       => ['nullable', 'file', 'mimetypes:audio/webm,audio/ogg,audio/mp4,audio/mpeg,audio/wav,audio/x-m4a', 'max:10240'],
+            'employee_id' => ['required', 'integer'],
+            'called_at' => ['nullable', 'date'],
+            'remarks' => ['required', 'string', 'max:2000'],
+            'follow_up_date' => ['nullable', 'date'],
+            'voice_note' => ['nullable', 'file', 'mimetypes:audio/webm,audio/ogg,audio/mp4,audio/mpeg,audio/wav,audio/x-m4a', 'max:10240'],
             'voice_note_label' => ['nullable', 'string', 'max:255'],
-            'attachment'       => ['nullable', 'file', 'mimetypes:audio/mpeg,audio/mp4,audio/ogg,audio/webm,video/mp4,image/jpeg,image/png,image/webp,application/pdf', 'max:102400'],
+            'attachment' => ['nullable', 'file', 'mimetypes:audio/mpeg,audio/mp4,audio/ogg,audio/webm,video/mp4,image/jpeg,image/png,image/webp,application/pdf', 'max:102400'],
             'attachment_label' => ['nullable', 'string', 'max:255'],
         ]);
 
@@ -80,37 +80,37 @@ class CallPanelController extends Controller
         }
 
         $call = new EmployeeCallLog([
-            'called_at'      => $validated['called_at'] ?? now(),
-            'remarks'        => $validated['remarks'],
+            'called_at' => $validated['called_at'] ?? now(),
+            'remarks' => $validated['remarks'],
             'follow_up_date' => $validated['follow_up_date'] ?? null,
         ]);
         $call->employee_id = $employee->id;
-        $call->company_id  = $employee->company_id;
-        $call->called_by   = $request->user()?->id;
+        $call->company_id = $employee->company_id;
+        $call->called_by = $request->user()?->id;
 
         if ($request->hasFile('voice_note')) {
             $file = $request->file('voice_note');
-            $ext  = $file->extension() ?: 'webm';
+            $ext = $file->extension() ?: 'webm';
             $path = $file->storeAs(
                 "call-voice-notes/{$employee->company_id}/{$employee->id}",
                 Str::random(32).'.'.$ext,
                 'local',
             );
-            $call->voice_note_path  = $path;
+            $call->voice_note_path = $path;
             $call->voice_note_label = $validated['voice_note_label'] ?: 'Voice Note';
         }
 
         if ($request->hasFile('attachment')) {
             $file = $request->file('attachment');
-            $ext  = $file->extension() ?: 'bin';
+            $ext = $file->extension() ?: 'bin';
             $path = $file->storeAs(
                 "call-attachments/{$employee->company_id}/{$employee->id}",
                 Str::random(32).'.'.$ext,
                 'local',
             );
-            $call->attachment_path          = $path;
+            $call->attachment_path = $path;
             $call->attachment_original_name = $file->getClientOriginalName();
-            $call->attachment_label         = $validated['attachment_label'] ?: $file->getClientOriginalName();
+            $call->attachment_label = $validated['attachment_label'] ?: $file->getClientOriginalName();
         }
 
         $call->save();
@@ -149,7 +149,7 @@ class CallPanelController extends Controller
         Gate::authorize('call_panel.edit');
 
         $validated = $request->validate([
-            'type'  => ['required', Rule::in(['voice', 'attachment'])],
+            'type' => ['required', Rule::in(['voice', 'attachment'])],
             'label' => ['required', 'string', 'max:255'],
         ]);
 
@@ -188,9 +188,9 @@ class CallPanelController extends Controller
         $rows = $employees->map(fn (Employee $e): array => $this->employeeRow($e))->values();
 
         return match ($tab) {
-            'pending'        => $rows->filter(fn (array $r): bool => $r['follow_up_date'] !== null)->values()->all(),
-            'not_contacted'  => $rows->filter(fn (array $r): bool => $r['not_contacted_this_week'])->values()->all(),
-            default          => $rows->all(),
+            'pending' => $rows->filter(fn (array $r): bool => $r['follow_up_date'] !== null)->values()->all(),
+            'not_contacted' => $rows->filter(fn (array $r): bool => $r['not_contacted_this_week'])->values()->all(),
+            default => $rows->all(),
         };
     }
 
@@ -215,13 +215,13 @@ class CallPanelController extends Controller
         $followUpDate = $followUp !== null ? Carbon::parse($followUp) : null;
 
         return [
-            'id'                   => $e->id,
-            'name'                 => $e->full_name,
-            'company'              => $e->company?->name,
-            'designation'          => $e->designation,
-            'last_contacted'       => $lastCall?->called_at->toDateTimeString(),
-            'follow_up_date'       => $followUpDate?->toDateString(),
-            'indicator'            => $this->indicator($followUpDate),
+            'id' => $e->id,
+            'name' => $e->full_name,
+            'company' => $e->company?->name,
+            'designation' => $e->designation,
+            'last_contacted' => $lastCall?->called_at->toDateTimeString(),
+            'follow_up_date' => $followUpDate?->toDateString(),
+            'indicator' => $this->indicator($followUpDate),
             'not_contacted_this_week' => $lastCall === null
                 || $lastCall->called_at->lt($this->weekStart()),
         ];
@@ -260,27 +260,27 @@ class CallPanelController extends Controller
         }
 
         return [
-            'id'          => $employee->id,
-            'name'        => $employee->full_name,
-            'mobile'      => $employee->mobile,
-            'phone'       => $employee->phone,
-            'company'     => $employee->company?->name,
+            'id' => $employee->id,
+            'name' => $employee->full_name,
+            'mobile' => $employee->mobile,
+            'phone' => $employee->phone,
+            'company' => $employee->company?->name,
             'designation' => $employee->designation,
-            'calls'       => EmployeeCallLog::query()
+            'calls' => EmployeeCallLog::query()
                 ->where('employee_id', $employee->id)
                 ->with('caller:id,name')
                 ->orderByDesc('called_at')
                 ->get()
                 ->map(fn (EmployeeCallLog $c): array => [
-                    'id'                     => $c->id,
-                    'called_at'              => $c->called_at->toDateTimeString(),
-                    'called_by'              => $c->caller?->name,
-                    'remarks'                => $c->remarks,
-                    'follow_up_date'         => $c->follow_up_date?->toDateString(),
-                    'has_voice_note'         => $c->voice_note_path !== null,
-                    'voice_note_label'       => $c->voice_note_label,
-                    'has_attachment'         => $c->attachment_path !== null,
-                    'attachment_label'       => $c->attachment_label,
+                    'id' => $c->id,
+                    'called_at' => $c->called_at->toDateTimeString(),
+                    'called_by' => $c->caller?->name,
+                    'remarks' => $c->remarks,
+                    'follow_up_date' => $c->follow_up_date?->toDateString(),
+                    'has_voice_note' => $c->voice_note_path !== null,
+                    'voice_note_label' => $c->voice_note_label,
+                    'has_attachment' => $c->attachment_path !== null,
+                    'attachment_label' => $c->attachment_label,
                     'attachment_original_name' => $c->attachment_original_name,
                 ])
                 ->values()

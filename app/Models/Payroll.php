@@ -48,7 +48,7 @@ class Payroll extends Model
     public array $auditExclude = [
         'wage_rate', 'base_salary', 'days_amount', 'hours_amount', 'overtime_pay',
         'reimbursements', 'project_expenses', 'gross_pay', 'advance_deductions',
-        'other_deductions', 'manual_additions', 'net_amount',
+        'fine_deductions', 'other_deductions', 'manual_additions', 'net_amount',
     ];
 
     /** @var list<string> */
@@ -56,15 +56,15 @@ class Payroll extends Model
         'employee_id', 'month', 'attendance_days', 'attendance_hours', 'overtime_hours',
         'wage_type', 'wage_rate', 'base_salary', 'days_amount', 'hours_amount',
         'overtime_pay', 'reimbursements', 'project_expenses', 'gross_pay',
-        'advance_deductions', 'other_deductions', 'manual_additions', 'net_amount',
-        'status', 'payment_method', 'paid_at', 'notes', 'deployment_notes',
+        'advance_deductions', 'fine_deductions', 'other_deductions', 'manual_additions',
+        'net_amount', 'status', 'payment_method', 'paid_at', 'notes', 'deployment_notes',
     ];
 
     /** @var list<string> */
     protected $hidden = [
         'wage_rate', 'base_salary', 'days_amount', 'hours_amount', 'overtime_pay',
         'reimbursements', 'project_expenses', 'gross_pay', 'advance_deductions',
-        'other_deductions', 'manual_additions', 'net_amount',
+        'fine_deductions', 'other_deductions', 'manual_additions', 'net_amount',
     ];
 
     protected function casts(): array
@@ -89,6 +89,7 @@ class Payroll extends Model
             'project_expenses' => 'encrypted',
             'gross_pay' => 'encrypted',
             'advance_deductions' => 'encrypted',
+            'fine_deductions' => 'encrypted',
             'other_deductions' => 'encrypted',
             'manual_additions' => 'encrypted',
             'net_amount' => 'encrypted',
