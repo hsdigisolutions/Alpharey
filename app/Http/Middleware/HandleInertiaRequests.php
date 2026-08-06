@@ -7,6 +7,7 @@ use App\Models\User;
 use App\Support\CurrentCompany;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
+use Tighten\Ziggy\Ziggy;
 
 class HandleInertiaRequests extends Middleware
 {
@@ -85,6 +86,13 @@ class HandleInertiaRequests extends Middleware
                 'success' => $request->session()->get('success'),
                 'error' => $request->session()->get('error'),
             ],
+            // Ziggy route manifest — passed via Inertia instead of the @routes
+            // inline script, which is blocked by the production CSP (script-src
+            // 'self' forbids inline scripts). ZiggyVue reads this in app.js.
+            'ziggy' => fn () => array_merge(
+                (new Ziggy)->toArray(),
+                ['location' => $request->url()],
+            ),
             // Bell: unread count + the latest few (REQUIREMENTS.md §12)
             'notifications' => $user === null ? null : [
                 'unread' => $user->unreadNotifications()->count(),

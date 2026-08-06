@@ -14,9 +14,17 @@ createInertiaApp({
         return pages[`./Pages/${name}.vue`];
     },
     setup({ el, App, props, plugin }) {
+        // window.Ziggy is normally set by the @routes Blade directive (inline
+        // script), which is blocked by the production CSP (script-src 'self').
+        // Set it from the Inertia shared prop instead so that components using
+        // `import { route } from 'ziggy-js'` directly can find the config.
+        if (props.initialPage.props.ziggy) {
+            window.Ziggy = props.initialPage.props.ziggy;
+        }
+
         const app = createApp({ render: () => h(App, props) })
             .use(plugin)
-            .use(ZiggyVue)
+            .use(ZiggyVue, props.initialPage.props.ziggy)
             // Registered globally: every screen renders bilingual labels.
             .component('Bilingual', Bilingual);
 
