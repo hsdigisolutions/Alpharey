@@ -1327,6 +1327,7 @@ return [
         'session_open' => 'En uso',
         'session_closed' => 'Devuelto',
         'session_notes' => 'Notas de devolución',
+        'session_duration' => 'Duración',
         'plate_number' => 'Matrícula',
         'brand' => 'Marca',
         'model' => 'Modelo',

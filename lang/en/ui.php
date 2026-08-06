@@ -1326,6 +1326,7 @@ return [
         'session_open' => 'In use',
         'session_closed' => 'Returned',
         'session_notes' => 'Return notes',
+        'session_duration' => 'Duration',
         'plate_number' => 'Plate number',
         'brand' => 'Brand',
         'model' => 'Model',

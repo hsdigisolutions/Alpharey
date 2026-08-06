@@ -53,6 +53,17 @@ function timeOnly(dt) {
     return dt.slice(11, 16); // "HH:MM" from "YYYY-MM-DD HH:MM:SS"
 }
 
+function sessionDuration(takenAt, returnedAt) {
+    if (!takenAt || !returnedAt) return '—';
+    const secs = Math.floor((new Date(returnedAt) - new Date(takenAt)) / 1000);
+    const d = Math.floor(secs / 86400);
+    const h = Math.floor((secs % 86400) / 3600);
+    const m = Math.floor((secs % 3600) / 60);
+    if (d > 0) return h > 0 ? `${d}d ${h}h` : `${d}d`;
+    if (h > 0) return m > 0 ? `${h}h ${m}m` : `${h}h`;
+    return `${m}m`;
+}
+
 const filters = reactive({
     search: props.filters.search ?? '',
     ownership: props.filters.ownership ?? '',
@@ -129,30 +140,19 @@ const columns = [
                         {{ elapsed(s.taken_at) }}
                     </div>
 
-                    <!-- Worker -->
-                    <p class="mb-0.5 text-[11px] font-semibold uppercase tracking-widest text-status-ok/70">
-                        <Bilingual k="employees.title" inline />
-                    </p>
-                    <p class="mb-4 text-base font-bold text-status-ok">{{ s.employee ?? '—' }}</p>
+                    <!-- Worker name -->
+                    <p class="mb-3 text-base font-bold text-status-ok">{{ s.employee ?? '—' }}</p>
 
-                    <!-- Vehicle -->
-                    <div class="flex items-baseline gap-2">
-                        <span class="rounded-md bg-status-ok/15 px-2 py-0.5 font-mono text-[13px] font-bold tracking-wider text-status-ok">
-                            {{ s.plate_number }}
-                        </span>
-                        <span class="text-sm text-status-ok/80">{{ [s.brand, s.model].filter(Boolean).join(' ') || '—' }}</span>
-                    </div>
+                    <!-- Plate badge -->
+                    <span class="rounded-md bg-status-ok/15 px-2 py-0.5 font-mono text-[13px] font-bold tracking-wider text-status-ok">
+                        {{ s.plate_number }}
+                    </span>
 
-                    <!-- Meta row -->
-                    <div class="mt-3 flex items-center gap-4 text-[12px] text-status-ok/70">
-                        <span>
-                            <span class="opacity-60"><Bilingual k="vehicles.session_taken_at" inline /> </span>
-                            <span class="tabular-nums font-medium">{{ timeOnly(s.taken_at) }}</span>
-                        </span>
-                        <span>
-                            <span class="opacity-60"><Bilingual k="vehicles.starting_mileage" inline /> </span>
-                            <span class="tabular-nums font-medium">{{ s.starting_mileage != null ? s.starting_mileage.toLocaleString() + ' km' : '—' }}</span>
-                        </span>
+                    <!-- Meta row: time + starting km -->
+                    <div class="mt-3 flex items-center gap-3 text-[12px] tabular-nums text-status-ok/80">
+                        <span class="font-medium">{{ timeOnly(s.taken_at) }}</span>
+                        <span class="opacity-40">·</span>
+                        <span class="font-medium">{{ s.starting_mileage != null ? s.starting_mileage.toLocaleString() + ' km' : '—' }}</span>
                     </div>
                 </Link>
             </div>
@@ -169,12 +169,12 @@ const columns = [
                 <table class="w-full text-sm">
                     <thead>
                         <tr class="border-b border-line bg-surface-sunken text-[11px] font-semibold uppercase tracking-wide text-muted">
-                            <th class="px-4 py-2.5 text-start"><Bilingual k="employees.title" inline /></th>
-                            <th class="px-4 py-2.5 text-start"><Bilingual k="vehicles.plate_number" inline /></th>
-                            <th class="tabular-nums px-4 py-2.5 text-start"><Bilingual k="vehicles.session_taken_at" inline /></th>
-                            <th class="tabular-nums px-4 py-2.5 text-start"><Bilingual k="vehicles.session_returned_at" inline /></th>
-                            <th class="tabular-nums px-4 py-2.5 text-end"><Bilingual k="vehicles.session_km_driven" inline /></th>
-                            <th class="px-4 py-2.5 text-start"><Bilingual k="vehicles.session_notes" inline /></th>
+                            <th class="px-4 py-2.5 text-start">{{ $t('employees.title') }}</th>
+                            <th class="px-4 py-2.5 text-start">{{ $t('vehicles.plate_number') }}</th>
+                            <th class="tabular-nums px-4 py-2.5 text-start">{{ $t('vehicles.session_taken_at') }}</th>
+                            <th class="tabular-nums px-4 py-2.5 text-start">{{ $t('vehicles.session_returned_at') }}</th>
+                            <th class="tabular-nums px-4 py-2.5 text-end">{{ $t('vehicles.session_duration') }}</th>
+                            <th class="tabular-nums px-4 py-2.5 text-end">{{ $t('vehicles.session_km_driven') }}</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-line">
@@ -186,12 +186,13 @@ const columns = [
                                 <span class="rounded-md bg-surface-sunken px-1.5 py-0.5 font-mono text-[12px] font-semibold">
                                     {{ s.plate_number }}
                                 </span>
-                                <span class="ms-1.5 text-ink-soft">{{ [s.brand, s.model].filter(Boolean).join(' ') }}</span>
                             </td>
-                            <td class="tabular-nums px-4 py-2.5 text-ink-soft">{{ s.taken_at.slice(0, 16).replace('T', ' ') }}</td>
-                            <td class="tabular-nums px-4 py-2.5 text-ink-soft">{{ s.returned_at ? s.returned_at.slice(0, 16).replace('T', ' ') : '—' }}</td>
+                            <td class="tabular-nums px-4 py-2.5 text-ink-soft">{{ timeOnly(s.taken_at) }}</td>
+                            <td class="tabular-nums px-4 py-2.5 text-ink-soft">{{ timeOnly(s.returned_at) }}</td>
+                            <td class="tabular-nums px-4 py-2.5 text-end font-medium text-ink">
+                                {{ sessionDuration(s.taken_at, s.returned_at) }}
+                            </td>
                             <td class="tabular-nums px-4 py-2.5 text-end font-medium">{{ s.km_driven != null ? s.km_driven + ' km' : '—' }}</td>
-                            <td class="max-w-48 truncate px-4 py-2.5 text-ink-soft">{{ s.return_notes ?? '—' }}</td>
                         </tr>
                     </tbody>
                 </table>
