@@ -14,7 +14,7 @@
  *   5. Return sheet: ending mileage + optional notes → POST /worker/vehicles/{session}/return.
  *   6. Fuel log: open session → "Log fuel" sheet → POST /worker/vehicles/{session}/fuel.
  */
-import { onMounted, onUnmounted, ref } from 'vue';
+import { onMounted, onUnmounted, ref, watch } from 'vue';
 import { Head, router } from '@inertiajs/vue3';
 import WorkerLayout from '@/Layouts/WorkerLayout.vue';
 import VButton from '@/Components/ui/VButton.vue';
@@ -24,6 +24,7 @@ import VTextarea from '@/Components/ui/VTextarea.vue';
 const props = defineProps({
     worker: { type: Object, required: true },
     vehicles: { type: Array, required: true },
+    fines: { type: Array, default: () => [] },
     // The currently active session for this worker (null if none).
     // eslint-disable-next-line vue/prop-name-casing
     my_session: { type: Object, default: null },
@@ -33,15 +34,40 @@ const props = defineProps({
 let pollTimer = null;
 
 function poll() {
-    router.reload({ only: ['vehicles', 'my_session'] });
+    router.reload({ only: ['vehicles', 'my_session', 'fines'] });
 }
 
 onMounted(() => {
     pollTimer = setInterval(poll, 30_000);
+    if (props.my_session) startStopwatch();
 });
 
 onUnmounted(() => {
     clearInterval(pollTimer);
+    clearInterval(swTimer);
+});
+
+// ── Stopwatch ─────────────────────────────────────────────────────────────────
+const elapsed = ref('00:00:00');
+let swTimer = null;
+
+function startStopwatch() {
+    clearInterval(swTimer);
+    const start = new Date(props.my_session.taken_at);
+    function tick() {
+        const diff = Math.max(0, Math.floor((Date.now() - start.getTime()) / 1000));
+        const h = Math.floor(diff / 3600).toString().padStart(2, '0');
+        const m = Math.floor((diff % 3600) / 60).toString().padStart(2, '0');
+        const s = (diff % 60).toString().padStart(2, '0');
+        elapsed.value = `${h}:${m}:${s}`;
+    }
+    tick();
+    swTimer = setInterval(tick, 1000);
+}
+
+watch(() => props.my_session, (session) => {
+    clearInterval(swTimer);
+    if (session) startStopwatch();
 });
 
 // ── Take sheet ───────────────────────────────────────────────────────────────
@@ -132,6 +158,10 @@ function submitFuel() {
             <div class="rounded-lg border border-line bg-surface-raised p-4 shadow-card">
                 <p class="mb-3 text-xs font-semibold uppercase tracking-wide text-muted">{{ $t('worker_vehicles.active_session') }}</p>
                 <dl class="space-y-2 text-sm">
+                    <div class="flex justify-between gap-3">
+                        <dt class="text-ink-soft">{{ $t('worker_vehicles.elapsed_time') }}</dt>
+                        <dd class="tabular-nums font-bold text-accent">{{ elapsed }}</dd>
+                    </div>
                     <div class="flex justify-between gap-3">
                         <dt class="text-ink-soft">{{ $t('worker_vehicles.taken_at') }}</dt>
                         <dd class="font-medium text-ink">{{ my_session.taken_at }}</dd>
@@ -287,6 +317,28 @@ function submitFuel() {
                         </VButton>
                     </div>
                 </form>
+            </div>
+        </div>
+        <!-- Fines section -->
+        <div v-if="fines.length" class="mt-6">
+            <p class="mb-3 text-sm font-semibold text-ink">{{ $t('worker_vehicles.fines_title') }}</p>
+            <div class="space-y-2">
+                <div v-for="fine in fines" :key="fine.id"
+                    class="rounded-lg border border-line bg-surface-raised p-4 shadow-card">
+                    <div class="flex items-start justify-between gap-3">
+                        <div class="min-w-0 flex-1">
+                            <p class="truncate text-sm font-medium text-ink">{{ fine.description }}</p>
+                            <p class="text-xs text-ink-soft">{{ fine.fine_date }}<template v-if="fine.authority"> · {{ fine.authority }}</template></p>
+                        </div>
+                        <div class="shrink-0 text-right">
+                            <p class="tabular-nums font-semibold text-ink">{{ Number(fine.amount).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }} €</p>
+                            <span class="text-xs"
+                                :class="fine.paid ? 'text-status-ok' : 'text-status-danger'">
+                                {{ $t(fine.paid ? 'worker_vehicles.fine_paid' : 'worker_vehicles.fine_unpaid') }}
+                            </span>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </WorkerLayout>

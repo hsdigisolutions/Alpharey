@@ -47,6 +47,7 @@ return [
         'audit_logs' => 'Registro de Actividad',
         'settings' => 'Configuración',
         'apps' => 'Más módulos',
+        'worker_expenses' => 'Gastos del Trabajador',
     ],
 
     'auth' => [
@@ -1222,6 +1223,11 @@ return [
         'none_for_you' => 'No tiene acceso a vehículos. Consulte con su responsable.',
         'km_driven' => 'km recorridos',
         'fuel_total' => 'Litros añadidos en este viaje',
+        'elapsed_time' => 'Tiempo transcurrido',
+        'fines_title' => 'Mis multas',
+        'fines_none' => 'Sin multas registradas',
+        'fine_paid' => 'Pagada',
+        'fine_unpaid' => 'Pendiente',
     ],
 
     // Feature 2 admin — revisión de gastos de trabajadores

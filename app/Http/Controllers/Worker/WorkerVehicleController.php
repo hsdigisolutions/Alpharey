@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Employee;
 use App\Models\Scopes\CompanyScope;
 use App\Models\Vehicle;
+use App\Models\VehicleFine;
 use App\Models\VehicleSession;
 use App\Models\WorkerExpense;
 use App\Services\Workers\VehicleSessionService;
@@ -65,8 +66,24 @@ class WorkerVehicleController extends Controller
                 ->count()
             : 0;
 
+        $fines = VehicleFine::query()
+            ->withoutGlobalScope(CompanyScope::class)
+            ->where('employee_id', $employee->id)
+            ->where('company_id', $employee->company_id)
+            ->orderByDesc('fine_date')
+            ->get()
+            ->map(fn (VehicleFine $f) => [
+                'id' => $f->id,
+                'fine_date' => $f->fine_date->toDateString(),
+                'amount' => $f->amount,
+                'description' => $f->description,
+                'authority' => $f->authority,
+                'paid' => (bool) $f->paid,
+            ]);
+
         return Inertia::render('Worker/Vehicles', [
             'vehicles' => $vehicles,
+            'fines' => $fines,
             'my_session' => $mySession ? [
                 'id' => $mySession->id,
                 'taken_at' => $mySession->taken_at,

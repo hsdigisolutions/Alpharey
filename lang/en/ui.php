@@ -46,6 +46,7 @@ return [
         'audit_logs' => 'Audit Logs',
         'settings' => 'Settings',
         'apps' => 'More modules',
+        'worker_expenses' => 'Worker Expenses',
     ],
 
     'auth' => [
@@ -1221,6 +1222,11 @@ return [
         'none_for_you' => 'You do not have vehicle access. Ask your manager.',
         'km_driven' => 'km driven',
         'fuel_total' => 'Litres added this trip',
+        'elapsed_time' => 'Elapsed time',
+        'fines_title' => 'My fines',
+        'fines_none' => 'No fines on record',
+        'fine_paid' => 'Paid',
+        'fine_unpaid' => 'Unpaid',
     ],
 
     // Feature 2 admin — worker expense review

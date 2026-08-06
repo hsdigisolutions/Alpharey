@@ -91,11 +91,38 @@ async function submitCheckIn() {
     });
 }
 
-async function checkOut() {
+function openCheckOut() {
+    noteTextForm.text_note = '';
+    audioBlob.value = null;
+    audioDuration.value = null;
+    isRecording.value = false;
+    expenseForm.reset();
+    receiptFile.value = null;
+    checkOutOpen.value = true;
+}
+
+async function submitCheckOut() {
     busy.value = true;
     statusLine.value = t('worker.getting_location');
+    checkOutOpen.value = false;
 
     const loc = await getLocation();
+
+    // Capture note + expense data now — page reloads on success and the refs
+    // may update; local consts survive the closure.
+    const hasNote = !!(noteTextForm.text_note || audioBlob.value);
+    const capturedNoteText = noteTextForm.text_note;
+    const capturedAudio = audioBlob.value;
+    const capturedAudioDuration = audioDuration.value;
+
+    const hasExpense = !!(expenseForm.amount);
+    const capturedExpense = {
+        date: expenseForm.date,
+        amount: expenseForm.amount,
+        category: expenseForm.category,
+        description: expenseForm.description,
+        receipt: receiptFile.value,
+    };
 
     router.post('/worker/check-out', {
         lat: loc.lat,
@@ -103,6 +130,27 @@ async function checkOut() {
         accuracy: loc.accuracy,
         denied: loc.denied,
     }, {
+        onSuccess: () => {
+            if (hasNote) {
+                const nd = new FormData();
+                nd.append('attendance_id', String(props.today.attendance_id));
+                if (capturedNoteText) nd.append('text_note', capturedNoteText);
+                if (capturedAudio) {
+                    nd.append('audio', capturedAudio, 'note.webm');
+                    nd.append('duration_seconds', String(capturedAudioDuration ?? 0));
+                }
+                router.post('/worker/voice-note', nd, { forceFormData: true, preserveScroll: true });
+            }
+            if (hasExpense) {
+                const ed = new FormData();
+                ed.append('date', capturedExpense.date);
+                ed.append('amount', capturedExpense.amount);
+                ed.append('category', capturedExpense.category);
+                if (capturedExpense.description) ed.append('description', capturedExpense.description);
+                if (capturedExpense.receipt) ed.append('receipt', capturedExpense.receipt);
+                router.post('/worker/expenses', ed, { forceFormData: true, preserveScroll: true });
+            }
+        },
         onFinish: () => {
             busy.value = false;
             statusLine.value = '';
@@ -124,8 +172,8 @@ function submitAbsence() {
     });
 }
 
-// --- Feature 1: Voice / text note after check-out ---
-const noteOpen = ref(false);
+// --- Checkout sheet (ask for optional note + expense before submitting) ---
+const checkOutOpen = ref(false);
 const isRecording = ref(false);
 const audioBlob = ref(null);
 const audioDuration = ref(null);
@@ -158,29 +206,8 @@ function stopRecording() {
 }
 
 const noteTextForm = useForm({ attendance_id: null, text_note: '', duration_seconds: null });
-const noteSubmitting = ref(false);
-
-function submitNote(attendanceId) {
-    noteSubmitting.value = true;
-    const data = new FormData();
-    data.append('attendance_id', String(attendanceId));
-    if (noteTextForm.text_note) data.append('text_note', noteTextForm.text_note);
-    if (audioBlob.value) {
-        data.append('audio', audioBlob.value, 'note.webm');
-        data.append('duration_seconds', String(audioDuration.value ?? 0));
-    }
-    router.post('/worker/voice-note', data, {
-        forceFormData: true,
-        onFinish: () => {
-            noteSubmitting.value = false;
-            noteOpen.value = false;
-            audioBlob.value = null;
-        },
-    });
-}
 
 // --- Feature 2: Worker expense submission ---
-const expenseOpen = ref(false);
 const expenseForm = useForm({
     date: new Date().toISOString().slice(0, 10),
     amount: '',
@@ -193,22 +220,6 @@ function onReceiptChange(e) {
     receiptFile.value = e.target.files[0] ?? null;
 }
 
-function submitExpense() {
-    const data = new FormData();
-    data.append('date', expenseForm.date);
-    data.append('amount', expenseForm.amount);
-    data.append('category', expenseForm.category);
-    data.append('description', expenseForm.description);
-    if (receiptFile.value) data.append('receipt', receiptFile.value);
-    router.post('/worker/expenses', data, {
-        forceFormData: true,
-        onSuccess: () => {
-            expenseOpen.value = false;
-            expenseForm.reset();
-            receiptFile.value = null;
-        },
-    });
-}
 </script>
 
 <template>
@@ -278,7 +289,7 @@ function submitExpense() {
         <!-- STATE: checked in → check out -->
         <template v-else-if="today.state === 'checked_in'">
             <p v-if="statusLine" class="mb-2 text-center text-xs text-muted">{{ statusLine }}</p>
-            <VButton variant="secondary" class="w-full" size="lg" :loading="busy" @click="checkOut">
+            <VButton variant="secondary" class="w-full" size="lg" :loading="busy" @click="openCheckOut">
                 {{ $t('worker.check_out') }}
             </VButton>
         </template>
@@ -289,19 +300,6 @@ function submitExpense() {
                 {{ $t('worker.done_for_today') }}
             </div>
 
-            <!-- Feature 1 + 2: After checkout, offer note and expense buttons -->
-            <template v-if="today.state === 'checked_out'">
-                <button type="button"
-                    class="w-full rounded-lg border border-line bg-surface-raised py-3 text-sm text-ink-soft shadow-card hover:bg-surface-hover"
-                    @click="noteOpen = true">
-                    + {{ $t('worker.voice_note') }}
-                </button>
-                <button type="button"
-                    class="w-full rounded-lg border border-line bg-surface-raised py-3 text-sm text-ink-soft shadow-card hover:bg-surface-hover"
-                    @click="expenseOpen = true">
-                    + {{ $t('worker.add_expense') }}
-                </button>
-            </template>
         </div>
 
         <!-- Feature 4: Vehicle link -->
@@ -347,7 +345,7 @@ function submitExpense() {
             <h2 class="mb-3 text-sm font-semibold capitalize text-ink">{{ month.label }}</h2>
 
             <!-- Summary figures -->
-            <div class="mb-4 grid grid-cols-2 gap-2">
+            <div class="mb-4 grid grid-cols-3 gap-2">
                 <div class="rounded-lg border border-line bg-surface-raised p-3 text-center shadow-card">
                     <p class="tabular-nums text-2xl font-semibold text-status-ok">{{ month.present }}</p>
                     <p class="text-xs text-ink-soft">{{ $t('worker.days_present') }}</p>
@@ -359,10 +357,6 @@ function submitExpense() {
                 <div class="rounded-lg border border-line bg-surface-raised p-3 text-center shadow-card">
                     <p class="tabular-nums text-2xl font-semibold text-ink">{{ month.hours }}</p>
                     <p class="text-xs text-ink-soft">{{ $t('worker.total_hours') }}</p>
-                </div>
-                <div class="rounded-lg border border-line bg-surface-raised p-3 text-center shadow-card">
-                    <p class="tabular-nums text-2xl font-semibold text-accent">{{ eur(month.earned) }}</p>
-                    <p class="text-xs text-ink-soft">{{ $t('worker.earned') }}</p>
                 </div>
             </div>
 
@@ -397,99 +391,77 @@ function submitExpense() {
             </div>
         </div>
 
-        <!-- Feature 1: Voice / text note bottom sheet -->
-        <div v-if="noteOpen" class="fixed inset-0 z-40 flex items-end bg-black/40" @click.self="noteOpen = false">
-            <div class="w-full rounded-t-xl bg-surface-raised p-5 shadow-overlay"
-                style="padding-bottom: calc(1.25rem + env(safe-area-inset-bottom))">
-                <h2 class="mb-4 text-base font-semibold">{{ $t('worker.voice_note') }}</h2>
+        <!-- Checkout sheet: optional note + optional expense, then submit -->
+        <div v-if="checkOutOpen" class="fixed inset-0 z-40 flex items-end bg-black/40" @click.self="checkOutOpen = false">
+            <div class="w-full rounded-t-xl bg-surface-raised shadow-overlay"
+                style="max-height: 88vh; overflow-y: auto; padding: 1.25rem; padding-bottom: calc(1.25rem + env(safe-area-inset-bottom))">
+                <h2 class="mb-5 text-base font-semibold">{{ $t('worker.check_out') }}</h2>
 
-                <!-- Recording controls -->
-                <div class="mb-4 flex flex-col items-center gap-3">
-                    <div v-if="audioBlob" class="rounded-md bg-status-ok-soft px-3 py-2 text-sm text-status-ok">
+                <!-- Note section -->
+                <p class="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">{{ $t('worker.voice_note') }}</p>
+                <div class="mb-3 flex flex-col items-center gap-2">
+                    <div v-if="audioBlob" class="w-full rounded-md bg-status-ok-soft px-3 py-2 text-sm text-status-ok">
                         {{ $t('worker.note_recorded').replace(':s', audioDuration ?? 0) }}
                     </div>
                     <template v-else>
-                        <button v-if="!isRecording" type="button"
-                            class="flex h-14 w-14 items-center justify-center rounded-full bg-status-danger text-on-accent shadow-raised"
-                            @click="startRecording">
-                            <span class="h-4 w-4 rounded-full bg-white" />
-                        </button>
-                        <button v-else type="button"
-                            class="flex h-14 w-14 animate-pulse items-center justify-center rounded-full bg-status-danger text-on-accent shadow-raised"
-                            @click="stopRecording">
-                            <span class="h-3 w-3 rounded-sm bg-white" />
-                        </button>
-                        <p class="text-xs text-ink-soft">
-                            {{ isRecording ? $t('worker.note_recording') : $t('worker.note_tap_record') }}
-                        </p>
+                        <div class="flex items-center gap-3">
+                            <button v-if="!isRecording" type="button"
+                                class="flex h-12 w-12 items-center justify-center rounded-full bg-status-danger text-on-accent shadow-raised"
+                                @click="startRecording">
+                                <span class="h-3.5 w-3.5 rounded-full bg-white" />
+                            </button>
+                            <button v-else type="button"
+                                class="flex h-12 w-12 animate-pulse items-center justify-center rounded-full bg-status-danger text-on-accent shadow-raised"
+                                @click="stopRecording">
+                                <span class="h-3 w-3 rounded-sm bg-white" />
+                            </button>
+                            <p class="text-xs text-ink-soft">
+                                {{ isRecording ? $t('worker.note_recording') : $t('worker.note_tap_record') }}
+                            </p>
+                        </div>
                     </template>
                 </div>
+                <VTextarea v-model="noteTextForm.text_note" :rows="2" :placeholder="$t('worker.note_text_placeholder')" class="mb-4" />
 
-                <!-- Optional text note (also the fallback if microphone denied) -->
-                <VTextarea v-model="noteTextForm.text_note" :rows="2" :placeholder="$t('worker.note_text_placeholder')" />
-
-                <div class="mt-4 flex gap-2">
-                    <VButton variant="ghost" class="flex-1" type="button" @click="noteOpen = false">
-                        {{ $t('common.cancel') }}
-                    </VButton>
-                    <VButton class="flex-1" type="button" :loading="noteSubmitting"
-                        :disabled="!audioBlob && !noteTextForm.text_note"
-                        @click="submitNote(today.attendance_id)">
-                        {{ $t('worker.note_submit') }}
-                    </VButton>
-                </div>
-            </div>
-        </div>
-
-        <!-- Feature 2: Expense submission bottom sheet -->
-        <div v-if="expenseOpen" class="fixed inset-0 z-40 flex items-end bg-black/40" @click.self="expenseOpen = false">
-            <div class="w-full rounded-t-xl bg-surface-raised p-5 shadow-overlay"
-                style="padding-bottom: calc(1.25rem + env(safe-area-inset-bottom))">
-                <h2 class="mb-4 text-base font-semibold">{{ $t('worker.add_expense') }}</h2>
-                <form @submit.prevent="submitExpense" class="space-y-3">
+                <!-- Expense section -->
+                <p class="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">{{ $t('worker.add_expense') }}</p>
+                <div class="space-y-3 mb-5">
                     <div class="grid grid-cols-2 gap-3">
-                        <div>
-                            <label class="mb-1 block text-xs text-ink-soft">{{ $t('worker.expense_date') }}</label>
-                            <VInput v-model="expenseForm.date" type="date" />
-                        </div>
                         <div>
                             <label class="mb-1 block text-xs text-ink-soft">{{ $t('worker.expense_amount') }}</label>
                             <VInput v-model="expenseForm.amount" type="number" step="0.01" min="0.01" placeholder="0.00" />
                         </div>
+                        <div>
+                            <label class="mb-1 block text-xs text-ink-soft">{{ $t('worker.expense_category') }}</label>
+                            <VSelect v-model="expenseForm.category">
+                                <option value="transport">{{ $t('worker.expense_cat_transport') }}</option>
+                                <option value="materials">{{ $t('worker.expense_cat_materials') }}</option>
+                                <option value="tools">{{ $t('worker.expense_cat_tools') }}</option>
+                                <option value="food">{{ $t('worker.expense_cat_food') }}</option>
+                                <option value="other">{{ $t('worker.expense_cat_other') }}</option>
+                            </VSelect>
+                        </div>
                     </div>
-
-                    <div>
-                        <label class="mb-1 block text-xs text-ink-soft">{{ $t('worker.expense_category') }}</label>
-                        <VSelect v-model="expenseForm.category">
-                            <option value="transport">{{ $t('worker.expense_cat_transport') }}</option>
-                            <option value="materials">{{ $t('worker.expense_cat_materials') }}</option>
-                            <option value="tools">{{ $t('worker.expense_cat_tools') }}</option>
-                            <option value="food">{{ $t('worker.expense_cat_food') }}</option>
-                            <option value="other">{{ $t('worker.expense_cat_other') }}</option>
-                        </VSelect>
-                    </div>
-
                     <div>
                         <label class="mb-1 block text-xs text-ink-soft">{{ $t('worker.expense_description') }}</label>
                         <VTextarea v-model="expenseForm.description" :rows="2" :placeholder="$t('worker.expense_desc_placeholder')" />
                     </div>
-
                     <div>
                         <label class="mb-1 block text-xs text-ink-soft">{{ $t('worker.expense_receipt') }}</label>
                         <input type="file" accept="image/*,application/pdf"
                             class="block w-full text-sm text-ink-soft file:mr-3 file:rounded-md file:border-0 file:bg-accent-soft file:px-3 file:py-1 file:text-sm file:text-accent"
                             @change="onReceiptChange" />
                     </div>
+                </div>
 
-                    <div class="flex gap-2 pt-1">
-                        <VButton variant="ghost" class="flex-1" type="button" @click="expenseOpen = false">
-                            {{ $t('common.cancel') }}
-                        </VButton>
-                        <VButton class="flex-1" type="submit">
-                            {{ $t('worker.expense_submit') }}
-                        </VButton>
-                    </div>
-                </form>
+                <div class="flex gap-2">
+                    <VButton variant="ghost" class="flex-1" type="button" @click="checkOutOpen = false">
+                        {{ $t('common.cancel') }}
+                    </VButton>
+                    <VButton variant="secondary" class="flex-1" :loading="busy" @click="submitCheckOut">
+                        {{ $t('worker.check_out') }}
+                    </VButton>
+                </div>
             </div>
         </div>
     </WorkerLayout>
