@@ -1317,6 +1317,8 @@ return [
         'tab_mileage' => 'Kilometraje',
         'tab_fines' => 'Multas',
         'tab_fuel' => 'Combustible',
+        'active_sessions' => 'Vehículos en uso',
+        'recent_sessions' => 'Actividad reciente',
         'tab_sessions' => 'Uso por empleado',
         'session_taken_at' => 'Tomado',
         'session_returned_at' => 'Devuelto',

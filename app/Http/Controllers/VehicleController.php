@@ -16,6 +16,7 @@ use App\Models\VehicleDailyAssignment;
 use App\Models\VehicleFine;
 use App\Models\VehicleFuelRecord;
 use App\Models\VehicleMaintenanceHistory;
+use App\Models\VehicleSession;
 use App\Services\Vehicles\VehicleCompliance;
 use App\Services\Vehicles\VehicleService;
 use Illuminate\Database\Eloquent\Builder;
@@ -54,8 +55,52 @@ class VehicleController extends Controller
             ->withQueryString()
             ->through(fn (Vehicle $v): array => $this->row($v));
 
+        // Vehicle IDs scoped to this company (CompanyScope already applied on Vehicle)
+        $vehicleIds = Vehicle::query()->pluck('id');
+
+        $activeSessions = VehicleSession::query()
+            ->whereIn('vehicle_id', $vehicleIds)
+            ->whereNull('returned_at')
+            ->with(['employee:id,full_name', 'vehicle:id,plate_number,brand,model'])
+            ->orderBy('taken_at')
+            ->get()
+            ->map(fn (VehicleSession $s): array => [
+                'id' => $s->id,
+                'employee' => $s->employee?->full_name,
+                'vehicle_id' => $s->vehicle_id,
+                'plate_number' => $s->vehicle?->plate_number,
+                'brand' => $s->vehicle?->brand,
+                'model' => $s->vehicle?->model,
+                'taken_at' => $s->taken_at->toDateTimeString(),
+                'starting_mileage' => $s->starting_mileage,
+            ])
+            ->values();
+
+        $recentSessions = VehicleSession::query()
+            ->whereIn('vehicle_id', $vehicleIds)
+            ->whereNotNull('returned_at')
+            ->with(['employee:id,full_name', 'vehicle:id,plate_number,brand,model'])
+            ->orderBy('returned_at', 'desc')
+            ->limit(30)
+            ->get()
+            ->map(fn (VehicleSession $s): array => [
+                'id' => $s->id,
+                'employee' => $s->employee?->full_name,
+                'vehicle_id' => $s->vehicle_id,
+                'plate_number' => $s->vehicle?->plate_number,
+                'brand' => $s->vehicle?->brand,
+                'model' => $s->vehicle?->model,
+                'taken_at' => $s->taken_at->toDateTimeString(),
+                'returned_at' => $s->returned_at?->toDateTimeString(),
+                'km_driven' => $s->km_driven,
+                'return_notes' => $s->return_notes,
+            ])
+            ->values();
+
         return Inertia::render('Vehicles/Index', [
             'vehicles' => $vehicles,
+            'activeSessions' => $activeSessions,
+            'recentSessions' => $recentSessions,
             'filters' => $request->only(['search', 'ownership', 'active', 'compliance', 'per_page']),
             'employees' => Employee::query()->orderBy('full_name')->get(['id', 'full_name']),
             'ownerships' => array_map(fn (VehicleOwnership $o): string => $o->value, VehicleOwnership::cases()),

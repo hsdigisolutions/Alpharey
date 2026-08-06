@@ -4,7 +4,7 @@
  * vehicle's insurance/ITV expiries, graded server-side by VehicleCompliance
  * on the same traffic light as documents.
  */
-import { reactive, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
 import { ensureCompanySelected } from '@/composables/useCompanyGate';
 import AppLayout from '@/Layouts/AppLayout.vue';
@@ -24,6 +24,8 @@ import VToggle from '@/Components/ui/VToggle.vue';
 
 const props = defineProps({
     vehicles: { type: Object, required: true },
+    activeSessions: { type: Array, required: true },
+    recentSessions: { type: Array, required: true },
     filters: { type: Object, required: true },
     employees: { type: Array, required: true },
     ownerships: { type: Array, required: true },
@@ -31,6 +33,25 @@ const props = defineProps({
     vehicleTypes: { type: Array, required: true },
     can: { type: Object, required: true },
 });
+
+/* ---------- live elapsed timer (updates every 30 s) ---------- */
+const now = ref(Date.now());
+let ticker;
+onMounted(() => { ticker = setInterval(() => { now.value = Date.now(); }, 30000); });
+onBeforeUnmount(() => clearInterval(ticker));
+
+function elapsed(takenAt) {
+    const secs = Math.floor((now.value - new Date(takenAt)) / 1000);
+    const h = Math.floor(secs / 3600);
+    const m = Math.floor((secs % 3600) / 60);
+    if (h === 0) return `${m}m`;
+    return `${h}h ${m > 0 ? m + 'm' : ''}`.trim();
+}
+
+function timeOnly(dt) {
+    if (!dt) return '—';
+    return dt.slice(11, 16); // "HH:MM" from "YYYY-MM-DD HH:MM:SS"
+}
 
 const filters = reactive({
     search: props.filters.search ?? '',
@@ -89,6 +110,95 @@ const columns = [
             <VButton v-if="can.create" icon="plus" @click="open()"><Bilingual k="vehicles.new" inline /></VButton>
         </VPageHeader>
 
+        <!-- ══════════ Active Sessions ══════════ -->
+        <section v-if="activeSessions.length" class="mb-8">
+            <div class="mb-3 flex items-center gap-2">
+                <span class="relative flex h-2.5 w-2.5">
+                    <span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-status-ok opacity-60"></span>
+                    <span class="relative inline-flex h-2.5 w-2.5 rounded-full bg-status-ok"></span>
+                </span>
+                <Bilingual k="vehicles.active_sessions" class="text-[13px] font-semibold text-status-ok" />
+                <span class="text-[12px] font-medium text-status-ok opacity-70">({{ activeSessions.length }})</span>
+            </div>
+
+            <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                <Link v-for="s in activeSessions" :key="s.id" :href="`/vehicles/${s.vehicle_id}`"
+                    class="group relative overflow-hidden rounded-xl border border-status-ok/30 bg-status-ok-soft p-4 transition hover:border-status-ok/60 hover:shadow-card">
+                    <!-- Elapsed badge -->
+                    <div class="absolute end-3 top-3 rounded-full bg-status-ok px-2.5 py-0.5 text-[11px] font-bold text-white tabular-nums">
+                        {{ elapsed(s.taken_at) }}
+                    </div>
+
+                    <!-- Worker -->
+                    <p class="mb-0.5 text-[11px] font-semibold uppercase tracking-widest text-status-ok/70">
+                        <Bilingual k="employees.title" inline />
+                    </p>
+                    <p class="mb-4 text-base font-bold text-status-ok">{{ s.employee ?? '—' }}</p>
+
+                    <!-- Vehicle -->
+                    <div class="flex items-baseline gap-2">
+                        <span class="rounded-md bg-status-ok/15 px-2 py-0.5 font-mono text-[13px] font-bold tracking-wider text-status-ok">
+                            {{ s.plate_number }}
+                        </span>
+                        <span class="text-sm text-status-ok/80">{{ [s.brand, s.model].filter(Boolean).join(' ') || '—' }}</span>
+                    </div>
+
+                    <!-- Meta row -->
+                    <div class="mt-3 flex items-center gap-4 text-[12px] text-status-ok/70">
+                        <span>
+                            <span class="opacity-60"><Bilingual k="vehicles.session_taken_at" inline /> </span>
+                            <span class="tabular-nums font-medium">{{ timeOnly(s.taken_at) }}</span>
+                        </span>
+                        <span>
+                            <span class="opacity-60"><Bilingual k="vehicles.starting_mileage" inline /> </span>
+                            <span class="tabular-nums font-medium">{{ s.starting_mileage != null ? s.starting_mileage.toLocaleString() + ' km' : '—' }}</span>
+                        </span>
+                    </div>
+                </Link>
+            </div>
+        </section>
+
+        <!-- ══════════ Recent Returns ══════════ -->
+        <section v-if="recentSessions.length" class="mb-8">
+            <div class="mb-3 flex items-center gap-2">
+                <AppIcon name="vehicles" class="h-4 w-4 text-muted" />
+                <Bilingual k="vehicles.recent_sessions" class="text-[13px] font-semibold text-ink-soft" />
+            </div>
+
+            <div class="overflow-hidden rounded-xl border border-line bg-surface-raised">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="border-b border-line bg-surface-sunken text-[11px] font-semibold uppercase tracking-wide text-muted">
+                            <th class="px-4 py-2.5 text-start"><Bilingual k="employees.title" inline /></th>
+                            <th class="px-4 py-2.5 text-start"><Bilingual k="vehicles.plate_number" inline /></th>
+                            <th class="tabular-nums px-4 py-2.5 text-start"><Bilingual k="vehicles.session_taken_at" inline /></th>
+                            <th class="tabular-nums px-4 py-2.5 text-start"><Bilingual k="vehicles.session_returned_at" inline /></th>
+                            <th class="tabular-nums px-4 py-2.5 text-end"><Bilingual k="vehicles.session_km_driven" inline /></th>
+                            <th class="px-4 py-2.5 text-start"><Bilingual k="vehicles.session_notes" inline /></th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-line">
+                        <tr v-for="s in recentSessions" :key="s.id"
+                            class="cursor-pointer transition hover:bg-surface-hover"
+                            @click="router.get(`/vehicles/${s.vehicle_id}`)">
+                            <td class="px-4 py-2.5 font-medium">{{ s.employee ?? '—' }}</td>
+                            <td class="px-4 py-2.5">
+                                <span class="rounded-md bg-surface-sunken px-1.5 py-0.5 font-mono text-[12px] font-semibold">
+                                    {{ s.plate_number }}
+                                </span>
+                                <span class="ms-1.5 text-ink-soft">{{ [s.brand, s.model].filter(Boolean).join(' ') }}</span>
+                            </td>
+                            <td class="tabular-nums px-4 py-2.5 text-ink-soft">{{ s.taken_at.slice(0, 16).replace('T', ' ') }}</td>
+                            <td class="tabular-nums px-4 py-2.5 text-ink-soft">{{ s.returned_at ? s.returned_at.slice(0, 16).replace('T', ' ') : '—' }}</td>
+                            <td class="tabular-nums px-4 py-2.5 text-end font-medium">{{ s.km_driven != null ? s.km_driven + ' km' : '—' }}</td>
+                            <td class="max-w-48 truncate px-4 py-2.5 text-ink-soft">{{ s.return_notes ?? '—' }}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- ══════════ Fleet list ══════════ -->
         <div class="flex flex-wrap items-end gap-2 pb-3">
             <VSearchInput v-model="filters.search" class="w-full sm:w-72" :placeholder="$t('vehicles.search')"
                 @update:model-value="apply()" />

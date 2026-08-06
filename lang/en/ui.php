@@ -1316,6 +1316,8 @@ return [
         'tab_mileage' => 'Mileage',
         'tab_fines' => 'Fines',
         'tab_fuel' => 'Fuel',
+        'active_sessions' => 'Vehicles in use',
+        'recent_sessions' => 'Recent activity',
         'tab_sessions' => 'Worker sessions',
         'session_taken_at' => 'Taken',
         'session_returned_at' => 'Returned',
