@@ -40,6 +40,7 @@ const props = defineProps({
     paymentMethods: { type: Array, required: true },
     paymentStatuses: { type: Array, required: true },
     statuses: { type: Array, required: true },
+    editing: { type: Object, default: null },
     can: { type: Object, required: true },
 });
 
@@ -123,6 +124,68 @@ function runDelete() { confirm.value.fn?.(); confirm.value.open = false; }
 function destroy(row) {
     askDelete(row.reference ?? row.number ?? '',
         () => router.delete(`/invoices/${row.id}`, { preserveScroll: true }));
+}
+
+function openEdit(row) {
+    editingId.value = row.id;
+    router.get(`/invoices/${row.id}`, {}, {
+        only: ['editing'],
+        preserveScroll: true,
+        preserveState: true,
+        onSuccess: () => {
+            const e = props.editing;
+            if (!e) return;
+            Object.assign(form, {
+                type: e.type,
+                sub_type: e.sub_type,
+                client_id: e.client_id ?? '',
+                vendor_id: e.vendor_id ?? '',
+                project_id: e.project_id ?? '',
+                invoice_date: e.invoice_date,
+                due_date: e.due_date ?? null,
+                billing_type: e.billing_type ?? '',
+                billing_period: e.billing_period ?? '',
+                vat_rate: e.vat_rate ?? null,
+                discount_type: e.discount_type ?? '',
+                discount_value: e.discount_value,
+                retention_percent: e.retention_percent,
+                status: e.status,
+                payment_method: e.payment_method ?? '',
+                payment_date: e.payment_date ?? null,
+                notes: e.notes ?? '',
+                lines: e.lines?.length
+                    ? e.lines.map((l) => ({ description: l.description, quantity: l.quantity, unit_price: l.unit_price }))
+                    : [{ description: '', quantity: 1, unit_price: 0 }],
+            });
+            form.clearErrors();
+            panelOpen.value = true;
+        },
+    });
+}
+
+/* ---------- payment log (edit mode only) ---------- */
+const payForm = useForm({ amount: '', payment_date: '', payment_method: '', reference: '' });
+const editingPayments = computed(() => props.editing?.payments ?? []);
+
+function logPayment() {
+    payForm.post(`/invoices/${editingId.value}/payments`, {
+        preserveScroll: true,
+        preserveState: true,
+        onSuccess: () => {
+            payForm.reset();
+            router.get(`/invoices/${editingId.value}`, {}, { only: ['editing'], preserveScroll: true, preserveState: true });
+        },
+    });
+}
+
+function deletePayment(paymentId) {
+    router.delete(`/payments/${paymentId}`, {
+        preserveScroll: true,
+        preserveState: true,
+        onSuccess: () => {
+            router.get(`/invoices/${editingId.value}`, {}, { only: ['editing'], preserveScroll: true, preserveState: true });
+        },
+    });
 }
 
 /* ---------- live preview of the server's arithmetic ---------- */
@@ -226,6 +289,10 @@ const columns = computed(() => [
                 </td>
                 <td class="px-3 py-2.5 text-end">
                     <span class="flex items-center justify-end gap-1.5">
+                        <button v-if="can.edit" class="rounded-sm p-1.5 text-muted hover:text-ink"
+                            :title="$t('invoices.edit')" @click="openEdit(r)">
+                            <AppIcon name="edit" class="h-3.5 w-3.5" />
+                        </button>
                         <a v-if="can.export" :href="`/invoices/${r.id}/pdf`" class="rounded-sm p-1.5 text-muted hover:text-ink" title="PDF">
                             <AppIcon name="download" class="h-3.5 w-3.5" />
                         </a>
@@ -357,6 +424,60 @@ const columns = computed(() => [
 
                 <FormField k="invoices.notes"><VTextarea v-model="form.notes" :rows="2" /></FormField>
             </form>
+
+            <!-- ══════════ Payments (edit mode only) ══════════ -->
+            <template v-if="editingId">
+                <div class="mt-6 border-t border-line pt-5 space-y-3">
+                    <Bilingual k="invoices.payments" class="text-[13px] font-semibold" />
+
+                    <!-- Existing payments list -->
+                    <div v-if="editingPayments.length" class="space-y-1">
+                        <div v-for="p in editingPayments" :key="p.id"
+                            class="flex items-center justify-between rounded-md border border-line bg-surface-sunken px-3 py-2 text-sm">
+                            <span class="tabular-nums font-medium">{{ eur(p.amount) }}</span>
+                            <span class="text-ink-soft">{{ p.payment_date }}</span>
+                            <span class="text-ink-soft">{{ p.payment_method ?? '—' }}</span>
+                            <span class="text-ink-soft">{{ p.reference ?? '—' }}</span>
+                            <button v-if="can.edit" class="rounded-sm p-1 text-muted hover:text-status-danger"
+                                @click="deletePayment(p.id)">
+                                <AppIcon name="trash" class="h-3.5 w-3.5" />
+                            </button>
+                        </div>
+                    </div>
+                    <p v-else class="text-sm text-muted">
+                        <Bilingual k="invoices.no_payments" inline />
+                    </p>
+
+                    <!-- Log payment mini-form -->
+                    <div v-if="can.edit" class="rounded-lg border border-line bg-surface-raised p-3 space-y-3">
+                        <Bilingual k="invoices.add_payment" class="text-xs font-semibold uppercase tracking-wide text-muted" />
+                        <div class="grid gap-2 sm:grid-cols-2">
+                            <FormField k="invoices.amount" :error="payForm.errors.amount" required>
+                                <VInput v-model="payForm.amount" type="number" step="0.01" min="0.01" />
+                            </FormField>
+                            <FormField k="invoices.payment_date" :error="payForm.errors.payment_date" required>
+                                <VDateInput v-model="payForm.payment_date" />
+                            </FormField>
+                            <FormField k="invoices.payment_method" :error="payForm.errors.payment_method">
+                                <VSelect v-model="payForm.payment_method">
+                                    <option value="">—</option>
+                                    <option v-for="m in paymentMethods" :key="m" :value="m">
+                                        {{ $t(`invoices.payment_method_${m}`) }}
+                                    </option>
+                                </VSelect>
+                            </FormField>
+                            <FormField k="invoices.reference" :error="payForm.errors.reference">
+                                <VInput v-model="payForm.reference" />
+                            </FormField>
+                        </div>
+                        <div class="flex justify-end">
+                            <VButton variant="secondary" size="sm" :loading="payForm.processing" @click="logPayment">
+                                <Bilingual k="invoices.add_payment" inline />
+                            </VButton>
+                        </div>
+                    </div>
+                </div>
+            </template>
 
             <template #footer>
                 <VButton variant="ghost" @click="panelOpen = false"><Bilingual k="common.cancel" inline /></VButton>

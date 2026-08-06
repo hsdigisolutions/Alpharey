@@ -1546,6 +1546,9 @@ return [
         'payment_paid' => 'Paid',
         'payment_pending' => 'Pending',
         'payment_method' => 'Payment method',
+        'payment_method_bank_transfer' => 'Bank transfer',
+        'payment_method_cash' => 'Cash',
+        'payment_method_cash_via_supervisor' => 'Cash via supervisor',
         'payment_date' => 'Payment date',
         'lines' => 'Line items',
         'description' => 'Description',
@@ -1560,6 +1563,7 @@ return [
         'paid_amount' => 'Paid',
         'notes' => 'Notes',
         'pdf' => 'PDF',
+        'no_payments' => 'No payments recorded yet.',
         'no_rows' => 'No invoices yet.',
     ],
 

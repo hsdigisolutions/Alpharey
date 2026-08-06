@@ -1547,6 +1547,9 @@ return [
         'payment_paid' => 'Pagada',
         'payment_pending' => 'Pendiente',
         'payment_method' => 'Forma de pago',
+        'payment_method_bank_transfer' => 'Transferencia bancaria',
+        'payment_method_cash' => 'Efectivo',
+        'payment_method_cash_via_supervisor' => 'Efectivo vía supervisor',
         'payment_date' => 'Fecha de pago',
         'lines' => 'Líneas',
         'description' => 'Descripción',
@@ -1561,6 +1564,7 @@ return [
         'paid_amount' => 'Pagado',
         'notes' => 'Notas',
         'pdf' => 'PDF',
+        'no_payments' => 'Sin pagos registrados / No payments recorded',
         'no_rows' => 'Sin facturas todavía.',
     ],
 
