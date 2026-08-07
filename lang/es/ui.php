@@ -460,8 +460,10 @@ return [
         'note_deleted' => 'Nota eliminada / Note deleted',
         'add_call' => 'Registrar llamada',
         'remarks' => 'Comentarios',
-        'follow_up' => 'Fecha de seguimiento',
+        'follow_up' => 'Seguimiento',
         'call_saved' => 'Llamada registrada / Call logged',
+        'no_calls' => 'Sin llamadas registradas',
+        'no_remarks' => 'Sin comentarios',
     ],
 
     'documents' => [

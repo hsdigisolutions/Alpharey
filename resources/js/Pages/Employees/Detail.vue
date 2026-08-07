@@ -98,6 +98,20 @@ function deleteRate(rate) {
         () => router.delete(`/employees/${props.employee.id}/wage-rates/${rate.id}`, { preserveScroll: true }));
 }
 
+// --- Calls timeline helpers ---
+function callDateTime(value) {
+    if (!value) return '';
+    const d = new Date(value.replace(' ', 'T'));
+    return d.toLocaleString('es-ES', {
+        day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
+    });
+}
+
+function followUpOverdue(value) {
+    if (!value) return false;
+    return new Date(`${value}T00:00:00`) < new Date(new Date().toDateString());
+}
+
 const infoRows = [
     { k: 'employees.code', v: props.employee.employee_code },
     { k: 'employees.nif', v: props.employee.nif },
@@ -360,30 +374,54 @@ function destroy() {
             </div>
 
             <!-- Llamadas -->
-            <div v-else-if="tab === 'calls'" class="grid gap-5 lg:grid-cols-[1fr_320px]">
-                <VCard>
-                    <VTimeline v-if="calls.length">
-                        <VTimelineItem v-for="call in calls" :key="call.id"
-                            :time="call.called_at" :author="call.called_by"
-                            type-label="Llamada / Call" type-status="accent">
-                            {{ call.remarks }}
-                            <span v-if="call.follow_up_date" class="mt-1 block text-xs text-status-warn">
-                                <Bilingual k="employees.follow_up" inline /> {{ call.follow_up_date }}
+            <div v-else-if="tab === 'calls'" class="grid gap-5 lg:grid-cols-[1fr_340px]">
+                <!-- Call log timeline: a connected rail of call cards -->
+                <div v-if="calls.length" class="relative ps-2">
+                    <span class="absolute inset-y-3 start-[19px] w-px bg-line" aria-hidden="true" />
+                    <ul class="space-y-3">
+                        <li v-for="call in calls" :key="call.id" class="relative flex gap-3">
+                            <span class="relative z-10 mt-3 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-accent-soft bg-accent-soft text-accent ring-4 ring-surface">
+                                <AppIcon name="calls" class="h-4 w-4" />
                             </span>
-                        </VTimelineItem>
-                    </VTimeline>
-                    <VEmptyState v-else icon="calls" />
-                </VCard>
-                <VCard title-key="employees.add_call">
+                            <div class="min-w-0 flex-1 rounded-lg border border-line bg-surface-raised p-3.5 shadow-card">
+                                <div class="flex items-baseline justify-between gap-3">
+                                    <span class="truncate text-sm font-semibold text-ink">{{ call.called_by ?? '—' }}</span>
+                                    <time class="tabular-nums shrink-0 text-xs text-muted">{{ callDateTime(call.called_at) }}</time>
+                                </div>
+                                <p v-if="call.remarks" class="mt-1.5 whitespace-pre-line text-sm leading-relaxed text-ink-soft">{{ call.remarks }}</p>
+                                <p v-else class="mt-1.5 text-sm italic text-muted"><Bilingual k="employees.no_remarks" /></p>
+                                <div v-if="call.follow_up_date"
+                                    class="mt-2.5 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium"
+                                    :class="followUpOverdue(call.follow_up_date)
+                                        ? 'bg-status-danger-soft text-status-danger'
+                                        : 'bg-status-warn-soft text-status-warn'">
+                                    <AppIcon name="calendar" class="h-3.5 w-3.5" />
+                                    <Bilingual k="employees.follow_up" inline />
+                                    <span class="tabular-nums">· {{ call.follow_up_date }}</span>
+                                </div>
+                            </div>
+                        </li>
+                    </ul>
+                </div>
+                <VCard v-else><VEmptyState icon="calls" title-key="employees.no_calls" /></VCard>
+
+                <!-- Log-a-call composer -->
+                <VCard class="h-fit">
+                    <div class="mb-4 flex items-center gap-2.5">
+                        <span class="flex h-8 w-8 items-center justify-center rounded-md bg-accent-soft text-accent">
+                            <AppIcon name="calls" class="h-4 w-4" />
+                        </span>
+                        <h3 class="text-[15px] font-semibold"><Bilingual k="employees.add_call" /></h3>
+                    </div>
                     <form class="space-y-3" @submit.prevent="submitCall">
                         <FormField k="employees.remarks" :error="callForm.errors.remarks" required>
-                            <VTextarea v-model="callForm.remarks" :rows="3" />
+                            <VTextarea v-model="callForm.remarks" :rows="4" />
                         </FormField>
                         <FormField k="employees.follow_up" :error="callForm.errors.follow_up_date">
                             <VDateInput v-model="callForm.follow_up_date" />
                         </FormField>
-                        <VButton type="submit" class="w-full" :loading="callForm.processing">
-                            <Bilingual k="common.save" inline />
+                        <VButton type="submit" icon="calls" class="w-full" :loading="callForm.processing">
+                            <Bilingual k="employees.add_call" inline />
                         </VButton>
                     </form>
                 </VCard>
