@@ -286,6 +286,7 @@ return [
         'ntype_leave_pending' => 'Ausencia pendiente',
         'ntype_project_alert' => 'Alerta de proyecto',
         'ntype_deployment_event' => 'Evento de desplazamiento',
+        'ntype_worker_gps_missing' => 'Fichaje sin ubicación GPS',
         'host' => 'Servidor SMTP',
         'port' => 'Puerto',
         'username' => 'Usuario',
@@ -1293,6 +1294,18 @@ return [
         // Feature 4 — vehículos
         'my_expenses' => 'Mis gastos',
         'expenses_none' => 'Sin gastos enviados',
+        // Fix D — check-in confirmation + check-out day summary
+        'checkin_confirmed' => 'Entrada registrada',
+        'checkin_time' => 'Hora de entrada',
+        'location_captured' => 'Ubicación capturada',
+        'location_not_captured' => 'Ubicación no capturada. El administrador será notificado.',
+        'worked_so_far' => 'Tiempo trabajado',
+        'checkout_summary' => 'Resumen de la jornada',
+        'summary_entry' => 'Entrada',
+        'summary_exit' => 'Salida',
+        'summary_hours' => 'Horas trabajadas',
+        'summary_amount' => 'Importe del día',
+        'confirm_check_out' => 'Confirmar salida',
         'privacy' => [
             'title' => 'Protección de datos',
             'subtitle' => 'Antes de fichar, lea esta información',

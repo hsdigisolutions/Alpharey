@@ -8,6 +8,7 @@ use App\Http\Requests\Worker\PunchRequest;
 use App\Models\Advance;
 use App\Models\Attendance;
 use App\Models\Employee;
+use App\Models\Project;
 use App\Models\Scopes\CompanyScope;
 use App\Models\WorkerExpense;
 use App\Services\Workers\WorkerAttendanceService;
@@ -151,9 +152,11 @@ class WorkerController extends Controller
     }
 
     /**
-     * Today's status for the home screen — enough for the button to know what
-     * it should offer next. No pay figure here; that lives on the dashboard
-     * behind its own shaping (Phase D).
+     * Today's status for the home screen — enough for the check-in confirmation
+     * card and the check-out day summary. The project name is loaded with the
+     * tenant scope DROPPED: a worker has no CRM session, so a scoped read comes
+     * back null (the same bug the dashboard calendar hit). The pay figure is the
+     * worker's OWN, shown only once the day is closed.
      *
      * @return array<string, mixed>
      */
@@ -167,12 +170,25 @@ class WorkerController extends Controller
             return ['state' => 'absent', 'note' => $today->worker_note];
         }
 
+        $project = $today->project_id !== null
+            ? Project::query()
+                ->withoutGlobalScope(CompanyScope::class)
+                ->where('id', $today->project_id)
+                ->value('name')
+            : null;
+
         return [
             'state' => $today->check_out !== null ? 'checked_out' : 'checked_in',
             'attendance_id' => $today->id,
             'check_in' => $today->check_in,
             'check_out' => $today->check_out,
             'hours' => $today->check_out !== null ? (float) $today->hours_worked : null,
+            'project' => $project,
+            // Evidence the GPS fix landed — drives the "ubicación capturada"
+            // line and the amber "no capturada" warning on the confirmation.
+            'location_captured' => $today->check_in_lat !== null && $today->check_in_lng !== null,
+            // The day's earnings — only meaningful once checked out.
+            'amount' => $today->check_out !== null ? (float) $today->total_amount : null,
         ];
     }
 

@@ -17,6 +17,7 @@ enum NotificationType: string
     case LeavePending = 'leave_pending';
     case ProjectAlert = 'project_alert';
     case DeploymentEvent = 'deployment_event';
+    case WorkerGpsMissing = 'worker_gps_missing';
 
     /**
      * The default recipient roles for each type when no rule has been set.

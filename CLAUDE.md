@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Status: Phase 9 in progress — hardening (2026-08-01)
 
 **Every screen 01–26 is built (Phase 8 complete).** Phase 9 is hardening, UAT, and
-launch — no new screens. Current: **663 Pest tests / 3884 assertions passing (1
+launch — no new screens. Current: **702 Pest tests / 4094 assertions passing (1
 skipped) · Pint clean · Larastan level 6 clean · `composer audit` + `npm audit`
 clean · production Vite build working.**
 
@@ -68,6 +68,31 @@ through AttendanceService clears `is_auto_generated` (a human now owns it).
 Calendars shade an auto-absence lighter red than a manual one (grid + employee
 tab); the employee-tab absences card shows the auto count. `--date=Y-m-d` runs a
 back-date for testing. Tests: `AutoAbsentTest` (6).
+
+### Worker check-in/out flow rework (2026-08-08)
+
+No migration — UI + one notification type. `WorkerController::todayPayload()`
+enriched: `project` (loaded with `CompanyScope` DROPPED — a worker has no CRM
+session, so a scoped read returns null), `location_captured`
+(`check_in_lat`/`check_in_lng` both set), and `amount` (`total_amount`, only once
+`check_out` is set). `Worker/Home.vue`:
+- **Check-in confirmation card** (state `checked_in`): entry time, project, a LIVE
+  "tiempo trabajado" counter ticking from `check_in` (`setInterval`, cleared on
+  unmount), and a green "Ubicación capturada" line OR an amber "Ubicación no
+  capturada — el administrador será notificado" warning.
+- **Check-out day summary**: the check-out sheet shows entry + project + live
+  worked time BEFORE confirming (button relabelled "Confirmar salida"); the closed
+  state (`checked_out`) shows the full summary — entrada / salida / horas / proyecto
+  / **importe del día** (the worker's own pay, shown once the day is closed).
+- **GPS-missing admin alert**: `WorkerAttendanceService::checkIn()` dispatches
+  `NotificationType::WorkerGpsMissing` (new case, default role Admin, appears in the
+  Settings matrix automatically via `NotificationRules::matrix()`) through
+  `NotificationDispatcher` when the punch recorded `location_denied`. GPS stays
+  EVIDENCE not a gate — the punch always stands; the alert just stops an admin being
+  blind to a location-less check-in. Recipients resolved by the matrix (never by
+  hand). Tests: two added to `WorkerAttendanceTest` (admins notified on denied /
+  nothing sent when a fix lands) + one to `WorkerDashboardTest` for the enriched
+  calendar cell. **702 pass / 4094 assertions.**
 
 ### Worker PWA calendar polish (2026-08-07)
 

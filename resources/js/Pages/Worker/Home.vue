@@ -7,7 +7,7 @@
  * out, or report an absence. The screen shows exactly one primary action at a
  * time based on today's state from the server.
  */
-import { computed, nextTick, ref } from 'vue';
+import { computed, nextTick, onUnmounted, ref } from 'vue';
 import { Head, router, useForm, usePage } from '@inertiajs/vue3';
 import { t } from '@/translate';
 import { getLocation } from '@/composables/useGeolocation';
@@ -49,6 +49,25 @@ function hoursHM(h) {
     const mm = Math.round((Math.max(0, Number(h) || 0) - hh) * 60);
     return `${hh}h ${String(mm).padStart(2, '0')}m`;
 }
+
+// Live "time worked so far" while checked in — a ticking counter from the
+// recorded check-in time, so the worker sees the day accumulate before the
+// check-out summary. Only runs while the day is open.
+const nowTs = ref(Date.now());
+let ticker = null;
+if (props.today.state === 'checked_in') {
+    ticker = setInterval(() => { nowTs.value = Date.now(); }, 1000);
+}
+onUnmounted(() => { if (ticker) clearInterval(ticker); });
+
+const workedSoFar = computed(() => {
+    if (!props.today.check_in) return hoursHM(0);
+    const [hh, mm] = String(props.today.check_in).split(':').map(Number);
+    const start = new Date();
+    start.setHours(hh, mm, 0, 0);
+    const diff = (nowTs.value - start.getTime()) / 3600000;
+    return hoursHM(diff > 0 ? diff : 0);
+});
 
 // --- Check IN: selfie, then a GPS fix, then submit ---
 const camera = ref(null);
@@ -264,20 +283,78 @@ const noteTextForm = useForm({ attendance_id: null, text_note: '', duration_seco
             </div>
         </template>
 
-        <!-- STATE: checked in → check out -->
+        <!-- STATE: checked in → confirmation card + live counter, then check out -->
         <template v-else-if="today.state === 'checked_in'">
+            <div class="mb-4 rounded-lg border border-status-ok/40 bg-status-ok-soft p-4 shadow-card">
+                <div class="mb-3 flex items-center gap-2">
+                    <span class="flex h-6 w-6 items-center justify-center rounded-full bg-status-ok text-xs text-on-accent">✓</span>
+                    <span class="text-sm font-semibold text-status-ok">{{ $t('worker.checkin_confirmed') }}</span>
+                </div>
+                <dl class="space-y-1.5 text-sm">
+                    <div class="flex items-center justify-between">
+                        <dt class="text-ink-soft">{{ $t('worker.checkin_time') }}</dt>
+                        <dd class="tabular-nums font-medium text-ink">{{ today.check_in }}</dd>
+                    </div>
+                    <div v-if="today.project" class="flex items-center justify-between">
+                        <dt class="text-ink-soft">{{ $t('worker.detail_project') }}</dt>
+                        <dd class="font-medium text-ink">{{ today.project }}</dd>
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <dt class="text-ink-soft">{{ $t('worker.worked_so_far') }}</dt>
+                        <dd class="tabular-nums font-semibold text-status-ok">{{ workedSoFar }}</dd>
+                    </div>
+                </dl>
+                <p v-if="today.location_captured" class="mt-3 flex items-center gap-1.5 text-xs text-status-ok">
+                    <span>📍</span>{{ $t('worker.location_captured') }}
+                </p>
+                <p v-else class="mt-3 flex items-center gap-1.5 rounded-md bg-status-warn-soft px-2 py-1.5 text-xs text-status-warn">
+                    <span>⚠️</span>{{ $t('worker.location_not_captured') }}
+                </p>
+            </div>
+
             <p v-if="statusLine" class="mb-2 text-center text-xs text-muted">{{ statusLine }}</p>
             <VButton variant="secondary" class="w-full" size="lg" :loading="busy" @click="openCheckOut">
                 {{ $t('worker.check_out') }}
             </VButton>
         </template>
 
-        <!-- STATE: done or absent → nothing more to do today -->
+        <!-- STATE: checked out → the closed-day summary with the day's total -->
+        <div v-else-if="today.state === 'checked_out'" class="space-y-3">
+            <div class="rounded-lg border border-line bg-surface-raised p-4 shadow-card">
+                <p class="mb-3 text-center text-sm font-semibold text-ink">{{ $t('worker.checkout_summary') }}</p>
+                <dl class="space-y-1.5 text-sm">
+                    <div class="flex items-center justify-between">
+                        <dt class="text-ink-soft">{{ $t('worker.summary_entry') }}</dt>
+                        <dd class="tabular-nums font-medium text-ink">{{ today.check_in }}</dd>
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <dt class="text-ink-soft">{{ $t('worker.summary_exit') }}</dt>
+                        <dd class="tabular-nums font-medium text-ink">{{ today.check_out }}</dd>
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <dt class="text-ink-soft">{{ $t('worker.summary_hours') }}</dt>
+                        <dd class="tabular-nums font-medium text-ink">{{ hoursHM(today.hours) }}</dd>
+                    </div>
+                    <div v-if="today.project" class="flex items-center justify-between">
+                        <dt class="text-ink-soft">{{ $t('worker.detail_project') }}</dt>
+                        <dd class="font-medium text-ink">{{ today.project }}</dd>
+                    </div>
+                    <div v-if="today.amount !== null" class="mt-1 flex items-center justify-between border-t border-line pt-2">
+                        <dt class="font-medium text-accent">{{ $t('worker.summary_amount') }}</dt>
+                        <dd class="tabular-nums text-lg font-semibold text-accent">{{ eur(today.amount) }}</dd>
+                    </div>
+                </dl>
+            </div>
+            <div class="rounded-lg border border-line bg-surface-raised p-4 text-center text-sm text-ink-soft shadow-card">
+                {{ $t('worker.done_for_today') }}
+            </div>
+        </div>
+
+        <!-- STATE: absent → nothing more to do today -->
         <div v-else class="space-y-3">
             <div class="rounded-lg border border-line bg-surface-raised p-5 text-center text-sm text-ink-soft shadow-card">
                 {{ $t('worker.done_for_today') }}
             </div>
-
         </div>
 
         <!-- Feature 4: Vehicle link -->
@@ -362,7 +439,23 @@ const noteTextForm = useForm({ attendance_id: null, text_note: '', duration_seco
         <div v-if="checkOutOpen" class="fixed inset-0 z-40 flex items-end bg-black/40" @click.self="checkOutOpen = false">
             <div class="w-full rounded-t-xl bg-surface-raised shadow-overlay"
                 style="max-height: 88vh; overflow-y: auto; padding: 1.25rem; padding-bottom: calc(1.25rem + env(safe-area-inset-bottom))">
-                <h2 class="mb-5 text-base font-semibold">{{ $t('worker.check_out') }}</h2>
+                <h2 class="mb-4 text-base font-semibold">{{ $t('worker.check_out') }}</h2>
+
+                <!-- Day summary before confirming: what the worker is closing out. -->
+                <dl class="mb-5 space-y-1.5 rounded-lg border border-line bg-surface-sunken p-3 text-sm">
+                    <div class="flex items-center justify-between">
+                        <dt class="text-ink-soft">{{ $t('worker.summary_entry') }}</dt>
+                        <dd class="tabular-nums font-medium text-ink">{{ today.check_in }}</dd>
+                    </div>
+                    <div v-if="today.project" class="flex items-center justify-between">
+                        <dt class="text-ink-soft">{{ $t('worker.detail_project') }}</dt>
+                        <dd class="font-medium text-ink">{{ today.project }}</dd>
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <dt class="text-ink-soft">{{ $t('worker.worked_so_far') }}</dt>
+                        <dd class="tabular-nums font-semibold text-accent">{{ workedSoFar }}</dd>
+                    </div>
+                </dl>
 
                 <!-- Note section -->
                 <p class="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">{{ $t('worker.voice_note') }}</p>
@@ -395,7 +488,7 @@ const noteTextForm = useForm({ attendance_id: null, text_note: '', duration_seco
                         {{ $t('common.cancel') }}
                     </VButton>
                     <VButton variant="secondary" class="flex-1" :loading="busy" @click="submitCheckOut">
-                        {{ $t('worker.check_out') }}
+                        {{ $t('worker.confirm_check_out') }}
                     </VButton>
                 </div>
             </div>

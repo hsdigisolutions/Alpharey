@@ -4,10 +4,12 @@ namespace App\Services\Workers;
 
 use App\Enums\AttendanceMode;
 use App\Enums\AttendanceStatus;
+use App\Enums\NotificationType;
 use App\Models\Attendance;
 use App\Models\Employee;
 use App\Models\Scopes\CompanyScope;
 use App\Services\Attendance\AttendanceService;
+use App\Services\Notifications\NotificationDispatcher;
 use App\Support\PeriodLock;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
@@ -35,6 +37,7 @@ class WorkerAttendanceService
     public function __construct(
         private readonly AttendanceService $attendance,
         private readonly PeriodLock $lock,
+        private readonly NotificationDispatcher $notifications,
     ) {}
 
     /**
@@ -62,7 +65,7 @@ class WorkerAttendanceService
         // is harmless; a row referencing a missing file is not.
         $photoPath = $this->storePhoto($employee, $photo);
 
-        return DB::transaction(function () use ($employee, $today, $location, $photoPath): Attendance {
+        $attendance = DB::transaction(function () use ($employee, $today, $location, $photoPath): Attendance {
             // createForWorker() bypasses resolveEmployee() which requires a CRM
             // session (CurrentCompany) that workers never have. The employee is
             // already verified by WorkerController — pass it directly.
@@ -82,6 +85,31 @@ class WorkerAttendanceService
 
             return $attendance;
         });
+
+        // GPS is evidence, not a gate: the punch stood, but a check-in with no
+        // location leaves the admin blind to where the worker was — so notify
+        // the company's admins (delivery governed by the Settings matrix).
+        if ($attendance->location_denied) {
+            $this->notifyGpsMissing($employee);
+        }
+
+        return $attendance;
+    }
+
+    /**
+     * Alert the company's admins that a worker checked in without a GPS fix.
+     * Routed through the dispatcher so the notification matrix (Screen 26)
+     * controls who receives it — a sender never picks recipients by hand.
+     */
+    private function notifyGpsMissing(Employee $employee): void
+    {
+        $this->notifications->dispatch(NotificationType::WorkerGpsMissing, $employee->company_id, [
+            'title_es' => "{$employee->full_name} fichó sin ubicación GPS",
+            'title_en' => "{$employee->full_name} checked in without GPS location",
+            'entity' => $employee->full_name,
+            'company' => $employee->company?->name,
+            'url' => null,
+        ]);
     }
 
     /**

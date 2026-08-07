@@ -284,6 +284,7 @@ return [
         'ntype_leave_pending' => 'Leave pending',
         'ntype_project_alert' => 'Project alert',
         'ntype_deployment_event' => 'Deployment event',
+        'ntype_worker_gps_missing' => 'Check-in without GPS location',
         'host' => 'SMTP host',
         'port' => 'Port',
         'username' => 'Username',
@@ -1292,6 +1293,18 @@ return [
         // Feature 4 — vehicles
         'my_expenses' => 'My expenses',
         'expenses_none' => 'No expenses submitted yet',
+        // Fix D — check-in confirmation + check-out day summary
+        'checkin_confirmed' => 'Checked in',
+        'checkin_time' => 'Check-in time',
+        'location_captured' => 'Location captured',
+        'location_not_captured' => 'Location not captured. The administrator will be notified.',
+        'worked_so_far' => 'Time worked',
+        'checkout_summary' => 'Day summary',
+        'summary_entry' => 'Check-in',
+        'summary_exit' => 'Check-out',
+        'summary_hours' => 'Hours worked',
+        'summary_amount' => 'Day total',
+        'confirm_check_out' => 'Confirm check-out',
         'privacy' => [
             'title' => 'Data protection',
             'subtitle' => 'Before you clock in, please read this',

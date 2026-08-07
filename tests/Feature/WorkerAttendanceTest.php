@@ -6,9 +6,11 @@ use App\Models\Company;
 use App\Models\Employee;
 use App\Models\LockedPeriod;
 use App\Models\User;
+use App\Notifications\SystemNotification;
 use App\Services\Workers\WorkerAccountService;
 use App\Support\PeriodLock;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Storage;
 
 /**
@@ -69,6 +71,29 @@ it('records the punch but flags it when location is denied', function (): void {
     expect($row->status)->toBe(AttendanceStatus::Present)
         ->and($row->location_denied)->toBeTrue()
         ->and($row->check_in_lat)->toBeNull();
+});
+
+it('notifies the company admins when a worker checks in without GPS', function (): void {
+    Notification::fake();
+
+    $this->actingAs($this->worker)->post('/worker/check-in', ['denied' => true])->assertRedirect();
+
+    // The company admin (created in beforeEach) is a recipient of the
+    // worker_gps_missing type by its coded default (Admin role).
+    Notification::assertSentTo(
+        User::where('role', 'admin')->where('company_id', $this->company->id)->get(),
+        SystemNotification::class,
+    );
+});
+
+it('does not raise the GPS alert when a location is captured', function (): void {
+    Notification::fake();
+
+    $this->actingAs($this->worker)->post('/worker/check-in', [
+        'lat' => 40.4168, 'lng' => -3.7038, 'accuracy' => 10, 'denied' => false,
+    ])->assertRedirect();
+
+    Notification::assertNothingSent();
 });
 
 it('refuses a second check-in on the same day', function (): void {
