@@ -9,6 +9,21 @@ launch — no new screens. Current: **663 Pest tests / 3884 assertions passing (
 skipped) · Pint clean · Larastan level 6 clean · `composer audit` + `npm audit`
 clean · production Vite build working.**
 
+### Employee detail — Asistencia tab (2026-08-07)
+
+Screen 06's Asistencia tab (was "coming soon") is now a per-employee month
+calendar. `EmployeeController@show` builds `attendanceTab` (Monday-first grid +
+monthly summary: present / hours / overtime / absences / leaves / total wage),
+gated by `attendance.view`; the wage total is null without `payroll.view ||
+employees.edit`. Month navigation and cell-edit use Inertia PARTIAL reloads
+(`only: ['attendanceTab']` / `['attendanceEditing']`, `att_month` / `att_edit`
+query params) so the tab updates without a full page load. A deployed worker's
+host-logged days count too (query drops the tenant scope, pins to `employee_id`).
+The shared `AttendanceModal` is reused (this employee pre-selected); "Nueva
+Asistencia" creates, clicking a day edits. Cell colours reuse the day-type
+palette + purple for weekend work + grey for empty weekends. Tests:
+`EmployeeAttendanceTabTest` (3 tests — grid+summary, wage-gating, view-gating).
+
 ### Day types for daily workers — dehadi (2026-08-07)
 
 A daily (dehadi) worker is paid by the JORNADA, not the hour. Attendance now

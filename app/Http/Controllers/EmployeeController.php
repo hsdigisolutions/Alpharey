@@ -5,9 +5,11 @@ namespace App\Http\Controllers;
 use App\Enums\WageType;
 use App\Http\Requests\Employees\StoreEmployeeRequest;
 use App\Http\Requests\Employees\UpdateEmployeeRequest;
+use App\Models\Attendance;
 use App\Models\Employee;
 use App\Models\EmployeeWageRate;
 use App\Models\Payroll;
+use App\Models\Project;
 use App\Models\UserColumnSetting;
 use App\Services\Documents\DocumentStatus;
 use App\Services\Employees\EmployeeQueryFilter;
@@ -16,6 +18,7 @@ use App\Services\Employees\WageRateService;
 use App\Support\DocumentTypes;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Gate;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -148,6 +151,16 @@ class EmployeeController extends Controller
             'payroll' => $canSeeWages ? $this->payrollRows($employee) : [],
             // Historial de Salario — the effective-dated wage timeline.
             'wageHistory' => $canSeeWages ? $this->wageHistoryRows($employee, $wageRates) : [],
+            // Asistencia tab — per-employee month grid + summary (attendance.view gated).
+            'attendanceTab' => Gate::allows('attendance.view')
+                ? $this->attendanceTabPayload($employee, $request->string('att_month')->value() ?: now()->format('Y-m'), $canSeeWages)
+                : null,
+            'attendanceEditing' => Gate::allows('attendance.view') && $request->filled('att_edit')
+                ? $this->attendanceEditingPayload($employee, (int) $request->integer('att_edit'), $canSeeWages)
+                : null,
+            'attendanceProjects' => Gate::allows('attendance.view') ? $this->attendanceProjects() : [],
+            'attendanceEmployee' => Gate::allows('attendance.view') ? $this->attendanceEmployeePayload($employee, $canSeeWages) : null,
+            'canManageAttendance' => Gate::allows('attendance.create'),
             'canSeeWages' => $canSeeWages,
             'can' => [
                 'edit' => Gate::allows('employees.edit'),
@@ -207,6 +220,147 @@ class EmployeeController extends Controller
                 'is_current' => $r->id === $currentId,
             ])
             ->all();
+    }
+
+    /**
+     * The Asistencia tab: this employee's month grid + monthly summary. A
+     * deployed worker's host-logged days count too, so the query drops the
+     * tenant scope and pins to the employee (their pay is home-company's).
+     *
+     * @return array<string, mixed>
+     */
+    private function attendanceTabPayload(Employee $employee, string $month, bool $canSeeWages): array
+    {
+        $start = Carbon::createFromFormat('Y-m', $month)->startOfMonth();
+        $end = $start->copy()->endOfMonth();
+
+        $records = Attendance::query()->withoutGlobalScopes()
+            ->where('employee_id', $employee->id)
+            ->whereBetween('date', [$start->toDateString(), $end->toDateString()])
+            ->with('project:id,name')
+            ->get();
+
+        $grid = [];
+        foreach ($records as $r) {
+            $grid[(int) $r->date->format('j')] = [
+                'id' => $r->id,
+                'status' => $r->status->value,
+                'day_type' => $r->day_type?->value,
+                'hours' => (float) $r->hours_worked,
+                'quantity' => $r->quantity !== null ? (float) $r->quantity : null,
+                'project' => $r->project?->name,
+                'total' => $canSeeWages ? (float) $r->total_amount : null,
+            ];
+        }
+
+        $weekend = [];
+        for ($d = 1; $d <= $start->daysInMonth; $d++) {
+            $weekend[$d] = $start->copy()->day($d)->isWeekend();
+        }
+
+        // status is an enum cast, so compare ->value (the Phase 4 grid-summary bug).
+        $worked = $records->filter(fn (Attendance $r) => in_array($r->status->value, ['present', 'late', 'early_leave'], true));
+
+        return [
+            'month' => $month,
+            'days_in_month' => $start->daysInMonth,
+            'weekend' => $weekend,
+            'grid' => $grid,
+            'summary' => [
+                'present' => $worked->count(),
+                'hours' => round((float) $records->sum(fn (Attendance $r) => (float) $r->hours_worked), 2),
+                'overtime' => round((float) $records->sum(fn (Attendance $r) => (float) $r->overtime_hours), 2),
+                'absences' => $records->filter(fn (Attendance $r) => $r->status->value === 'absent')->count(),
+                'leaves' => $records->filter(fn (Attendance $r) => $r->status->value === 'leave')->count(),
+                'total_wage' => $canSeeWages ? round((float) $records->sum(fn (Attendance $r) => (float) $r->total_amount), 2) : null,
+            ],
+        ];
+    }
+
+    /**
+     * The edit payload for one of THIS employee's attendance days (cell click).
+     *
+     * @return array<string, mixed>|null
+     */
+    private function attendanceEditingPayload(Employee $employee, int $attendanceId, bool $canSeeWages): ?array
+    {
+        $a = Attendance::query()->withoutGlobalScopes()
+            ->where('employee_id', $employee->id)
+            ->find($attendanceId);
+
+        if ($a === null) {
+            return null;
+        }
+
+        return [
+            'id' => $a->id,
+            'employee_id' => $a->employee_id,
+            'project_id' => $a->project_id,
+            'date' => $a->date->toDateString(),
+            'mode' => $a->mode->value,
+            'day_type' => $a->day_type?->value,
+            'check_in' => $a->check_in,
+            'check_out' => $a->check_out,
+            'break_hours' => (float) $a->break_hours,
+            'deduct_break' => $a->deduct_break,
+            'hours_worked' => (float) $a->hours_worked,
+            'quantity' => $a->quantity !== null ? (float) $a->quantity : null,
+            'overtime_hours' => (float) $a->overtime_hours,
+            'status' => $a->status->value,
+            'total_amount' => $canSeeWages ? (float) $a->total_amount : null,
+            'manual_wage_override' => $a->manual_wage_override,
+            'is_paid' => $a->is_paid,
+            'is_exception' => $a->is_exception,
+            'exception_reason' => $a->exception_reason,
+            'notes' => $a->notes,
+        ];
+    }
+
+    /**
+     * Projects for the attendance modal's dropdown.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function attendanceProjects(): array
+    {
+        return Project::query()->with('client:id,company_name')->orderBy('name')
+            ->get(['id', 'name', 'client_id'])
+            ->map(fn (Project $p): array => [
+                'id' => $p->id,
+                'name' => $p->name,
+                'client_name' => $p->client?->company_name,
+            ])->all();
+    }
+
+    /**
+     * This employee shaped for the attendance modal (single-row dropdown), with
+     * the wage bases the day-type preview needs when the viewer may see pay.
+     *
+     * @return array<string, mixed>
+     */
+    private function attendanceEmployeePayload(Employee $employee, bool $canSeeWages): array
+    {
+        $row = [
+            'id' => $employee->id,
+            'full_name' => $employee->full_name,
+            'designation' => $employee->designation,
+        ];
+
+        if ($canSeeWages) {
+            $daily = $employee->getAttribute('daily_wage');
+            $hourly = $employee->getAttribute('wage_rate');
+            $perMeter = $employee->getAttribute('per_meter_rate');
+            $row['daily_rate'] = $daily !== null ? round((float) $daily, 2) : null;
+            $row['per_meter_rate'] = $perMeter !== null ? round((float) $perMeter, 2) : null;
+            $row['hourly_rate_raw'] = $hourly !== null ? round((float) $hourly, 2) : null;
+            $row['hourly_rate'] = match ($employee->wage_type) {
+                WageType::Hourly => $hourly !== null ? round((float) $hourly, 2) : null,
+                WageType::Daily => $daily !== null ? round((float) $daily / 8, 2) : null,
+                default => $hourly !== null ? round((float) $hourly, 2) : null,
+            };
+        }
+
+        return $row;
     }
 
     public function store(StoreEmployeeRequest $request, EmployeeService $service): RedirectResponse

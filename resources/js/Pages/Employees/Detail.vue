@@ -4,11 +4,12 @@
  * Documentos, Notas, Llamadas. Asistencia + Nómina are placeholders
  * until Phases 4/6. Edit opens the shared modal (never a separate page).
  */
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { Head, router, useForm } from '@inertiajs/vue3';
 import { t } from '@/translate';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import AppIcon from '@/Components/AppIcon.vue';
+import AttendanceModal from '@/Components/Attendance/AttendanceModal.vue';
 import EmployeeFormModal from '@/Components/Employees/EmployeeFormModal.vue';
 import WageRateFormModal from '@/Components/Employees/WageRateFormModal.vue';
 import DocumentsPanel from '@/Components/Documents/DocumentsPanel.vue';
@@ -36,6 +37,11 @@ const props = defineProps({
     calls: { type: Array, required: true },
     payroll: { type: Array, default: () => [] },
     wageHistory: { type: Array, default: () => [] },
+    attendanceTab: { type: Object, default: null },
+    attendanceEditing: { type: Object, default: null },
+    attendanceProjects: { type: Array, default: () => [] },
+    attendanceEmployee: { type: Object, default: null },
+    canManageAttendance: { type: Boolean, default: false },
     appAccess: { type: Object, default: () => ({ email: null, active: false }) },
     canSeeWages: { type: Boolean, default: false },
     can: { type: Object, required: true },
@@ -111,6 +117,94 @@ function followUpOverdue(value) {
     if (!value) return false;
     return new Date(`${value}T00:00:00`) < new Date(new Date().toDateString());
 }
+
+// --- Asistencia tab ---
+const showAttModal = ref(false);
+const attNewDate = ref(null);
+const attWeekdays = ['L', 'M', 'X', 'J', 'V', 'S', 'D'];
+
+const attStatusStyle = {
+    late: 'bg-status-warn-soft text-status-warn',
+    early_leave: 'bg-status-warn-soft text-status-warn',
+    absent: 'bg-status-danger-soft text-status-danger',
+    leave: 'bg-status-info-soft text-status-info',
+};
+const attDayTypeStyle = {
+    full: 'bg-status-ok-soft text-status-ok',
+    half: 'bg-status-warn-soft text-status-warn',
+    hourly: 'bg-status-info-soft text-status-info',
+    per_meter: 'bg-accent-soft text-accent',
+};
+
+// Calendar cells, Monday-first, with leading blanks for alignment.
+const attCalendar = computed(() => {
+    if (!props.attendanceTab) return [];
+    const [y, m] = props.attendanceTab.month.split('-').map(Number);
+    const lead = (new Date(y, m - 1, 1).getDay() + 6) % 7; // Mon=0
+    const cells = [];
+    for (let i = 0; i < lead; i++) cells.push({ day: null });
+    for (let d = 1; d <= props.attendanceTab.days_in_month; d++) cells.push({ day: d });
+    return cells;
+});
+
+function attCellClass(day) {
+    const cell = props.attendanceTab.grid[day];
+    const wknd = props.attendanceTab.weekend[day];
+    if (!cell) return wknd ? 'bg-surface-sunken/50 text-faint' : 'hover:bg-surface-sunken text-muted';
+    if (cell.status !== 'present') return attStatusStyle[cell.status] ?? attDayTypeStyle.full;
+    if (wknd) return 'bg-accent-soft text-accent'; // weekend work (purple/coral)
+    return attDayTypeStyle[cell.day_type] ?? attDayTypeStyle.full;
+}
+
+function attCellMarker(day) {
+    const cell = props.attendanceTab.grid[day];
+    if (!cell) return '';
+    if (props.attendanceTab.weekend[day] && cell.status === 'present') return 'FS';
+    if (cell.status === 'absent') return 'A';
+    if (cell.status === 'leave') return 'V';
+    switch (cell.day_type) {
+        case 'full': return 'C';
+        case 'half': return 'M';
+        case 'per_meter': return cell.quantity ?? '·';
+        default: return cell.hours;
+    }
+}
+
+function attMonthNav(delta) {
+    const [y, m] = props.attendanceTab.month.split('-').map(Number);
+    const d = new Date(y, m - 1 + delta, 1);
+    const month = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    router.get(`/employees/${props.employee.id}`, { att_month: month },
+        { only: ['attendanceTab'], preserveState: true, preserveScroll: true });
+}
+
+function openAttCell(day) {
+    const cell = props.attendanceTab.grid[day];
+    if (cell) {
+        router.get(`/employees/${props.employee.id}`,
+            { att_month: props.attendanceTab.month, att_edit: cell.id },
+            { only: ['attendanceEditing'], preserveState: true, preserveScroll: true });
+    } else {
+        attNewDate.value = `${props.attendanceTab.month}-${String(day).padStart(2, '0')}`;
+        showAttModal.value = true;
+    }
+}
+
+function openAttNew() {
+    attNewDate.value = `${props.attendanceTab.month}-01`;
+    showAttModal.value = true;
+}
+
+function closeAttModal() {
+    showAttModal.value = false;
+    attNewDate.value = null;
+    // Drop the editing payload and refresh the grid (covers a just-saved change).
+    router.get(`/employees/${props.employee.id}`, { att_month: props.attendanceTab?.month },
+        { only: ['attendanceTab', 'attendanceEditing'], preserveState: true, preserveScroll: true });
+}
+
+// Open the modal in edit mode once the server hands back the day's payload.
+watch(() => props.attendanceEditing, (v) => { if (v) showAttModal.value = true; });
 
 const infoRows = [
     { k: 'employees.code', v: props.employee.employee_code },
@@ -294,12 +388,82 @@ function destroy() {
                 entity-type="employee" :entity-id="employee.id"
                 :documents="documents" :sets="documentSets" :can="can" />
 
-            <!-- Asistencia placeholder (the standalone grid is canonical) -->
-            <VCard v-else-if="tab === 'attendance'">
-                <p class="py-8 text-center text-sm text-muted">
-                    <Bilingual k="common.coming_soon" class="items-center" />
-                </p>
-            </VCard>
+            <!-- Asistencia — per-employee month calendar + summary -->
+            <div v-else-if="tab === 'attendance'">
+                <VCard v-if="!attendanceTab">
+                    <VEmptyState icon="attendance" title-key="attendance.no_access" />
+                </VCard>
+                <template v-else>
+                    <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+                        <div class="flex items-center gap-2">
+                            <VButton variant="secondary" size="sm" icon="chevron-left" @click="attMonthNav(-1)" />
+                            <span class="min-w-32 text-center text-sm font-semibold tabular-nums">{{ attendanceTab.month }}</span>
+                            <VButton variant="secondary" size="sm" icon="chevron-right" @click="attMonthNav(1)" />
+                        </div>
+                        <VButton v-if="canManageAttendance" size="sm" icon="plus" @click="openAttNew">
+                            <Bilingual k="attendance.new" inline />
+                        </VButton>
+                    </div>
+
+                    <VCard>
+                        <!-- Weekday header -->
+                        <div class="mb-1 grid grid-cols-7 gap-1 text-center text-[11px] font-medium uppercase text-muted">
+                            <span v-for="(w, i) in attWeekdays" :key="i">{{ w }}</span>
+                        </div>
+                        <!-- Calendar grid -->
+                        <div class="grid grid-cols-7 gap-1">
+                            <template v-for="(c, i) in attCalendar" :key="i">
+                                <span v-if="c.day === null" />
+                                <button v-else type="button"
+                                    class="relative flex aspect-square flex-col items-center justify-center rounded-md text-xs transition-colors"
+                                    :class="attCellClass(c.day)"
+                                    :title="attendanceTab.grid[c.day]?.project ?? ''"
+                                    @click="openAttCell(c.day)">
+                                    <span class="absolute start-1 top-0.5 text-[9px] opacity-60">{{ c.day }}</span>
+                                    <span class="tabular-nums font-semibold">{{ attCellMarker(c.day) }}</span>
+                                </button>
+                            </template>
+                        </div>
+                        <!-- Legend -->
+                        <div class="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted">
+                            <span><span class="inline-block h-2 w-2 rounded-full bg-status-ok"></span> C · <Bilingual k="attendance.day_type_full" inline /></span>
+                            <span><span class="inline-block h-2 w-2 rounded-full bg-status-warn"></span> M · <Bilingual k="attendance.day_type_half" inline /></span>
+                            <span><span class="inline-block h-2 w-2 rounded-full bg-status-info"></span> <Bilingual k="attendance.day_type_hourly" inline /></span>
+                            <span><span class="inline-block h-2 w-2 rounded-full bg-accent"></span> FS · <Bilingual k="attendance.weekend" inline /></span>
+                            <span><span class="inline-block h-2 w-2 rounded-full bg-status-danger"></span> A · <Bilingual k="attendance.status_absent" inline /></span>
+                            <span><span class="inline-block h-2 w-2 rounded-full bg-status-info"></span> V · <Bilingual k="attendance.status_leave" inline /></span>
+                        </div>
+                    </VCard>
+
+                    <!-- Monthly summary -->
+                    <div class="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+                        <div class="rounded-lg border border-line bg-surface-raised p-3">
+                            <p class="text-xs text-muted"><Bilingual k="attendance.sum_present" /></p>
+                            <p class="tabular-nums mt-1 text-lg font-semibold">{{ attendanceTab.summary.present }}</p>
+                        </div>
+                        <div class="rounded-lg border border-line bg-surface-raised p-3">
+                            <p class="text-xs text-muted"><Bilingual k="attendance.sum_hours" /></p>
+                            <p class="tabular-nums mt-1 text-lg font-semibold">{{ attendanceTab.summary.hours }}</p>
+                        </div>
+                        <div class="rounded-lg border border-line bg-surface-raised p-3">
+                            <p class="text-xs text-muted"><Bilingual k="attendance.sum_overtime" /></p>
+                            <p class="tabular-nums mt-1 text-lg font-semibold">{{ attendanceTab.summary.overtime }}</p>
+                        </div>
+                        <div class="rounded-lg border border-line bg-surface-raised p-3">
+                            <p class="text-xs text-muted"><Bilingual k="attendance.sum_absences" /></p>
+                            <p class="tabular-nums mt-1 text-lg font-semibold">{{ attendanceTab.summary.absences }}</p>
+                        </div>
+                        <div class="rounded-lg border border-line bg-surface-raised p-3">
+                            <p class="text-xs text-muted"><Bilingual k="attendance.sum_leaves" /></p>
+                            <p class="tabular-nums mt-1 text-lg font-semibold">{{ attendanceTab.summary.leaves }}</p>
+                        </div>
+                        <div v-if="canSeeWages" class="rounded-lg border border-accent/40 bg-accent-soft p-3">
+                            <p class="text-xs text-accent"><Bilingual k="attendance.sum_total_wage" /></p>
+                            <p class="tabular-nums mt-1 text-lg font-semibold text-accent">{{ eur(attendanceTab.summary.total_wage) }}</p>
+                        </div>
+                    </div>
+                </template>
+            </div>
 
             <!-- Nómina — the employee's payroll history (pay data, gated) -->
             <VCard v-else-if="tab === 'payroll'">
@@ -432,6 +596,16 @@ function destroy() {
 
         <WageRateFormModal v-if="canSeeWages" :open="showWageModal" :employee-id="employee.id"
             :current-type="employee.wage_type" :current-rate="currentRate" @close="showWageModal = false" />
+
+        <AttendanceModal v-if="attendanceEmployee"
+            :open="showAttModal"
+            :record="attendanceEditing"
+            :preset-employee="employee.id"
+            :preset-date="attNewDate"
+            :employees="[attendanceEmployee]"
+            :projects="attendanceProjects"
+            :can-see-wage="canSeeWages"
+            @close="closeAttModal" />
 
         <VConfirmDialog :open="confirm.open" :message="confirm.message" @confirm="runDelete" @cancel="confirm.open = false" />
 
