@@ -52,6 +52,7 @@ const dayTypeStyle = {
 
 function cellClass(cell) {
     if (!cell) return '';
+    if (cell.status === 'absent' && cell.is_auto) return 'bg-status-danger-soft/40 text-status-danger/70';
     if (cell.status !== 'present') return cellStyle[cell.status] ?? cellStyle.present;
     if (cell.is_weekend) return 'bg-accent-soft text-accent'; // voluntary weekend work
     return dayTypeStyle[cell.day_type] ?? cellStyle.present;

@@ -36,6 +36,7 @@ use Illuminate\Support\Carbon;
  * @property numeric-string $overtime_hours
  * @property numeric-string $total_amount
  * @property bool $manual_wage_override
+ * @property bool $is_auto_generated
  * @property bool $is_paid
  * @property Carbon|null $check_in_at
  * @property Carbon|null $check_out_at
@@ -91,6 +92,7 @@ class Attendance extends Model
             'hourly_rate_snapshot' => 'decimal:2',
             'total_amount' => 'decimal:2',
             'manual_wage_override' => 'boolean',
+            'is_auto_generated' => 'boolean',
             'is_paid' => 'boolean',
             'is_exception' => 'boolean',
             // Worker PWA capture (set by WorkerAttendanceService, never mass

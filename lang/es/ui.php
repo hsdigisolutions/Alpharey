@@ -786,6 +786,7 @@ return [
         'sum_leaves' => 'Permisos',
         'sum_half_days' => 'Medias jornadas',
         'sum_total_wage' => 'Salario total',
+        'auto' => 'auto',
         'rate_applied' => 'Tarifa aplicada:',
         'since' => 'desde',
         'amount_calc' => 'Importe calculado:',

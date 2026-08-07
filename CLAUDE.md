@@ -54,6 +54,21 @@ the bulk "Vino / No vino / No convocado" distinction has no data difference (No
 vino/No convocado both = no record, no penalty), so selection = "came"; the notice
 explains it. Follow-up if the client wants those states persisted.
 
+### Nightly auto-absent sweep (2026-08-08)
+
+`attendance:auto-absent` (scheduled `dailyAt('23:59')->timezone('Europe/Madrid')`
+in `routes/console.php`) books an automatic absence for every active employee in
+every active company (company = not soft-deleted) that has no attendance row on a
+WEEKDAY. Migration `2026_08_08_000001` adds `is_auto_generated` (NOT fillable —
+set only in the command). Skips: weekends; a day that already has any row
+(approved leave writes a Leave row, so it's covered); inactive employees;
+new hires whose `joining_date` is after the day. The row is `status=absent`,
+0 hours / 0 pay, `notes = 'Ausencia automática — sin registro'`. Editing it
+through AttendanceService clears `is_auto_generated` (a human now owns it).
+Calendars shade an auto-absence lighter red than a manual one (grid + employee
+tab); the employee-tab absences card shows the auto count. `--date=Y-m-d` runs a
+back-date for testing. Tests: `AutoAbsentTest` (6).
+
 ### Worker PWA calendar polish (2026-08-07)
 
 - **Language mix fixed**: the month label (`Agosto 2026`) was hardcoded to Spanish

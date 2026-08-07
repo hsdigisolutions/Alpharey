@@ -151,6 +151,8 @@ function attCellClass(day) {
     const cell = props.attendanceTab.grid[day];
     const wknd = props.attendanceTab.weekend[day];
     if (!cell) return wknd ? 'bg-surface-sunken/50 text-faint' : 'hover:bg-surface-sunken text-muted';
+    // An auto-generated absence shows a lighter red than a manual one.
+    if (cell.status === 'absent' && cell.is_auto) return 'bg-status-danger-soft/40 text-status-danger/70';
     if (cell.status !== 'present') return attStatusStyle[cell.status] ?? attDayTypeStyle.full;
     if (wknd) return 'bg-accent-soft text-accent'; // weekend work (purple/coral)
     return attDayTypeStyle[cell.day_type] ?? attDayTypeStyle.full;
@@ -459,7 +461,10 @@ function destroy() {
                         </div>
                         <div class="rounded-lg border border-line bg-surface-raised p-3">
                             <p class="text-xs text-muted"><Bilingual k="attendance.sum_absences" /></p>
-                            <p class="tabular-nums mt-1 text-lg font-semibold">{{ attendanceTab.summary.absences }}</p>
+                            <p class="tabular-nums mt-1 text-lg font-semibold">
+                                {{ attendanceTab.summary.absences }}
+                                <span v-if="attendanceTab.summary.auto_absences" class="text-xs font-normal text-muted">({{ attendanceTab.summary.auto_absences }} {{ $t('attendance.auto') }})</span>
+                            </p>
                         </div>
                         <div class="rounded-lg border border-line bg-surface-raised p-3">
                             <p class="text-xs text-muted"><Bilingual k="attendance.sum_leaves" /></p>

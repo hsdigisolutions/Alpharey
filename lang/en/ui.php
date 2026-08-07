@@ -785,6 +785,7 @@ return [
         'sum_leaves' => 'Leave',
         'sum_half_days' => 'Half days',
         'sum_total_wage' => 'Total wage',
+        'auto' => 'auto',
         'rate_applied' => 'Applied rate:',
         'since' => 'from',
         'amount_calc' => 'Calculated amount:',

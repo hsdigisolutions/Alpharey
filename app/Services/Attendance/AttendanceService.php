@@ -100,6 +100,9 @@ class AttendanceService
 
             $attendance->fill($data);
 
+            // A human is now editing this row — it is no longer an auto-absence.
+            $attendance->is_auto_generated = false;
+
             $this->lock->assertOpen($attendance->company_id, $attendance->date);
 
             // Re-freeze the snapshot if the employee, the date, or the DAY TYPE
