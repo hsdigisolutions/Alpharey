@@ -32,6 +32,7 @@ use Illuminate\Support\Carbon;
  * @property numeric-string $attendance_hours
  * @property numeric-string $overtime_hours
  * @property array<int, string>|null $deployment_notes
+ * @property array<int, array<string, mixed>>|null $rate_periods
  */
 class Payroll extends Model
 {
@@ -49,12 +50,13 @@ class Payroll extends Model
         'wage_rate', 'base_salary', 'days_amount', 'hours_amount', 'overtime_pay',
         'reimbursements', 'project_expenses', 'gross_pay', 'advance_deductions',
         'fine_deductions', 'other_deductions', 'manual_additions', 'net_amount',
+        'rate_periods',
     ];
 
     /** @var list<string> */
     protected $fillable = [
         'employee_id', 'month', 'attendance_days', 'attendance_hours', 'overtime_hours',
-        'wage_type', 'wage_rate', 'base_salary', 'days_amount', 'hours_amount',
+        'wage_type', 'wage_rate', 'base_salary', 'days_amount', 'hours_amount', 'rate_periods',
         'overtime_pay', 'reimbursements', 'project_expenses', 'gross_pay',
         'advance_deductions', 'fine_deductions', 'other_deductions', 'manual_additions',
         'net_amount', 'status', 'payment_method', 'paid_at', 'notes', 'deployment_notes',
@@ -65,6 +67,7 @@ class Payroll extends Model
         'wage_rate', 'base_salary', 'days_amount', 'hours_amount', 'overtime_pay',
         'reimbursements', 'project_expenses', 'gross_pay', 'advance_deductions',
         'fine_deductions', 'other_deductions', 'manual_additions', 'net_amount',
+        'rate_periods',
     ];
 
     protected function casts(): array
@@ -79,6 +82,8 @@ class Payroll extends Model
             'attendance_hours' => 'decimal:2',
             'overtime_hours' => 'decimal:2',
             'deployment_notes' => 'array',
+            // Per-rate period breakdown (contains pay figures) — encrypted JSON
+            'rate_periods' => 'encrypted:array',
             // Money — encrypted at rest
             'wage_rate' => 'encrypted',
             'base_salary' => 'encrypted',

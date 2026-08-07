@@ -5,9 +5,58 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Status: Phase 9 in progress — hardening (2026-08-01)
 
 **Every screen 01–26 is built (Phase 8 complete).** Phase 9 is hardening, UAT, and
-launch — no new screens. Current: **638 Pest tests / 3810 assertions passing (1
+launch — no new screens. Current: **663 Pest tests / 3884 assertions passing (1
 skipped) · Pint clean · Larastan level 6 clean · `composer audit` + `npm audit`
 clean · production Vite build working.**
+
+### Employee Wage History — automatic rate switching (2026-08-07)
+
+A worker's wage rate can change over time (50 €/day → 70 €/day from a date); the
+system now prices each worked day from the rate in force ON that day, automatically,
+across any number of changes. Migrations: `2026_08_07_000001_extend_employee_wage_rates_effective_dating`
+(+`effective_to`, `reason`, `created_by`), `..._000002_backfill_employee_wage_rates`
+(seed/reconcile), `..._000003_add_rate_periods_to_payrolls` (encrypted JSON breakdown).
+Tests: `WageRateTest` (16 tests / 45 assertions). **UI is Spanish-only** (client rule
+2026-08-07): new keys live under `wage_rates.*` in BOTH dictionaries with identical
+Spanish text, so the label stays Spanish under any locale.
+
+**The table existed since Phase 2 but was dormant** — it stored an `is_default` flag
+with `effective_from` only, and nothing read it. This wires it up as a proper
+effective-dated history: each row owns a closed `[effective_from, effective_to]`
+range; exactly ONE row per employee is open (`effective_to = null`) = the rate in
+force today. The single-open invariant lives in **`WageRateService`** (not a DB
+constraint — a partial unique index is not portable to the SQLite test DB, and MySQL
+treats multiple NULLs as distinct anyway).
+
+**`WageRateService` is the single writer.** `rateForDate()` is the spec lookup
+(`effective_from <= date <= effective_to|∞`, newest wins, unscoped by company so a
+deployed worker's home-company rates resolve). `snapshotValues()` is what
+AttendanceService now freezes onto each day — the dated rate if one covers the day,
+else a FALLBACK to the employee's live wage fields that replicates the pre-history
+`applySnapshots` EXACTLY (so factory-made employees with no rate row still price as
+before — this is why every existing attendance/payroll test still passes).
+`createRate()` closes the open row the day before the new one, opens the new one,
+syncs the employee's cached wage columns to today's rate, and reprices UNPAID/unlocked
+attendance from the new date (edge case 2 — a paid month or `PeriodLock`ed month is
+never touched). `deleteRate()` refuses if any attendance falls in the row's range.
+
+**AttendanceService** now delegates `applySnapshots` to `WageRateService::snapshotValues($employee, $date)`
+and re-snapshots on employee OR date change; `recalculateRow()` is the public entry the
+back-dated reprice calls. **EmployeeService** no longer writes wage-rate rows itself —
+create seeds the first rate; a direct wage-field edit on the employee form updates the
+OPEN row in place (a correction to the current rate), never a new dated period. A new
+DATED period is created ONLY through "Nueva Tarifa".
+
+**PayrollService** groups the month's worked days into contiguous rate periods
+(`ratePeriods()`) whenever the frozen rate changes, stored on the new encrypted
+`payrolls.rate_periods` JSON column; period amounts are the SAME `hours × frozen hourly`
+the gross uses, so they reconcile to `days_amount`/`hours_amount` to the cent. Null
+unless ≥2 periods (a real change). Both payslip PDFs render a "Períodos de tarifa"
+section. **Screen 06 Información tab** gained a "Historial de Salario" timeline (coral
+current row + `Actual` badge, muted history) and a "Nueva Tarifa" modal (previous rate
+shown read-only; a back-dated start warns + requires confirmation before repricing).
+Endpoints: `POST /employees/{employee}/wage-rates` · `DELETE …/wage-rates/{wageRate}`
+(both `employees.edit`-gated, tenant-scoped route binding → cross-company 404).
 
 ### Vehicle module extension (2026-07-30)
 

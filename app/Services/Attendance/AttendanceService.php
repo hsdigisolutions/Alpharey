@@ -5,13 +5,13 @@ namespace App\Services\Attendance;
 use App\Enums\AttendanceMode;
 use App\Enums\DeploymentStatus;
 use App\Enums\OvertimePolicyType;
-use App\Enums\WageType;
 use App\Models\Attendance;
 use App\Models\AttendanceLog;
 use App\Models\Employee;
 use App\Models\EmployeeDeployment;
 use App\Models\OvertimePolicy;
 use App\Models\Scopes\CompanyScope;
+use App\Services\Employees\WageRateService;
 use App\Support\CurrentCompany;
 use App\Support\PeriodLock;
 use Illuminate\Support\Facades\Auth;
@@ -31,7 +31,10 @@ use Illuminate\Support\Facades\DB;
  */
 class AttendanceService
 {
-    public function __construct(private readonly PeriodLock $lock) {}
+    public function __construct(
+        private readonly PeriodLock $lock,
+        private readonly WageRateService $wageRates,
+    ) {}
 
     /**
      * @param  array<string, mixed>  $data
@@ -96,9 +99,10 @@ class AttendanceService
 
             $this->lock->assertOpen($attendance->company_id, $attendance->date);
 
-            // Re-freeze the snapshot only if the employee changed; otherwise
-            // the original day-rate stands.
-            if ($attendance->isDirty('employee_id')) {
+            // Re-freeze the snapshot if the employee OR the date changed — the
+            // day's rate follows whichever wage period the new date lands in.
+            // An unchanged row keeps its original frozen rate.
+            if ($attendance->isDirty('employee_id') || $attendance->isDirty('date')) {
                 $employee = $this->resolveEmployee((int) $attendance->employee_id);
                 $this->applySnapshots($attendance, $employee);
             }
@@ -142,28 +146,31 @@ class AttendanceService
         return $employee;
     }
 
-    private function applySnapshots(Attendance $attendance, Employee $employee): void
+    /**
+     * Re-freeze the snapshot and recompute the day total for an existing row,
+     * used when a back-dated wage change reprices UNPAID attendance
+     * (WageRateService::recalculateUnpaidAttendance). Paid/locked days are
+     * filtered out by the caller and never reach here.
+     */
+    public function recalculateRow(Attendance $attendance, Employee $employee): void
     {
-        $attendance->wage_type_snapshot = $employee->wage_type;
+        $this->applySnapshots($attendance, $employee);
+        $this->recompute($attendance);
+        $attendance->save();
 
-        $rate = $employee->getAttribute('wage_rate');
-        $attendance->wage_rate_snapshot = $rate !== null ? (float) $rate : null;
-
-        // Resolve an hourly rate for the day: explicit hourly rate, or derive
-        // a daily wage over the employee's default working hours.
-        $attendance->hourly_rate_snapshot = $this->resolveHourlyRate($employee);
+        $this->log($attendance, 'updated');
     }
 
-    private function resolveHourlyRate(Employee $employee): ?float
+    private function applySnapshots(Attendance $attendance, Employee $employee): void
     {
-        $rate = $employee->getAttribute('wage_rate');
-        $daily = $employee->getAttribute('daily_wage');
+        // The rate FROZEN for this specific day: whichever wage period the
+        // attendance date falls in (WageRateService), falling back to the
+        // employee's live fields when no dated rate covers the day.
+        [$wageType, $wageRate, $hourly] = $this->wageRates->snapshotValues($employee, $attendance->date);
 
-        return match ($employee->wage_type) {
-            WageType::Hourly => $rate !== null ? (float) $rate : null,
-            WageType::Daily => $daily !== null ? round((float) $daily / 8, 2) : null,
-            default => $rate !== null ? (float) $rate : null,
-        };
+        $attendance->wage_type_snapshot = $wageType;
+        $attendance->wage_rate_snapshot = $wageRate;
+        $attendance->hourly_rate_snapshot = $hourly;
     }
 
     /**

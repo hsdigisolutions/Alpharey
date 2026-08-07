@@ -6,11 +6,13 @@ use App\Enums\WageType;
 use App\Http\Requests\Employees\StoreEmployeeRequest;
 use App\Http\Requests\Employees\UpdateEmployeeRequest;
 use App\Models\Employee;
+use App\Models\EmployeeWageRate;
 use App\Models\Payroll;
 use App\Models\UserColumnSetting;
 use App\Services\Documents\DocumentStatus;
 use App\Services\Employees\EmployeeQueryFilter;
 use App\Services\Employees\EmployeeService;
+use App\Services\Employees\WageRateService;
 use App\Support\DocumentTypes;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -88,7 +90,7 @@ class EmployeeController extends Controller
         ]);
     }
 
-    public function show(Request $request, Employee $employee, DocumentStatus $status): Response
+    public function show(Request $request, Employee $employee, DocumentStatus $status, WageRateService $wageRates): Response
     {
         Gate::authorize('employees.view');
 
@@ -144,10 +146,13 @@ class EmployeeController extends Controller
                 ]),
             // Nómina tab — pay data, so only for a wage viewer; empty otherwise.
             'payroll' => $canSeeWages ? $this->payrollRows($employee) : [],
+            // Historial de Salario — the effective-dated wage timeline.
+            'wageHistory' => $canSeeWages ? $this->wageHistoryRows($employee, $wageRates) : [],
             'canSeeWages' => $canSeeWages,
             'can' => [
                 'edit' => Gate::allows('employees.edit'),
                 'delete' => Gate::allows('employees.delete'),
+                'manageWages' => Gate::allows('employees.edit'),
                 'upload' => Gate::allows('documents.upload'),
                 'download' => Gate::allows('documents.download'),
                 'deleteDocs' => Gate::allows('documents.delete'),
@@ -176,6 +181,30 @@ class EmployeeController extends Controller
                 'net_amount' => (float) $p->getAttribute('net_amount'),
                 'status' => $p->status->value,
                 'paid_at' => $p->paid_at?->toDateString(),
+            ])
+            ->all();
+    }
+
+    /**
+     * The effective-dated wage timeline for the Historial de Salario section.
+     * Rates are encrypted at rest and decrypted here, behind the wage gate; the
+     * record covering today is flagged as the current (active) rate.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function wageHistoryRows(Employee $employee, WageRateService $wageRates): array
+    {
+        $currentId = $wageRates->rateForDate($employee->id, now()->toDateString())?->id;
+
+        return $wageRates->history($employee)
+            ->map(fn (EmployeeWageRate $r): array => [
+                'id' => $r->id,
+                'wage_type' => $r->wage_type?->value,
+                'rate' => (float) $r->rate,
+                'effective_from' => $r->effective_from->toDateString(),
+                'effective_to' => $r->effective_to?->toDateString(),
+                'reason' => $r->reason,
+                'is_current' => $r->id === $currentId,
             ])
             ->all();
     }

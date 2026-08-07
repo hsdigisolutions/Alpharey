@@ -139,6 +139,10 @@ class PayrollService
         $daysAmount = $wageType === WageType::Daily ? $baseEarned : 0.0;
         $hoursAmount = $wageType === WageType::Hourly ? $baseEarned : 0.0;
 
+        // When the rate changed mid-month, break the worked days into rate
+        // periods for the payslip. Only meaningful for daily/hourly workers.
+        $ratePeriods = $this->ratePeriods($records, $wageType);
+
         $reimbursements = $this->reimbursementsFor($employee->id, $month)
             + $this->pwaExpensesFor($employee->id, $month);
         $projectExpenses = $this->projectExpensesFor($employee->id, $month);
@@ -169,6 +173,7 @@ class PayrollService
         $payroll->base_salary = (string) round($baseSalary, 2);
         $payroll->days_amount = (string) round($daysAmount, 2);
         $payroll->hours_amount = (string) round($hoursAmount, 2);
+        $payroll->rate_periods = $ratePeriods;
         $payroll->overtime_pay = (string) round($overtimePay, 2);
         $payroll->reimbursements = (string) round($reimbursements, 2);
         $payroll->project_expenses = (string) round($projectExpenses, 2);
@@ -202,6 +207,84 @@ class PayrollService
             ->where('employee_id', $employeeId)
             ->whereBetween('date', [$start, $end])
             ->get();
+    }
+
+    /**
+     * Break the month's worked days into contiguous rate periods, so a payslip
+     * for a worker whose rate changed mid-month shows each stretch separately:
+     *
+     *   Período 1: 01 Jul → 10 Jul  (50,00 €/día)  8 días   400,00 €
+     *   Período 2: 11 Jul → 31 Jul  (70,00 €/día)  15 días  1.050,00 €
+     *
+     * A new period starts whenever the frozen rate on the day changes. Amounts
+     * are the SAME base figure the gross uses (hours × frozen hourly), so the
+     * periods always reconcile to days_amount / hours_amount to the cent.
+     *
+     * Returns null unless there are at least two periods — a single-rate month
+     * needs no breakdown. Only daily/hourly workers have per-day rate periods.
+     *
+     * @param  Collection<int, Attendance>  $records
+     * @return list<array<string, mixed>>|null
+     */
+    private function ratePeriods(Collection $records, ?WageType $wageType): ?array
+    {
+        if ($wageType !== WageType::Daily && $wageType !== WageType::Hourly) {
+            return null;
+        }
+
+        $worked = $records
+            ->filter(fn (Attendance $r) => in_array($r->status->value, self::WORKED, true))
+            ->filter(fn (Attendance $r) => $r->hourly_rate_snapshot !== null)
+            ->sortBy(fn (Attendance $r) => $r->date->toDateString())
+            ->values();
+
+        if ($worked->isEmpty()) {
+            return null;
+        }
+
+        $periods = [];
+        $current = null;
+        $lastKey = null;
+
+        foreach ($worked as $record) {
+            $snapshotType = $record->wage_type_snapshot;
+            $type = $snapshotType !== null ? $snapshotType->value : $wageType->value;
+            $hourly = (float) $record->hourly_rate_snapshot;
+            $key = $type.'|'.number_format($hourly, 4, '.', '');
+            $date = $record->date->toDateString();
+            $base = (float) $record->hours_worked * $hourly;
+
+            if ($key !== $lastKey) {
+                if ($current !== null) {
+                    $periods[] = $current;
+                }
+
+                // Display rate: a daily worker's day-rate is the hourly × 8.
+                $displayRate = $type === WageType::Daily->value ? round($hourly * 8, 2) : round($hourly, 2);
+
+                $current = [
+                    'wage_type' => $type,
+                    'rate' => $displayRate,
+                    'from' => $date,
+                    'to' => $date,
+                    'days' => 0,
+                    'hours' => 0.0,
+                    'amount' => 0.0,
+                ];
+                $lastKey = $key;
+            }
+
+            $current['to'] = $date;
+            $current['days']++;
+            $current['hours'] = round($current['hours'] + (float) $record->hours_worked, 2);
+            $current['amount'] = round($current['amount'] + $base, 2);
+        }
+
+        if ($current !== null) {
+            $periods[] = $current;
+        }
+
+        return count($periods) >= 2 ? $periods : null;
     }
 
     /**

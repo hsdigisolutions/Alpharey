@@ -43,6 +43,29 @@
             <div class="note">{{ $note }}</div>
         @endforeach
 
+        @php $periods = $payroll->rate_periods ?? []; @endphp
+        @if (count($periods) > 1)
+            @php
+                $unit = fn ($t) => $t === 'daily' ? '/día' : ($t === 'hourly' ? '/hora' : '');
+                $fmtDate = fn ($d) => \Illuminate\Support\Carbon::parse($d)->format('d/m/Y');
+            @endphp
+            <table>
+                <tr><td colspan="2"><strong>Períodos de tarifa</strong></td></tr>
+                @foreach ($periods as $i => $p)
+                    <tr>
+                        <td>
+                            Período {{ $i + 1 }}: {{ $fmtDate($p['from']) }} → {{ $fmtDate($p['to']) }}
+                            <span class="muted">
+                                ({{ $eur($p['rate']) }}{{ $unit($p['wage_type']) }} ·
+                                {{ $p['wage_type'] === 'hourly' ? ((float) $p['hours']).' h' : ((int) $p['days']).' días' }})
+                            </span>
+                        </td>
+                        <td class="amount">{{ $eur($p['amount']) }}</td>
+                    </tr>
+                @endforeach
+            </table>
+        @endif
+
         <table>
             <tr><td>Salario base / Sueldo</td><td class="amount">{{ $eur($payroll->base_salary) }}</td></tr>
             <tr>

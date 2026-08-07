@@ -4,18 +4,23 @@ namespace App\Services\Employees;
 
 use App\Models\Employee;
 use App\Models\EmployeeSalaryHistory;
-use App\Models\EmployeeWageRate;
 use App\Support\CurrentCompany;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 
 /**
  * Create/update pipeline: code generation, salary-change history
- * (encrypted, append-only), and the effective-dated wage-rate record
- * consumed by attendance/payroll in later phases.
+ * (encrypted, append-only), and the effective-dated wage-rate record that
+ * AttendanceService freezes onto each worked day. The wage-rate history is
+ * owned by WageRateService (the single-open invariant lives there) — this
+ * service only seeds the first rate on create and keeps the CURRENT rate in
+ * step when the employee form edits wage fields directly. A new DATED period
+ * is created only through the "Nueva Tarifa" flow, never here.
  */
 class EmployeeService
 {
+    public function __construct(private readonly WageRateService $wageRates) {}
+
     private const WAGE_FIELDS = [
         'wage_type', 'wage_rate', 'base_salary', 'daily_wage', 'per_meter_rate', 'commission_percent',
     ];
@@ -32,7 +37,7 @@ class EmployeeService
             $employee->employee_code = Employee::nextCode((int) $companyId);
             $employee->save();
 
-            $this->recordWageRate($employee);
+            $this->wageRates->seedFromEmployee($employee);
 
             return $employee;
         });
@@ -66,33 +71,15 @@ class EmployeeService
 
             $employee->save();
 
+            // A direct wage-field edit is a correction to the CURRENT rate —
+            // update the open record in place rather than opening a new dated
+            // period (that is what "Nueva Tarifa" is for).
             if ($changedWageFields !== []) {
-                $this->recordWageRate($employee);
+                $this->wageRates->syncOpenRateFromEmployee($employee);
             }
 
             return $employee;
         });
-    }
-
-    private function recordWageRate(Employee $employee): void
-    {
-        if ($employee->wage_type === null || $employee->getAttribute('wage_rate') === null) {
-            return;
-        }
-
-        EmployeeWageRate::query()
-            ->where('employee_id', $employee->id)
-            ->update(['is_default' => false]);
-
-        $rate = new EmployeeWageRate([
-            'wage_type' => $employee->wage_type->value,
-            'rate' => (string) $employee->getAttribute('wage_rate'),
-            'effective_from' => now()->toDateString(),
-            'is_default' => true,
-        ]);
-        $rate->employee_id = $employee->id;
-        $rate->company_id = $employee->company_id;
-        $rate->save();
     }
 
     private function stringable(mixed $value): ?string

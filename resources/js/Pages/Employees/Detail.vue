@@ -4,11 +4,13 @@
  * Documentos, Notas, Llamadas. Asistencia + Nómina are placeholders
  * until Phases 4/6. Edit opens the shared modal (never a separate page).
  */
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import { Head, router, useForm } from '@inertiajs/vue3';
 import { t } from '@/translate';
 import AppLayout from '@/Layouts/AppLayout.vue';
+import AppIcon from '@/Components/AppIcon.vue';
 import EmployeeFormModal from '@/Components/Employees/EmployeeFormModal.vue';
+import WageRateFormModal from '@/Components/Employees/WageRateFormModal.vue';
 import DocumentsPanel from '@/Components/Documents/DocumentsPanel.vue';
 import FormField from '@/Components/ui/FormField.vue';
 import VAvatar from '@/Components/ui/VAvatar.vue';
@@ -33,6 +35,7 @@ const props = defineProps({
     notes: { type: Array, required: true },
     calls: { type: Array, required: true },
     payroll: { type: Array, default: () => [] },
+    wageHistory: { type: Array, default: () => [] },
     appAccess: { type: Object, default: () => ({ email: null, active: false }) },
     canSeeWages: { type: Boolean, default: false },
     can: { type: Object, required: true },
@@ -71,6 +74,28 @@ const canSeeWages = props.canSeeWages;
 
 function eur(value) {
     return `${Number(value ?? 0).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`;
+}
+
+// --- Historial de Salario (wage history) ---
+const showWageModal = ref(false);
+
+// The rate in force today — the "previous rate" a new one supersedes.
+const currentRate = computed(() => props.wageHistory.find((r) => r.is_current) ?? null);
+
+function wageDate(value) {
+    if (!value) return t('wage_rates.today');
+    return new Date(`${value}T00:00:00`).toLocaleDateString('es-ES', {
+        day: '2-digit', month: 'short', year: 'numeric',
+    });
+}
+
+function wageTypeLabel(value) {
+    return value ? t(`employees.wage_${value}`) : '—';
+}
+
+function deleteRate(rate) {
+    askDelete(`${eur(rate.rate)} · ${wageDate(rate.effective_from)}`,
+        () => router.delete(`/employees/${props.employee.id}/wage-rates/${rate.id}`, { preserveScroll: true }));
 }
 
 const infoRows = [
@@ -210,6 +235,44 @@ function destroy() {
                         <Bilingual k="worker_access.grant" inline />
                     </VButton>
                 </VCard>
+
+                <!-- Historial de Salario — the effective-dated wage timeline -->
+                <VCard v-if="canSeeWages" class="lg:col-span-2">
+                    <div class="mb-4 flex items-center justify-between gap-3">
+                        <h3 class="text-[15px] font-semibold"><Bilingual k="wage_rates.section_title" /></h3>
+                        <VButton v-if="can.manageWages" size="sm" icon="plus" @click="showWageModal = true">
+                            <Bilingual k="wage_rates.new" inline />
+                        </VButton>
+                    </div>
+
+                    <VEmptyState v-if="!wageHistory.length" icon="euro" title-key="wage_rates.none" />
+
+                    <ul v-else class="space-y-2">
+                        <li v-for="rate in wageHistory" :key="rate.id"
+                            class="flex items-center gap-3 rounded-md border px-3 py-2.5"
+                            :class="rate.is_current
+                                ? 'border-accent border-s-2 bg-accent-soft'
+                                : 'border-line bg-surface-sunken'">
+                            <span class="h-2 w-2 shrink-0 rounded-full"
+                                :class="rate.is_current ? 'bg-accent' : 'bg-faint'" />
+                            <div class="min-w-0 flex-1">
+                                <p class="text-sm">
+                                    {{ wageDate(rate.effective_from) }} → {{ wageDate(rate.effective_to) }}
+                                </p>
+                                <p class="text-xs text-muted">{{ wageTypeLabel(rate.wage_type) }}</p>
+                            </div>
+                            <span class="tabular-nums text-sm font-medium">{{ eur(rate.rate) }}</span>
+                            <VBadge v-if="rate.is_current" status="ok">
+                                <Bilingual k="wage_rates.current_badge" inline />
+                            </VBadge>
+                            <button v-if="can.manageWages && !rate.is_current" type="button"
+                                class="rounded-md p-1 text-muted hover:bg-surface-hover hover:text-status-danger"
+                                :aria-label="t('common.delete')" @click="deleteRate(rate)">
+                                <AppIcon name="trash" class="h-4 w-4" />
+                            </button>
+                        </li>
+                    </ul>
+                </VCard>
             </div>
 
             <!-- Documentos -->
@@ -328,6 +391,9 @@ function destroy() {
         </div>
 
         <EmployeeFormModal :open="showEdit" :employee="employee" :can-see-wages="canSeeWages" @close="showEdit = false" />
+
+        <WageRateFormModal v-if="canSeeWages" :open="showWageModal" :employee-id="employee.id"
+            :current-type="employee.wage_type" :current-rate="currentRate" @close="showWageModal = false" />
 
         <VConfirmDialog :open="confirm.open" :message="confirm.message" @confirm="runDelete" @cancel="confirm.open = false" />
 

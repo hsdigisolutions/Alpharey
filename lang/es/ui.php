@@ -1077,6 +1077,28 @@ return [
     ],
 
     // Granting an employee a login for the mobile app (employee detail).
+    'wage_rates' => [
+        'section_title' => 'Historial de Salario',
+        'new' => 'Nueva Tarifa',
+        'new_title' => 'Nueva Tarifa Salarial',
+        'effective_from' => 'Fecha de inicio',
+        'wage_type' => 'Tipo de salario',
+        'rate' => 'Nueva tarifa',
+        'previous_rate' => 'Tarifa anterior',
+        'no_previous' => 'Ninguna',
+        'reason' => 'Motivo (opcional)',
+        'reason_ph' => 'Motivo del cambio',
+        'current_badge' => 'Actual',
+        'today' => 'hoy',
+        'none' => 'Sin historial de salario',
+        'confirm_recalc' => 'Esto recalculará la asistencia no pagada desde esa fecha. ¿Continuar?',
+        'confirm_yes' => 'Sí, recalcular y guardar',
+        'date_after_current' => 'La fecha debe ser posterior a la tarifa actual (:date).',
+        'has_attendance' => 'No se puede eliminar: existe asistencia registrada con esta tarifa.',
+        'saved' => 'Tarifa guardada.',
+        'deleted' => 'Tarifa eliminada.',
+    ],
+
     'worker_access' => [
         'title' => 'Acceso a la App',
         'hint' => 'Permite a este empleado fichar desde su móvil.',
