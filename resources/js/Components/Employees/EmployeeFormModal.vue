@@ -4,7 +4,7 @@
  * the spec: personal / employment / wage / bank / other. Wage + bank
  * fields only render when the server sent them (permission-filtered).
  */
-import { watch } from 'vue';
+import { computed, watch } from 'vue';
 import { useForm } from '@inertiajs/vue3';
 import FormField from '@/Components/ui/FormField.vue';
 import VButton from '@/Components/ui/VButton.vue';
@@ -62,6 +62,16 @@ function submit() {
 
 const wageTypes = ['daily', 'hourly', 'monthly', 'per_meter'];
 const paymentMethods = ['bank_transfer', 'cash', 'cash_via_supervisor'];
+
+// Show only the primary wage field for the selected type.
+// When no type is selected, show all fields so existing data is visible.
+const showWageRate    = computed(() => !form.wage_type || form.wage_type === 'hourly');
+const showDailyWage   = computed(() => !form.wage_type || form.wage_type === 'daily');
+const showBaseSalary  = computed(() => !form.wage_type || form.wage_type === 'monthly');
+const showPerMeter    = computed(() => !form.wage_type || form.wage_type === 'per_meter');
+
+// Bank section only needed for bank transfer.
+const showBank = computed(() => !form.payment_method || form.payment_method === 'bank_transfer');
 </script>
 
 <template>
@@ -134,16 +144,16 @@ const paymentMethods = ['bank_transfer', 'cash', 'cash_via_supervisor'];
                             </option>
                         </VSelect>
                     </FormField>
-                    <FormField k="employees.wage_rate" :error="form.errors.wage_rate">
+                    <FormField v-if="showWageRate" k="employees.wage_rate" :error="form.errors.wage_rate">
                         <VCurrencyInput v-model="form.wage_rate" />
                     </FormField>
-                    <FormField k="employees.base_salary" :error="form.errors.base_salary">
+                    <FormField v-if="showBaseSalary" k="employees.base_salary" :error="form.errors.base_salary">
                         <VCurrencyInput v-model="form.base_salary" />
                     </FormField>
-                    <FormField k="employees.daily_wage" :error="form.errors.daily_wage">
+                    <FormField v-if="showDailyWage" k="employees.daily_wage" :error="form.errors.daily_wage">
                         <VCurrencyInput v-model="form.daily_wage" />
                     </FormField>
-                    <FormField k="employees.per_meter_rate" :error="form.errors.per_meter_rate">
+                    <FormField v-if="showPerMeter" k="employees.per_meter_rate" :error="form.errors.per_meter_rate">
                         <VCurrencyInput v-model="form.per_meter_rate" />
                     </FormField>
                     <FormField k="employees.commission" :error="form.errors.commission_percent">
@@ -160,8 +170,8 @@ const paymentMethods = ['bank_transfer', 'cash', 'cash_via_supervisor'];
                 </div>
             </section>
 
-            <!-- Bank (permission-gated) -->
-            <section v-if="canSeeWages">
+            <!-- Bank (permission-gated; hidden for cash payments) -->
+            <section v-if="canSeeWages && showBank">
                 <Bilingual k="employees.section_bank" class="mb-3 text-[15px] font-semibold" />
                 <div class="grid gap-4 sm:grid-cols-2">
                     <FormField k="employees.iban" :error="form.errors.iban">
