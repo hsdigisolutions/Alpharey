@@ -60,6 +60,17 @@ function timeOnly(dt) {
     });
 }
 
+// Date + time for the recent-activity table: a session can span days, so
+// "20:44 → 14:48" is only unambiguous with the date next to each time.
+function dateTime(dt) {
+    if (!dt) return '—';
+    return toUtc(dt).toLocaleString('es-ES', {
+        day: '2-digit', month: '2-digit',
+        hour: '2-digit', minute: '2-digit', hour12: false,
+        timeZone: 'Europe/Madrid',
+    });
+}
+
 function sessionDuration(takenAt, returnedAt) {
     if (!takenAt || !returnedAt) return '—';
     const secs = Math.floor((toUtc(returnedAt) - toUtc(takenAt)) / 1000);
@@ -194,8 +205,8 @@ const columns = [
                                     {{ s.plate_number }}
                                 </span>
                             </td>
-                            <td class="tabular-nums px-4 py-2.5 text-ink-soft">{{ timeOnly(s.taken_at) }}</td>
-                            <td class="tabular-nums px-4 py-2.5 text-ink-soft">{{ timeOnly(s.returned_at) }}</td>
+                            <td class="tabular-nums px-4 py-2.5 text-ink-soft">{{ dateTime(s.taken_at) }}</td>
+                            <td class="tabular-nums px-4 py-2.5 text-ink-soft">{{ dateTime(s.returned_at) }}</td>
                             <td class="tabular-nums px-4 py-2.5 text-end font-medium text-ink">
                                 {{ sessionDuration(s.taken_at, s.returned_at) }}
                             </td>
