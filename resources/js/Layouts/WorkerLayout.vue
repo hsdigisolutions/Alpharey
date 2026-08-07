@@ -40,11 +40,15 @@ function setLang(lang) {
 const now = ref(new Date());
 let clock = null;
 
+// The company operates in Spain: the clock is pinned to Europe/Madrid so it
+// always matches the attendance times the server writes with now() — a worker
+// (or a tester) on a device set to another timezone still sees Spanish time,
+// not their own, which is the "when am I" that every punch is dated against.
 const time = computed(() =>
-    now.value.toLocaleTimeString(locale.value, { hour: '2-digit', minute: '2-digit' }),
+    now.value.toLocaleTimeString(locale.value, { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Madrid' }),
 );
 const dateLine = computed(() =>
-    now.value.toLocaleDateString(locale.value, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }),
+    now.value.toLocaleDateString(locale.value, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Europe/Madrid' }),
 );
 
 // --- Install prompt ---------------------------------------------------------
