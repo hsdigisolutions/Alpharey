@@ -266,6 +266,8 @@ class PayrollController extends Controller
             'base_salary' => $money('base_salary'),
             'days_amount' => $money('days_amount'),
             'hours_amount' => $money('hours_amount'),
+            // Per-day-type breakdown (jornadas completas/medias/horas/metros).
+            'day_type_summary' => Gate::allows('payroll.view') ? $p->day_type_summary : null,
             'overtime_pay' => $money('overtime_pay'),
             'reimbursements' => $money('reimbursements'),
             'project_expenses' => $money('project_expenses'),

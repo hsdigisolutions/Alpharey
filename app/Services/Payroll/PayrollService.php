@@ -3,7 +3,9 @@
 namespace App\Services\Payroll;
 
 use App\Enums\AdvanceStatus;
+use App\Enums\AttendanceStatus;
 use App\Enums\BillingMethod;
+use App\Enums\DayType;
 use App\Enums\DeploymentStatus;
 use App\Enums\PayrollStatus;
 use App\Enums\WageType;
@@ -113,42 +115,61 @@ class PayrollService
         $hours = round((float) $records->sum(fn (Attendance $r) => (float) $r->hours_worked), 2);
         $otHours = round((float) $records->sum(fn (Attendance $r) => (float) $r->overtime_hours), 2);
 
-        // Split each day's frozen total into its base and overtime portions
-        // using the same formula AttendanceService used to build it.
-        $baseEarned = 0.0;
-        $overtimePay = 0.0;
+        // Rows that carry pay: worked days AND paid leave (leave books its wage
+        // snapshot so it reaches payroll — an unpaid leave row is simply 0).
+        $paidRows = $records->filter(
+            fn (Attendance $r) => in_array($r->status->value, self::WORKED, true)
+                || $r->status === AttendanceStatus::Leave,
+        );
 
-        foreach ($records as $record) {
-            $hourly = (float) ($record->hourly_rate_snapshot ?? 0);
-            $base = (float) $record->hours_worked * $hourly;
+        // Earnings by DAY TYPE, from each day's frozen total (never recomputed).
+        //   full/half → daily jornadas; hourly → base + overtime; per_meter → piecework.
+        $fullHalfAmount = 0.0;
+        $hourlyBase = 0.0;
+        $overtimePay = 0.0;
+        $perMeterAmount = 0.0;
+
+        foreach ($paidRows as $record) {
             $total = (float) $record->total_amount;
 
-            $baseEarned += $base;
-            $overtimePay += max(0, $total - $base);
+            match ($this->effectiveDayType($record)) {
+                DayType::Full, DayType::Half => $fullHalfAmount += $total,
+                DayType::PerMeter => $perMeterAmount += $total,
+                DayType::Hourly => (function () use ($record, $total, &$hourlyBase, &$overtimePay): void {
+                    $base = (float) $record->hours_worked * (float) ($record->hourly_rate_snapshot ?? 0);
+                    $hourlyBase += $base;
+                    $overtimePay += max(0, $total - $base);
+                })(),
+            };
         }
 
         $wageType = $employee->wage_type;
 
-        // "Base Salary / Wage" line: a monthly salary, or per-meter earnings.
+        // "Base Salary / Wage" line: a monthly salary, or per-meter earnings from
+        // approved measurements. Per-meter DAYS (attendance) are shown on their
+        // own "Por metros" summary line, so they stay OUT of this bucket.
         $baseSalary = match ($wageType) {
             WageType::Monthly => (float) ($employee->getAttribute('base_salary') ?? 0),
             WageType::PerMeter => $this->perMeterEarnings($employee, $month),
             default => 0.0,
         };
 
-        $daysAmount = $wageType === WageType::Daily ? $baseEarned : 0.0;
-        $hoursAmount = $wageType === WageType::Hourly ? $baseEarned : 0.0;
+        $daysAmount = $fullHalfAmount;
+        $hoursAmount = $hourlyBase;
 
-        // When the rate changed mid-month, break the worked days into rate
-        // periods for the payslip. Only meaningful for daily/hourly workers.
+        // When the rate changed mid-month, break the worked days into rate periods.
         $ratePeriods = $this->ratePeriods($records, $wageType);
+
+        // Per-day-type breakdown for the payslip (jornadas completas/medias/horas/metros).
+        $attendanceEarnings = $daysAmount + $hoursAmount + $overtimePay + $perMeterAmount;
+        $dayTypeSummary = $attendanceEarnings > 0 ? $this->dayTypeSummary($paidRows) : null;
 
         $reimbursements = $this->reimbursementsFor($employee->id, $month)
             + $this->pwaExpensesFor($employee->id, $month);
         $projectExpenses = $this->projectExpensesFor($employee->id, $month);
 
         $gross = $baseSalary + $daysAmount + $hoursAmount + $overtimePay
-            + $reimbursements + $projectExpenses;
+            + $perMeterAmount + $reimbursements + $projectExpenses;
 
         $advances = $this->advanceDeductionsFor($employee->id, $month);
         $fineDeductions = $this->vehicleFinesFor($employee->id, $month);
@@ -174,6 +195,7 @@ class PayrollService
         $payroll->days_amount = (string) round($daysAmount, 2);
         $payroll->hours_amount = (string) round($hoursAmount, 2);
         $payroll->rate_periods = $ratePeriods;
+        $payroll->day_type_summary = $dayTypeSummary;
         $payroll->overtime_pay = (string) round($overtimePay, 2);
         $payroll->reimbursements = (string) round($reimbursements, 2);
         $payroll->project_expenses = (string) round($projectExpenses, 2);
@@ -285,6 +307,76 @@ class PayrollService
         }
 
         return count($periods) >= 2 ? $periods : null;
+    }
+
+    /**
+     * The per-day-type breakdown for the payslip, grouped by (day type, rate)
+     * so a mid-month rate change splits into its own line:
+     *
+     *   Jornadas completas: 15 días × 80,00 €  = 1.200,00 €
+     *   Medias jornadas:     4 días × 40,00 €  =   160,00 €
+     *   Por horas:          12 h    × 10,00 €  =   120,00 €
+     *   Por metros:         30 m    ×  5,00 €  =   150,00 €
+     *
+     * `units` is days / hours / metres by type; `rate` is the price per unit
+     * (a half day shows the half-day rate). Amounts sum to the attendance
+     * earnings exactly — they are the frozen day totals, never recomputed.
+     *
+     * @param  Collection<int, Attendance>  $paidRows
+     * @return list<array<string, mixed>>|null
+     */
+    private function dayTypeSummary(Collection $paidRows): ?array
+    {
+        $order = ['full' => 0, 'half' => 1, 'hourly' => 2, 'per_meter' => 3];
+        $groups = [];
+
+        foreach ($paidRows as $record) {
+            $type = $this->effectiveDayType($record);
+            $perMeterRate = (float) ($record->wage_rate_snapshot ?? 0);
+            $hourly = (float) ($record->hourly_rate_snapshot ?? 0);
+            $total = (float) $record->total_amount;
+
+            // full/half price per unit is the day's own total (units = 1), so a
+            // rate change splits into its own group and a leave row with no rate
+            // snapshot still shows the amount it actually paid.
+            [$unitRate, $units, $amount] = match ($type) {
+                DayType::Full, DayType::Half => [$total, 1.0, $total],
+                DayType::PerMeter => [$perMeterRate, (float) ($record->quantity ?? 0), $total],
+                DayType::Hourly => [$hourly, (float) $record->hours_worked, (float) $record->hours_worked * $hourly],
+            };
+
+            $key = $type->value.'|'.number_format($unitRate, 4, '.', '');
+            $groups[$key] ??= ['type' => $type->value, 'rate' => round($unitRate, 2), 'units' => 0.0, 'amount' => 0.0];
+            $groups[$key]['units'] = round($groups[$key]['units'] + $units, 2);
+            $groups[$key]['amount'] = round($groups[$key]['amount'] + $amount, 2);
+        }
+
+        if ($groups === []) {
+            return null;
+        }
+
+        $list = array_values($groups);
+        usort($list, fn (array $a, array $b): int => ($order[$a['type']] <=> $order[$b['type']]) ?: ($b['rate'] <=> $a['rate']));
+
+        return $list;
+    }
+
+    /**
+     * The day type a row is priced by. Explicit `day_type` wins; a row without
+     * one (a leave row, or legacy data) falls back to its frozen wage type —
+     * a daily snapshot is a full jornada, an hourly snapshot is priced per hour.
+     */
+    private function effectiveDayType(Attendance $record): DayType
+    {
+        if ($record->day_type !== null) {
+            return $record->day_type;
+        }
+
+        return match ($record->wage_type_snapshot) {
+            WageType::Daily => DayType::Full,
+            WageType::PerMeter => DayType::PerMeter,
+            default => DayType::Hourly,
+        };
     }
 
     /**

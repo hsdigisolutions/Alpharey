@@ -4,6 +4,7 @@ namespace App\Http\Requests\Attendance;
 
 use App\Enums\AttendanceMode;
 use App\Enums\AttendanceStatus;
+use App\Enums\DayType;
 use App\Rules\OwnCompanyEmployee;
 use App\Rules\OwnCompanyProject;
 use Illuminate\Foundation\Http\FormRequest;
@@ -31,11 +32,13 @@ class StoreAttendanceRequest extends FormRequest
             'project_id' => ['nullable', 'integer', new OwnCompanyProject],
             'date' => ['required', 'date'],
             'mode' => ['required', Rule::enum(AttendanceMode::class)],
+            'day_type' => ['nullable', Rule::enum(DayType::class)],
             'check_in' => ['nullable', 'date_format:H:i'],
             'check_out' => ['nullable', 'date_format:H:i', 'after:check_in'],
             'break_hours' => ['nullable', 'numeric', 'min:0', 'max:12'],
             'deduct_break' => ['boolean'],
             'hours_worked' => ['nullable', 'numeric', 'min:0', 'max:24'],
+            'quantity' => ['nullable', 'numeric', 'min:0', 'max:100000', 'required_if:day_type,per_meter'],
             'overtime_hours' => ['nullable', 'numeric', 'min:0', 'max:24'],
             'status' => ['required', Rule::enum(AttendanceStatus::class)],
             'total_amount' => ['nullable', 'numeric', 'min:0'],

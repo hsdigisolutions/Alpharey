@@ -37,12 +37,14 @@ const workerSearch = ref('');
 
 const form = useForm({
     date: null,
-    mode: 'hourly',
+    mode: 'project_based',
+    day_type: 'full',
     check_in: '09:00',
     check_out: '17:00',
     break_hours: 1,
     deduct_break: true,
     hours_worked: 8,
+    quantity: null,
     overtime_hours: 0,
     status: 'present',
     notes: '',
@@ -57,12 +59,14 @@ watch(() => props.open, (v) => {
     workerSearch.value = '';
     form.clearErrors();
     form.date = `${props.month}-01`;
-    form.mode = 'hourly';
+    form.mode = 'project_based';
+    form.day_type = 'full';
     form.check_in = '09:00';
     form.check_out = '17:00';
     form.break_hours = 1;
     form.deduct_break = true;
     form.hours_worked = 8;
+    form.quantity = null;
     form.overtime_hours = 0;
     form.status = 'present';
     form.notes = '';
@@ -114,7 +118,9 @@ function selectGroup(list) {
 }
 
 // ── Live hours (mirrors AttendanceService::hoursFromClock) ─────────────────
-const isHourly = computed(() => form.mode === 'hourly');
+const dayTypes = ['full', 'half', 'hourly', 'per_meter'];
+const isHourly = computed(() => form.day_type === 'hourly');
+const isPerMeter = computed(() => form.day_type === 'per_meter');
 const liveHours = computed(() => {
     if (!isHourly.value) return null;
     const ci = form.check_in, co = form.check_out;
@@ -147,6 +153,9 @@ function submit() {
         employee_ids: selectedEmployeeIds.value,
         project_id: selectedProjectId.value,
         ...form.data(),
+        // Capture mode follows the day type; drop per-meter quantity otherwise.
+        mode: form.day_type === 'hourly' ? 'hourly' : 'project_based',
+        quantity: form.day_type === 'per_meter' ? form.quantity : null,
     };
     form.transform(() => data).post('/attendance/bulk', {
         preserveScroll: true,
@@ -289,14 +298,13 @@ const titleKey = computed(() => {
                         <option v-for="s in statuses" :key="s" :value="s">{{ $t(`attendance.status_${s}`) }}</option>
                     </VSelect>
                 </FormField>
-                <FormField k="attendance.mode" required>
-                    <VSelect v-model="form.mode">
-                        <option value="hourly">{{ $t('attendance.mode_hourly') }}</option>
-                        <option value="project_based">{{ $t('attendance.mode_project_based') }}</option>
+                <FormField k="attendance.day_type" required>
+                    <VSelect v-model="form.day_type">
+                        <option v-for="dt in dayTypes" :key="dt" :value="dt">{{ $t(`attendance.day_type_${dt}`) }}</option>
                     </VSelect>
                 </FormField>
-                <FormField k="attendance.overtime_hours">
-                    <VInput v-model="form.overtime_hours" type="number" step="0.25" />
+                <FormField v-if="isPerMeter" k="attendance.quantity" :error="form.errors.quantity" required>
+                    <VInput v-model="form.quantity" type="number" step="0.01" />
                 </FormField>
 
                 <template v-if="isHourly">
@@ -314,8 +322,11 @@ const titleKey = computed(() => {
                             <Bilingual k="attendance.deduct_break" inline class="text-sm" />
                         </VCheckbox>
                     </div>
+                    <FormField k="attendance.overtime_hours">
+                        <VInput v-model="form.overtime_hours" type="number" step="0.25" />
+                    </FormField>
                 </template>
-                <FormField v-else k="attendance.hours_worked">
+                <FormField v-else-if="!isPerMeter" k="attendance.hours_worked">
                     <VInput v-model="form.hours_worked" type="number" step="0.25" />
                 </FormField>
             </div>
@@ -341,10 +352,14 @@ const titleKey = computed(() => {
                     <span class="font-medium text-ink">{{ form.date }}</span>
                     <span><Bilingual k="attendance.project" inline /></span>
                     <span class="font-medium text-ink">{{ selectedProject?.name ?? '—' }}</span>
-                    <span><Bilingual k="attendance.mode" inline /></span>
-                    <span class="font-medium text-ink">{{ $t(`attendance.mode_${form.mode}`) }}</span>
+                    <span><Bilingual k="attendance.day_type" inline /></span>
+                    <span class="font-medium text-ink">{{ $t(`attendance.day_type_${form.day_type}`) }}</span>
                     <span><Bilingual k="attendance.status" inline /></span>
                     <span class="font-medium text-ink">{{ $t(`attendance.status_${form.status}`) }}</span>
+                    <template v-if="isPerMeter">
+                        <span><Bilingual k="attendance.quantity" inline /></span>
+                        <span class="tabular-nums font-medium text-ink">{{ form.quantity ?? '—' }}</span>
+                    </template>
                     <template v-if="isHourly">
                         <span><Bilingual k="attendance.check_in" inline /></span>
                         <span class="font-medium text-ink">{{ form.check_in }} – {{ form.check_out }}</span>

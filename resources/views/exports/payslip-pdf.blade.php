@@ -67,19 +67,37 @@
         </table>
     @endif
 
+    @php
+        $daySummary = $payroll->day_type_summary ?? [];
+        $dtLabel = ['full' => 'Jornadas completas', 'half' => 'Medias jornadas', 'hourly' => 'Por horas', 'per_meter' => 'Por metros'];
+        $dtUnit = ['full' => 'días', 'half' => 'días', 'hourly' => 'h', 'per_meter' => 'm'];
+        $num = fn ($n) => ((float) $n == (int) $n) ? (string) (int) $n : number_format((float) $n, 2, ',', '.');
+    @endphp
     <table>
         <tr>
             <td>Salario base / Sueldo</td>
             <td class="amount">{{ $eur($payroll->base_salary) }}</td>
         </tr>
-        <tr>
-            <td>Días trabajados <span class="muted">({{ (float) $payroll->attendance_days }})</span></td>
-            <td class="amount">{{ $eur($payroll->days_amount) }}</td>
-        </tr>
-        <tr>
-            <td>Horas trabajadas <span class="muted">({{ (float) $payroll->attendance_hours }} h)</span></td>
-            <td class="amount">{{ $eur($payroll->hours_amount) }}</td>
-        </tr>
+        @if (count($daySummary))
+            @foreach ($daySummary as $s)
+                <tr>
+                    <td>
+                        {{ $dtLabel[$s['type']] ?? $s['type'] }}
+                        <span class="muted">({{ $num($s['units']) }} {{ $dtUnit[$s['type']] ?? '' }} × {{ $eur($s['rate']) }})</span>
+                    </td>
+                    <td class="amount">{{ $eur($s['amount']) }}</td>
+                </tr>
+            @endforeach
+        @else
+            <tr>
+                <td>Días trabajados <span class="muted">({{ (float) $payroll->attendance_days }})</span></td>
+                <td class="amount">{{ $eur($payroll->days_amount) }}</td>
+            </tr>
+            <tr>
+                <td>Horas trabajadas <span class="muted">({{ (float) $payroll->attendance_hours }} h)</span></td>
+                <td class="amount">{{ $eur($payroll->hours_amount) }}</td>
+            </tr>
+        @endif
         <tr>
             <td>Reembolsos</td>
             <td class="amount">{{ $eur($payroll->reimbursements) }}</td>

@@ -3,8 +3,10 @@
 namespace App\Services\Attendance;
 
 use App\Enums\AttendanceMode;
+use App\Enums\DayType;
 use App\Enums\DeploymentStatus;
 use App\Enums\OvertimePolicyType;
+use App\Enums\WageType;
 use App\Models\Attendance;
 use App\Models\AttendanceLog;
 use App\Models\Employee;
@@ -99,10 +101,10 @@ class AttendanceService
 
             $this->lock->assertOpen($attendance->company_id, $attendance->date);
 
-            // Re-freeze the snapshot if the employee OR the date changed — the
-            // day's rate follows whichever wage period the new date lands in.
-            // An unchanged row keeps its original frozen rate.
-            if ($attendance->isDirty('employee_id') || $attendance->isDirty('date')) {
+            // Re-freeze the snapshot if the employee, the date, or the DAY TYPE
+            // changed — each picks a different rate. An otherwise-unchanged row
+            // keeps its original frozen rate.
+            if ($attendance->isDirty('employee_id') || $attendance->isDirty('date') || $attendance->isDirty('day_type')) {
                 $employee = $this->resolveEmployee((int) $attendance->employee_id);
                 $this->applySnapshots($attendance, $employee);
             }
@@ -161,21 +163,58 @@ class AttendanceService
         $this->log($attendance, 'updated');
     }
 
+    /**
+     * Freeze the rate this day is priced from — chosen by its DAY TYPE, using
+     * the rates in force for the date (WageRateService respects wage history):
+     *
+     *   full/half → the daily rate (hourly equivalent = daily/8 for OT)
+     *   hourly    → the hourly rate
+     *   per_meter → the per-meter rate
+     *
+     * The frozen rate never moves once set; a later raise cannot rewrite it.
+     */
     private function applySnapshots(Attendance $attendance, Employee $employee): void
     {
-        // The rate FROZEN for this specific day: whichever wage period the
-        // attendance date falls in (WageRateService), falling back to the
-        // employee's live fields when no dated rate covers the day.
-        [$wageType, $wageRate, $hourly] = $this->wageRates->snapshotValues($employee, $attendance->date);
+        $dayType = $this->dayTypeFor($attendance);
+        $attendance->day_type = $dayType;
+
+        $rates = $this->wageRates->ratesForDate($employee, $attendance->date);
+
+        [$wageType, $rate, $hourly] = match ($dayType) {
+            DayType::Hourly => [WageType::Hourly, $rates['hourly'], $rates['hourly']],
+            DayType::PerMeter => [WageType::PerMeter, $rates['per_meter'], null],
+            // full / half are both daily-rate jornadas
+            default => [
+                WageType::Daily,
+                $rates['daily'],
+                $rates['daily'] !== null ? round($rates['daily'] / 8, 2) : null,
+            ],
+        };
 
         $attendance->wage_type_snapshot = $wageType;
-        $attendance->wage_rate_snapshot = $wageRate;
+        $attendance->wage_rate_snapshot = $rate;
         $attendance->hourly_rate_snapshot = $hourly;
     }
 
     /**
-     * Recompute hours (hourly mode) and the day total. Manual override keeps
-     * the caller-supplied total_amount untouched.
+     * The day type a row is priced by. Explicit when set; otherwise derived
+     * from the capture mode (hourly clock → hourly, anything else → a full day,
+     * the dehadi default) so legacy and worker-PWA rows still price.
+     */
+    private function dayTypeFor(Attendance $attendance): DayType
+    {
+        return $attendance->day_type
+            ?? ($attendance->mode === AttendanceMode::Hourly ? DayType::Hourly : DayType::Full);
+    }
+
+    /**
+     * Recompute hours (hourly mode) and the day total from the frozen rate and
+     * the DAY TYPE. Manual override keeps the caller-supplied total_amount.
+     *
+     *   full      total = daily rate
+     *   half      total = daily rate × 0.5
+     *   hourly    total = hours × hourly rate  (+ overtime)
+     *   per_meter total = quantity × per-meter rate
      */
     private function recompute(Attendance $attendance): void
     {
@@ -188,14 +227,28 @@ class AttendanceService
             return; // trust the caller's total_amount
         }
 
+        $rate = (float) ($attendance->wage_rate_snapshot ?? 0);
+
+        $total = match ($this->dayTypeFor($attendance)) {
+            DayType::Full => $rate,
+            DayType::Half => $rate * 0.5,
+            DayType::PerMeter => (float) ($attendance->quantity ?? 0) * $rate,
+            DayType::Hourly => $this->hourlyTotal($attendance),
+        };
+
+        $attendance->total_amount = (string) round($total, 2);
+    }
+
+    /**
+     * Hourly-day total: worked hours + priced overtime, from the frozen rate.
+     */
+    private function hourlyTotal(Attendance $attendance): float
+    {
         $hourly = (float) ($attendance->hourly_rate_snapshot ?? 0);
-        $hours = (float) $attendance->hours_worked;
-        $otHours = (float) $attendance->overtime_hours;
+        $base = (float) $attendance->hours_worked * $hourly;
+        $ot = (float) $attendance->overtime_hours * $hourly * $this->overtimeMultiplier($attendance);
 
-        $base = $hours * $hourly;
-        $ot = $otHours * $hourly * $this->overtimeMultiplier($attendance);
-
-        $attendance->total_amount = (string) round($base + $ot, 2);
+        return $base + $ot;
     }
 
     private function hoursFromClock(Attendance $attendance): float

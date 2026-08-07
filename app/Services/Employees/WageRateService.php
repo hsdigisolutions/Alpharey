@@ -88,6 +88,38 @@ class WageRateService
     }
 
     /**
+     * The three pay rates in force for this employee on the given date, for the
+     * day-type calculation: [daily, hourly, per_meter].
+     *
+     * The dated wage history governs whichever rate matches its own wage_type
+     * (a dehadi's daily rate changing over time); the other two come from the
+     * employee's live rate columns — "admin fills whichever applies".
+     *
+     * @return array{daily: float|null, hourly: float|null, per_meter: float|null}
+     */
+    public function ratesForDate(Employee $employee, Carbon|string $date): array
+    {
+        $day = $date instanceof Carbon ? $date->toDateString() : $date;
+        $record = $this->rateForDate($employee->id, $day);
+
+        $daily = $this->floatOrNull($employee->getAttribute('daily_wage'));
+        $hourly = $this->floatOrNull($employee->getAttribute('wage_rate'));
+        $perMeter = $this->floatOrNull($employee->getAttribute('per_meter_rate'));
+
+        if ($record !== null && $record->wage_type !== null) {
+            $rate = (float) $record->rate;
+            match ($record->wage_type) {
+                WageType::Daily => $daily = $rate,
+                WageType::Hourly => $hourly = $rate,
+                WageType::PerMeter => $perMeter = $rate,
+                WageType::Monthly => null, // monthly salary is not a per-day rate
+            };
+        }
+
+        return ['daily' => $daily, 'hourly' => $hourly, 'per_meter' => $perMeter];
+    }
+
+    /**
      * Open a new dated rate for the employee. Closes the currently-open rate the
      * day before the new one starts, syncs the employee's cached wage fields to
      * whatever rate is active today, and reprices UNPAID attendance from the new
@@ -357,6 +389,11 @@ class WageRateService
         };
 
         $employee->saveQuietly(); // avoid re-triggering EmployeeService history
+    }
+
+    private function floatOrNull(mixed $value): ?float
+    {
+        return $value !== null ? (float) $value : null;
     }
 
     private function liveAmountFor(Employee $employee): ?float

@@ -36,9 +36,9 @@ const props = defineProps({
 const emit = defineEmits(['close']);
 
 const blank = {
-    employee_id: '', project_id: '', date: null, mode: 'hourly',
+    employee_id: '', project_id: '', date: null, mode: 'project_based', day_type: 'full',
     check_in: '09:00', check_out: '17:00', break_hours: 1, deduct_break: true,
-    hours_worked: 0, overtime_hours: 0, status: 'present', total_amount: null,
+    hours_worked: 0, quantity: null, overtime_hours: 0, status: 'present', total_amount: null,
     manual_wage_override: false, is_paid: false, is_exception: false,
     exception_reason: '', notes: '',
 };
@@ -55,7 +55,11 @@ watch(() => props.open, (open) => {
 });
 
 const statuses = ['present', 'absent', 'late', 'early_leave', 'leave'];
-const isHourly = computed(() => form.mode === 'hourly');
+const dayTypes = ['full', 'half', 'hourly', 'per_meter'];
+
+// The day type drives pay; the capture mode follows it (hourly clock vs manual).
+const isHourly = computed(() => form.day_type === 'hourly');
+const isPerMeter = computed(() => form.day_type === 'per_meter');
 
 // ── Grouped employee options for VCombobox ─────────────────────────────────
 // When a project is selected: show project workers first (with header), then
@@ -107,16 +111,34 @@ const liveHours = computed(() => {
     return Math.round(hours * 100) / 100;
 });
 
-// ── Wage rate for the selected employee (canSeeWage only) ──────────────────
-const selectedEmployeeRate = computed(() => {
-    if (!props.canSeeWage || !form.employee_id) return null;
-    const emp = props.employees.find((e) => e.id == form.employee_id);
-    return emp?.hourly_rate ?? null;
+// ── Live pay preview by day type (canSeeWage only) ─────────────────────────
+const selectedEmployee = computed(() =>
+    props.employees.find((e) => e.id == form.employee_id) ?? null);
+
+// The per-unit rate shown next to the preview, chosen by day type.
+const dayTypeRate = computed(() => {
+    const emp = selectedEmployee.value;
+    if (!props.canSeeWage || !emp) return null;
+    if (form.day_type === 'hourly') return emp.hourly_rate_raw ?? emp.hourly_rate ?? null;
+    if (form.day_type === 'per_meter') return emp.per_meter_rate ?? null;
+    return emp.daily_rate ?? null; // full / half
 });
 
 const liveTotal = computed(() => {
-    if (selectedEmployeeRate.value === null || liveHours.value === null) return null;
-    return Math.round(liveHours.value * selectedEmployeeRate.value * 100) / 100;
+    const rate = dayTypeRate.value;
+    if (rate === null) return null;
+    let total = 0;
+    if (form.day_type === 'full') total = rate;
+    else if (form.day_type === 'half') total = rate * 0.5;
+    else if (form.day_type === 'hourly') total = (liveHours.value ?? (Number(form.hours_worked) || 0)) * rate;
+    else if (form.day_type === 'per_meter') total = (Number(form.quantity) || 0) * rate;
+    return Math.round(total * 100) / 100;
+});
+
+const rateUnit = computed(() => {
+    if (form.day_type === 'hourly') return '€/h';
+    if (form.day_type === 'per_meter') return '€/m';
+    return '€/día';
 });
 
 // ── Helpers for bilingual header strings outside <template> ───────────────
@@ -127,7 +149,13 @@ function $tStr(key) {
 }
 
 function submit() {
-    const payload = form.transform((d) => ({ ...d, project_id: d.project_id || null }));
+    const payload = form.transform((d) => ({
+        ...d,
+        project_id: d.project_id || null,
+        // Capture mode follows the day type: hourly clocks in/out, the rest are manual.
+        mode: d.day_type === 'hourly' ? 'hourly' : 'project_based',
+        quantity: d.day_type === 'per_meter' ? d.quantity : null,
+    }));
     const opts = { preserveScroll: true, onSuccess: () => emit('close') };
     props.record?.id ? payload.put(`/attendance/${props.record.id}`, opts) : payload.post('/attendance', opts);
 }
@@ -182,10 +210,9 @@ function formatCoords(loc) {
                 <FormField k="attendance.date" :error="form.errors.date" required>
                     <VDateInput v-model="form.date" />
                 </FormField>
-                <FormField k="attendance.mode" required>
-                    <VSelect v-model="form.mode">
-                        <option value="hourly">{{ $t('attendance.mode_hourly') }}</option>
-                        <option value="project_based">{{ $t('attendance.mode_project_based') }}</option>
+                <FormField k="attendance.day_type" required>
+                    <VSelect v-model="form.day_type">
+                        <option v-for="dt in dayTypes" :key="dt" :value="dt">{{ $t(`attendance.day_type_${dt}`) }}</option>
                     </VSelect>
                 </FormField>
 
@@ -194,14 +221,14 @@ function formatCoords(loc) {
                     <FormField k="attendance.check_out" :error="form.errors.check_out"><VDateInput v-model="form.check_out" type="time" /></FormField>
                     <FormField k="attendance.break_hours"><VInput v-model="form.break_hours" type="number" step="0.5" /></FormField>
                     <div class="flex items-end pb-2"><VCheckbox v-model="form.deduct_break"><Bilingual k="attendance.deduct_break" inline class="text-sm" /></VCheckbox></div>
+                    <FormField k="attendance.overtime_hours" :error="form.errors.overtime_hours">
+                        <VInput v-model="form.overtime_hours" type="number" step="0.25" />
+                    </FormField>
                 </template>
-                <FormField v-else k="attendance.hours_worked" :error="form.errors.hours_worked">
-                    <VInput v-model="form.hours_worked" type="number" step="0.25" />
+                <FormField v-else-if="isPerMeter" k="attendance.quantity" :error="form.errors.quantity" required>
+                    <VInput v-model="form.quantity" type="number" step="0.01" />
                 </FormField>
 
-                <FormField k="attendance.overtime_hours" :error="form.errors.overtime_hours">
-                    <VInput v-model="form.overtime_hours" type="number" step="0.25" />
-                </FormField>
                 <FormField k="attendance.status" required>
                     <VSelect v-model="form.status">
                         <option v-for="s in statuses" :key="s" :value="s">{{ $t(`attendance.status_${s}`) }}</option>
@@ -209,21 +236,20 @@ function formatCoords(loc) {
                 </FormField>
             </div>
 
-            <!-- Live hours preview (Feature 2) — only in hourly mode, create flow -->
-            <div v-if="isHourly && liveHours !== null && !record?.id"
-                class="flex items-center gap-4 rounded-md bg-surface-sunken px-3 py-2 text-sm">
-                <div class="flex items-center gap-1.5 text-ink-soft">
+            <!-- Live pay preview by day type — create flow, wage viewers -->
+            <div v-if="canSeeWage && !record?.id && dayTypeRate !== null"
+                class="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-md bg-surface-sunken px-3 py-2 text-sm">
+                <div v-if="isHourly" class="flex items-center gap-1.5 text-ink-soft">
                     <AppIcon name="clock" class="h-4 w-4" />
                     <Bilingual k="attendance.hours_preview" inline />
-                    <span class="tabular-nums font-semibold text-ink">{{ liveHours }}h</span>
+                    <span class="tabular-nums font-semibold text-ink">{{ liveHours ?? form.hours_worked }}h</span>
                 </div>
-                <div v-if="canSeeWage && selectedEmployeeRate !== null" class="flex items-center gap-1.5 text-ink-soft">
+                <div class="flex items-center gap-1.5 text-ink-soft">
                     <Bilingual k="attendance.wage_rate" inline />
-                    <span class="tabular-nums text-ink">{{ selectedEmployeeRate }} €/h</span>
+                    <span class="tabular-nums text-ink">{{ dayTypeRate }} {{ rateUnit }}</span>
                 </div>
-                <div v-if="canSeeWage && liveTotal !== null" class="ms-auto flex items-center gap-1.5 font-medium text-ink">
-                    ≈
-                    <span class="tabular-nums">{{ liveTotal.toFixed(2) }} €</span>
+                <div v-if="liveTotal !== null" class="ms-auto flex items-center gap-1.5 font-medium text-ink">
+                    ≈ <span class="tabular-nums">{{ liveTotal.toFixed(2) }} €</span>
                 </div>
             </div>
 

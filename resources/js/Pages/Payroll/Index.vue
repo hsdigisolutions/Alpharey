@@ -63,6 +63,13 @@ function markPaid(row) {
 const breakdownId = ref(null);
 const breakdown = computed(() => props.rows.find((r) => r.id === breakdownId.value) ?? null);
 
+// Whole numbers show plain (15 días); fractional show 2 decimals (7,5 h).
+function dtNum(n) {
+    const f = Number(n);
+    return f === Math.trunc(f) ? String(Math.trunc(f))
+        : f.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
 /* ---------- manual adjustments ---------- */
 const adjustingId = ref(null);
 const adjusting = computed(() => props.rows.find((r) => r.id === adjustingId.value) ?? null);
@@ -219,14 +226,28 @@ const columns = [
                         <dt><Bilingual k="payroll.base_salary" inline /></dt>
                         <dd>{{ eur(breakdown.base_salary) }}</dd>
                     </div>
-                    <div class="flex justify-between gap-4">
-                        <dt><Bilingual k="payroll.attendance_days" inline /> <span class="text-muted">({{ breakdown.attendance_days }})</span></dt>
-                        <dd>{{ eur(breakdown.days_amount) }}</dd>
-                    </div>
-                    <div class="flex justify-between gap-4">
-                        <dt><Bilingual k="payroll.attendance_hours" inline /> <span class="text-muted">({{ breakdown.attendance_hours }} h)</span></dt>
-                        <dd>{{ eur(breakdown.hours_amount) }}</dd>
-                    </div>
+                    <!-- Per-day-type breakdown when present; else the generic days/hours lines -->
+                    <template v-if="breakdown.day_type_summary?.length">
+                        <div v-for="(s, i) in breakdown.day_type_summary" :key="i" class="flex justify-between gap-4">
+                            <dt>
+                                {{ $t(`attendance.day_type_${s.type}`) }}
+                                <span class="text-muted">({{ dtNum(s.units) }}
+                                    {{ s.type === 'hourly' ? 'h' : (s.type === 'per_meter' ? 'm' : $t('attendance.unit_days')) }}
+                                    × {{ eur(s.rate) }})</span>
+                            </dt>
+                            <dd>{{ eur(s.amount) }}</dd>
+                        </div>
+                    </template>
+                    <template v-else>
+                        <div class="flex justify-between gap-4">
+                            <dt><Bilingual k="payroll.attendance_days" inline /> <span class="text-muted">({{ breakdown.attendance_days }})</span></dt>
+                            <dd>{{ eur(breakdown.days_amount) }}</dd>
+                        </div>
+                        <div class="flex justify-between gap-4">
+                            <dt><Bilingual k="payroll.attendance_hours" inline /> <span class="text-muted">({{ breakdown.attendance_hours }} h)</span></dt>
+                            <dd>{{ eur(breakdown.hours_amount) }}</dd>
+                        </div>
+                    </template>
                     <div class="flex justify-between gap-4">
                         <dt><Bilingual k="payroll.reimbursements" inline /></dt>
                         <dd>{{ eur(breakdown.reimbursements) }}</dd>

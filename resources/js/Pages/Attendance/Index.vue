@@ -41,6 +41,34 @@ const cellStyle = {
     leave: 'bg-status-info-soft text-status-info',
 };
 
+// Colour a worked cell by DAY TYPE: full=green, half=amber, hourly=blue,
+// per_meter=coral. Non-present statuses keep their status colour.
+const dayTypeStyle = {
+    full: 'bg-status-ok-soft text-status-ok',
+    half: 'bg-status-warn-soft text-status-warn',
+    hourly: 'bg-status-info-soft text-status-info',
+    per_meter: 'bg-accent-soft text-accent',
+};
+
+function cellClass(cell) {
+    if (!cell) return '';
+    if (cell.status !== 'present') return cellStyle[cell.status] ?? cellStyle.present;
+    return dayTypeStyle[cell.day_type] ?? cellStyle.present;
+}
+
+// Marker: C completa · M media · hours for hourly · metres for per-meter · A absent.
+function cellContent(cell) {
+    if (!cell) return '';
+    if (cell.status === 'absent') return 'A';
+    if (cell.status === 'leave') return 'V';
+    switch (cell.day_type) {
+        case 'full': return 'C';
+        case 'half': return 'M';
+        case 'per_meter': return cell.quantity ?? '·';
+        default: return cell.hours;
+    }
+}
+
 function changeMonth(delta) {
     const [y, m] = props.month.split('-').map(Number);
     const d = new Date(y, m - 1 + delta, 1);
@@ -165,11 +193,11 @@ const monthLabel = computed(() => {
                             <button type="button"
                                 class="h-8 w-8 rounded-sm text-[10px] font-semibold transition-colors"
                                 :class="grid[emp.id]?.[day]
-                                    ? cellStyle[grid[emp.id][day].status]
+                                    ? cellClass(grid[emp.id][day])
                                     : (isWeekend(day) ? 'bg-surface-sunken/40' : 'hover:bg-surface-sunken')"
                                 :title="grid[emp.id]?.[day]?.project ?? ''"
                                 @click="openCell(emp.id, day)">
-                                {{ grid[emp.id]?.[day] ? grid[emp.id][day].hours : '' }}
+                                {{ cellContent(grid[emp.id]?.[day]) }}
                             </button>
                             <!-- Worker left a voice/text note on this day -->
                             <AppIcon v-if="grid[emp.id]?.[day]?.has_voice_note" name="mic"

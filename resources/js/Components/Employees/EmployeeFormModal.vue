@@ -63,12 +63,9 @@ function submit() {
 const wageTypes = ['daily', 'hourly', 'monthly', 'per_meter'];
 const paymentMethods = ['bank_transfer', 'cash', 'cash_via_supervisor'];
 
-// Show only the primary wage field for the selected type.
-// When no type is selected, show all fields so existing data is visible.
-const showWageRate    = computed(() => !form.wage_type || form.wage_type === 'hourly');
-const showDailyWage   = computed(() => !form.wage_type || form.wage_type === 'daily');
-const showBaseSalary  = computed(() => !form.wage_type || form.wage_type === 'monthly');
-const showPerMeter    = computed(() => !form.wage_type || form.wage_type === 'per_meter');
+// All rate fields are always shown — a dehadi worker can carry a daily rate
+// AND an hourly rate; the admin fills whichever applies. The day-type entry
+// then picks the right one per attendance day.
 
 // Bank section only needed for bank transfer.
 const showBank = computed(() => !form.payment_method || form.payment_method === 'bank_transfer');
@@ -144,17 +141,17 @@ const showBank = computed(() => !form.payment_method || form.payment_method === 
                             </option>
                         </VSelect>
                     </FormField>
-                    <FormField v-if="showWageRate" k="employees.wage_rate" :error="form.errors.wage_rate">
-                        <VCurrencyInput v-model="form.wage_rate" />
-                    </FormField>
-                    <FormField v-if="showBaseSalary" k="employees.base_salary" :error="form.errors.base_salary">
-                        <VCurrencyInput v-model="form.base_salary" />
-                    </FormField>
-                    <FormField v-if="showDailyWage" k="employees.daily_wage" :error="form.errors.daily_wage">
+                    <FormField k="employees.daily_wage" :error="form.errors.daily_wage">
                         <VCurrencyInput v-model="form.daily_wage" />
                     </FormField>
-                    <FormField v-if="showPerMeter" k="employees.per_meter_rate" :error="form.errors.per_meter_rate">
+                    <FormField k="employees.wage_rate" :error="form.errors.wage_rate">
+                        <VCurrencyInput v-model="form.wage_rate" />
+                    </FormField>
+                    <FormField k="employees.per_meter_rate" :error="form.errors.per_meter_rate">
                         <VCurrencyInput v-model="form.per_meter_rate" />
+                    </FormField>
+                    <FormField k="employees.base_salary" :error="form.errors.base_salary">
+                        <VCurrencyInput v-model="form.base_salary" />
                     </FormField>
                     <FormField k="employees.commission" :error="form.errors.commission_percent">
                         <VInput v-model="form.commission_percent" type="number" step="0.01" />

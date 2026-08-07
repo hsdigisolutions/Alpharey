@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Enums\AttendanceMode;
 use App\Enums\AttendanceStatus;
+use App\Enums\DayType;
 use App\Enums\WageType;
 use App\Models\Concerns\Auditable;
 use App\Models\Concerns\BelongsToCompany;
@@ -23,9 +24,11 @@ use Illuminate\Support\Carbon;
  * @property int $employee_id
  * @property Carbon $date
  * @property AttendanceMode $mode
+ * @property DayType|null $day_type
  * @property AttendanceStatus $status
  * @property WageType|null $wage_type_snapshot
  * @property numeric-string $hours_worked
+ * @property numeric-string|null $quantity
  * @property numeric-string $overtime_hours
  * @property numeric-string $total_amount
  * @property bool $manual_wage_override
@@ -56,8 +59,8 @@ class Attendance extends Model
 
     /** @var list<string> */
     protected $fillable = [
-        'employee_id', 'project_id', 'date', 'mode', 'check_in', 'check_out',
-        'break_hours', 'deduct_break', 'hours_worked', 'overtime_hours', 'status',
+        'employee_id', 'project_id', 'date', 'mode', 'day_type', 'check_in', 'check_out',
+        'break_hours', 'deduct_break', 'hours_worked', 'quantity', 'overtime_hours', 'status',
         'wage_type_snapshot', 'wage_rate_snapshot', 'hourly_rate_snapshot',
         'total_amount', 'manual_wage_override', 'is_paid', 'is_exception',
         'exception_reason', 'work_mode', 'notes',
@@ -68,11 +71,13 @@ class Attendance extends Model
         return [
             'date' => 'date:Y-m-d',
             'mode' => AttendanceMode::class,
+            'day_type' => DayType::class,
             'status' => AttendanceStatus::class,
             'wage_type_snapshot' => WageType::class,
             'break_hours' => 'decimal:2',
             'deduct_break' => 'boolean',
             'hours_worked' => 'decimal:2',
+            'quantity' => 'decimal:2',
             'overtime_hours' => 'decimal:2',
             'wage_rate_snapshot' => 'decimal:2',
             'hourly_rate_snapshot' => 'decimal:2',

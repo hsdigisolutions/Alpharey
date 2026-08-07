@@ -9,6 +9,49 @@ launch — no new screens. Current: **663 Pest tests / 3884 assertions passing (
 skipped) · Pint clean · Larastan level 6 clean · `composer audit` + `npm audit`
 clean · production Vite build working.**
 
+### Day types for daily workers — dehadi (2026-08-07)
+
+A daily (dehadi) worker is paid by the JORNADA, not the hour. Attendance now
+carries a `day_type` (`App\Enums\DayType`: full / half / hourly / per_meter) that
+drives the day's pay, server-side and never trusted from the client:
+
+    full      total = daily rate × 1.0
+    half      total = daily rate × 0.5
+    hourly    total = hours × hourly rate  (+ overtime)
+    per_meter total = quantity × per-meter rate
+
+Migration `2026_08_07_000004_add_day_type_to_attendance` adds `day_type` +
+`quantity` to `attendance` and `day_type_summary` (encrypted JSON) to `payrolls`,
+and backfills existing rows (hourly-snapshot → hourly, else full; a legacy full
+row seeds `wage_rate_snapshot` from its frozen total so a later edit recomputes
+to the same amount). Tests: `DayTypeTest` (8 tests / 17 assertions).
+
+**AttendanceService** freezes the base rate by day type in `applySnapshots`
+(`WageRateService::ratesForDate` returns `{daily, hourly, per_meter}` — the wage
+history governs whichever rate matches its own wage_type, the others come from the
+employee columns), re-snapshots when day_type changes, and `recompute` prices the
+day by its type. The **capture mode follows the day type** (hourly clocks in/out;
+the rest are manual/quantity) — the frontend derives `mode` from `day_type`, so
+`mode` stays valid but is no longer the visible selector.
+
+**PayrollService** now sums earnings by day type over worked **and paid-leave**
+rows (`effectiveDayType()` falls back to `wage_type_snapshot` when `day_type` is
+null, so leave/legacy rows still price — the fix for a leave-to-payroll
+regression), and builds `day_type_summary` (grouped by type × rate, reconciles to
+gross to the cent): *Jornadas completas / Medias jornadas / Por horas / Por
+metros*. Both payslip PDFs and the on-screen breakdown modal render it, replacing
+the generic días/horas lines when present. Per-meter attendance is its own gross
+term (NOT folded into base_salary — that would double-count against the summary
+line).
+
+**Frontend:** the entry + bulk modals lead with a "Tipo de jornada" selector
+(quantity field for per-meter; live per-type pay preview); the calendar cell shows
+**C** (green, completa) · **M** (amber, media) · hours (blue) · metres (coral) ·
+**A** (red, absent) · **V** (leave). The employee form now shows **all** rate
+fields at once with unit labels (€/día, €/hora, €/m², €/mes) — a worker can carry
+several — reverting the earlier by-type hiding. **EN toggle fixed** on the Salary
+History panel/modal (real English values, no longer Spanish-in-both).
+
 ### Employee Wage History — automatic rate switching (2026-08-07)
 
 A worker's wage rate can change over time (50 €/day → 70 €/day from a date); the

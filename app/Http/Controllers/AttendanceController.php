@@ -87,7 +87,9 @@ class AttendanceController extends Controller
             $grid[$record->employee_id][$day] = [
                 'id' => $record->id,
                 'status' => $record->status->value,
+                'day_type' => $record->day_type?->value,
                 'hours' => (float) $record->hours_worked,
+                'quantity' => $record->quantity !== null ? (float) $record->quantity : null,
                 'project' => $record->project?->name,
                 'has_voice_note' => $notedAttendanceIds->has($record->id),
                 'location_mismatch' => (bool) $record->location_mismatch,
@@ -103,19 +105,27 @@ class AttendanceController extends Controller
             $wageEmployees = Employee::query()
                 ->withoutGlobalScope(CompanyScope::class)
                 ->whereIn('id', $employeeIds)
-                ->get(['id', 'wage_type', 'wage_rate', 'daily_wage'])
+                ->get(['id', 'wage_type', 'wage_rate', 'daily_wage', 'per_meter_rate'])
                 ->keyBy('id');
 
+            // All four rate bases the day-type preview needs. hourly_rate keeps
+            // the derived value the older preview used (daily → daily/8).
             $employees = $employees->map(function (array $e) use ($wageEmployees): array {
                 $wEmp = $wageEmployees->get($e['id']);
                 if ($wEmp !== null) {
                     $rate = $wEmp->getAttribute('wage_rate');
                     $daily = $wEmp->getAttribute('daily_wage');
+                    $perMeter = $wEmp->getAttribute('per_meter_rate');
+                    $e['daily_rate'] = $daily !== null ? round((float) $daily, 2) : null;
+                    $e['per_meter_rate'] = $perMeter !== null ? round((float) $perMeter, 2) : null;
                     $e['hourly_rate'] = match ($wEmp->wage_type) {
                         WageType::Hourly => $rate !== null ? round((float) $rate, 2) : null,
                         WageType::Daily => $daily !== null ? round((float) $daily / 8, 2) : null,
                         default => $rate !== null ? round((float) $rate, 2) : null,
                     };
+                    // For a daily worker the "hourly" clock preview isn't the pay
+                    // base; expose the real hourly rate column too when present.
+                    $e['hourly_rate_raw'] = $rate !== null ? round((float) $rate, 2) : null;
                 }
 
                 return $e;
@@ -289,11 +299,13 @@ class AttendanceController extends Controller
             'project_id' => $attendance->project_id,
             'date' => $attendance->date->toDateString(),
             'mode' => $attendance->mode->value,
+            'day_type' => $attendance->day_type?->value,
             'check_in' => $attendance->check_in,
             'check_out' => $attendance->check_out,
             'break_hours' => (float) $attendance->break_hours,
             'deduct_break' => $attendance->deduct_break,
             'hours_worked' => (float) $attendance->hours_worked,
+            'quantity' => $attendance->quantity !== null ? (float) $attendance->quantity : null,
             'overtime_hours' => (float) $attendance->overtime_hours,
             'status' => $attendance->status->value,
             'total_amount' => $canSeeWage ? (float) $attendance->total_amount : null,
