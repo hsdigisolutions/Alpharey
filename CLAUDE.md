@@ -9,6 +9,30 @@ launch — no new screens. Current: **663 Pest tests / 3884 assertions passing (
 skipped) · Pint clean · Larastan level 6 clean · `composer audit` + `npm audit`
 clean · production Vite build working.**
 
+### Subcontractor (thaekedar) module (2026-08-07)
+
+New module `subcontractors` (sidebar "Más módulos"). Migration
+`2026_08_07_000006_create_subcontractor_tables` adds three tables: `subcontractors`
+(company-owned, project-linked), `subcontractor_workers` (free-text name +
+optional link to one of our employees; `total_agreed` = days × rate, computed by
+the service, never client), `subcontractor_payments` (a schedule of payments with
+an `expense_id` link). Enums: `SubcontractorStatus` (active/completed/cancelled),
+`SubcontractorPaymentStatus` (pending/partial/paid). Added `Module::Subcontractors`
+— the permission matrix, gate registration, and PermissionFuzz suite are all
+data-driven over `Module::cases()`, so it extends automatically (view/create/edit/
+delete/export). Tests: `SubcontractorTest` (10 tests).
+
+**`SubcontractorService::markPaid()`** posts a Gasto (ExpenseType Other,
+PaymentStatus Paid) on the **subcontractor's OWN company + project** — never the
+browsing session's active company (client decision) — and links `expense_id`;
+idempotent (a payment already carrying an expense is left alone, so re-marking
+cannot double-charge). `markPending()` / `deletePayment()` remove the expense.
+Mirrors the vehicle-fine auto-expense pattern. Screens: `Subcontractors/Index`
+(list) + `Subcontractors/Detail` (record card · workers table w/ add-edit modal ·
+payment schedule w/ mark-paid/pending + running totals: total acordado / pagado /
+pendiente). Nested worker/payment routes re-check `subcontractor_id` ownership
+(→ 404) since those child models are reached through the tenant-scoped parent.
+
 ### Weekend / optional work days (2026-08-07)
 
 Voluntary Saturday/Sunday work. Migration `2026_08_07_000005_add_weekend_to_attendance`

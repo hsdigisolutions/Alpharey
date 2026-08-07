@@ -165,7 +165,7 @@ it('registers a gate for every module and action (no ability left undefined)', f
     $abilities = everyAbility();
 
     expect($abilities)->toHaveCount(count(Module::cases()) * count(PermissionAction::cases()))
-        ->and(count($abilities))->toBe(144); // 18 modules × 8 actions
+        ->and(count($abilities))->toBe(152); // 19 modules × 8 actions
 
     foreach ($abilities as $ability) {
         expect(Gate::has($ability))->toBeTrue("ability {$ability} must be a defined gate");

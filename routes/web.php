@@ -45,6 +45,7 @@ use App\Http\Controllers\ProjectWorkerController;
 use App\Http\Controllers\ProposalController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\SearchController;
+use App\Http\Controllers\SubcontractorController;
 use App\Http\Controllers\TodayController;
 use App\Http\Controllers\VehicleController;
 use App\Http\Controllers\VendorController;
@@ -365,6 +366,21 @@ Route::middleware(['auth', 'active', 'two_factor', 'not_worker'])->group(functio
     Route::delete('/vehicles/{vehicle}/fines/{fine}', [VehicleController::class, 'destroyFine'])->name('vehicles.fines.destroy');
     Route::post('/vehicles/{vehicle}/fuel', [VehicleController::class, 'storeFuel'])->name('vehicles.fuel.store');
     Route::delete('/vehicles/{vehicle}/fuel/{fuelRecord}', [VehicleController::class, 'destroyFuel'])->name('vehicles.fuel.destroy');
+
+    // Subcontratistas (thaekedar). Marking a payment paid posts a Gasto on the
+    // subcontractor's own company + project — see SubcontractorService.
+    Route::get('/subcontractors', [SubcontractorController::class, 'index'])->name('subcontractors.index');
+    Route::post('/subcontractors', [SubcontractorController::class, 'store'])->name('subcontractors.store');
+    Route::get('/subcontractors/{subcontractor}', [SubcontractorController::class, 'show'])->name('subcontractors.show');
+    Route::put('/subcontractors/{subcontractor}', [SubcontractorController::class, 'update'])->name('subcontractors.update');
+    Route::delete('/subcontractors/{subcontractor}', [SubcontractorController::class, 'destroy'])->name('subcontractors.destroy');
+    Route::post('/subcontractors/{subcontractor}/workers', [SubcontractorController::class, 'storeWorker'])->name('subcontractors.workers.store');
+    Route::put('/subcontractors/{subcontractor}/workers/{worker}', [SubcontractorController::class, 'updateWorker'])->name('subcontractors.workers.update');
+    Route::delete('/subcontractors/{subcontractor}/workers/{worker}', [SubcontractorController::class, 'destroyWorker'])->name('subcontractors.workers.destroy');
+    Route::post('/subcontractors/{subcontractor}/payments', [SubcontractorController::class, 'storePayment'])->name('subcontractors.payments.store');
+    Route::post('/subcontractors/{subcontractor}/payments/{payment}/paid', [SubcontractorController::class, 'markPaid'])->name('subcontractors.payments.paid');
+    Route::post('/subcontractors/{subcontractor}/payments/{payment}/pending', [SubcontractorController::class, 'markPending'])->name('subcontractors.payments.pending');
+    Route::delete('/subcontractors/{subcontractor}/payments/{payment}', [SubcontractorController::class, 'destroyPayment'])->name('subcontractors.payments.destroy');
 
     // Screen 22 — Leave management (Phase 7). Approving books the days into
     // the attendance grid, so these go through LeaveService, not the model.

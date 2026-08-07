@@ -28,7 +28,7 @@ it('lists only users of the admin company', function (): void {
         ->assertInertia(fn (Assert $page) => $page
             ->component('Admin/Permissions')
             ->has('users', 2) // the admin + own staff, never company B
-            ->has('matrix', 18));
+            ->has('matrix', 19)); // one row per Module (+ subcontractors)
 });
 
 it('redirects a super admin without a selected company to welcome', function (): void {

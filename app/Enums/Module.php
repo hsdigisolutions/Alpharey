@@ -25,6 +25,7 @@ enum Module: string
     case Measurements = 'measurements';
     case Inventory = 'inventory';
     case Deployments = 'deployments';
+    case Subcontractors = 'subcontractors';
 
     /**
      * The actions that apply to this module — the "—" cells of the
@@ -44,6 +45,7 @@ enum Module: string
             self::Vendors,
             self::Vehicles,
             self::Inventory,
+            self::Subcontractors,
             self::Proposals => [$a::View, $a::Create, $a::Edit, $a::Delete, $a::Export],
             self::Invoices,
             self::Expenses,
