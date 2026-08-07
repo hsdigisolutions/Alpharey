@@ -41,7 +41,9 @@ onMounted(() => { ticker = setInterval(() => { now.value = Date.now(); }, 30000)
 onBeforeUnmount(() => clearInterval(ticker));
 
 function toUtc(dt) {
-    return /^\d{4}-\d{2}-\d{2} /.test(dt) ? new Date(dt.replace(' ', 'T') + 'Z') : new Date(dt);
+    // MySQL "YYYY-MM-DD HH:MM:SS" → no timezone info: replace space with T so
+    // ECMAScript parses as LOCAL time (T without Z = local; space is implementation-defined)
+    return /^\d{4}-\d{2}-\d{2} /.test(dt) ? new Date(dt.replace(' ', 'T')) : new Date(dt);
 }
 
 function elapsed(takenAt) {

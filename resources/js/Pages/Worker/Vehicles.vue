@@ -53,7 +53,7 @@ let swTimer = null;
 
 function toUtc(dt) {
     if (!dt) return new Date(0);
-    return /^\d{4}-\d{2}-\d{2} /.test(dt) ? new Date(dt.replace(' ', 'T') + 'Z') : new Date(dt);
+    return /^\d{4}-\d{2}-\d{2} /.test(dt) ? new Date(dt.replace(' ', 'T')) : new Date(dt);
 }
 
 const takenAtFormatted = computed(() => {
