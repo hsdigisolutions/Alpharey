@@ -415,12 +415,16 @@ function destroy() {
                             <template v-for="(c, i) in attCalendar" :key="i">
                                 <span v-if="c.day === null" />
                                 <button v-else type="button"
-                                    class="relative flex aspect-square flex-col items-center justify-center rounded-md text-xs transition-colors"
+                                    class="relative flex aspect-square min-h-14 flex-col items-center justify-center rounded-md text-xs transition-colors"
                                     :class="attCellClass(c.day)"
                                     :title="attendanceTab.grid[c.day]?.project ?? ''"
                                     @click="openAttCell(c.day)">
-                                    <span class="absolute start-1 top-0.5 text-[9px] opacity-60">{{ c.day }}</span>
-                                    <span class="tabular-nums font-semibold">{{ attCellMarker(c.day) }}</span>
+                                    <span class="absolute start-1 top-0.5 text-[9px] font-medium opacity-70">{{ c.day }}</span>
+                                    <span class="tabular-nums text-sm font-semibold">{{ attCellMarker(c.day) }}</span>
+                                    <span v-if="attendanceTab.grid[c.day]?.project"
+                                        class="absolute bottom-0.5 start-1 max-w-[85%] truncate text-[8px] opacity-70">{{ attendanceTab.grid[c.day].project.slice(0, 10) }}</span>
+                                    <span v-if="canSeeWages && attendanceTab.grid[c.day]?.total"
+                                        class="tabular-nums absolute bottom-0.5 end-1 text-[9px] font-semibold">{{ Math.round(attendanceTab.grid[c.day].total) }}€</span>
                                 </button>
                             </template>
                         </div>
@@ -442,8 +446,12 @@ function destroy() {
                             <p class="tabular-nums mt-1 text-lg font-semibold">{{ attendanceTab.summary.present }}</p>
                         </div>
                         <div class="rounded-lg border border-line bg-surface-raised p-3">
+                            <p class="text-xs text-muted"><Bilingual k="attendance.sum_half_days" /></p>
+                            <p class="tabular-nums mt-1 text-lg font-semibold">{{ attendanceTab.summary.half_days }}</p>
+                        </div>
+                        <div class="rounded-lg border border-line bg-surface-raised p-3">
                             <p class="text-xs text-muted"><Bilingual k="attendance.sum_hours" /></p>
-                            <p class="tabular-nums mt-1 text-lg font-semibold">{{ attendanceTab.summary.hours }}</p>
+                            <p class="tabular-nums mt-1 text-lg font-semibold">{{ attendanceTab.summary.hours }}h</p>
                         </div>
                         <div class="rounded-lg border border-line bg-surface-raised p-3">
                             <p class="text-xs text-muted"><Bilingual k="attendance.sum_overtime" /></p>

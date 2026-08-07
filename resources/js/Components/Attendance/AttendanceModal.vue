@@ -40,7 +40,7 @@ const blank = {
     check_in: '09:00', check_out: '17:00', break_hours: 1, deduct_break: true,
     hours_worked: 0, quantity: null, overtime_hours: 0, status: 'present', total_amount: null,
     weekend_rate_type: 'normal', weekend_rate_amount: null,
-    manual_wage_override: false, is_paid: false, is_exception: false,
+    manual_wage_override: false, override_reason: '', is_paid: false, is_exception: false,
     exception_reason: '', notes: '',
 };
 const form = useForm({ ...blank });
@@ -163,6 +163,24 @@ const rateUnit = computed(() => {
     return '€/día';
 });
 
+// Hours as "7h 00m" rather than a raw decimal.
+function toHM(hours) {
+    const h = Math.floor(Math.max(0, hours));
+    const m = Math.round((Math.max(0, hours) - h) * 60);
+    return `${h}h ${String(m).padStart(2, '0')}m`;
+}
+
+// "Tarifa aplicada: 80,00 €/día (desde 01/01/2025)" — which rate the day uses.
+const wageSnapshot = computed(() => {
+    if (!props.canSeeWage || dayTypeRate.value === null) return null;
+    const from = selectedEmployee.value?.rate_from;
+    return {
+        rate: dayTypeRate.value,
+        unit: rateUnit.value,
+        from: from ? new Date(`${from}T00:00:00`).toLocaleDateString('es-ES') : null,
+    };
+});
+
 // ── Helpers for bilingual header strings outside <template> ───────────────
 // $t is only available inside template; here we pull from the page prop.
 function $tStr(key) {
@@ -281,27 +299,36 @@ function formatCoords(loc) {
                 </div>
             </div>
 
-            <!-- Live pay preview by day type — create flow, wage viewers -->
-            <div v-if="canSeeWage && !record?.id && dayTypeRate !== null"
-                class="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-md bg-surface-sunken px-3 py-2 text-sm">
-                <div v-if="isHourly" class="flex items-center gap-1.5 text-ink-soft">
-                    <AppIcon name="clock" class="h-4 w-4" />
-                    <Bilingual k="attendance.hours_preview" inline />
-                    <span class="tabular-nums font-semibold text-ink">{{ liveHours ?? form.hours_worked }}h</span>
+            <!-- Live pay preview by day type — wage viewers, create + edit -->
+            <div v-if="canSeeWage && dayTypeRate !== null"
+                class="space-y-1.5 rounded-md bg-surface-sunken px-3 py-2.5 text-sm">
+                <div v-if="wageSnapshot" class="flex flex-wrap items-center gap-1.5 text-xs text-muted">
+                    <Bilingual k="attendance.rate_applied" inline />
+                    <span class="tabular-nums text-ink-soft">{{ wageSnapshot.rate }} {{ wageSnapshot.unit }}</span>
+                    <span v-if="wageSnapshot.from">({{ $t('attendance.since') }} {{ wageSnapshot.from }})</span>
                 </div>
-                <div class="flex items-center gap-1.5 text-ink-soft">
-                    <Bilingual k="attendance.wage_rate" inline />
-                    <span class="tabular-nums text-ink">{{ dayTypeRate }} {{ rateUnit }}</span>
-                </div>
-                <div v-if="liveTotal !== null" class="ms-auto flex items-center gap-1.5 font-medium text-ink">
-                    ≈ <span class="tabular-nums">{{ liveTotal.toFixed(2) }} €</span>
+                <div class="flex flex-wrap items-center gap-x-4 gap-y-1">
+                    <div v-if="isHourly" class="flex items-center gap-1.5 text-ink-soft">
+                        <AppIcon name="clock" class="h-4 w-4" />
+                        <Bilingual k="attendance.hours_preview" inline />
+                        <span class="tabular-nums font-semibold text-ink">{{ toHM(liveHours ?? (Number(form.hours_worked) || 0)) }}</span>
+                    </div>
+                    <div v-if="liveTotal !== null" class="ms-auto flex items-center gap-1.5 font-medium text-ink">
+                        <Bilingual k="attendance.amount_calc" inline />
+                        <span class="tabular-nums font-semibold">{{ liveTotal.toFixed(2) }} €</span>
+                    </div>
                 </div>
             </div>
 
             <!-- Wage override (permission-gated) -->
             <div v-if="canSeeWage" class="rounded-md bg-surface-sunken p-3">
                 <VCheckbox v-model="form.manual_wage_override"><Bilingual k="attendance.manual_override" inline class="text-sm" /></VCheckbox>
-                <FormField v-if="form.manual_wage_override" k="attendance.total" class="mt-2"><VCurrencyInput v-model="form.total_amount" /></FormField>
+                <template v-if="form.manual_wage_override">
+                    <FormField k="attendance.total" class="mt-2" :error="form.errors.total_amount"><VCurrencyInput v-model="form.total_amount" /></FormField>
+                    <FormField k="attendance.override_reason" class="mt-2" :error="form.errors.override_reason" required>
+                        <VInput v-model="form.override_reason" />
+                    </FormField>
+                </template>
             </div>
 
             <div class="flex flex-wrap gap-6">

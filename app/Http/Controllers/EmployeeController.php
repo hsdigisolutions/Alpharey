@@ -159,7 +159,7 @@ class EmployeeController extends Controller
                 ? $this->attendanceEditingPayload($employee, (int) $request->integer('att_edit'), $canSeeWages)
                 : null,
             'attendanceProjects' => Gate::allows('attendance.view') ? $this->attendanceProjects() : [],
-            'attendanceEmployee' => Gate::allows('attendance.view') ? $this->attendanceEmployeePayload($employee, $canSeeWages) : null,
+            'attendanceEmployee' => Gate::allows('attendance.view') ? $this->attendanceEmployeePayload($employee, $canSeeWages, $wageRates) : null,
             'canManageAttendance' => Gate::allows('attendance.create'),
             'canSeeWages' => $canSeeWages,
             'can' => [
@@ -268,6 +268,7 @@ class EmployeeController extends Controller
             'grid' => $grid,
             'summary' => [
                 'present' => $worked->count(),
+                'half_days' => $worked->filter(fn (Attendance $r) => $r->day_type?->value === 'half')->count(),
                 'hours' => round((float) $records->sum(fn (Attendance $r) => (float) $r->hours_worked), 2),
                 'overtime' => round((float) $records->sum(fn (Attendance $r) => (float) $r->overtime_hours), 2),
                 'absences' => $records->filter(fn (Attendance $r) => $r->status->value === 'absent')->count(),
@@ -309,6 +310,7 @@ class EmployeeController extends Controller
             'status' => $a->status->value,
             'total_amount' => $canSeeWages ? (float) $a->total_amount : null,
             'manual_wage_override' => $a->manual_wage_override,
+            'override_reason' => $a->override_reason,
             'is_paid' => $a->is_paid,
             'is_exception' => $a->is_exception,
             'exception_reason' => $a->exception_reason,
@@ -338,7 +340,7 @@ class EmployeeController extends Controller
      *
      * @return array<string, mixed>
      */
-    private function attendanceEmployeePayload(Employee $employee, bool $canSeeWages): array
+    private function attendanceEmployeePayload(Employee $employee, bool $canSeeWages, WageRateService $wageRates): array
     {
         $row = [
             'id' => $employee->id,
@@ -358,6 +360,8 @@ class EmployeeController extends Controller
                 WageType::Daily => $daily !== null ? round((float) $daily / 8, 2) : null,
                 default => $hourly !== null ? round((float) $hourly, 2) : null,
             };
+            // "Tarifa aplicada … (desde …)" — the current rate's effective-from.
+            $row['rate_from'] = $wageRates->rateForDate($employee->id, now()->toDateString())?->effective_from?->toDateString();
         }
 
         return $row;

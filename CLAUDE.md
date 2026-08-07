@@ -54,6 +54,21 @@ the bulk "Vino / No vino / No convocado" distinction has no data difference (No
 vino/No convocado both = no record, no penalty), so selection = "came"; the notice
 explains it. Follow-up if the client wants those states persisted.
 
+### Attendance UI polish — cells + modal live preview (2026-08-07)
+
+Follow-up review fixes on the admin attendance side (client screenshots):
+- **Calendar cells** now show four corners: day number (top-left), the day-type
+  marker (centre), project name short (bottom-left, first 10 chars), and the day
+  amount (bottom-right, wage-gated). Employee-tab summary gained a "Medias
+  jornadas" (half-day count) card and an `h` suffix on hours.
+- **Entry/edit modal**: the live pay preview now shows for BOTH create and edit,
+  labelled "Importe calculado", with hours as `7h 00m` (not a decimal); a wage
+  snapshot line "Tarifa aplicada: 80,00 €/día (desde 01/01/2025)" reads the
+  current rate's `effective_from`. A manual override now requires a reason
+  (`override_reason` column, migration `2026_08_07_000007`, `required_if` in
+  StoreAttendanceRequest). Tests: `AttendanceOverrideTest` (2) + a half-days
+  assertion on `EmployeeAttendanceTabTest`.
+
 ### Employee detail — Asistencia tab (2026-08-07)
 
 Screen 06's Asistencia tab (was "coming soon") is now a per-employee month

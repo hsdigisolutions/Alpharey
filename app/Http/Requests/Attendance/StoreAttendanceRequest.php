@@ -47,6 +47,7 @@ class StoreAttendanceRequest extends FormRequest
             'status' => ['required', Rule::enum(AttendanceStatus::class)],
             'total_amount' => ['nullable', 'numeric', 'min:0'],
             'manual_wage_override' => ['boolean'],
+            'override_reason' => ['nullable', 'string', 'max:255', 'required_if:manual_wage_override,true'],
             'is_paid' => ['boolean'],
             'is_exception' => ['boolean'],
             'exception_reason' => ['nullable', 'string', 'max:255', 'required_if:is_exception,true'],

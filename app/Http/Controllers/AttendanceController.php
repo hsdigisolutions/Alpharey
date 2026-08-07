@@ -311,6 +311,7 @@ class AttendanceController extends Controller
             'status' => $attendance->status->value,
             'total_amount' => $canSeeWage ? (float) $attendance->total_amount : null,
             'manual_wage_override' => $attendance->manual_wage_override,
+            'override_reason' => $attendance->override_reason,
             'is_paid' => $attendance->is_paid,
             'is_exception' => $attendance->is_exception,
             'exception_reason' => $attendance->exception_reason,

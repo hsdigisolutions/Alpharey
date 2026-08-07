@@ -115,7 +115,7 @@ it('respects a manual wage override', function (): void {
     $this->actingAs($this->admin)->post('/attendance', [
         'employee_id' => $employee->id, 'date' => '2026-07-03', 'mode' => 'project_based',
         'hours_worked' => 8, 'status' => 'present',
-        'manual_wage_override' => true, 'total_amount' => 999,
+        'manual_wage_override' => true, 'total_amount' => 999, 'override_reason' => 'Ajuste manual',
     ])->assertRedirect();
 
     expect((float) Attendance::withoutGlobalScopes()->where('employee_id', $employee->id)->value('total_amount'))

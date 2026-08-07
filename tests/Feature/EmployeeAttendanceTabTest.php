@@ -26,6 +26,7 @@ it('returns a month grid and summary on the attendance tab', function (): void {
         ->assertInertia(fn ($page) => $page
             ->where('attendanceTab.month', '2026-07')
             ->where('attendanceTab.summary.present', 1)
+            ->where('attendanceTab.summary.half_days', 0)
             ->where('attendanceTab.summary.total_wage', 80)
             ->where('attendanceTab.grid.6.day_type', 'full')
             ->where('attendanceTab.grid.6.total', 80)
