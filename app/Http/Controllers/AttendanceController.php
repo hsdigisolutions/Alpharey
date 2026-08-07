@@ -3,13 +3,17 @@
 namespace App\Http\Controllers;
 
 use App\Enums\DeploymentStatus;
+use App\Enums\WageType;
 use App\Http\Requests\Attendance\StoreAttendanceRequest;
+use App\Http\Requests\Attendance\StoreBulkAttendanceRequest;
 use App\Http\Requests\Attendance\UpdateAttendanceRequest;
 use App\Models\Attendance;
 use App\Models\AttendanceVoiceNote;
 use App\Models\Employee;
 use App\Models\EmployeeDeployment;
 use App\Models\Project;
+use App\Models\ProjectEmployeeRate;
+use App\Models\Scopes\CompanyScope;
 use App\Services\Attendance\AttendanceService;
 use App\Services\Audit\AuditLogger;
 use App\Support\CurrentCompany;
@@ -90,9 +94,44 @@ class AttendanceController extends Controller
             ];
         }
 
+        // When the acting user can see wage data, compute a per-employee hourly
+        // rate from the frozen wage fields so the modal can show an auto-fill
+        // preview. wage_rate/daily_wage are $hidden so we access via getAttribute.
+        $canSeeWage = Gate::allows('payroll.view') || Gate::allows('employees.edit');
+
+        if ($canSeeWage) {
+            $wageEmployees = Employee::query()
+                ->withoutGlobalScope(CompanyScope::class)
+                ->whereIn('id', $employeeIds)
+                ->get(['id', 'wage_type', 'wage_rate', 'daily_wage'])
+                ->keyBy('id');
+
+            $employees = $employees->map(function (array $e) use ($wageEmployees): array {
+                $wEmp = $wageEmployees->get($e['id']);
+                if ($wEmp !== null) {
+                    $rate = $wEmp->getAttribute('wage_rate');
+                    $daily = $wEmp->getAttribute('daily_wage');
+                    $e['hourly_rate'] = match ($wEmp->wage_type) {
+                        WageType::Hourly => $rate !== null ? round((float) $rate, 2) : null,
+                        WageType::Daily => $daily !== null ? round((float) $daily / 8, 2) : null,
+                        default => $rate !== null ? round((float) $rate, 2) : null,
+                    };
+                }
+
+                return $e;
+            });
+        }
+
+        // Project→employee assignment map for the "show project workers first"
+        // feature in the entry modals. Only employee ids, no wage data here.
+        $projectAssignments = ProjectEmployeeRate::query()
+            ->get(['project_id', 'employee_id'])
+            ->groupBy('project_id')
+            ->map(fn ($rows) => $rows->pluck('employee_id')->values()->all())
+            ->all();
+
         // Monthly summary per employee. The wage total is gated exactly like
         // the cell payload below — hours are attendance data, money is pay data.
-        $canSeeWage = Gate::allows('payroll.view') || Gate::allows('employees.edit');
 
         $summary = $records->groupBy('employee_id')->map(function ($rows) use ($canSeeWage) {
             // status is an AttendanceStatus enum cast — compare on ->value
@@ -119,13 +158,24 @@ class AttendanceController extends Controller
             $editing = $record !== null ? $this->payload($record) : null;
         }
 
+        // Load projects with their client name for the searchable dropdown.
+        $projects = Project::query()->with('client:id,company_name')->orderBy('name')
+            ->get(['id', 'name', 'client_id'])
+            ->map(fn (Project $p): array => [
+                'id' => $p->id,
+                'name' => $p->name,
+                'client_name' => $p->client?->company_name,
+            ]);
+
         return Inertia::render('Attendance/Index', [
             'month' => $month->format('Y-m'),
             'daysInMonth' => $end->day,
             'employees' => $employees,
             'grid' => $grid,
             'summary' => $summary,
-            'projects' => Project::query()->orderBy('name')->get(['id', 'name']),
+            'projects' => $projects,
+            'projectAssignments' => $projectAssignments,
+            'canSeeWage' => $canSeeWage,
             'editing' => $editing,
             'can' => [
                 'create' => Gate::allows('attendance.create'),
@@ -141,6 +191,43 @@ class AttendanceController extends Controller
         $service->create($request->validated());
 
         return back()->with('success', __('ui.attendance.saved'));
+    }
+
+    public function storeBulk(StoreBulkAttendanceRequest $request, AttendanceService $service): RedirectResponse
+    {
+        $data = $request->validated();
+        $employeeIds = $data['employee_ids'];
+        $date = $data['date'];
+
+        // Skip any employee that already has an attendance row on this date so
+        // we never violate the (employee_id, date) unique index.
+        $existing = Attendance::query()
+            ->withoutGlobalScopes()
+            ->where('company_id', app(CurrentCompany::class)->id())
+            ->whereIn('employee_id', $employeeIds)
+            ->where('date', $date)
+            ->pluck('employee_id')
+            ->flip()
+            ->all();
+
+        $created = 0;
+        $skipped = count($existing);
+
+        foreach ($employeeIds as $employeeId) {
+            if (isset($existing[$employeeId])) {
+                continue;
+            }
+
+            $service->create(array_merge($data, ['employee_id' => $employeeId]));
+            $created++;
+        }
+
+        $msg = strtr(__('ui.attendance.bulk_created'), [':count' => $created]);
+        if ($skipped > 0) {
+            $msg .= ' — '.strtr(__('ui.attendance.bulk_skipped'), [':count' => $skipped]);
+        }
+
+        return back()->with('success', $msg);
     }
 
     public function update(UpdateAttendanceRequest $request, Attendance $attendance, AttendanceService $service): RedirectResponse

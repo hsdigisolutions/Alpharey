@@ -330,6 +330,9 @@ return [
         'confirm_delete_title' => 'Confirm deletion',
         'confirm_delete_body' => 'This action cannot be undone.',
         'delete' => 'Delete',
+        'back' => 'Back',
+        'next' => 'Next',
+        'employees' => 'employees',
     ],
 
     'table' => [
@@ -780,6 +783,31 @@ return [
         'leave' => 'Leave',
         'total_wage' => 'Total wage',
         'no_rows' => 'No records this month',
+        // Bulk entry
+        'bulk_new' => 'Bulk Entry',
+        'bulk_step1' => 'Project',
+        'bulk_step2' => 'Workers',
+        'bulk_step3' => 'Details',
+        'bulk_step4' => 'Confirm',
+        'bulk_select_project' => 'Search project...',
+        'bulk_skip_project' => 'No project (optional)',
+        'bulk_created' => ':count attendance records created',
+        'bulk_skipped' => ':count skipped (already exist)',
+        'bulk_workers_title' => 'Select workers',
+        'bulk_details_title' => 'Attendance details',
+        'bulk_preview_title' => 'Confirm and save',
+        'bulk_no_workers' => 'No workers selected',
+        'select_all' => 'Select all',
+        'deselect_all' => 'Deselect all',
+        'project_workers' => 'Assigned to project',
+        'other_employees' => 'Other employees',
+        'no_project_workers' => 'No workers assigned to this project',
+        'search_employee' => 'Search employee...',
+        'search_project' => 'Search project...',
+        // Enhanced single entry
+        'wage_rate' => 'Hourly rate',
+        'hours_preview' => 'Calculated hours',
+        'preview_total' => 'Estimated total',
     ],
 
     'measurements' => [

@@ -10,6 +10,7 @@ import { ensureCompanySelected } from '@/composables/useCompanyGate';
 import AppIcon from '@/Components/AppIcon.vue';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import AttendanceModal from '@/Components/Attendance/AttendanceModal.vue';
+import BulkAttendanceModal from '@/Components/Attendance/BulkAttendanceModal.vue';
 import VBadge from '@/Components/ui/VBadge.vue';
 import VButton from '@/Components/ui/VButton.vue';
 import VPageHeader from '@/Components/ui/VPageHeader.vue';
@@ -21,12 +22,13 @@ const props = defineProps({
     grid: { type: Object, required: true },
     summary: { type: Object, required: true },
     projects: { type: Array, required: true },
+    projectAssignments: { type: Object, default: () => ({}) },
+    canSeeWage: { type: Boolean, default: false },
     editing: { type: Object, default: null },
     can: { type: Object, required: true },
 });
 
 const page = usePage();
-const canSeeWage = computed(() => ['super_admin', 'admin'].includes(page.props.auth.user?.role));
 
 const days = computed(() => Array.from({ length: props.daysInMonth }, (_, i) => i + 1));
 
@@ -50,6 +52,14 @@ function isWeekend(day) {
     const [y, m] = props.month.split('-').map(Number);
     const dow = new Date(y, m - 1, day).getDay();
     return dow === 0 || dow === 6;
+}
+
+/* --- bulk modal --- */
+const showBulkModal = ref(false);
+
+function openBulk() {
+    if (!ensureCompanySelected()) return;
+    showBulkModal.value = true;
 }
 
 /* --- edit modal --- */
@@ -105,6 +115,9 @@ const monthLabel = computed(() => {
             <VButton v-if="can.export" variant="secondary" size="sm" icon="export" @click="exportMonth">Excel</VButton>
             <VButton v-if="can.create" variant="secondary" size="sm" @click="downloadTemplate">
                 <Bilingual k="attendance.template" inline />
+            </VButton>
+            <VButton v-if="can.create" variant="secondary" icon="plus" @click="openBulk">
+                <Bilingual k="attendance.bulk_new" inline />
             </VButton>
             <VButton v-if="can.create" icon="plus" @click="openCreate">
                 <Bilingual k="attendance.new" inline />
@@ -201,7 +214,16 @@ const monthLabel = computed(() => {
 
         <AttendanceModal :open="showModal" :record="modalRecord"
             :preset-employee="preset.employee" :preset-date="preset.date"
-            :employees="employees" :projects="projects" :can-see-wage="canSeeWage"
+            :employees="employees" :projects="projects"
+            :project-assignments="projectAssignments"
+            :can-see-wage="canSeeWage"
             @close="showModal = false" />
+
+        <BulkAttendanceModal :open="showBulkModal"
+            :employees="employees" :projects="projects"
+            :project-assignments="projectAssignments"
+            :can-see-wage="canSeeWage"
+            :month="month"
+            @close="showBulkModal = false" />
     </AppLayout>
 </template>

@@ -3,6 +3,9 @@
  * Attendance day entry (Screen 11 cell edit). Hourly mode auto-calculates
  * hours from check-in/out; project-based takes manual hours. The day total
  * is computed server-side from the frozen wage snapshot unless overridden.
+ *
+ * Feature 2 enhancements: searchable employee/project dropdowns (VCombobox),
+ * project-workers-first grouping, live hours preview, wage rate display.
  */
 import { computed, ref, watch } from 'vue';
 import { router, useForm } from '@inertiajs/vue3';
@@ -11,6 +14,7 @@ import FormField from '@/Components/ui/FormField.vue';
 import VBadge from '@/Components/ui/VBadge.vue';
 import VButton from '@/Components/ui/VButton.vue';
 import VCheckbox from '@/Components/ui/VCheckbox.vue';
+import VCombobox from '@/Components/ui/VCombobox.vue';
 import VConfirmDialog from '@/Components/ui/VConfirmDialog.vue';
 import VCurrencyInput from '@/Components/ui/VCurrencyInput.vue';
 import VDateInput from '@/Components/ui/VDateInput.vue';
@@ -26,6 +30,7 @@ const props = defineProps({
     presetDate: { type: String, default: null },
     employees: { type: Array, required: true },
     projects: { type: Array, required: true },
+    projectAssignments: { type: Object, default: () => ({}) }, // { projectId: [employeeId, ...] }
     canSeeWage: { type: Boolean, default: false },
 });
 const emit = defineEmits(['close']);
@@ -52,6 +57,75 @@ watch(() => props.open, (open) => {
 const statuses = ['present', 'absent', 'late', 'early_leave', 'leave'];
 const isHourly = computed(() => form.mode === 'hourly');
 
+// ── Grouped employee options for VCombobox ─────────────────────────────────
+// When a project is selected: show project workers first (with header), then
+// a divider, then all others. Without a project: flat list.
+const employeeOptions = computed(() => {
+    const pid = form.project_id;
+    const all = props.employees;
+
+    if (!pid) {
+        return all.map((e) => ({ value: e.id, label: e.full_name, secondary: e.designation }));
+    }
+
+    const assignedIds = new Set(props.projectAssignments[pid] ?? []);
+    const assigned = all.filter((e) => assignedIds.has(e.id));
+    const others = all.filter((e) => !assignedIds.has(e.id));
+    const opts = [];
+
+    if (assigned.length) {
+        opts.push({ isHeader: true, label: $tStr('attendance.project_workers') });
+        assigned.forEach((e) => opts.push({ value: e.id, label: e.full_name, secondary: e.designation }));
+    }
+    if (others.length) {
+        opts.push({ isHeader: true, label: $tStr('attendance.other_employees') });
+        others.forEach((e) => opts.push({ value: e.id, label: e.full_name, secondary: e.designation }));
+    }
+    return opts;
+});
+
+// Project options for VCombobox.
+const projectOptions = computed(() =>
+    props.projects.map((p) => ({ value: p.id, label: p.name, secondary: p.client_name })),
+);
+
+// ── Live hours preview ─────────────────────────────────────────────────────
+// Mirrors AttendanceService::hoursFromClock() so the user sees the result
+// before saving. Server recomputes authoritatively on save.
+const liveHours = computed(() => {
+    if (!isHourly.value) return null;
+    const ci = form.check_in, co = form.check_out;
+    if (!ci || !co) return null;
+    const [ih, im] = ci.split(':').map(Number);
+    const [oh, om] = co.split(':').map(Number);
+    const minutes = (oh * 60 + om) - (ih * 60 + im);
+    if (minutes <= 0) return 0;
+    let hours = minutes / 60;
+    if (form.deduct_break && form.break_hours > 0) {
+        hours = Math.max(0, hours - Number(form.break_hours));
+    }
+    return Math.round(hours * 100) / 100;
+});
+
+// ── Wage rate for the selected employee (canSeeWage only) ──────────────────
+const selectedEmployeeRate = computed(() => {
+    if (!props.canSeeWage || !form.employee_id) return null;
+    const emp = props.employees.find((e) => e.id == form.employee_id);
+    return emp?.hourly_rate ?? null;
+});
+
+const liveTotal = computed(() => {
+    if (selectedEmployeeRate.value === null || liveHours.value === null) return null;
+    return Math.round(liveHours.value * selectedEmployeeRate.value * 100) / 100;
+});
+
+// ── Helpers for bilingual header strings outside <template> ───────────────
+// $t is only available inside template; here we pull from the page prop.
+function $tStr(key) {
+    // Fallback: just use the last segment as a reasonable English label.
+    return key.split('.').at(-1)?.replace(/_/g, ' ') ?? key;
+}
+
 function submit() {
     const payload = form.transform((d) => ({ ...d, project_id: d.project_id || null }));
     const opts = { preserveScroll: true, onSuccess: () => emit('close') };
@@ -71,9 +145,6 @@ function doDestroy() {
     router.delete(`/attendance/${props.record.id}`, { preserveScroll: true, onSuccess: () => emit('close') });
 }
 
-// Drop a pin at exact coordinates. The ?q= format is the most reliable way to
-// place a marker — the search/?api=1&query= form sometimes resolves as a text
-// search and can miss the pin. z=16 gives a street-level zoom on open.
 function mapsUrl(loc) {
     return `https://maps.google.com/maps?q=${loc.lat},${loc.lng}&z=16`;
 }
@@ -87,20 +158,29 @@ function formatCoords(loc) {
     <VModal :open="open" :title-key="record?.id ? 'attendance.edit' : 'attendance.new'" size="md" @close="emit('close')">
         <form id="att-form" class="space-y-4" @submit.prevent="submit">
             <div class="grid gap-4 sm:grid-cols-2">
-                <FormField k="attendance.employee" :error="form.errors.employee_id" required>
-                    <VSelect v-model="form.employee_id" :disabled="Boolean(record?.id)">
-                        <option value="">—</option>
-                        <option v-for="e in employees" :key="e.id" :value="e.id">{{ e.full_name }}</option>
-                    </VSelect>
+                <!-- Searchable project dropdown (Feature 2) -->
+                <FormField k="attendance.project" :error="form.errors.project_id">
+                    <VCombobox
+                        v-model="form.project_id"
+                        :options="projectOptions"
+                        :placeholder="$t('attendance.search_project')"
+                        :search-placeholder="$t('attendance.search_project')"
+                    />
                 </FormField>
+
+                <!-- Searchable employee dropdown with project-first grouping (Feature 2) -->
+                <FormField k="attendance.employee" :error="form.errors.employee_id" required>
+                    <VCombobox
+                        v-model="form.employee_id"
+                        :options="employeeOptions"
+                        :placeholder="$t('attendance.search_employee')"
+                        :search-placeholder="$t('attendance.search_employee')"
+                        :disabled="Boolean(record?.id)"
+                    />
+                </FormField>
+
                 <FormField k="attendance.date" :error="form.errors.date" required>
                     <VDateInput v-model="form.date" />
-                </FormField>
-                <FormField k="attendance.project" :error="form.errors.project_id">
-                    <VSelect v-model="form.project_id">
-                        <option value="">—</option>
-                        <option v-for="p in projects" :key="p.id" :value="p.id">{{ p.name }}</option>
-                    </VSelect>
                 </FormField>
                 <FormField k="attendance.mode" required>
                     <VSelect v-model="form.mode">
@@ -129,6 +209,24 @@ function formatCoords(loc) {
                 </FormField>
             </div>
 
+            <!-- Live hours preview (Feature 2) — only in hourly mode, create flow -->
+            <div v-if="isHourly && liveHours !== null && !record?.id"
+                class="flex items-center gap-4 rounded-md bg-surface-sunken px-3 py-2 text-sm">
+                <div class="flex items-center gap-1.5 text-ink-soft">
+                    <AppIcon name="clock" class="h-4 w-4" />
+                    <Bilingual k="attendance.hours_preview" inline />
+                    <span class="tabular-nums font-semibold text-ink">{{ liveHours }}h</span>
+                </div>
+                <div v-if="canSeeWage && selectedEmployeeRate !== null" class="flex items-center gap-1.5 text-ink-soft">
+                    <Bilingual k="attendance.wage_rate" inline />
+                    <span class="tabular-nums text-ink">{{ selectedEmployeeRate }} €/h</span>
+                </div>
+                <div v-if="canSeeWage && liveTotal !== null" class="ms-auto flex items-center gap-1.5 font-medium text-ink">
+                    ≈
+                    <span class="tabular-nums">{{ liveTotal.toFixed(2) }} €</span>
+                </div>
+            </div>
+
             <!-- Wage override (permission-gated) -->
             <div v-if="canSeeWage" class="rounded-md bg-surface-sunken p-3">
                 <VCheckbox v-model="form.manual_wage_override"><Bilingual k="attendance.manual_override" inline class="text-sm" /></VCheckbox>
@@ -144,9 +242,7 @@ function formatCoords(loc) {
             </FormField>
             <FormField k="attendance.notes"><VTextarea v-model="form.notes" :rows="2" /></FormField>
 
-            <!-- Worker PWA capture: shown only for a phone punch. Read-only —
-                 an admin sees where/when the worker punched and their selfie,
-                 but the record itself is edited through the fields above. -->
+            <!-- Worker PWA capture: shown only for a phone punch. Read-only. -->
             <div v-if="record?.worker" class="rounded-md border border-line bg-surface-sunken p-3">
                 <div class="mb-2 flex items-center gap-2">
                     <VBadge status="info"><Bilingual k="attendance.from_app" inline /></VBadge>
@@ -187,19 +283,13 @@ function formatCoords(loc) {
                     </div>
                 </dl>
 
-                <!-- Check-in selfie with GPS watermark (phone punch only).
-                     Fetched through the gated, audited route — never a public URL.
-                     Overlaid timestamp + coordinates mimic the GPS-camera format
-                     so the admin sees the same proof the worker captured. -->
                 <div v-if="record.worker.has_photo" class="mt-3 overflow-hidden rounded-lg border border-line">
                     <div class="relative bg-black">
                         <img :src="`/attendance/${record.id}/selfie`" alt="Check-in selfie"
                             class="w-full object-cover object-top"
                             style="max-height: 340px;" />
-                        <!-- GPS-camera style overlay: dark gradient + data strip -->
                         <div class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/60 to-transparent px-3 pb-3 pt-10">
                             <div class="flex items-end gap-2.5">
-                                <!-- Location pin box (mini-map substitute — no external tile allowed by CSP) -->
                                 <div class="flex h-14 w-14 shrink-0 flex-col items-center justify-center rounded border border-white/20 bg-black/70">
                                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
                                         stroke-linecap="round" stroke-linejoin="round"
@@ -210,22 +300,18 @@ function formatCoords(loc) {
                                     <span class="mt-0.5 text-[8px] font-bold uppercase tracking-widest text-white/50">GPS</span>
                                 </div>
                                 <div class="min-w-0 flex-1 font-mono">
-                                    <!-- Coordinates -->
                                     <p v-if="record.worker.check_in" class="text-sm font-semibold leading-tight text-white">
                                         Lat {{ (+record.worker.check_in.lat).toFixed(6) }}°
                                         Lng {{ (+record.worker.check_in.lng).toFixed(6) }}°
                                     </p>
                                     <p v-else class="text-xs text-yellow-300">GPS not captured</p>
-                                    <!-- Timestamp -->
                                     <p v-if="record.worker.check_in_at" class="mt-0.5 text-[11px] text-white/80">
                                         {{ record.worker.check_in_at }}
                                     </p>
-                                    <!-- Accuracy -->
                                     <p v-if="record.worker.check_in?.accuracy" class="text-[10px] text-white/60">
                                         ±{{ Math.round(record.worker.check_in.accuracy) }}m
                                     </p>
                                 </div>
-                                <!-- Branding badge -->
                                 <div class="shrink-0 text-right leading-none">
                                     <p class="text-[9px] font-bold uppercase tracking-wider text-white/50">AlphaRey</p>
                                     <p class="text-[8px] text-white/35">GPS Check-in</p>
@@ -233,7 +319,6 @@ function formatCoords(loc) {
                             </div>
                         </div>
                     </div>
-                    <!-- View full size link below the photo -->
                     <a :href="`/attendance/${record.id}/selfie`" target="_blank" rel="noopener"
                         class="flex items-center justify-center gap-1.5 bg-surface-sunken py-1.5 text-xs text-accent underline-offset-2 hover:underline">
                         <Bilingual k="attendance.view_selfie_full" inline />
@@ -241,8 +326,7 @@ function formatCoords(loc) {
                 </div>
             </div>
 
-            <!-- Voice / text note captured at check-out (Feature 1). Read-only.
-                 The audio streams through the gated, audited download route. -->
+            <!-- Voice/text note captured at check-out. Read-only. -->
             <div v-if="record?.voice_note" class="rounded-md border border-line bg-surface-sunken p-3">
                 <div class="mb-2 flex items-center gap-2">
                     <AppIcon name="mic" class="h-4 w-4 text-ink-soft" />

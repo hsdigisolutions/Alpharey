@@ -332,6 +332,9 @@ return [
         'confirm_delete_title' => '¿Confirmar eliminación?',
         'confirm_delete_body' => 'Esta acción no se puede deshacer.',
         'delete' => 'Eliminar',
+        'back' => 'Atrás',
+        'next' => 'Siguiente',
+        'employees' => 'empleados',
     ],
 
     'table' => [
@@ -781,6 +784,31 @@ return [
         'leave' => 'Ausencias',
         'total_wage' => 'Total nómina',
         'no_rows' => 'Sin registros este mes',
+        // Bulk entry
+        'bulk_new' => 'Entrada Masiva',
+        'bulk_step1' => 'Proyecto',
+        'bulk_step2' => 'Trabajadores',
+        'bulk_step3' => 'Detalles',
+        'bulk_step4' => 'Confirmar',
+        'bulk_select_project' => 'Buscar proyecto...',
+        'bulk_skip_project' => 'Sin proyecto (opcional)',
+        'bulk_created' => ':count registros de asistencia creados',
+        'bulk_skipped' => ':count omitidos (ya existen)',
+        'bulk_workers_title' => 'Seleccionar trabajadores',
+        'bulk_details_title' => 'Detalles de asistencia',
+        'bulk_preview_title' => 'Confirmar y guardar',
+        'bulk_no_workers' => 'Sin trabajadores seleccionados',
+        'select_all' => 'Seleccionar todos',
+        'deselect_all' => 'Deseleccionar todos',
+        'project_workers' => 'Asignados al proyecto',
+        'other_employees' => 'Otros empleados',
+        'no_project_workers' => 'Sin trabajadores asignados a este proyecto',
+        'search_employee' => 'Buscar empleado...',
+        'search_project' => 'Buscar proyecto...',
+        // Enhanced single entry
+        'wage_rate' => 'Tarifa horaria',
+        'hours_preview' => 'Horas calculadas',
+        'preview_total' => 'Total estimado',
     ],
 
     'measurements' => [
