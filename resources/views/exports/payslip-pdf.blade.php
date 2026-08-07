@@ -72,6 +72,12 @@
         $dtLabel = ['full' => 'Jornadas completas', 'half' => 'Medias jornadas', 'hourly' => 'Por horas', 'per_meter' => 'Por metros'];
         $dtUnit = ['full' => 'días', 'half' => 'días', 'hourly' => 'h', 'per_meter' => 'm'];
         $num = fn ($n) => ((float) $n == (int) $n) ? (string) (int) $n : number_format((float) $n, 2, ',', '.');
+        $labelFor = function ($s) use ($dtLabel) {
+            if (! empty($s['weekend'])) {
+                return in_array($s['type'], ['full', 'half']) ? 'Días fin de semana' : ($dtLabel[$s['type']] ?? $s['type']).' (FS)';
+            }
+            return $dtLabel[$s['type']] ?? $s['type'];
+        };
     @endphp
     <table>
         <tr>
@@ -82,7 +88,7 @@
             @foreach ($daySummary as $s)
                 <tr>
                     <td>
-                        {{ $dtLabel[$s['type']] ?? $s['type'] }}
+                        {{ $labelFor($s) }}
                         <span class="muted">({{ $num($s['units']) }} {{ $dtUnit[$s['type']] ?? '' }} × {{ $eur($s['rate']) }})</span>
                     </td>
                     <td class="amount">{{ $eur($s['amount']) }}</td>

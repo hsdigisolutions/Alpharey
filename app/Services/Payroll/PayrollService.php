@@ -332,6 +332,7 @@ class PayrollService
 
         foreach ($paidRows as $record) {
             $type = $this->effectiveDayType($record);
+            $weekend = (bool) $record->is_weekend;
             $perMeterRate = (float) ($record->wage_rate_snapshot ?? 0);
             $hourly = (float) ($record->hourly_rate_snapshot ?? 0);
             $total = (float) $record->total_amount;
@@ -345,8 +346,9 @@ class PayrollService
                 DayType::Hourly => [$hourly, (float) $record->hours_worked, (float) $record->hours_worked * $hourly],
             };
 
-            $key = $type->value.'|'.number_format($unitRate, 4, '.', '');
-            $groups[$key] ??= ['type' => $type->value, 'rate' => round($unitRate, 2), 'units' => 0.0, 'amount' => 0.0];
+            // Weekend days get their own line ("Días fin de semana").
+            $key = $type->value.'|'.($weekend ? 'w' : 'd').'|'.number_format($unitRate, 4, '.', '');
+            $groups[$key] ??= ['type' => $type->value, 'weekend' => $weekend, 'rate' => round($unitRate, 2), 'units' => 0.0, 'amount' => 0.0];
             $groups[$key]['units'] = round($groups[$key]['units'] + $units, 2);
             $groups[$key]['amount'] = round($groups[$key]['amount'] + $amount, 2);
         }
@@ -356,7 +358,8 @@ class PayrollService
         }
 
         $list = array_values($groups);
-        usort($list, fn (array $a, array $b): int => ($order[$a['type']] <=> $order[$b['type']]) ?: ($b['rate'] <=> $a['rate']));
+        usort($list, fn (array $a, array $b): int => ($order[$a['type']] <=> $order[$b['type']])
+            ?: (($a['weekend'] <=> $b['weekend']) ?: ($b['rate'] <=> $a['rate'])));
 
         return $list;
     }

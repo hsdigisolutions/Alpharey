@@ -39,6 +39,7 @@ const blank = {
     employee_id: '', project_id: '', date: null, mode: 'project_based', day_type: 'full',
     check_in: '09:00', check_out: '17:00', break_hours: 1, deduct_break: true,
     hours_worked: 0, quantity: null, overtime_hours: 0, status: 'present', total_amount: null,
+    weekend_rate_type: 'normal', weekend_rate_amount: null,
     manual_wage_override: false, is_paid: false, is_exception: false,
     exception_reason: '', notes: '',
 };
@@ -60,6 +61,20 @@ const dayTypes = ['full', 'half', 'hourly', 'per_meter'];
 // The day type drives pay; the capture mode follows it (hourly clock vs manual).
 const isHourly = computed(() => form.day_type === 'hourly');
 const isPerMeter = computed(() => form.day_type === 'per_meter');
+
+// Weekend detection (Sat/Sun) — the server confirms it, this only drives the UI.
+const isWeekendDate = computed(() => {
+    if (!form.date) return false;
+    const d = new Date(`${form.date}T00:00:00`).getDay();
+    return d === 0 || d === 6;
+});
+const weekendRateTypes = ['normal', 'x1.5', 'x2', 'custom'];
+const weekendKey = {
+    normal: 'attendance.weekend_normal',
+    'x1.5': 'attendance.weekend_x15',
+    x2: 'attendance.weekend_x2',
+    custom: 'attendance.weekend_custom',
+};
 
 // ── Grouped employee options for VCombobox ─────────────────────────────────
 // When a project is selected: show project workers first (with header), then
@@ -132,6 +147,13 @@ const liveTotal = computed(() => {
     else if (form.day_type === 'half') total = rate * 0.5;
     else if (form.day_type === 'hourly') total = (liveHours.value ?? (Number(form.hours_worked) || 0)) * rate;
     else if (form.day_type === 'per_meter') total = (Number(form.quantity) || 0) * rate;
+
+    // Weekend premium
+    if (isWeekendDate.value) {
+        if (form.weekend_rate_type === 'custom') total = Number(form.weekend_rate_amount) || 0;
+        else if (form.weekend_rate_type === 'x1.5') total *= 1.5;
+        else if (form.weekend_rate_type === 'x2') total *= 2;
+    }
     return Math.round(total * 100) / 100;
 });
 
@@ -155,6 +177,9 @@ function submit() {
         // Capture mode follows the day type: hourly clocks in/out, the rest are manual.
         mode: d.day_type === 'hourly' ? 'hourly' : 'project_based',
         quantity: d.day_type === 'per_meter' ? d.quantity : null,
+        // Weekend premium only applies on an actual weekend date.
+        weekend_rate_type: isWeekendDate.value ? d.weekend_rate_type : null,
+        weekend_rate_amount: isWeekendDate.value && d.weekend_rate_type === 'custom' ? d.weekend_rate_amount : null,
     }));
     const opts = { preserveScroll: true, onSuccess: () => emit('close') };
     props.record?.id ? payload.put(`/attendance/${props.record.id}`, opts) : payload.post('/attendance', opts);
@@ -234,6 +259,26 @@ function formatCoords(loc) {
                         <option v-for="s in statuses" :key="s" :value="s">{{ $t(`attendance.status_${s}`) }}</option>
                     </VSelect>
                 </FormField>
+            </div>
+
+            <!-- Weekend / optional work day -->
+            <div v-if="isWeekendDate" class="rounded-md border border-accent/40 bg-accent-soft p-3">
+                <p class="text-sm font-semibold text-accent"><Bilingual k="attendance.weekend_notice_title" /></p>
+                <p class="mt-1 text-xs text-ink-soft"><Bilingual k="attendance.weekend_notice_body" /></p>
+
+                <div class="mt-3">
+                    <span class="mb-1.5 block text-[13px] font-medium"><Bilingual k="attendance.weekend_rate" /></span>
+                    <div class="flex flex-wrap gap-x-4 gap-y-1.5">
+                        <label v-for="wt in weekendRateTypes" :key="wt" class="flex items-center gap-1.5 text-sm">
+                            <input v-model="form.weekend_rate_type" type="radio" :value="wt" class="accent-[var(--color-accent)]" />
+                            {{ $t(weekendKey[wt]) }}
+                        </label>
+                    </div>
+                    <FormField v-if="form.weekend_rate_type === 'custom'" k="attendance.weekend_custom"
+                        class="mt-2" :error="form.errors.weekend_rate_amount">
+                        <VCurrencyInput v-model="form.weekend_rate_amount" />
+                    </FormField>
+                </div>
             </div>
 
             <!-- Live pay preview by day type — create flow, wage viewers -->

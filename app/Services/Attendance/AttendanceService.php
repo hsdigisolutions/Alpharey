@@ -7,6 +7,7 @@ use App\Enums\DayType;
 use App\Enums\DeploymentStatus;
 use App\Enums\OvertimePolicyType;
 use App\Enums\WageType;
+use App\Enums\WeekendRateType;
 use App\Models\Attendance;
 use App\Models\AttendanceLog;
 use App\Models\Employee;
@@ -218,6 +219,9 @@ class AttendanceService
      */
     private function recompute(Attendance $attendance): void
     {
+        // Weekend is detected server-side from the date, never taken from input.
+        $attendance->is_weekend = $attendance->date->isWeekend();
+
         // Columns are decimal casts → assign numeric strings (matches @property)
         if ($attendance->mode === AttendanceMode::Hourly) {
             $attendance->hours_worked = (string) $this->hoursFromClock($attendance);
@@ -236,7 +240,27 @@ class AttendanceService
             DayType::Hourly => $this->hourlyTotal($attendance),
         };
 
+        $total = $this->applyWeekendPremium($attendance, $total);
+
         $attendance->total_amount = (string) round($total, 2);
+    }
+
+    /**
+     * A voluntary weekend day can be paid at a premium: × 1.5, × 2, or a flat
+     * custom amount. Only applies when the day is actually a weekend and a rate
+     * type is set — a weekday, or a weekend with no premium, is unchanged.
+     */
+    private function applyWeekendPremium(Attendance $attendance, float $total): float
+    {
+        if (! $attendance->is_weekend || $attendance->weekend_rate_type === null) {
+            return $total;
+        }
+
+        if ($attendance->weekend_rate_type === WeekendRateType::Custom) {
+            return (float) ($attendance->weekend_rate_amount ?? 0);
+        }
+
+        return $total * ($attendance->weekend_rate_type->multiplier() ?? 1.0);
     }
 
     /**

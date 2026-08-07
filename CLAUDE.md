@@ -9,6 +9,27 @@ launch — no new screens. Current: **663 Pest tests / 3884 assertions passing (
 skipped) · Pint clean · Larastan level 6 clean · `composer audit` + `npm audit`
 clean · production Vite build working.**
 
+### Weekend / optional work days (2026-08-07)
+
+Voluntary Saturday/Sunday work. Migration `2026_08_07_000005_add_weekend_to_attendance`
+adds `is_weekend` (server-detected, NOT `$fillable` — set in `AttendanceService::recompute`
+from `date->isWeekend()`, never from the client), `weekend_rate_type`
+(`App\Enums\WeekendRateType`: normal / x1.5 / x2 / custom) and `weekend_rate_amount`;
+existing rows are backfilled from the stored date. `applyWeekendPremium()` multiplies
+the day total (×1.5 / ×2) or replaces it with the custom flat amount, only when the
+day is actually a weekend AND a rate type is set. Tests: `WeekendAttendanceTest`
+(7 tests — detection, client-ignore, ×1.5 / ×2 / custom, weekday no-op, payroll split).
+
+`PayrollService::dayTypeSummary()` groups weekend days into their own line
+(`weekend` flag on each entry); payslip PDFs + the on-screen breakdown render them as
+"Días fin de semana". Entry + bulk modals show the weekend notice (LOPD-style: only
+record volunteers; non-attendance is NOT an absence) and a rate selector when the
+chosen date is a weekend; the live preview applies the premium. Calendar cells mark
+weekend work **FS** in coral on both the standalone grid and the employee tab. **Note:**
+the bulk "Vino / No vino / No convocado" distinction has no data difference (No
+vino/No convocado both = no record, no penalty), so selection = "came"; the notice
+explains it. Follow-up if the client wants those states persisted.
+
 ### Employee detail — Asistencia tab (2026-08-07)
 
 Screen 06's Asistencia tab (was "coming soon") is now a per-employee month

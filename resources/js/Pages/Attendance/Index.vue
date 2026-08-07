@@ -53,14 +53,16 @@ const dayTypeStyle = {
 function cellClass(cell) {
     if (!cell) return '';
     if (cell.status !== 'present') return cellStyle[cell.status] ?? cellStyle.present;
+    if (cell.is_weekend) return 'bg-accent-soft text-accent'; // voluntary weekend work
     return dayTypeStyle[cell.day_type] ?? cellStyle.present;
 }
 
-// Marker: C completa · M media · hours for hourly · metres for per-meter · A absent.
+// Marker: FS weekend · C completa · M media · hours for hourly · metres for per-meter · A absent.
 function cellContent(cell) {
     if (!cell) return '';
     if (cell.status === 'absent') return 'A';
     if (cell.status === 'leave') return 'V';
+    if (cell.is_weekend) return 'FS';
     switch (cell.day_type) {
         case 'full': return 'C';
         case 'half': return 'M';

@@ -5,6 +5,7 @@ namespace App\Http\Requests\Attendance;
 use App\Enums\AttendanceMode;
 use App\Enums\AttendanceStatus;
 use App\Enums\DayType;
+use App\Enums\WeekendRateType;
 use App\Rules\OwnCompanyEmployee;
 use App\Rules\OwnCompanyProject;
 use Illuminate\Foundation\Http\FormRequest;
@@ -39,6 +40,9 @@ class StoreAttendanceRequest extends FormRequest
             'deduct_break' => ['boolean'],
             'hours_worked' => ['nullable', 'numeric', 'min:0', 'max:24'],
             'quantity' => ['nullable', 'numeric', 'min:0', 'max:100000', 'required_if:day_type,per_meter'],
+            // is_weekend is detected server-side and never accepted from input.
+            'weekend_rate_type' => ['nullable', Rule::enum(WeekendRateType::class)],
+            'weekend_rate_amount' => ['nullable', 'numeric', 'min:0', 'required_if:weekend_rate_type,custom'],
             'overtime_hours' => ['nullable', 'numeric', 'min:0', 'max:24'],
             'status' => ['required', Rule::enum(AttendanceStatus::class)],
             'total_amount' => ['nullable', 'numeric', 'min:0'],

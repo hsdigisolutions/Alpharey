@@ -88,6 +88,7 @@ class AttendanceController extends Controller
                 'id' => $record->id,
                 'status' => $record->status->value,
                 'day_type' => $record->day_type?->value,
+                'is_weekend' => (bool) $record->is_weekend,
                 'hours' => (float) $record->hours_worked,
                 'quantity' => $record->quantity !== null ? (float) $record->quantity : null,
                 'project' => $record->project?->name,

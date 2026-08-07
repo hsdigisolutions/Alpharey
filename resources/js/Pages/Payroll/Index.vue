@@ -230,7 +230,7 @@ const columns = [
                     <template v-if="breakdown.day_type_summary?.length">
                         <div v-for="(s, i) in breakdown.day_type_summary" :key="i" class="flex justify-between gap-4">
                             <dt>
-                                {{ $t(`attendance.day_type_${s.type}`) }}
+                                {{ s.weekend ? $t('attendance.weekend_days') : $t(`attendance.day_type_${s.type}`) }}
                                 <span class="text-muted">({{ dtNum(s.units) }}
                                     {{ s.type === 'hourly' ? 'h' : (s.type === 'per_meter' ? 'm' : $t('attendance.unit_days')) }}
                                     × {{ eur(s.rate) }})</span>

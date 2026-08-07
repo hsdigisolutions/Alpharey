@@ -45,6 +45,8 @@ const form = useForm({
     deduct_break: true,
     hours_worked: 8,
     quantity: null,
+    weekend_rate_type: 'normal',
+    weekend_rate_amount: null,
     overtime_hours: 0,
     status: 'present',
     notes: '',
@@ -67,6 +69,8 @@ watch(() => props.open, (v) => {
     form.deduct_break = true;
     form.hours_worked = 8;
     form.quantity = null;
+    form.weekend_rate_type = 'normal';
+    form.weekend_rate_amount = null;
     form.overtime_hours = 0;
     form.status = 'present';
     form.notes = '';
@@ -121,6 +125,17 @@ function selectGroup(list) {
 const dayTypes = ['full', 'half', 'hourly', 'per_meter'];
 const isHourly = computed(() => form.day_type === 'hourly');
 const isPerMeter = computed(() => form.day_type === 'per_meter');
+
+const weekendRateTypes = ['normal', 'x1.5', 'x2', 'custom'];
+const weekendKey = {
+    normal: 'attendance.weekend_normal', 'x1.5': 'attendance.weekend_x15',
+    x2: 'attendance.weekend_x2', custom: 'attendance.weekend_custom',
+};
+const isWeekendDate = computed(() => {
+    if (!form.date) return false;
+    const d = new Date(`${form.date}T00:00:00`).getDay();
+    return d === 0 || d === 6;
+});
 const liveHours = computed(() => {
     if (!isHourly.value) return null;
     const ci = form.check_in, co = form.check_out;
@@ -156,6 +171,8 @@ function submit() {
         // Capture mode follows the day type; drop per-meter quantity otherwise.
         mode: form.day_type === 'hourly' ? 'hourly' : 'project_based',
         quantity: form.day_type === 'per_meter' ? form.quantity : null,
+        weekend_rate_type: isWeekendDate.value ? form.weekend_rate_type : null,
+        weekend_rate_amount: isWeekendDate.value && form.weekend_rate_type === 'custom' ? form.weekend_rate_amount : null,
     };
     form.transform(() => data).post('/attendance/bulk', {
         preserveScroll: true,
@@ -306,6 +323,24 @@ const titleKey = computed(() => {
                 <FormField v-if="isPerMeter" k="attendance.quantity" :error="form.errors.quantity" required>
                     <VInput v-model="form.quantity" type="number" step="0.01" />
                 </FormField>
+
+                <!-- Weekend / optional work day notice + rate (full width) -->
+                <div v-if="isWeekendDate" class="rounded-md border border-accent/40 bg-accent-soft p-3 sm:col-span-2">
+                    <p class="text-sm font-semibold text-accent"><Bilingual k="attendance.weekend_notice_title" /></p>
+                    <p class="mt-1 text-xs text-ink-soft"><Bilingual k="attendance.weekend_notice_body" /></p>
+                    <div class="mt-3">
+                        <span class="mb-1.5 block text-[13px] font-medium"><Bilingual k="attendance.weekend_rate" /></span>
+                        <div class="flex flex-wrap gap-x-4 gap-y-1.5">
+                            <label v-for="wt in weekendRateTypes" :key="wt" class="flex items-center gap-1.5 text-sm">
+                                <input v-model="form.weekend_rate_type" type="radio" :value="wt" class="accent-[var(--color-accent)]" />
+                                {{ $t(weekendKey[wt]) }}
+                            </label>
+                        </div>
+                        <FormField v-if="form.weekend_rate_type === 'custom'" k="attendance.weekend_custom" class="mt-2">
+                            <VCurrencyInput v-model="form.weekend_rate_amount" />
+                        </FormField>
+                    </div>
+                </div>
 
                 <template v-if="isHourly">
                     <FormField k="attendance.check_in" :error="form.errors.check_in">
