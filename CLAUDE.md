@@ -54,6 +54,21 @@ the bulk "Vino / No vino / No convocado" distinction has no data difference (No
 vino/No convocado both = no record, no penalty), so selection = "came"; the notice
 explains it. Follow-up if the client wants those states persisted.
 
+### Worker PWA calendar polish (2026-08-07)
+
+- **Language mix fixed**: the month label (`Agosto 2026`) was hardcoded to Spanish
+  while the stat labels followed `$t()`. Now the label is formatted client-side
+  from the locale (`monthLabel` computed), so the whole dashboard is one language.
+- **Salary earned this month** surfaced (the service already computed `earned`,
+  the UI never showed it) — coral card under the stats.
+- **Hours** render as `28h 57m` (a `hoursHM` helper), not the raw decimal `28.95`.
+- **`MonthCalendar`** cells now show a day-type marker (C / M / hours / metres / A)
+  coloured by type, and tapping a day reveals its detail (hours / project /
+  amount). `WorkerDashboardService` enriches each cell with day_type/hours/quantity/
+  project/total. **Real bug caught by the new test**: the eager-loaded `project`
+  was tenant-scoped, so in the worker's no-company context it resolved to null —
+  now loaded with the scope dropped. Tests: `WorkerDashboardTest` (+1 cell-detail).
+
 ### Attendance UI polish — cells + modal live preview (2026-08-07)
 
 Follow-up review fixes on the admin attendance side (client screenshots):

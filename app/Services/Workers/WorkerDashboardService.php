@@ -32,7 +32,7 @@ class WorkerDashboardService
      *     absent: int,
      *     hours: float,
      *     earned: float,
-     *     calendar: list<array{day:int, weekday:int, status:string}>
+     *     calendar: list<array{day:int, weekday:int, status:string, day_type:string|null, hours:float|null, quantity:float|null, project:string|null, total:float|null, is_today:bool}>
      * }
      */
     public function forMonth(Employee $employee, ?string $month = null): array
@@ -49,7 +49,10 @@ class WorkerDashboardService
             ->withoutGlobalScope(CompanyScope::class)
             ->where('employee_id', $employee->id)
             ->whereBetween('date', [$start->toDateString(), $end->toDateString()])
-            ->get(['date', 'status', 'hours_worked', 'total_amount']);
+            // The worker has no company session, so the project's tenant scope
+            // would resolve to null — drop it (the row already pins to them).
+            ->with(['project' => fn ($q) => $q->withoutGlobalScope(CompanyScope::class)->select('id', 'name')])
+            ->get(['id', 'date', 'status', 'day_type', 'hours_worked', 'quantity', 'total_amount', 'project_id']);
 
         $byDate = $rows->keyBy(fn (Attendance $r): string => $r->date->toDateString());
 
@@ -76,6 +79,12 @@ class WorkerDashboardService
                 // and grey the weekend regardless of locale.
                 'weekday' => (int) $cursor->dayOfWeekIso - 1,
                 'status' => $status,
+                // Detail for the tap-a-day view (the worker's own numbers).
+                'day_type' => $row?->day_type?->value,
+                'hours' => $row !== null ? (float) $row->hours_worked : null,
+                'quantity' => $row !== null && $row->quantity !== null ? (float) $row->quantity : null,
+                'project' => $row?->project?->name,
+                'total' => $row !== null ? (float) $row->total_amount : null,
                 // The one day the worker can actually act on — highlighted, and
                 // it is the only date any punch ever writes to (server-enforced).
                 'is_today' => $cursor->isSameDay($today),

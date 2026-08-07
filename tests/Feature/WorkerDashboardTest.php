@@ -3,6 +3,7 @@
 use App\Models\Attendance;
 use App\Models\Company;
 use App\Models\Employee;
+use App\Models\Project;
 use App\Services\Workers\WorkerDashboardService;
 
 /**
@@ -81,4 +82,23 @@ it('only ever sees the worker\'s own rows', function (): void {
     $data = $this->service->forMonth($this->employee, $month);
 
     expect($data['present'])->toBe(0)->and($data['earned'])->toBe(0.0);
+});
+
+it('carries day type, project and amount onto each calendar cell', function (): void {
+    $month = '2026-05';
+    $project = Project::factory()->forCompany($this->company)->create(['name' => 'Reforma Madrid']);
+
+    Attendance::factory()->create([
+        'company_id' => $this->company->id, 'employee_id' => $this->employee->id,
+        'project_id' => $project->id, 'date' => "$month-04", 'status' => 'present',
+        'day_type' => 'full', 'hours_worked' => '8', 'total_amount' => '80',
+    ]);
+
+    $data = $this->service->forMonth($this->employee, $month);
+    $cell = collect($data['calendar'])->firstWhere('day', 4);
+
+    expect($cell['day_type'])->toBe('full')
+        ->and((float) $cell['hours'])->toBe(8.0)
+        ->and((float) $cell['total'])->toBe(80.0)
+        ->and($cell['project'])->toBe('Reforma Madrid');
 });

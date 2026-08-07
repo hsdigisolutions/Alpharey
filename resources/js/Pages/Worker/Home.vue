@@ -36,6 +36,20 @@ function eur(value) {
 const page = usePage();
 const flashError = computed(() => page.props.flash?.error);
 
+// The month label follows the worker's language (was always Spanish before).
+const monthLabel = computed(() => {
+    const [y, m] = props.month.month.split('-').map(Number);
+    const loc = page.props.locale?.primary === 'en' ? 'en-GB' : 'es-ES';
+    return new Date(y, m - 1, 1).toLocaleDateString(loc, { month: 'long', year: 'numeric' });
+});
+
+// Hours as "28h 57m" rather than a raw decimal (28.95).
+function hoursHM(h) {
+    const hh = Math.floor(Math.max(0, Number(h) || 0));
+    const mm = Math.round((Math.max(0, Number(h) || 0) - hh) * 60);
+    return `${hh}h ${String(mm).padStart(2, '0')}m`;
+}
+
 // --- Check IN: selfie, then a GPS fix, then submit ---
 const camera = ref(null);
 const cameraOpen = ref(false);
@@ -289,10 +303,10 @@ const noteTextForm = useForm({ attendance_id: null, text_note: '', duration_seco
 
         <!-- ── Dashboard: this month ── -->
         <section class="mt-6">
-            <h2 class="mb-3 text-sm font-semibold capitalize text-ink">{{ month.label }}</h2>
+            <h2 class="mb-3 text-sm font-semibold capitalize text-ink">{{ monthLabel }}</h2>
 
             <!-- Summary figures -->
-            <div class="mb-4 grid grid-cols-3 gap-2">
+            <div class="mb-3 grid grid-cols-3 gap-2">
                 <div class="rounded-lg border border-line bg-surface-raised p-3 text-center shadow-card">
                     <p class="tabular-nums text-2xl font-semibold text-status-ok">{{ month.present }}</p>
                     <p class="text-xs text-ink-soft">{{ $t('worker.days_present') }}</p>
@@ -302,9 +316,15 @@ const noteTextForm = useForm({ attendance_id: null, text_note: '', duration_seco
                     <p class="text-xs text-ink-soft">{{ $t('worker.days_absent') }}</p>
                 </div>
                 <div class="rounded-lg border border-line bg-surface-raised p-3 text-center shadow-card">
-                    <p class="tabular-nums text-2xl font-semibold text-ink">{{ month.hours }}</p>
+                    <p class="tabular-nums text-lg font-semibold text-ink">{{ hoursHM(month.hours) }}</p>
                     <p class="text-xs text-ink-soft">{{ $t('worker.total_hours') }}</p>
                 </div>
+            </div>
+
+            <!-- Salary earned this month -->
+            <div class="mb-4 flex items-center justify-between rounded-lg border border-accent/40 bg-accent-soft px-4 py-3 shadow-card">
+                <span class="text-sm font-medium text-accent">{{ $t('worker.month_earned') }}</span>
+                <span class="tabular-nums text-xl font-semibold text-accent">{{ eur(month.earned) }}</span>
             </div>
 
             <!-- Calendar -->
