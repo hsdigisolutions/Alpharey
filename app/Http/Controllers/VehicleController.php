@@ -71,7 +71,7 @@ class VehicleController extends Controller
                 'plate_number' => $s->vehicle?->plate_number,
                 'brand' => $s->vehicle?->brand,
                 'model' => $s->vehicle?->model,
-                'taken_at' => $s->taken_at->toDateTimeString(),
+                'taken_at' => $s->taken_at->toIso8601ZuluString(),
                 'starting_mileage' => $s->starting_mileage,
             ])
             ->values();
@@ -90,8 +90,8 @@ class VehicleController extends Controller
                 'plate_number' => $s->vehicle?->plate_number,
                 'brand' => $s->vehicle?->brand,
                 'model' => $s->vehicle?->model,
-                'taken_at' => $s->taken_at->toDateTimeString(),
-                'returned_at' => $s->returned_at?->toDateTimeString(),
+                'taken_at' => $s->taken_at->toIso8601ZuluString(),
+                'returned_at' => $s->returned_at?->toIso8601ZuluString(),
                 'km_driven' => $s->km_driven,
                 'return_notes' => $s->return_notes,
             ])

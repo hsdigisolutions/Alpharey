@@ -53,13 +53,16 @@ let swTimer = null;
 
 function toUtc(dt) {
     if (!dt) return new Date(0);
-    return /^\d{4}-\d{2}-\d{2} /.test(dt) ? new Date(dt.replace(' ', 'T')) : new Date(dt);
+    return new Date(dt);
 }
 
 const takenAtFormatted = computed(() => {
     const dt = props.my_session?.taken_at;
     if (!dt) return '—';
-    return toUtc(dt).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', hour12: false });
+    return toUtc(dt).toLocaleTimeString('es-ES', {
+        hour: '2-digit', minute: '2-digit', hour12: false,
+        timeZone: 'Europe/Madrid',
+    });
 });
 
 function startStopwatch() {

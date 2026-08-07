@@ -41,9 +41,7 @@ onMounted(() => { ticker = setInterval(() => { now.value = Date.now(); }, 30000)
 onBeforeUnmount(() => clearInterval(ticker));
 
 function toUtc(dt) {
-    // MySQL "YYYY-MM-DD HH:MM:SS" → no timezone info: replace space with T so
-    // ECMAScript parses as LOCAL time (T without Z = local; space is implementation-defined)
-    return /^\d{4}-\d{2}-\d{2} /.test(dt) ? new Date(dt.replace(' ', 'T')) : new Date(dt);
+    return new Date(dt);
 }
 
 function elapsed(takenAt) {
@@ -56,7 +54,10 @@ function elapsed(takenAt) {
 
 function timeOnly(dt) {
     if (!dt) return '—';
-    return toUtc(dt).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', hour12: false });
+    return toUtc(dt).toLocaleTimeString('es-ES', {
+        hour: '2-digit', minute: '2-digit', hour12: false,
+        timeZone: 'Europe/Madrid',
+    });
 }
 
 function sessionDuration(takenAt, returnedAt) {
