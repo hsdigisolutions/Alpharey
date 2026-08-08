@@ -1,8 +1,10 @@
 <?php
 
+use App\Models\Attendance;
 use App\Models\Client;
 use App\Models\Company;
 use App\Models\Employee;
+use App\Models\Measurement;
 use App\Models\Project;
 use App\Models\ReportRemark;
 use App\Models\User;
@@ -109,4 +111,51 @@ it('denies project creation without permission', function (): void {
 
     $this->actingAs($user)->post('/projects', ['name' => 'X', 'status' => 'active', 'priority' => 'low'])
         ->assertForbidden();
+});
+
+it('shows the project attendance tab with records and a period summary', function (): void {
+    $project = Project::factory()->forCompany($this->companyA)->create();
+    $employee = Employee::factory()->forCompany($this->companyA)->create([
+        'wage_type' => 'daily', 'daily_wage' => '80', 'designation' => 'Maestro',
+    ]);
+    Attendance::factory()->create([
+        'company_id' => $this->companyA->id, 'employee_id' => $employee->id, 'project_id' => $project->id,
+        'date' => now()->format('Y-m-01'), 'status' => 'present', 'day_type' => 'full',
+        'hours_worked' => '8', 'total_amount' => '80', 'wage_rate_snapshot' => '80',
+    ]);
+
+    $this->actingAs($this->adminA)->get("/projects/{$project->id}?att_month=".now()->format('Y-m'))
+        ->assertInertia(fn (Assert $page) => $page
+            ->has('projectAttendance.records', 1)
+            ->where('projectAttendance.summary.workers', 1)
+            ->where('projectAttendance.summary.days', 1)
+            ->where('projectAttendance.summary.hours', 8)
+            ->where('projectAttendance.summary.labour_cost', 80));
+});
+
+it('shows the project measurements tab with an approved/pending summary', function (): void {
+    $project = Project::factory()->forCompany($this->companyA)->create(['billing_type' => 'per_meter']);
+    $employee = Employee::factory()->forCompany($this->companyA)->create();
+
+    $approved = new Measurement([
+        'project_id' => $project->id, 'employee_id' => $employee->id,
+        'date' => '2026-05-10', 'quantity' => '850', 'unit' => 'm²', 'measurement_type' => 'area',
+    ]);
+    $approved->company_id = $this->companyA->id;
+    $approved->approved = true;
+    $approved->save();
+
+    $pending = new Measurement([
+        'project_id' => $project->id, 'employee_id' => $employee->id,
+        'date' => '2026-05-11', 'quantity' => '50', 'unit' => 'm²', 'measurement_type' => 'area',
+    ]);
+    $pending->company_id = $this->companyA->id;
+    $pending->save();
+
+    $this->actingAs($this->adminA)->get("/projects/{$project->id}")
+        ->assertInertia(fn (Assert $page) => $page
+            ->has('projectMeasurements.records', 2)
+            ->where('projectMeasurements.summary.approved_qty', 850)
+            ->where('projectMeasurements.summary.pending_qty', 50)
+            ->where('projectMeasurements.summary.billing_linked', true));
 });

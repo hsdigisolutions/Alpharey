@@ -28,6 +28,7 @@ const props = defineProps({
     record: { type: Object, default: null }, // existing record (edit) or null (create)
     presetEmployee: { type: Number, default: null },
     presetDate: { type: String, default: null },
+    presetProject: { type: Number, default: null },
     employees: { type: Array, required: true },
     projects: { type: Array, required: true },
     projectAssignments: { type: Object, default: () => ({}) }, // { projectId: [employeeId, ...] }
@@ -52,6 +53,7 @@ watch(() => props.open, (open) => {
     if (!props.record) {
         form.employee_id = props.presetEmployee ?? '';
         form.date = props.presetDate ?? null;
+        if (props.presetProject) form.project_id = props.presetProject;
     }
 });
 

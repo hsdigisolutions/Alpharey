@@ -4,7 +4,7 @@
  * Documentos, Notas. Asistencia/Mediciones/Facturas/Gastos populate in
  * Phases 4/6. Project notes are IMMUTABLE once saved (no edit/delete).
  */
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import { Head, router, useForm } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import ProjectFormModal from '@/Components/Projects/ProjectFormModal.vue';
@@ -18,7 +18,9 @@ import VConfirmDialog from '@/Components/ui/VConfirmDialog.vue';
 import VCurrencyInput from '@/Components/ui/VCurrencyInput.vue';
 import VEmptyState from '@/Components/ui/VEmptyState.vue';
 import VInput from '@/Components/ui/VInput.vue';
+import VModal from '@/Components/ui/VModal.vue';
 import VSelect from '@/Components/ui/VSelect.vue';
+import AttendanceModal from '@/Components/Attendance/AttendanceModal.vue';
 import VTabs from '@/Components/ui/VTabs.vue';
 import VTextarea from '@/Components/ui/VTextarea.vue';
 import VTimeline from '@/Components/ui/VTimeline.vue';
@@ -45,6 +47,17 @@ const props = defineProps({
     designationRates: { type: Array, default: () => [] },
     designations: { type: Array, default: () => [] },
     rateTypes: { type: Array, default: () => [] },
+    // Attendance tab
+    projectAttendance: { type: Object, default: null },
+    attendanceMonth: { type: String, default: '' },
+    attendanceEntryEmployees: { type: Array, default: () => [] },
+    canManageAttendance: { type: Boolean, default: false },
+    canSeeAttendance: { type: Boolean, default: false },
+    // Measurements tab
+    projectMeasurements: { type: Object, default: null },
+    measurementTypes: { type: Array, default: () => [] },
+    measurementEmployees: { type: Array, default: () => [] },
+    canManageMeasurements: { type: Object, default: () => ({}) },
     can: { type: Object, required: true },
 });
 
@@ -127,6 +140,76 @@ function rowTone(margin) {
     if (m > 15) return 'bg-status-ok-soft';
     if (m >= 5) return 'bg-status-warn-soft';
     return 'bg-status-danger-soft';
+}
+
+// ── Attendance tab ──────────────────────────────────────────────────────────
+function attMonthNav(delta) {
+    const [y, m] = props.attendanceMonth.split('-').map(Number);
+    const d = new Date(y, m - 1 + delta, 1);
+    const mm = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    router.get(`/projects/${props.project.id}`, { att_month: mm },
+        { preserveScroll: true, preserveState: true, only: ['projectAttendance', 'attendanceMonth'] });
+}
+const attMonthLabel = computed(() => {
+    const [y, m] = (props.attendanceMonth || '').split('-').map(Number);
+    if (!y) return '';
+    return new Date(y, m - 1, 1).toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
+});
+const attSearch = ref('');
+const attDayType = ref('');
+const attRecords = computed(() => {
+    let rows = props.projectAttendance?.records ?? [];
+    if (attSearch.value) rows = rows.filter((r) => (r.employee ?? '').toLowerCase().includes(attSearch.value.toLowerCase()));
+    if (attDayType.value) rows = rows.filter((r) => r.day_type === attDayType.value);
+    return rows;
+});
+const showAttEntry = ref(false);
+function reloadAfterEntry() {
+    router.reload({ only: ['projectAttendance', 'dailyPnl', 'profitability'], preserveScroll: true });
+}
+
+// ── Measurements tab ────────────────────────────────────────────────────────
+const measSearch = ref('');
+const measApproval = ref('all');
+const measRecords = computed(() => {
+    let rows = props.projectMeasurements?.records ?? [];
+    if (measSearch.value) rows = rows.filter((r) => (r.employee ?? '').toLowerCase().includes(measSearch.value.toLowerCase()));
+    if (measApproval.value === 'approved') rows = rows.filter((r) => r.approved);
+    else if (measApproval.value === 'pending') rows = rows.filter((r) => !r.approved);
+    return rows;
+});
+const measUnits = ['m²', 'm', 'm³', 'kg', 'units'];
+const measModalOpen = ref(false);
+const measEditing = ref(null);
+const measForm = useForm({ employee_id: '', date: null, quantity: null, unit: 'm²', measurement_type: 'area', notes: '' });
+function openMeas(m = null) {
+    measEditing.value = m;
+    measForm.clearErrors();
+    if (m) {
+        measForm.employee_id = m.employee_id ?? '';
+        measForm.date = m.date;
+        measForm.quantity = m.quantity;
+        measForm.unit = m.unit ?? 'm²';
+        measForm.measurement_type = m.type;
+        measForm.notes = m.notes ?? '';
+    } else {
+        measForm.reset();
+        measForm.unit = 'm²';
+        measForm.measurement_type = 'area';
+    }
+    measModalOpen.value = true;
+}
+function submitMeas() {
+    const opts = { preserveScroll: true, onSuccess: () => { measModalOpen.value = false; measForm.reset(); } };
+    measForm.transform((d) => ({ ...d, project_id: props.project.id, employee_id: d.employee_id || null }));
+    if (measEditing.value) measForm.put(`/measurements/${measEditing.value.id}`, opts);
+    else measForm.post('/measurements', opts);
+}
+function approveMeas(m, approved) {
+    router.post(`/measurements/${m.id}/approve`, { approved }, { preserveScroll: true });
+}
+function deleteMeas(m) {
+    askDelete(m.employee ?? '', () => router.delete(`/measurements/${m.id}`, { preserveScroll: true }));
 }
 
 // immutable notes
@@ -499,11 +582,186 @@ function destroy() {
             <VFinanceRows v-else-if="tab === 'expenses'"
                 :rows="expenses" :can-view="canViewExpenses" empty-key="finance.no_expenses" />
 
-            <!-- Asistencia / Mediciones — the standalone screens are canonical -->
+            <!-- Asistencia — this project's attendance for the month -->
+            <div v-else-if="tab === 'attendance'" class="space-y-4">
+                <div v-if="!canSeeAttendance" class="py-8 text-center text-sm text-muted">{{ $t('common.no_permission') }}</div>
+                <template v-else>
+                    <div class="flex flex-wrap items-center gap-3">
+                        <button type="button" class="rounded-md border border-line p-1.5 hover:bg-surface-hover" @click="attMonthNav(-1)">
+                            <AppIcon name="chevron-left" class="h-4 w-4" />
+                        </button>
+                        <span class="min-w-40 text-center text-sm font-semibold capitalize">{{ attMonthLabel }}</span>
+                        <button type="button" class="rounded-md border border-line p-1.5 hover:bg-surface-hover" @click="attMonthNav(1)">
+                            <AppIcon name="chevron-right" class="h-4 w-4" />
+                        </button>
+                        <VInput v-model="attSearch" :placeholder="$t('projects.filter_employee')" class="w-48" />
+                        <VSelect v-model="attDayType" class="w-40">
+                            <option value="">{{ $t('attendance.all_day_types') }}</option>
+                            <option value="full">{{ $t('attendance.day_type_full') }}</option>
+                            <option value="half">{{ $t('attendance.day_type_half') }}</option>
+                            <option value="hourly">{{ $t('attendance.day_type_hourly') }}</option>
+                        </VSelect>
+                        <VButton v-if="canManageAttendance" class="ms-auto" icon="plus" @click="showAttEntry = true">
+                            <Bilingual k="attendance.new" inline />
+                        </VButton>
+                    </div>
+
+                    <VCard :padded="false">
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-sm">
+                                <thead class="bg-surface-sunken text-[11px] uppercase tracking-wide text-muted">
+                                    <tr>
+                                        <th class="px-3 py-2 text-start"><Bilingual k="attendance.date" inline /></th>
+                                        <th class="px-3 py-2 text-start"><Bilingual k="attendance.employee" inline /></th>
+                                        <th class="px-3 py-2 text-start"><Bilingual k="project_rates.designation" inline /></th>
+                                        <th class="px-3 py-2 text-start"><Bilingual k="attendance.day_type" inline /></th>
+                                        <th class="px-3 py-2 text-end"><Bilingual k="attendance.entry" inline /></th>
+                                        <th class="px-3 py-2 text-end"><Bilingual k="attendance.exit" inline /></th>
+                                        <th class="px-3 py-2 text-end"><Bilingual k="profitability.total_hours" inline /></th>
+                                        <th v-if="canSeeWages" class="px-3 py-2 text-end"><Bilingual k="project_rates.rate_type" inline /></th>
+                                        <th v-if="canSeeWages" class="px-3 py-2 text-end"><Bilingual k="profitability.labour_cost" inline /></th>
+                                        <th class="px-3 py-2 text-start"><Bilingual k="attendance.status" inline /></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr v-for="r in attRecords" :key="r.id" class="border-b border-line hover:bg-surface-hover">
+                                        <td class="tabular-nums px-3 py-2">{{ r.date }}</td>
+                                        <td class="px-3 py-2">{{ r.employee }}</td>
+                                        <td class="px-3 py-2 text-ink-soft">{{ r.designation ?? '—' }}</td>
+                                        <td class="px-3 py-2">{{ r.day_type ? $t(`attendance.day_type_${r.day_type}`) : '—' }}</td>
+                                        <td class="tabular-nums px-3 py-2 text-end">{{ r.check_in ?? '—' }}</td>
+                                        <td class="tabular-nums px-3 py-2 text-end">{{ r.check_out ?? '—' }}</td>
+                                        <td class="tabular-nums px-3 py-2 text-end">{{ hoursHM(r.hours) }}</td>
+                                        <td v-if="canSeeWages" class="tabular-nums px-3 py-2 text-end">{{ r.rate !== null ? eur(r.rate) : '—' }}</td>
+                                        <td v-if="canSeeWages" class="tabular-nums px-3 py-2 text-end font-medium">{{ r.total !== null ? eur(r.total) : '—' }}</td>
+                                        <td class="px-3 py-2"><VBadge :status="{ present: 'ok', absent: 'danger', leave: 'info', late: 'warn' }[r.status] ?? 'neutral'">{{ $t(`attendance.status_${r.status}`) }}</VBadge></td>
+                                    </tr>
+                                    <tr v-if="attRecords.length === 0"><td :colspan="canSeeWages ? 10 : 8" class="px-3 py-6 text-center text-muted">{{ $t('attendance.no_records') }}</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </VCard>
+
+                    <div v-if="projectAttendance" class="grid gap-3 sm:grid-cols-4">
+                        <VCard><p class="text-xs text-muted">{{ $t('projects.att_workers') }}</p><p class="tabular-nums mt-1 text-lg font-semibold">{{ projectAttendance.summary.workers }}</p></VCard>
+                        <VCard><p class="text-xs text-muted">{{ $t('projects.att_days') }}</p><p class="tabular-nums mt-1 text-lg font-semibold">{{ projectAttendance.summary.days }}</p></VCard>
+                        <VCard><p class="text-xs text-muted">{{ $t('profitability.total_hours') }}</p><p class="tabular-nums mt-1 text-lg font-semibold">{{ hoursHM(projectAttendance.summary.hours) }}</p></VCard>
+                        <VCard v-if="canSeeWages"><p class="text-xs text-muted">{{ $t('profitability.labour_cost') }}</p><p class="tabular-nums mt-1 text-lg font-semibold text-accent">{{ eur(projectAttendance.summary.labour_cost) }}</p></VCard>
+                    </div>
+                </template>
+            </div>
+
+            <!-- Mediciones — this project's measurements -->
+            <div v-else-if="tab === 'measurements'" class="space-y-4">
+                <div v-if="!canManageMeasurements.view" class="py-8 text-center text-sm text-muted">{{ $t('common.no_permission') }}</div>
+                <template v-else>
+                    <div class="flex flex-wrap items-center gap-3">
+                        <VInput v-model="measSearch" :placeholder="$t('projects.filter_employee')" class="w-48" />
+                        <VSelect v-model="measApproval" class="w-40">
+                            <option value="all">{{ $t('measurements.all') }}</option>
+                            <option value="approved">{{ $t('measurements.approved_f') }}</option>
+                            <option value="pending">{{ $t('measurements.pending_f') }}</option>
+                        </VSelect>
+                        <VButton v-if="canManageMeasurements.create" class="ms-auto" icon="plus" @click="openMeas()">
+                            <Bilingual k="measurements.add" inline />
+                        </VButton>
+                    </div>
+
+                    <VCard :padded="false">
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-sm">
+                                <thead class="bg-surface-sunken text-[11px] uppercase tracking-wide text-muted">
+                                    <tr>
+                                        <th class="px-3 py-2 text-start"><Bilingual k="measurements.date" inline /></th>
+                                        <th class="px-3 py-2 text-start"><Bilingual k="measurements.employee" inline /></th>
+                                        <th class="px-3 py-2 text-start"><Bilingual k="project_rates.designation" inline /></th>
+                                        <th class="px-3 py-2 text-end"><Bilingual k="measurements.quantity" inline /></th>
+                                        <th class="px-3 py-2 text-start"><Bilingual k="measurements.unit" inline /></th>
+                                        <th class="px-3 py-2 text-start"><Bilingual k="measurements.type" inline /></th>
+                                        <th class="px-3 py-2 text-start"><Bilingual k="measurements.approved_col" inline /></th>
+                                        <th class="px-3 py-2 text-start"><Bilingual k="measurements.notes" inline /></th>
+                                        <th class="px-3 py-2 text-end"><Bilingual k="common.actions" inline /></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr v-for="m in measRecords" :key="m.id" class="border-b border-line hover:bg-surface-hover">
+                                        <td class="tabular-nums px-3 py-2">{{ m.date }}</td>
+                                        <td class="px-3 py-2">{{ m.employee ?? '—' }}</td>
+                                        <td class="px-3 py-2 text-ink-soft">{{ m.designation ?? '—' }}</td>
+                                        <td class="tabular-nums px-3 py-2 text-end">{{ m.quantity }}</td>
+                                        <td class="px-3 py-2">{{ m.unit ?? '—' }}</td>
+                                        <td class="px-3 py-2">{{ $t(`measurements.type_${m.type}`) }}</td>
+                                        <td class="px-3 py-2"><VBadge :status="m.approved ? 'ok' : 'warn'">{{ m.approved ? $t('measurements.approved_f') : $t('measurements.pending_f') }}</VBadge></td>
+                                        <td class="px-3 py-2 text-ink-soft">{{ m.notes ?? '—' }}</td>
+                                        <td class="px-3 py-2">
+                                            <div class="flex items-center justify-end gap-1">
+                                                <VButton v-if="!m.approved && canManageMeasurements.approve" variant="ghost" size="sm" @click="approveMeas(m, true)"><Bilingual k="measurements.approve" inline /></VButton>
+                                                <VButton v-if="m.approved && canManageMeasurements.approve" variant="ghost" size="sm" @click="approveMeas(m, false)"><Bilingual k="measurements.reject" inline /></VButton>
+                                                <VButton v-if="!m.approved && canManageMeasurements.edit" variant="ghost" size="sm" icon="edit" @click="openMeas(m)" />
+                                                <VButton v-if="!m.approved && canManageMeasurements.delete" variant="ghost" size="sm" icon="trash" @click="deleteMeas(m)" />
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    <tr v-if="measRecords.length === 0"><td colspan="9" class="px-3 py-6 text-center text-muted">{{ $t('measurements.no_records') }}</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </VCard>
+
+                    <div v-if="projectMeasurements" class="grid gap-3 sm:grid-cols-3">
+                        <VCard><p class="text-xs text-muted">{{ $t('measurements.total_approved') }}</p><p class="tabular-nums mt-1 text-lg font-semibold text-status-ok">{{ projectMeasurements.summary.approved_qty }}</p></VCard>
+                        <VCard><p class="text-xs text-muted">{{ $t('measurements.total_pending') }}</p><p class="tabular-nums mt-1 text-lg font-semibold text-status-warn">{{ projectMeasurements.summary.pending_qty }}</p></VCard>
+                        <VCard><p class="text-xs text-muted">{{ $t('measurements.billing_linked') }}</p><p class="mt-1 text-lg font-semibold">{{ projectMeasurements.summary.billing_linked ? $t('common.yes') : $t('common.no') }}</p></VCard>
+                    </div>
+                </template>
+            </div>
+
+            <!-- Fallback for any other tab -->
             <VCard v-else>
                 <p class="py-8 text-center text-sm text-muted"><Bilingual k="common.coming_soon" class="items-center" /></p>
             </VCard>
         </div>
+
+        <!-- Attendance New Entry (this project preselected) -->
+        <AttendanceModal v-if="canManageAttendance" :open="showAttEntry" :record="null"
+            :preset-project="project.id" :employees="attendanceEntryEmployees"
+            :projects="[{ id: project.id, name: project.name, client_name: project.client }]"
+            :can-see-wage="canSeeWages" @close="showAttEntry = false; reloadAfterEntry()" />
+
+        <!-- Add / edit measurement -->
+        <VModal :open="measModalOpen" :title-key="measEditing ? 'measurements.edit' : 'measurements.add'" @close="measModalOpen = false">
+            <form id="meas-form" class="grid gap-4 sm:grid-cols-2" @submit.prevent="submitMeas">
+                <FormField k="measurements.employee" :error="measForm.errors.employee_id" class="sm:col-span-2">
+                    <VSelect v-model="measForm.employee_id">
+                        <option value="">—</option>
+                        <option v-for="e in measurementEmployees" :key="e.id" :value="e.id">{{ e.full_name }}</option>
+                    </VSelect>
+                </FormField>
+                <FormField k="measurements.date" :error="measForm.errors.date" required>
+                    <VInput v-model="measForm.date" type="date" />
+                </FormField>
+                <FormField k="measurements.quantity" :error="measForm.errors.quantity" required>
+                    <VInput v-model="measForm.quantity" type="number" step="0.01" min="0" />
+                </FormField>
+                <FormField k="measurements.unit" :error="measForm.errors.unit">
+                    <VSelect v-model="measForm.unit">
+                        <option v-for="u in measUnits" :key="u" :value="u">{{ u }}</option>
+                    </VSelect>
+                </FormField>
+                <FormField k="measurements.type" :error="measForm.errors.measurement_type" required>
+                    <VSelect v-model="measForm.measurement_type">
+                        <option v-for="t in measurementTypes" :key="t" :value="t">{{ $t(`measurements.type_${t}`) }}</option>
+                    </VSelect>
+                </FormField>
+                <FormField k="measurements.notes" :error="measForm.errors.notes" class="sm:col-span-2">
+                    <VTextarea v-model="measForm.notes" :rows="2" />
+                </FormField>
+            </form>
+            <template #footer>
+                <VButton variant="ghost" @click="measModalOpen = false"><Bilingual k="common.cancel" inline /></VButton>
+                <VButton type="submit" form="meas-form" :loading="measForm.processing"><Bilingual k="common.save" inline /></VButton>
+            </template>
+        </VModal>
 
         <ProjectFormModal :open="showEdit" :project="project" :clients="clients" :vat-options="vatOptions" @close="showEdit = false" />
         <VConfirmDialog :open="confirm.open" :message="confirm.message" @confirm="runDelete" @cancel="confirm.open = false" />

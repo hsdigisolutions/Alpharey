@@ -2,16 +2,19 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\MeasurementType;
 use App\Enums\ProjectPriority;
 use App\Enums\ProjectRateType;
 use App\Enums\ProjectStatus;
 use App\Enums\VatRate;
 use App\Http\Requests\Projects\StoreProjectRequest;
 use App\Http\Requests\Projects\UpdateProjectRequest;
+use App\Models\Attendance;
 use App\Models\Client;
 use App\Models\Employee;
 use App\Models\Expense;
 use App\Models\Invoice;
+use App\Models\Measurement;
 use App\Models\Project;
 use App\Models\ProjectDesignationRate;
 use App\Services\Documents\DocumentStatus;
@@ -21,6 +24,7 @@ use App\Support\DocumentTypes;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
@@ -121,11 +125,12 @@ class ProjectController extends Controller
         ];
     }
 
-    public function show(Project $project, DocumentStatus $status, ProfitabilityService $profitability): Response
+    public function show(Request $request, Project $project, DocumentStatus $status, ProfitabilityService $profitability): Response
     {
         Gate::authorize('projects.view');
 
         $canSeeWages = Gate::allows('payroll.view') || Gate::allows('employees.edit');
+        $attMonth = $request->string('att_month')->value() ?: now()->format('Y-m');
 
         return Inertia::render('Projects/Detail', [
             'project' => array_merge($project->only([
@@ -205,6 +210,27 @@ class ProjectController extends Controller
                 ]),
             'designations' => ProjectDesignationRateController::optionsFor($project->company_id),
             'rateTypes' => array_map(fn (ProjectRateType $t) => $t->value, ProjectRateType::cases()),
+            // Attendance tab — this project's rows for the selected month + entry data.
+            'projectAttendance' => Gate::allows('attendance.view') ? $this->projectAttendance($project, $attMonth, $canSeeWages) : null,
+            'attendanceMonth' => $attMonth,
+            'attendanceEntryEmployees' => Gate::allows('attendance.create') ? $this->attendanceEntryEmployees($canSeeWages) : [],
+            'canManageAttendance' => Gate::allows('attendance.create'),
+            'canSeeAttendance' => Gate::allows('attendance.view'),
+            // Measurements tab — this project's records + summary + entry catalogue.
+            'projectMeasurements' => Gate::allows('measurements.view') ? $this->projectMeasurements($project) : null,
+            'measurementTypes' => array_map(fn (MeasurementType $t) => $t->value, MeasurementType::cases()),
+            'measurementEmployees' => Gate::allows('measurements.view')
+                ? Employee::query()->where('active', true)->orderBy('full_name')
+                    ->get(['id', 'full_name', 'designation'])
+                    ->map(fn (Employee $e) => ['id' => $e->id, 'full_name' => $e->full_name, 'designation' => $e->designation])->all()
+                : [],
+            'canManageMeasurements' => [
+                'view' => Gate::allows('measurements.view'),
+                'create' => Gate::allows('measurements.create'),
+                'edit' => Gate::allows('measurements.edit'),
+                'delete' => Gate::allows('measurements.delete'),
+                'approve' => Gate::allows('measurements.approve'),
+            ],
             'can' => [
                 'edit' => Gate::allows('projects.edit'),
                 'delete' => Gate::allows('projects.delete'),
@@ -259,6 +285,109 @@ class ProjectController extends Controller
                 'status' => $e->payment_status->value,
             ])
             ->all();
+    }
+
+    /**
+     * This project's attendance for one month + a period summary. Wage figures
+     * (rate, total, labour cost) are null unless the viewer may see pay.
+     *
+     * @return array<string, mixed>
+     */
+    private function projectAttendance(Project $project, string $month, bool $canSeeWages): array
+    {
+        $start = Carbon::createFromFormat('Y-m', $month)->startOfMonth();
+        $end = $start->copy()->endOfMonth();
+
+        $rows = Attendance::query()
+            ->where('project_id', $project->id)
+            ->whereBetween('date', [$start->toDateString(), $end->toDateString()])
+            ->with(['employee:id,full_name,designation'])
+            ->orderBy('date')
+            ->get();
+
+        $worked = $rows->filter(fn (Attendance $r) => in_array($r->status->value, ['present', 'late', 'early_leave'], true));
+
+        return [
+            'records' => $rows->map(fn (Attendance $r): array => [
+                'id' => $r->id,
+                'date' => $r->date->toDateString(),
+                'employee' => $r->employee?->full_name,
+                'designation' => $r->employee?->designation,
+                'day_type' => $r->day_type?->value,
+                'check_in' => $r->check_in,
+                'check_out' => $r->check_out,
+                'hours' => (float) $r->hours_worked,
+                'status' => $r->status->value,
+                'rate' => $canSeeWages ? (float) ($r->wage_rate_snapshot ?? 0) : null,
+                'total' => $canSeeWages ? (float) $r->total_amount : null,
+            ])->values()->all(),
+            'summary' => [
+                'workers' => $worked->pluck('employee_id')->unique()->count(),
+                'days' => $worked->count(),
+                'hours' => round((float) $worked->sum(fn (Attendance $r) => (float) $r->hours_worked), 2),
+                'labour_cost' => $canSeeWages ? round((float) $worked->sum(fn (Attendance $r) => (float) $r->total_amount), 2) : null,
+            ],
+        ];
+    }
+
+    /**
+     * Active employees with their rate fields (wage-gated), for the attendance
+     * New-Entry modal on the project tab.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function attendanceEntryEmployees(bool $canSeeWages): array
+    {
+        return Employee::query()->where('active', true)->orderBy('full_name')
+            ->get(['id', 'full_name', 'designation', 'wage_type', 'wage_rate', 'daily_wage', 'per_meter_rate'])
+            ->map(function (Employee $e) use ($canSeeWages): array {
+                $row = [
+                    'id' => $e->id, 'full_name' => $e->full_name,
+                    'designation' => $e->designation, 'wage_type' => $e->wage_type?->value,
+                ];
+                if ($canSeeWages) {
+                    $row['daily_rate'] = $e->daily_wage !== null ? round((float) $e->daily_wage, 2) : null;
+                    $row['hourly_rate_raw'] = $e->wage_rate !== null ? round((float) $e->wage_rate, 2) : null;
+                    $row['per_meter_rate'] = $e->per_meter_rate !== null ? round((float) $e->per_meter_rate, 2) : null;
+                }
+
+                return $row;
+            })->all();
+    }
+
+    /**
+     * This project's measurements + a summary (approved / pending quantity and
+     * whether they feed billing — a per_meter project).
+     *
+     * @return array<string, mixed>
+     */
+    private function projectMeasurements(Project $project): array
+    {
+        $rows = Measurement::query()
+            ->where('project_id', $project->id)
+            ->with(['employee:id,full_name,designation'])
+            ->orderByDesc('date')
+            ->get();
+
+        return [
+            'records' => $rows->map(fn (Measurement $m): array => [
+                'id' => $m->id,
+                'date' => $m->date->toDateString(),
+                'employee_id' => $m->employee_id,
+                'employee' => $m->employee?->full_name,
+                'designation' => $m->employee?->designation,
+                'quantity' => (float) $m->quantity,
+                'unit' => $m->unit,
+                'type' => $m->measurement_type->value,
+                'approved' => $m->approved,
+                'notes' => $m->notes,
+            ])->values()->all(),
+            'summary' => [
+                'approved_qty' => round((float) $rows->where('approved', true)->sum(fn (Measurement $m) => (float) $m->quantity), 2),
+                'pending_qty' => round((float) $rows->where('approved', false)->sum(fn (Measurement $m) => (float) $m->quantity), 2),
+                'billing_linked' => $project->billing_type?->value === 'per_meter',
+            ],
+        ];
     }
 
     public function store(StoreProjectRequest $request): RedirectResponse

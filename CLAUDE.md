@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Status: Phase 9 in progress — hardening (2026-08-01)
 
 **Every screen 01–26 is built (Phase 8 complete).** Phase 9 is hardening, UAT, and
-launch — no new screens. Current: **747 Pest tests / 4259 assertions passing (1
+launch — no new screens. Current: **749 Pest tests / 4289 assertions passing (1
 skipped) · Pint clean · Larastan level 6 clean · `composer audit` + `npm audit`
 clean · production Vite build working.**
 
@@ -198,6 +198,27 @@ hourly/per-meter/fixed/outsourced/subcontractor math, margin traffic light,
 dashboard tally + tenancy, day/month breakdown, report gating). The worked
 example (client 20/h · 320 h · labour 4.640 · gastos 450 → ingresos 6.400 ·
 beneficio 1.310 · margen 20,5 %) is pinned by the hourly test's ratios.
+
+### Project Detail: Attendance + Measurements tabs (2026-08-09)
+
+The two remaining project-detail placeholders ("Available in a later phase") are
+now built, reusing the existing Attendance/Measurement models + endpoints.
+
+- **Attendance tab.** `ProjectController::show` ships `projectAttendance` (this
+  project's rows for the selected month via an `att_month` partial-reload param,
+  with employee name + designation + day type + check-in/out + hours + rate +
+  total, wage-gated) and a period summary (workers / days / hours / labour cost).
+  Month nav + client-side employee/day-type filters; a "New Entry" button opens
+  the shared `AttendanceModal` with this project preselected (new `presetProject`
+  prop). Reloads `projectAttendance` + `dailyPnl` + `profitability` after saving.
+- **Measurements tab.** `projectMeasurements` (rows + approved/pending quantity
+  totals + `billing_linked` = per_meter project) drives a table with
+  approve/reject/edit/delete (existing `/measurements*` endpoints) and an
+  add/edit modal (employee · date · quantity · unit m²/m/m³/kg/units · type ·
+  notes). Approved measurements already feed profitability + per-meter billing.
+- Both tabs are permission-gated (`attendance.view/create`,
+  `measurements.view/create/edit/delete/approve`) and wage-gated for money.
+  Tests: `ProjectsTest` (+2 — attendance summary, measurement approved/pending).
 
 ### Deep audit pass (2026-08-09)
 
