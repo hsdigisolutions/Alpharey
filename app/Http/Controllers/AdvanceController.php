@@ -29,7 +29,11 @@ class AdvanceController extends Controller
             // Ownership is validity: an id from another company would deduct
             // from THAT company's payslip (payroll gathers per employee).
             'employee_id' => ['required', 'integer', new OwnCompanyEmployee],
-            'advance_category_id' => ['nullable', 'integer', Rule::exists('advance_categories', 'id')],
+            // Own-company or group-wide default category only (categories are
+            // shared reference data, so a bare exists would accept another
+            // tenant's private category).
+            'advance_category_id' => ['nullable', 'integer', Rule::exists('advance_categories', 'id')
+                ->where(fn ($q) => $q->whereNull('company_id')->orWhere('company_id', app(CurrentCompany::class)->id()))],
             'amount' => ['required', 'numeric', 'min:0.01', 'max:999999'],
             'reason' => ['nullable', 'string', 'max:1000'],
             'request_date' => ['required', 'date'],

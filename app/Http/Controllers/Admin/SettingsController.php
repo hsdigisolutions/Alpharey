@@ -77,6 +77,11 @@ class SettingsController extends Controller
      */
     public function updateAttendance(Request $request, SettingsService $settings): RedirectResponse
     {
+        // Explicit authorization (not only the `admin` route middleware) — the
+        // same super/company-admin gate the other settings writes enforce.
+        $user = $request->user();
+        abort_unless($user !== null && ($user->isSuperAdmin() || $user->isCompanyAdmin()), 403);
+
         $companyId = app(CurrentCompany::class)->id();
         abort_if($companyId === null, 403);
 

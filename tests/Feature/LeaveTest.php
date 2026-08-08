@@ -16,6 +16,7 @@ use App\Models\User;
 use App\Services\Leave\LeaveService;
 use App\Services\Payroll\PayrollService;
 use App\Support\PeriodLock;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
 
 /**
@@ -414,4 +415,28 @@ it('translates the seeded leave categories but keeps a company custom name', fun
 
     app()->setLocale('es');
     expect($seeded->label())->toBe('Vacaciones Anuales');
+});
+
+it('audits a leave attachment download', function (): void {
+    Storage::fake('local');
+    Storage::disk('local')->put('leave-attachments/cert.pdf', 'x');
+
+    $employee = Employee::factory()->create(['company_id' => $this->company->id]);
+    $leave = new Leave([
+        'employee_id' => $employee->id, 'leave_category_id' => $this->category->id,
+        'start_date' => '2026-05-04', 'end_date' => '2026-05-04', 'total_days' => '1',
+    ]);
+    $leave->company_id = $this->company->id;
+    $leave->status = LeaveStatus::Pending;
+    $leave->file_path = 'leave-attachments/cert.pdf';
+    $leave->original_name = 'cert.pdf';
+    $leave->save();
+
+    $this->actingAs($this->admin)->get("/leave/{$leave->id}/attachment")->assertOk();
+
+    $this->assertDatabaseHas('audit_logs', [
+        'model_type' => (new Leave)->getMorphClass(),
+        'model_id' => (string) $leave->id,
+        'action' => 'viewed',
+    ]);
 });

@@ -181,7 +181,9 @@ class CallPanelController extends Controller
                     ->orWhere('mobile', 'like', $term)
                     ->orWhere('phone', 'like', $term));
             })
-            ->with('company:id,name')
+            // Eager-load the call logs (newest first) so each row derives its
+            // last call + soonest follow-up in memory — no per-employee queries.
+            ->with(['company:id,name', 'callLogs' => fn ($q) => $q->orderByDesc('called_at')])
             ->orderBy('full_name')
             ->get();
 
@@ -199,18 +201,14 @@ class CallPanelController extends Controller
      */
     private function employeeRow(Employee $e): array
     {
-        $lastCall = EmployeeCallLog::query()
-            ->where('employee_id', $e->id)
-            ->orderByDesc('called_at')
-            ->first();
+        // Derived from the eager-loaded logs (ordered newest-first) — no query.
+        $lastCall = $e->callLogs->first();
 
         // The soonest outstanding follow-up, not the latest call's one: an
         // older call can hold the follow-up that is actually due.
-        $followUp = EmployeeCallLog::query()
-            ->where('employee_id', $e->id)
+        $followUp = $e->callLogs
             ->whereNotNull('follow_up_date')
-            ->orderBy('follow_up_date')
-            ->value('follow_up_date');
+            ->min('follow_up_date');
 
         $followUpDate = $followUp !== null ? Carbon::parse($followUp) : null;
 

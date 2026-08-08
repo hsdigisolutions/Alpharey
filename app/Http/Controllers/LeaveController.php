@@ -11,6 +11,7 @@ use App\Models\Employee;
 use App\Models\Leave;
 use App\Models\LeaveBalance;
 use App\Models\LeaveCategory;
+use App\Services\Audit\AuditLogger;
 use App\Services\Leave\LeaveService;
 use App\Support\CurrentCompany;
 use Illuminate\Database\Eloquent\Builder;
@@ -135,6 +136,10 @@ class LeaveController extends Controller
 
         abort_if($leave->file_path === null, 404);
         abort_unless(Storage::disk('local')->exists($leave->file_path), 404);
+
+        // Leave attachments can be medical certificates — audit the access, like
+        // every other private-file download (Rule 10).
+        app(AuditLogger::class)->log('viewed', $leave, ['context' => 'leave_attachment']);
 
         return Storage::disk('local')->download($leave->file_path, $leave->original_name);
     }

@@ -248,6 +248,18 @@ it('logs a fine charged to an employee without creating an expense', function ()
         ->and($fine->employee_id)->toBe($employee->id);
 });
 
+it('rejects a fine charged to an employee from another company', function (): void {
+    $vehicle = Vehicle::factory()->create(['company_id' => $this->company->id]);
+    $foreign = Employee::factory()->create(['company_id' => Company::factory()->create()->id]);
+
+    $this->post("/vehicles/{$vehicle->id}/fines", [
+        'fine_date' => '2026-07-15', 'amount' => '100', 'description' => 'x',
+        'charged_to' => 'employee', 'employee_id' => $foreign->id,
+    ])->assertSessionHasErrors('employee_id');
+
+    expect(VehicleFine::query()->withoutGlobalScopes()->count())->toBe(0);
+});
+
 it('flags and unflags a fine for salary deduction (never automatic)', function (): void {
     $vehicle = Vehicle::factory()->create(['company_id' => $this->company->id]);
     $employee = Employee::factory()->create(['company_id' => $this->company->id]);

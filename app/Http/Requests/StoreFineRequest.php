@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Rules\OwnCompanyEmployee;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
@@ -24,7 +25,9 @@ class StoreFineRequest extends FormRequest
             'description' => ['required', 'string', 'max:500'],
             'authority' => ['nullable', 'string', 'max:100'],
             'charged_to' => ['required', Rule::in(['company', 'employee'])],
-            'employee_id' => ['nullable', 'integer'],
+            // Own-company only: a foreign employee_id could later be flagged for
+            // salary deduction against another tenant's payslip.
+            'employee_id' => ['nullable', 'integer', new OwnCompanyEmployee],
         ];
     }
 }

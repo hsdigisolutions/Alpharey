@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Status: Phase 9 in progress — hardening (2026-08-01)
 
 **Every screen 01–26 is built (Phase 8 complete).** Phase 9 is hardening, UAT, and
-launch — no new screens. Current: **744 Pest tests / 4251 assertions passing (1
+launch — no new screens. Current: **747 Pest tests / 4259 assertions passing (1
 skipped) · Pint clean · Larastan level 6 clean · `composer audit` + `npm audit`
 clean · production Vite build working.**
 
@@ -198,6 +198,36 @@ hourly/per-meter/fixed/outsourced/subcontractor math, margin traffic light,
 dashboard tally + tenancy, day/month breakdown, report gating). The worked
 example (client 20/h · 320 h · labour 4.640 · gastos 450 → ingresos 6.400 ·
 beneficio 1.310 · margen 20,5 %) is pinned by the hourly test's ratios.
+
+### Deep audit pass (2026-08-09)
+
+A full security / database / performance / calculation sweep (three parallel
+read-only audits + the test suite). Findings and fixes:
+
+- **Security.** Real tenancy bug: `StoreFineRequest.employee_id` had no
+  own-company rule — an admin could fine an employee of ANOTHER company, which if
+  later flagged deduct-from-salary would hit a foreign payslip. Now `new
+  OwnCompanyEmployee`. Hardening: `AdvanceController.store` category `exists` now
+  constrained to null-default/own-company; `LeaveController::download` now audits
+  the access (medical certificates); `SettingsController::updateAttendance` gained
+  an explicit super/company-admin check (was middleware-only). All other download,
+  gate, company_id-from-input, nested-ownership, and SQL-injection checks came
+  back clean.
+- **Database.** All 70 models use explicit `$fillable`; money is `decimal` not
+  float; FKs indexed; sensitive fields encrypted + hidden. Added two composite
+  indexes the P&L/payroll filters wanted (`attendance[company_id,status]`,
+  `expenses[project_id,approved]`, migration `2026_08_09_000003`).
+- **Performance.** One real N+1: `CallPanelController::employeeRow` fired 2
+  queries per active employee (last call + follow-up) — now the `callLogs` are
+  eager-loaded and derived in memory. Every other list/show controller + export
+  view verified already eager-loading. Dashboard (120s) and profitability
+  (signature) stay cached.
+- **Design note (client decision):** the `designations` table stores a single
+  Spanish `name`, not `name_es`/`name_en` — consistent with the "Spanish-only for
+  new data" rule; flagged rather than forced bilingual.
+
+Tests added: cross-company fine rejection, leave-attachment download audit,
+auto-absent skips approved leave.
 
 ### Worker designations + project rates + daily P&L (2026-08-09)
 

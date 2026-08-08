@@ -45,6 +45,20 @@ it('skips an employee who already has a record that day', function (): void {
         ->and(Attendance::withoutGlobalScopes()->where('employee_id', $e->id)->where('status', 'absent')->exists())->toBeFalse();
 });
 
+it('skips an employee on approved leave (the leave row already covers the day)', function (): void {
+    // Approving leave writes an AttendanceStatus::Leave row, so the auto-absent
+    // sweep sees an existing record for the day and leaves it alone.
+    $e = Employee::factory()->forCompany($this->company)->create(['active' => true, 'joining_date' => '2026-01-01']);
+    Attendance::factory()->create([
+        'company_id' => $this->company->id, 'employee_id' => $e->id, 'date' => $this->weekday, 'status' => 'leave',
+    ]);
+
+    $this->artisan('attendance:auto-absent', ['--date' => $this->weekday])->assertSuccessful();
+
+    expect(Attendance::withoutGlobalScopes()->where('employee_id', $e->id)->count())->toBe(1)
+        ->and(Attendance::withoutGlobalScopes()->where('employee_id', $e->id)->where('status', 'absent')->exists())->toBeFalse();
+});
+
 it('skips an inactive employee', function (): void {
     Employee::factory()->forCompany($this->company)->create(['active' => false, 'joining_date' => '2026-01-01']);
 
