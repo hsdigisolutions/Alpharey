@@ -19,6 +19,7 @@ use App\Models\Measurement;
 use App\Models\Payroll;
 use App\Models\Scopes\CompanyScope;
 use App\Models\VehicleFine;
+use App\Models\VehicleFuelRecord;
 use App\Models\WorkerExpense;
 use App\Services\Employees\WageRateService;
 use App\Support\PeriodLock;
@@ -169,7 +170,8 @@ class PayrollService
         $dayTypeSummary = $attendanceEarnings > 0 ? $this->dayTypeSummary($paidRows, $employee) : null;
 
         $reimbursements = $this->reimbursementsFor($employee->id, $month)
-            + $this->pwaExpensesFor($employee->id, $month);
+            + $this->pwaExpensesFor($employee->id, $month)
+            + $this->fuelReimbursementsFor($employee->id, $month);
         $projectExpenses = $this->projectExpensesFor($employee->id, $month);
 
         $gross = $baseSalary + $daysAmount + $hoursAmount + $overtimePay
@@ -488,6 +490,22 @@ class PayrollService
             ->whereNull('payroll_id')
             ->whereBetween('date', [$start, $end])
             ->sum('amount'), 2);
+    }
+
+    /**
+     * Fuel a worker paid out of pocket in a company vehicle and asked to be paid
+     * back — a fuel record marked `payment_method = 'reimburse'`. Fuel put on the
+     * company card (any other method) is a company cost and never touches pay.
+     */
+    private function fuelReimbursementsFor(int $employeeId, string $month): float
+    {
+        [$start, $end] = $this->bounds($month);
+
+        return round((float) VehicleFuelRecord::query()->withoutGlobalScopes()
+            ->where('employee_id', $employeeId)
+            ->where('payment_method', 'reimburse')
+            ->whereBetween('fuel_date', [$start, $end])
+            ->sum('total_cost'), 2);
     }
 
     /**

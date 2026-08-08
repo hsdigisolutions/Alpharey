@@ -14,6 +14,9 @@ use App\Models\Measurement;
 use App\Models\Payroll;
 use App\Models\Project;
 use App\Models\User;
+use App\Models\Vehicle;
+use App\Models\VehicleFine;
+use App\Models\VehicleFuelRecord;
 use App\Services\Payroll\PayrollService;
 use App\Support\PeriodLock;
 use Inertia\Testing\AssertableInertia as Assert;
@@ -381,8 +384,8 @@ it('does not pay a soft-deleted employee', function (): void {
 
 it('never auto-deducts a vehicle fine charged to an employee', function (): void {
     $employee = hourlyEmployee(rate: 20, days: 1, hours: 8); // 160 gross
-    $vehicle = App\Models\Vehicle::factory()->create(['company_id' => $this->company->id]);
-    App\Models\VehicleFine::factory()->create([
+    $vehicle = Vehicle::factory()->create(['company_id' => $this->company->id]);
+    VehicleFine::factory()->create([
         'company_id' => $this->company->id, 'vehicle_id' => $vehicle->id, 'employee_id' => $employee->id,
         'fine_date' => $this->month.'-10', 'amount' => '200', 'charged_to' => 'employee',
         // NOT flagged for salary deduction.
@@ -396,8 +399,8 @@ it('never auto-deducts a vehicle fine charged to an employee', function (): void
 
 it('deducts a vehicle fine only once the admin flags it for this month', function (): void {
     $employee = hourlyEmployee(rate: 20, days: 1, hours: 8); // 160 gross
-    $vehicle = App\Models\Vehicle::factory()->create(['company_id' => $this->company->id]);
-    App\Models\VehicleFine::factory()->create([
+    $vehicle = Vehicle::factory()->create(['company_id' => $this->company->id]);
+    VehicleFine::factory()->create([
         'company_id' => $this->company->id, 'vehicle_id' => $vehicle->id, 'employee_id' => $employee->id,
         'fine_date' => $this->month.'-10', 'amount' => '50', 'charged_to' => 'employee',
         'deduct_from_salary' => true, 'deduction_month' => $this->month,
@@ -407,6 +410,26 @@ it('deducts a vehicle fine only once the admin flags it for this month', functio
 
     expect((float) $payroll->getAttribute('fine_deductions'))->toBe(50.0)
         ->and((float) $payroll->getAttribute('net_amount'))->toBe(110.0);
+});
+
+it('reimburses worker-paid fuel but not company-card fuel', function (): void {
+    $employee = hourlyEmployee(rate: 20, days: 1, hours: 8); // 160 gross
+    $vehicle = Vehicle::factory()->create(['company_id' => $this->company->id]);
+    // Worker paid this one → reimbursed.
+    VehicleFuelRecord::factory()->create([
+        'company_id' => $this->company->id, 'vehicle_id' => $vehicle->id, 'employee_id' => $employee->id,
+        'fuel_date' => $this->month.'-05', 'total_cost' => '40', 'payment_method' => 'reimburse',
+    ]);
+    // Company card → NOT reimbursed.
+    VehicleFuelRecord::factory()->create([
+        'company_id' => $this->company->id, 'vehicle_id' => $vehicle->id, 'employee_id' => $employee->id,
+        'fuel_date' => $this->month.'-06', 'total_cost' => '55', 'payment_method' => 'company_card',
+    ]);
+
+    $payroll = app(PayrollService::class)->calculateFor($employee, $this->company->id, $this->month);
+
+    expect((float) $payroll->getAttribute('reimbursements'))->toBe(40.0)
+        ->and((float) $payroll->getAttribute('gross_pay'))->toBe(200.0); // 160 + 40
 });
 
 it('re-derives a jornada left at 0 by the day-type back-fill from the daily rate', function (): void {

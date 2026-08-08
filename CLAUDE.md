@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Status: Phase 9 in progress — hardening (2026-08-01)
 
 **Every screen 01–26 is built (Phase 8 complete).** Phase 9 is hardening, UAT, and
-launch — no new screens. Current: **730 Pest tests / 4198 assertions passing (1
+launch — no new screens. Current: **733 Pest tests / 4206 assertions passing (1
 skipped) · Pint clean · Larastan level 6 clean · `composer audit` + `npm audit`
 clean · production Vite build working.**
 
@@ -39,6 +39,21 @@ category to its label (`fuel → Combustible`), never a raw `worker.expense_cat_
 key (added the missing `fuel` key). Tests: `PayrollTest` (+3 — fine
 never/only-when-flagged, zero-jornada re-derivation), `VehicleExtensionTest` (+1
 flag/unflag).
+
+**Follow-up (same day).** (1) **Advances from Payroll** — a "Nuevo anticipo"
+button on Screen 12 opens a modal (employee · importe · mes · fecha · motivo) that
+POSTs the existing `/advances` endpoint; the advance is created Pending and
+deducts once approved (the approval control is unchanged). (2) **Fuel
+reimbursement** — a `vehicle_fuel_records.payment_method = 'reimburse'` (worker
+paid, added to the fuel form) folds into the payroll reimbursements line via
+`PayrollService::fuelReimbursementsFor()`; company-card fuel stays a company cost.
+(3) **Two bug fixes:** the `settings.attendance` route (day-type thresholds) was
+never registered → Save 404'd — added `PUT /admin/settings/attendance`; and the
+Inertia error page rendered raw `errors.404_title` keys because a 404 from an
+unmatched route skips the web middleware (so `HandleInertiaRequests::share()`
+never ships the dictionary) — the exception respond hook now passes `lang` +
+`locale` explicitly, fixing every error page CRM-wide. Tests: `PayrollTest`
+(+1 fuel), `SettingsScreenTest` (+2 thresholds save/validate).
 
 ### Subcontractor (thaekedar) module (2026-08-07)
 

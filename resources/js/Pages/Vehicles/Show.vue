@@ -115,7 +115,7 @@ function deleteFuel(r) {
     askDelete(r.fuel_date ?? '',
         () => router.delete(`/vehicles/${props.vehicle.id}/fuel/${r.id}`, { preserveScroll: true }));
 }
-const fuelPaymentMethods = ['cash', 'card', 'company_card'];
+const fuelPaymentMethods = ['cash', 'card', 'company_card', 'reimburse'];
 const fuelTotal = computed(() =>
     props.fuel_records.reduce((s, r) => s + (r.total_cost ?? 0), 0).toFixed(2));
 

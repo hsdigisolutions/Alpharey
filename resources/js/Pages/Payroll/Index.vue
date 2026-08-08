@@ -18,6 +18,7 @@ import VEmptyState from '@/Components/ui/VEmptyState.vue';
 import VInput from '@/Components/ui/VInput.vue';
 import VModal from '@/Components/ui/VModal.vue';
 import VPageHeader from '@/Components/ui/VPageHeader.vue';
+import VSelect from '@/Components/ui/VSelect.vue';
 import VTable from '@/Components/ui/VTable.vue';
 import VTextarea from '@/Components/ui/VTextarea.vue';
 
@@ -77,6 +78,26 @@ function hoursHM(h) {
     return `${hh}h ${String(mm).padStart(2, '0')}m`;
 }
 
+/* ---------- new advance ---------- */
+const advanceOpen = ref(false);
+const advanceForm = useForm({
+    employee_id: '', amount: null, reason: '',
+    request_date: props.month + '-01', payroll_month: props.month,
+});
+function openAdvance() {
+    advanceForm.reset();
+    advanceForm.request_date = props.month + '-01';
+    advanceForm.payroll_month = props.month;
+    advanceOpen.value = true;
+}
+function submitAdvance() {
+    advanceForm.transform((d) => ({ ...d, reason: d.reason || null }))
+        .post('/advances', {
+            preserveScroll: true,
+            onSuccess: () => { advanceOpen.value = false; advanceForm.reset(); },
+        });
+}
+
 /* ---------- manual adjustments ---------- */
 const adjustingId = ref(null);
 const adjusting = computed(() => props.rows.find((r) => r.id === adjustingId.value) ?? null);
@@ -121,6 +142,9 @@ const columns = [
         <VPageHeader k="payroll.title">
             <VButton v-if="can.create && !locked" variant="secondary" icon="plus" @click="post('/payroll/calculate')">
                 <Bilingual k="payroll.calculate" inline />
+            </VButton>
+            <VButton v-if="can.create && !locked" variant="secondary" icon="plus" @click="openAdvance()">
+                <Bilingual k="payroll.new_advance" inline />
             </VButton>
             <VButton v-if="can.approve && !locked" variant="secondary" icon="check" @click="post('/payroll/approve-all')">
                 <Bilingual k="payroll.approve_all" inline />
@@ -328,6 +352,36 @@ const columns = [
             <template #footer>
                 <VButton variant="ghost" @click="adjustingId = null"><Bilingual k="common.cancel" inline /></VButton>
                 <VButton type="submit" form="adjust-form" :loading="adjustForm.processing">
+                    <Bilingual k="common.save" inline />
+                </VButton>
+            </template>
+        </VModal>
+
+        <!-- New advance (deducted from the chosen payroll month) -->
+        <VModal :open="advanceOpen" title-key="payroll.new_advance" @close="advanceOpen = false">
+            <form id="advance-form" class="grid gap-4 sm:grid-cols-2" @submit.prevent="submitAdvance">
+                <FormField k="payroll.advance_employee" :error="advanceForm.errors.employee_id" class="sm:col-span-2">
+                    <VSelect v-model="advanceForm.employee_id">
+                        <option value="" disabled>—</option>
+                        <option v-for="r in rows" :key="r.employee_id" :value="r.employee_id">{{ r.employee }}</option>
+                    </VSelect>
+                </FormField>
+                <FormField k="payroll.advance_amount" :error="advanceForm.errors.amount">
+                    <VInput v-model="advanceForm.amount" type="number" step="0.01" min="0.01" />
+                </FormField>
+                <FormField k="payroll.advance_month" :error="advanceForm.errors.payroll_month">
+                    <VInput v-model="advanceForm.payroll_month" type="month" />
+                </FormField>
+                <FormField k="payroll.advance_date" :error="advanceForm.errors.request_date">
+                    <VInput v-model="advanceForm.request_date" type="date" />
+                </FormField>
+                <FormField k="payroll.advance_reason" class="sm:col-span-2">
+                    <VTextarea v-model="advanceForm.reason" :rows="2" />
+                </FormField>
+            </form>
+            <template #footer>
+                <VButton variant="ghost" @click="advanceOpen = false"><Bilingual k="common.cancel" inline /></VButton>
+                <VButton type="submit" form="advance-form" :loading="advanceForm.processing">
                     <Bilingual k="common.save" inline />
                 </VButton>
             </template>

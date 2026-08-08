@@ -254,6 +254,7 @@ class PayrollController extends Controller
 
         return [
             'id' => $p->id,
+            'employee_id' => $p->employee_id,
             'employee' => $p->employee?->full_name,
             'designation' => $p->employee?->designation,
             'company' => $p->company?->name,
