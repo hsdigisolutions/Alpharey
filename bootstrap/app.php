@@ -59,7 +59,22 @@ return Application::configure(basePath: dirname(__DIR__))
             if ($status === 403
                 || (! app()->environment(['local', 'testing'])
                     && in_array($status, [404, 500, 503], true))) {
-                return Inertia::render('Error', ['status' => $status])
+                // A 404 from an UNMATCHED route never runs the web-group
+                // middleware, so HandleInertiaRequests::share() (which ships the
+                // bilingual dictionary) does not fire and the page would render
+                // raw "errors.404_title" keys. Pass lang + locale explicitly so
+                // every error page resolves its labels.
+                return Inertia::render('Error', [
+                    'status' => $status,
+                    'locale' => [
+                        'primary' => app()->getLocale(),
+                        'secondary' => app()->getLocale() === 'es' ? 'en' : 'es',
+                    ],
+                    'lang' => [
+                        'es' => trans('ui', [], 'es'),
+                        'en' => trans('ui', [], 'en'),
+                    ],
+                ])
                     ->toResponse($request)
                     ->setStatusCode($status);
             }

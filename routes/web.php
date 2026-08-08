@@ -451,6 +451,8 @@ Route::middleware(['auth', 'active', 'two_factor', 'not_worker'])->group(functio
 
         Route::get('/settings', [SettingsController::class, 'index'])->name('settings.index');
         Route::put('/settings/general', [SettingsController::class, 'updateGeneral'])->name('settings.general');
+        // Per-company auto day-type thresholds (Screen 26).
+        Route::put('/settings/attendance', [SettingsController::class, 'updateAttendance'])->name('settings.attendance');
         Route::put('/settings/mail', [SettingsController::class, 'updateMail'])->name('settings.mail');
         Route::post('/settings/mail/test', [SettingsController::class, 'testMail'])->name('settings.mail.test');
         // Screen 26 — notification rules matrix (Phase 8, Super Admin only)

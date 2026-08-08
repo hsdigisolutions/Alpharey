@@ -2,6 +2,7 @@
 
 use App\Models\Company;
 use App\Models\User;
+use App\Services\Attendance\AttendanceService;
 use App\Services\Settings\SettingsService;
 use Illuminate\Support\Facades\Crypt;
 use Inertia\Testing\AssertableInertia as Assert;
@@ -39,6 +40,26 @@ it('updates general settings', function (): void {
 
     expect($settings->get('general.app_name'))->toBe('AlphaRey CRM')
         ->and($settings->get('general.session_timeout_minutes'))->toBe(45);
+});
+
+it('saves the per-company auto day-type thresholds', function (): void {
+    $this->actingAs($this->companyAdmin)->put('/admin/settings/attendance', [
+        'full_day_threshold' => 7,
+        'half_day_threshold' => 4,
+    ])->assertRedirect()->assertSessionHasNoErrors();
+
+    $thresholds = app(AttendanceService::class)
+        ->dayTypeThresholds($this->company->id);
+
+    expect($thresholds['full'])->toBe(7.0)
+        ->and($thresholds['half'])->toBe(4.0);
+});
+
+it('rejects a half-day threshold above the full-day threshold', function (): void {
+    $this->actingAs($this->companyAdmin)->put('/admin/settings/attendance', [
+        'full_day_threshold' => 6,
+        'half_day_threshold' => 8,
+    ])->assertSessionHasErrors('half_day_threshold');
 });
 
 it('applies the configured session timeout on the next request', function (): void {
