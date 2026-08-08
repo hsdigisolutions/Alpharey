@@ -38,7 +38,8 @@ it('counts present and absent days and sums hours and pay', function (): void {
     expect($data['present'])->toBe(2)
         ->and($data['absent'])->toBe(1)
         ->and($data['hours'])->toBe(15.0)
-        ->and($data['earned'])->toBe(300.0)
+        // No 'earned' — workers never see money amounts (client rule 2026-08-08).
+        ->and($data)->not->toHaveKey('earned')
         ->and($data['calendar'])->toHaveCount(31); // May has 31 days
 });
 
@@ -81,10 +82,10 @@ it('only ever sees the worker\'s own rows', function (): void {
 
     $data = $this->service->forMonth($this->employee, $month);
 
-    expect($data['present'])->toBe(0)->and($data['earned'])->toBe(0.0);
+    expect($data['present'])->toBe(0)->and($data)->not->toHaveKey('earned');
 });
 
-it('carries day type, project and amount onto each calendar cell', function (): void {
+it('carries day type and project onto each calendar cell (no money)', function (): void {
     $month = '2026-05';
     $project = Project::factory()->forCompany($this->company)->create(['name' => 'Reforma Madrid']);
 
@@ -99,6 +100,6 @@ it('carries day type, project and amount onto each calendar cell', function (): 
 
     expect($cell['day_type'])->toBe('full')
         ->and((float) $cell['hours'])->toBe(8.0)
-        ->and((float) $cell['total'])->toBe(80.0)
+        ->and($cell)->not->toHaveKey('total')   // no money in the worker view
         ->and($cell['project'])->toBe('Reforma Madrid');
 });

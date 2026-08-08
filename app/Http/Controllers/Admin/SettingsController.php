@@ -8,10 +8,12 @@ use App\Http\Requests\Admin\TestMailRequest;
 use App\Http\Requests\Admin\UpdateGeneralSettingsRequest;
 use App\Http\Requests\Admin\UpdateMailSettingsRequest;
 use App\Models\OvertimePolicy;
+use App\Services\Attendance\AttendanceService;
 use App\Services\Notifications\NotificationRules;
 use App\Services\Settings\MailSettings;
 use App\Services\Settings\SettingsService;
 use App\Services\System\SystemHealth;
+use App\Support\CurrentCompany;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Mail;
@@ -45,6 +47,9 @@ class SettingsController extends Controller
                 'id', 'name', 'type', 'rate', 'daily_threshold_hours', 'accumulate_hours_per_day', 'notes',
             ]),
             'overtimeTypes' => array_map(fn (OvertimePolicyType $t) => $t->value, OvertimePolicyType::cases()),
+            // Auto day-type thresholds (hours), per the active company.
+            'dayTypeThresholds' => app(AttendanceService::class)
+                ->dayTypeThresholds(app(CurrentCompany::class)->id() ?? 0),
             // Notification matrix + system health are brand-level → Super Admin only
             'notificationMatrix' => $isSuperAdmin ? $rules->matrix() : null,
             'systemHealth' => $isSuperAdmin ? $health->check() : null,
@@ -62,6 +67,26 @@ class SettingsController extends Controller
         ]);
 
         $rules->save($validated['matrix']);
+
+        return back()->with('success', __('ui.settings.saved'));
+    }
+
+    /**
+     * Per-company auto day-type thresholds (hours). Half must not exceed full.
+     * Stored under company-scoped keys so each company grades its own days.
+     */
+    public function updateAttendance(Request $request, SettingsService $settings): RedirectResponse
+    {
+        $companyId = app(CurrentCompany::class)->id();
+        abort_if($companyId === null, 403);
+
+        $validated = $request->validate([
+            'full_day_threshold' => ['required', 'numeric', 'min:0.5', 'max:24'],
+            'half_day_threshold' => ['required', 'numeric', 'min:0', 'max:24', 'lte:full_day_threshold'],
+        ]);
+
+        $settings->set("attendance.full_day_threshold.{$companyId}", (float) $validated['full_day_threshold']);
+        $settings->set("attendance.half_day_threshold.{$companyId}", (float) $validated['half_day_threshold']);
 
         return back()->with('success', __('ui.settings.saved'));
     }

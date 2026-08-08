@@ -45,9 +45,6 @@ function marker(cell) {
     }
 }
 
-function eur(v) {
-    return `${Number(v ?? 0).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`;
-}
 function hoursHM(h) {
     const hh = Math.floor(Math.max(0, Number(h) || 0));
     const mm = Math.round((Math.max(0, Number(h) || 0) - hh) * 60);
@@ -90,7 +87,6 @@ function select(cell) {
             <template v-if="selected.status === 'present'">
                 <div class="flex justify-between py-0.5"><span class="text-ink-soft">{{ t('worker.total_hours') }}</span><span class="tabular-nums">{{ hoursHM(selected.hours) }}</span></div>
                 <div v-if="selected.project" class="flex justify-between py-0.5"><span class="text-ink-soft">{{ t('worker.detail_project') }}</span><span class="truncate ps-2 text-end">{{ selected.project }}</span></div>
-                <div v-if="selected.total" class="flex justify-between py-0.5 font-medium"><span class="text-ink-soft">{{ t('worker.detail_amount') }}</span><span class="tabular-nums">{{ eur(selected.total) }}</span></div>
             </template>
             <p v-else class="text-ink-soft">
                 {{ selected.status === 'absent' ? t('worker.legend_absent') : (selected.status === 'leave' ? t('worker.legend_present') : t('worker.detail_none')) }}

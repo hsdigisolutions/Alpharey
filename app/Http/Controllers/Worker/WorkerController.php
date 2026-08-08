@@ -15,6 +15,7 @@ use App\Services\Workers\WorkerAttendanceService;
 use App\Services\Workers\WorkerDashboardService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -47,6 +48,10 @@ class WorkerController extends Controller
                 'can_use_vehicles' => $employee->can_use_vehicles,
             ],
             'today' => $this->todayPayload($today),
+            // Weekend gating: a Sat/Sun is a rest day unless an admin offer
+            // invites this worker (then the offer's project is shown + check-in
+            // is allowed). Weekdays are always workable.
+            'weekend' => $this->weekendPayload($employee),
             // The current month's calendar + figures for the dashboard below.
             'month' => $this->dashboard->forMonth($employee),
             // Whether the worker still has to be shown the geolocation + selfie
@@ -107,11 +112,11 @@ class WorkerController extends Controller
     }
 
     /**
-     * Approved advances that have not yet been deducted from payroll. Amounts
-     * are encrypted; we decrypt here for the worker's OWN data (no gate needed
-     * — this is the worker reading their own pay data).
+     * Approved advances not yet deducted from payroll — surfaced so the worker
+     * knows a deduction is coming, but WITHOUT the euro amount: workers never see
+     * money amounts (client rule 2026-08-08). Only the month + reason.
      *
-     * @return list<array{amount: float, reason: string|null}>
+     * @return list<array{reason: string|null, payroll_month: string|null}>
      */
     private function pendingAdvances(Employee $employee): array
     {
@@ -122,7 +127,6 @@ class WorkerController extends Controller
             ->latest('request_date')
             ->get()
             ->map(fn (Advance $a) => [
-                'amount' => (float) $a->getAttribute('amount'),
                 'reason' => $a->reason,
                 'payroll_month' => $a->payroll_month,
             ])
@@ -149,6 +153,39 @@ class WorkerController extends Controller
                 'status' => $e->status->value,
             ])
             ->all();
+    }
+
+    /**
+     * Weekend state for the home screen. On a weekday: workable, nothing to say.
+     * On a weekend: a rest day unless an offer invites this worker, in which case
+     * the offer's project + rate are surfaced and check-in is unlocked.
+     *
+     * @return array{is_weekend: bool, rest_day: bool, offer: array{project: string|null, rate_type: string}|null}
+     */
+    private function weekendPayload(Employee $employee): array
+    {
+        $isWeekend = Carbon::now()->isWeekend();
+
+        if (! $isWeekend) {
+            return ['is_weekend' => false, 'rest_day' => false, 'offer' => null];
+        }
+
+        $offer = $this->attendance->weekendOfferFor($employee);
+
+        if ($offer === null) {
+            return ['is_weekend' => true, 'rest_day' => true, 'offer' => null];
+        }
+
+        // The project is tenant-scoped; a worker has no session, so drop the scope.
+        $project = $offer->project_id !== null
+            ? Project::query()->withoutGlobalScope(CompanyScope::class)->where('id', $offer->project_id)->value('name')
+            : null;
+
+        return [
+            'is_weekend' => true,
+            'rest_day' => false,
+            'offer' => ['project' => $project, 'rate_type' => $offer->weekend_rate_type->value],
+        ];
     }
 
     /**
@@ -187,8 +224,7 @@ class WorkerController extends Controller
             // Evidence the GPS fix landed — drives the "ubicación capturada"
             // line and the amber "no capturada" warning on the confirmation.
             'location_captured' => $today->check_in_lat !== null && $today->check_in_lng !== null,
-            // The day's earnings — only meaningful once checked out.
-            'amount' => $today->check_out !== null ? (float) $today->total_amount : null,
+            // NO money: a worker never sees wage amounts (client rule 2026-08-08).
         ];
     }
 

@@ -11,6 +11,7 @@ import AppIcon from '@/Components/AppIcon.vue';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import AttendanceModal from '@/Components/Attendance/AttendanceModal.vue';
 import BulkAttendanceModal from '@/Components/Attendance/BulkAttendanceModal.vue';
+import WeekendOfferModal from '@/Components/Attendance/WeekendOfferModal.vue';
 import VBadge from '@/Components/ui/VBadge.vue';
 import VButton from '@/Components/ui/VButton.vue';
 import VPageHeader from '@/Components/ui/VPageHeader.vue';
@@ -93,6 +94,14 @@ function openBulk() {
     showBulkModal.value = true;
 }
 
+/* --- weekend work offer modal --- */
+const showOfferModal = ref(false);
+
+function openOffer() {
+    if (!ensureCompanySelected()) return;
+    showOfferModal.value = true;
+}
+
 /* --- edit modal --- */
 const showModal = ref(false);
 const modalRecord = ref(null);
@@ -149,6 +158,9 @@ const monthLabel = computed(() => {
             </VButton>
             <VButton v-if="can.create" variant="secondary" icon="plus" @click="openBulk">
                 <Bilingual k="attendance.bulk_new" inline />
+            </VButton>
+            <VButton v-if="can.edit" variant="secondary" size="sm" @click="openOffer">
+                <Bilingual k="attendance.weekend_offer" inline />
             </VButton>
             <VButton v-if="can.create" icon="plus" @click="openCreate">
                 <Bilingual k="attendance.new" inline />
@@ -210,6 +222,13 @@ const monthLabel = computed(() => {
                             <AppIcon v-if="grid[emp.id]?.[day]?.location_mismatch" name="alert"
                                 class="pointer-events-none absolute start-0.5 top-0.5 h-2.5 w-2.5 text-status-warn"
                                 :title="$t('attendance.location_mismatch')" />
+                            <!-- Day-type auto-detection: 'A' = system-detected, '✎' = admin override -->
+                            <span v-if="grid[emp.id]?.[day]?.is_auto_detected"
+                                class="pointer-events-none absolute bottom-0 start-0.5 text-[7px] font-bold leading-none text-status-info"
+                                :title="$t('attendance.auto_detected')">A</span>
+                            <span v-else-if="grid[emp.id]?.[day]?.is_overridden"
+                                class="pointer-events-none absolute bottom-0 start-0.5 text-[8px] leading-none text-ink-soft"
+                                :title="$t('attendance.overridden')">✎</span>
                         </td>
                     </tr>
                 </tbody>
@@ -256,5 +275,9 @@ const monthLabel = computed(() => {
             :can-see-wage="canSeeWage"
             :month="month"
             @close="showBulkModal = false" />
+
+        <WeekendOfferModal :open="showOfferModal"
+            :employees="employees" :projects="projects"
+            @close="showOfferModal = false" />
     </AppLayout>
 </template>

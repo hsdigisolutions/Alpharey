@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\Attendance;
 use App\Models\Company;
 use App\Models\Employee;
 use App\Models\EmployeeWageRate;
@@ -21,7 +22,7 @@ beforeEach(function (): void {
     $this->svc = app(AttendanceService::class);
 });
 
-function logDay(int $employeeId, string $date, string $dayType, array $extra = []): App\Models\Attendance
+function logDay(int $employeeId, string $date, string $dayType, array $extra = []): Attendance
 {
     return app(AttendanceService::class)->create(array_merge([
         'employee_id' => $employeeId,
@@ -67,7 +68,7 @@ it('always computes the total server-side, ignoring a posted total', function ()
         'total_amount' => 9999, // ignored (no manual_wage_override)
     ])->assertRedirect();
 
-    $row = App\Models\Attendance::withoutGlobalScopes()->where('employee_id', $e->id)->where('date', '2026-07-05')->firstOrFail();
+    $row = Attendance::withoutGlobalScopes()->where('employee_id', $e->id)->where('date', '2026-07-05')->firstOrFail();
     expect((float) $row->total_amount)->toBe(80.0);
 });
 
@@ -138,5 +139,5 @@ it('rejects a per-meter day for another company employee', function (): void {
         'status' => 'present',
     ])->assertSessionHasErrors('employee_id');
 
-    expect(App\Models\Attendance::withoutGlobalScopes()->where('employee_id', $foreign->id)->count())->toBe(0);
+    expect(Attendance::withoutGlobalScopes()->where('employee_id', $foreign->id)->count())->toBe(0);
 });

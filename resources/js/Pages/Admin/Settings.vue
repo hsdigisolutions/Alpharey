@@ -25,6 +25,7 @@ const props = defineProps({
     canManageMail: { type: Boolean, required: true },
     overtimePolicies: { type: Array, default: () => [] },
     overtimeTypes: { type: Array, default: () => [] },
+    dayTypeThresholds: { type: Object, default: () => ({ full: 6, half: 3 }) },
     notificationMatrix: { type: Array, default: null },
     systemHealth: { type: Object, default: null },
 });
@@ -74,6 +75,16 @@ function saveMail() {
 
 function sendTest() {
     testForm.post('/admin/settings/mail/test', { preserveScroll: true });
+}
+
+/* --- Auto day-type thresholds --- */
+const thresholdForm = useForm({
+    full_day_threshold: props.dayTypeThresholds.full,
+    half_day_threshold: props.dayTypeThresholds.half,
+});
+
+function saveThresholds() {
+    thresholdForm.put('/admin/settings/attendance', { preserveScroll: true });
 }
 
 /* --- Overtime policies --- */
@@ -240,6 +251,26 @@ function deletePolicy(p) {
                     </tbody>
                 </table>
                 <p v-else class="px-4 py-6 text-center text-sm text-muted"><Bilingual k="common.coming_soon" class="items-center" /></p>
+            </VCard>
+
+            <!-- Auto day-type thresholds (per company) -->
+            <VCard title-key="attendance.day_type_thresholds" class="lg:col-span-2">
+                <p class="mb-4 text-sm text-ink-soft">{{ $t('attendance.day_type_thresholds_hint') }}</p>
+                <form class="flex flex-wrap items-end gap-4" @submit.prevent="saveThresholds">
+                    <label class="flex flex-col gap-1">
+                        <span class="text-xs font-medium text-ink-soft">{{ $t('attendance.full_day_threshold') }}</span>
+                        <input v-model="thresholdForm.full_day_threshold" type="number" step="0.5" min="0.5" max="24"
+                            class="w-40 rounded-md border border-line-strong bg-surface-sunken px-3 py-1.5 text-sm text-ink focus:border-accent focus:outline-none" />
+                        <span v-if="thresholdForm.errors.full_day_threshold" class="text-xs text-status-danger">{{ thresholdForm.errors.full_day_threshold }}</span>
+                    </label>
+                    <label class="flex flex-col gap-1">
+                        <span class="text-xs font-medium text-ink-soft">{{ $t('attendance.half_day_threshold') }}</span>
+                        <input v-model="thresholdForm.half_day_threshold" type="number" step="0.5" min="0" max="24"
+                            class="w-40 rounded-md border border-line-strong bg-surface-sunken px-3 py-1.5 text-sm text-ink focus:border-accent focus:outline-none" />
+                        <span v-if="thresholdForm.errors.half_day_threshold" class="text-xs text-status-danger">{{ thresholdForm.errors.half_day_threshold }}</span>
+                    </label>
+                    <VButton type="submit" :loading="thresholdForm.processing"><Bilingual k="common.save" inline /></VButton>
+                </form>
             </VCard>
 
             <!-- Notification rules matrix (Super Admin only) -->

@@ -8,10 +8,12 @@ use App\Enums\NotificationType;
 use App\Models\Attendance;
 use App\Models\Employee;
 use App\Models\Scopes\CompanyScope;
+use App\Models\WeekendWorkOffer;
 use App\Services\Attendance\AttendanceService;
 use App\Services\Notifications\NotificationDispatcher;
 use App\Support\PeriodLock;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -57,6 +59,20 @@ class WorkerAttendanceService
             ]);
         }
 
+        // Weekends are DAYS OFF by default: a check-in is only allowed when an
+        // admin has published a weekend offer for today AND invited this worker.
+        // The offer also carries the weekend rate applied below.
+        $offer = null;
+        if (Carbon::parse($today)->isWeekend()) {
+            $offer = $this->weekendOfferFor($employee, $today);
+
+            if ($offer === null) {
+                throw ValidationException::withMessages([
+                    'check_in' => __('ui.worker.rest_day'),
+                ]);
+            }
+        }
+
         // Reject a punch into a month payroll has closed (system-wide lock).
         $this->lock->assertOpen($employee->company_id, $today, 'check_in');
 
@@ -65,7 +81,7 @@ class WorkerAttendanceService
         // is harmless; a row referencing a missing file is not.
         $photoPath = $this->storePhoto($employee, $photo);
 
-        $attendance = DB::transaction(function () use ($employee, $today, $location, $photoPath): Attendance {
+        $attendance = DB::transaction(function () use ($employee, $today, $location, $photoPath, $offer): Attendance {
             // createForWorker() bypasses resolveEmployee() which requires a CRM
             // session (CurrentCompany) that workers never have. The employee is
             // already verified by WorkerController — pass it directly.
@@ -82,6 +98,14 @@ class WorkerAttendanceService
             $attendance->check_in_photo_path = $photoPath;
             $attendance->source = 'worker';
             $attendance->save();
+
+            // Weekend offer: carry its rate onto the row so the day is priced
+            // with the premium (the weekend day was server-detected in recompute).
+            if ($offer !== null) {
+                $attendance->weekend_rate_type = $offer->weekend_rate_type;
+                $attendance->weekend_rate_amount = $offer->weekend_rate_amount;
+                $this->attendance->recalculateRow($attendance, $employee);
+            }
 
             return $attendance;
         });
@@ -137,11 +161,16 @@ class WorkerAttendanceService
 
         $this->lock->assertOpen($employee->company_id, $today, 'check_out');
 
-        return DB::transaction(function () use ($attendance, $location): Attendance {
+        return DB::transaction(function () use ($employee, $attendance, $location): Attendance {
             // update() recomputes hours_worked + total_amount from the snapshot.
             $attendance = $this->attendance->update($attendance, [
                 'check_out' => now()->format('H:i'),
             ]);
+
+            // Grade the day AUTOMATICALLY from the hours just computed (full /
+            // half / hourly per the company thresholds) and re-price by it. The
+            // worker never picks a type; an admin can override later.
+            $this->attendance->applyAutoDayType($attendance, $employee);
 
             $attendance->check_out_at = now();
             $this->applyLocation($attendance, 'check_out', $location);
@@ -188,6 +217,23 @@ class WorkerAttendanceService
 
             return $attendance;
         });
+    }
+
+    /**
+     * The weekend work offer that lets THIS employee punch on the given date, or
+     * null. An offer exists per company per date; it only unlocks the day for the
+     * workers on its invited list. Tenant scope dropped (workers have no CRM
+     * session); membership is checked in PHP for MySQL/SQLite portability.
+     */
+    public function weekendOfferFor(Employee $employee, ?string $date = null): ?WeekendWorkOffer
+    {
+        $offer = WeekendWorkOffer::query()
+            ->withoutGlobalScope(CompanyScope::class)
+            ->where('company_id', $employee->company_id)
+            ->whereDate('offer_date', $date ?? now()->toDateString())
+            ->first();
+
+        return ($offer !== null && $offer->invites($employee->id)) ? $offer : null;
     }
 
     /**

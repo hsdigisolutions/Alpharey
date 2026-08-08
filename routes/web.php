@@ -50,6 +50,7 @@ use App\Http\Controllers\TodayController;
 use App\Http\Controllers\VehicleController;
 use App\Http\Controllers\VendorController;
 use App\Http\Controllers\WageRateController;
+use App\Http\Controllers\WeekendWorkOfferController;
 use App\Http\Controllers\WelcomeController;
 use App\Http\Controllers\Worker\WorkerController;
 use App\Http\Controllers\Worker\WorkerExpenseController;
@@ -261,6 +262,10 @@ Route::middleware(['auth', 'active', 'two_factor', 'not_worker'])->group(functio
     Route::delete('/attendance/{attendance}', [AttendanceController::class, 'destroy'])->name('attendance.destroy');
     // Worker PWA: the gated, audited check-in selfie (Phase E)
     Route::get('/attendance/{attendance}/selfie', [AttendanceController::class, 'selfie'])->name('attendance.selfie');
+
+    // Weekend Work Offers — an admin opens a specific weekend date for invited workers.
+    Route::post('/weekend-offers', [WeekendWorkOfferController::class, 'store'])->name('weekend-offers.store');
+    Route::delete('/weekend-offers/{weekendOffer}', [WeekendWorkOfferController::class, 'destroy'])->name('weekend-offers.destroy');
 
     // Screen 24 — Measurements (company-owned)
     Route::get('/measurements', [MeasurementController::class, 'index'])->name('measurements.index');

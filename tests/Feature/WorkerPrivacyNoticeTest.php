@@ -17,8 +17,12 @@ use App\Support\WorkerPrivacyNotice;
  * leave an audit trail (see docs/GDPR_WORKER_NOTICE.md).
  */
 beforeEach(function (): void {
+    // Weekends need a work offer for check-in; pin to a Monday for the notice flow.
+    $this->travelTo('2026-08-10 09:00');
     $this->company = Company::factory()->create();
 });
+
+afterEach(fn () => $this->travelBack());
 
 /** A worker login linked to an employee, NOT yet having seen the notice. */
 function unacknowledgedWorker(Company $company): array

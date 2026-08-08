@@ -3,6 +3,7 @@
 use App\Models\Attendance;
 use App\Models\Company;
 use App\Models\Employee;
+use App\Models\User;
 use Illuminate\Support\Carbon;
 
 beforeEach(function (): void {
@@ -63,7 +64,7 @@ it('skips a new hire whose joining date is after the day', function (): void {
 });
 
 it('clears the auto flag once an admin edits the row', function (): void {
-    $admin = App\Models\User::factory()->companyAdmin()->forCompany($this->company)->create();
+    $admin = User::factory()->companyAdmin()->forCompany($this->company)->create();
     $e = Employee::factory()->forCompany($this->company)->create([
         'active' => true, 'joining_date' => '2026-01-01', 'wage_type' => 'daily', 'daily_wage' => '80',
     ]);

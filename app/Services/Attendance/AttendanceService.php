@@ -15,6 +15,7 @@ use App\Models\EmployeeDeployment;
 use App\Models\OvertimePolicy;
 use App\Models\Scopes\CompanyScope;
 use App\Services\Employees\WageRateService;
+use App\Services\Settings\SettingsService;
 use App\Support\CurrentCompany;
 use App\Support\PeriodLock;
 use Illuminate\Support\Facades\Auth;
@@ -34,9 +35,15 @@ use Illuminate\Support\Facades\DB;
  */
 class AttendanceService
 {
+    /** Default day-type thresholds (hours), overridable per company in Settings. */
+    public const DEFAULT_FULL_DAY_THRESHOLD = 6.0;
+
+    public const DEFAULT_HALF_DAY_THRESHOLD = 3.0;
+
     public function __construct(
         private readonly PeriodLock $lock,
         private readonly WageRateService $wageRates,
+        private readonly SettingsService $settings,
     ) {}
 
     /**
@@ -103,6 +110,14 @@ class AttendanceService
             // A human is now editing this row — it is no longer an auto-absence.
             $attendance->is_auto_generated = false;
 
+            // An explicit day_type in the payload is a MANUAL choice (the admin
+            // grid/modal always sends it), so the auto-detected grade no longer
+            // stands — this becomes an override. auto_day_type is kept as the
+            // record of what the system had detected.
+            if (array_key_exists('day_type', $data)) {
+                $attendance->is_auto_detected = false;
+            }
+
             $this->lock->assertOpen($attendance->company_id, $attendance->date);
 
             // Re-freeze the snapshot if the employee, the date, or the DAY TYPE
@@ -160,6 +175,84 @@ class AttendanceService
      */
     public function recalculateRow(Attendance $attendance, Employee $employee): void
     {
+        $this->applySnapshots($attendance, $employee);
+        $this->recompute($attendance);
+        $attendance->save();
+
+        $this->log($attendance, 'updated');
+    }
+
+    /**
+     * Grade a day from the hours worked, using the company's thresholds:
+     *
+     *   hours >= full threshold  → full   (rate × 1.0)
+     *   hours >= half threshold  → half   (rate × 0.5)
+     *   otherwise                → hourly (hourly rate × hours)
+     */
+    public function autoDayType(float $hours, int $companyId): DayType
+    {
+        $t = $this->dayTypeThresholds($companyId);
+
+        return match (true) {
+            $hours >= $t['full'] => DayType::Full,
+            $hours >= $t['half'] => DayType::Half,
+            default => DayType::Hourly,
+        };
+    }
+
+    /**
+     * The company's day-type thresholds (hours). A per-company setting wins over
+     * the group default, which in turn falls back to the coded default.
+     *
+     * @return array{full: float, half: float}
+     */
+    public function dayTypeThresholds(int $companyId): array
+    {
+        return [
+            'full' => (float) $this->settings->get(
+                "attendance.full_day_threshold.{$companyId}",
+                $this->settings->get('attendance.full_day_threshold', self::DEFAULT_FULL_DAY_THRESHOLD),
+            ),
+            'half' => (float) $this->settings->get(
+                "attendance.half_day_threshold.{$companyId}",
+                $this->settings->get('attendance.half_day_threshold', self::DEFAULT_HALF_DAY_THRESHOLD),
+            ),
+        ];
+    }
+
+    /**
+     * Set the day type AUTOMATICALLY from the hours already computed on the row,
+     * then re-freeze the rate for that type and re-price. Called on check-out —
+     * the worker never picks a type; an admin can still override later via
+     * update() (which flips is_auto_detected off).
+     */
+    public function applyAutoDayType(Attendance $attendance, Employee $employee): void
+    {
+        // Weekend work is VOLUNTARY (Sat/Sun — the F2 weekend model): a weekend
+        // day is NEVER auto-graded into a paid full/half day. The hours stand
+        // and an admin applies any weekend rate by hand. So auto-detection is a
+        // weekday-only rule.
+        if ($attendance->date->isWeekend()) {
+            return;
+        }
+
+        // Full/half grading prices from the DAILY (jornada) rate — it only makes
+        // sense for a worker who has one. A purely hourly worker keeps their
+        // hourly pricing regardless of hours (grading them to a "full day" would
+        // price a daily rate they do not have).
+        $rates = $this->wageRates->ratesForDate($employee, $attendance->date);
+        $hasDailyRate = ($rates['daily'] ?? 0) > 0;
+
+        $detected = $hasDailyRate
+            ? $this->autoDayType((float) $attendance->hours_worked, (int) $attendance->company_id)
+            : DayType::Hourly;
+
+        $attendance->day_type = $detected;
+        $attendance->auto_day_type = $detected;
+        $attendance->is_auto_detected = true;
+
+        // Re-freeze the rate for the detected type (full/half → daily rate) and
+        // recompute the day total from it.
         $this->applySnapshots($attendance, $employee);
         $this->recompute($attendance);
         $attendance->save();

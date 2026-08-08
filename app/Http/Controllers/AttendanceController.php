@@ -90,6 +90,10 @@ class AttendanceController extends Controller
                 'day_type' => $record->day_type?->value,
                 'is_weekend' => (bool) $record->is_weekend,
                 'is_auto' => (bool) $record->is_auto_generated,
+                // Day-type auto-detection badges: 'auto' while the system's grade
+                // stands, 'edit' once an admin has overridden a detected day.
+                'is_auto_detected' => (bool) $record->is_auto_detected,
+                'is_overridden' => ! $record->is_auto_detected && $record->auto_day_type !== null,
                 'hours' => (float) $record->hours_worked,
                 'quantity' => $record->quantity !== null ? (float) $record->quantity : null,
                 'project' => $record->project?->name,

@@ -375,10 +375,13 @@ describe('Feature 3 – advances panel', function () {
             'payroll_month' => '2026-07',
         ]);
 
+        // Workers never see money amounts (client rule 2026-08-08): the panel
+        // surfaces the pending deduction by month, without the euro figure.
         $this->actingAs($user)
             ->get('/worker')
             ->assertInertia(fn ($page) => $page->has('pending_advances', 1)
-                ->where('pending_advances.0.amount', 200) // PHP serializes 200.0 as int 200 in JSON
+                ->where('pending_advances.0.payroll_month', '2026-07')
+                ->missing('pending_advances.0.amount')
             );
     });
 

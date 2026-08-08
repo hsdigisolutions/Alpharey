@@ -26,6 +26,8 @@ use Illuminate\Support\Carbon;
  * @property Carbon $date
  * @property AttendanceMode $mode
  * @property DayType|null $day_type
+ * @property DayType|null $auto_day_type
+ * @property bool $is_auto_detected
  * @property bool $is_weekend
  * @property WeekendRateType|null $weekend_rate_type
  * @property numeric-string|null $weekend_rate_amount
@@ -78,6 +80,8 @@ class Attendance extends Model
             'date' => 'date:Y-m-d',
             'mode' => AttendanceMode::class,
             'day_type' => DayType::class,
+            'auto_day_type' => DayType::class,
+            'is_auto_detected' => 'boolean',
             'is_weekend' => 'boolean',
             'weekend_rate_type' => WeekendRateType::class,
             'weekend_rate_amount' => 'decimal:2',

@@ -22,16 +22,14 @@ const props = defineProps({
     worker: { type: Object, required: true },
     today: { type: Object, required: true },
     month: { type: Object, required: true },
+    // Weekend gating: { is_weekend, rest_day, offer:{project,rate_type}|null }
+    weekend: { type: Object, default: () => ({ is_weekend: false, rest_day: false, offer: null }) },
     // eslint-disable-next-line vue/prop-name-casing -- Inertia sends snake_case verbatim
     privacy_acknowledged: { type: Boolean, default: true },
     // Feature 3 — advances
     // eslint-disable-next-line vue/prop-name-casing
     pending_advances: { type: Array, default: () => [] },
 });
-
-function eur(value) {
-    return `${Number(value ?? 0).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`;
-}
 
 const page = usePage();
 const flashError = computed(() => page.props.flash?.error);
@@ -228,7 +226,10 @@ const noteTextForm = useForm({ attendance_id: null, text_note: '', duration_seco
 
         <!-- Today's status banner -->
         <div class="mb-4 rounded-lg border border-line bg-surface-raised p-4 text-center shadow-card">
-            <p v-if="today.state === 'none'" class="text-sm text-ink-soft">
+            <p v-if="today.state === 'none' && weekend.rest_day" class="text-sm font-medium text-status-info">
+                {{ $t('worker.rest_day_title') }}
+            </p>
+            <p v-else-if="today.state === 'none'" class="text-sm text-ink-soft">
                 {{ $t('worker.status_none') }}
             </p>
             <p v-else-if="today.state === 'checked_in'" class="text-sm font-medium text-status-ok">
@@ -248,39 +249,58 @@ const noteTextForm = useForm({ attendance_id: null, text_note: '', duration_seco
 
         <!-- STATE: nothing yet today → check in (or report absence) -->
         <template v-if="today.state === 'none'">
-            <div v-if="!cameraOpen" class="space-y-3">
-                <VButton class="w-full rounded-xl text-lg font-semibold" size="lg" @click="beginCheckIn">
-                    {{ $t('worker.check_in') }}
-                </VButton>
-                <VButton variant="danger" size="lg" class="w-full rounded-xl" @click="absenceOpen = true">
-                    {{ $t('worker.report_absence') }}
-                </VButton>
+            <!-- Weekend rest day: no offer invites this worker → no check-in -->
+            <div v-if="weekend.rest_day"
+                class="rounded-lg border border-line bg-surface-raised p-6 text-center shadow-card">
+                <p class="text-base font-semibold text-ink">{{ $t('worker.rest_day_title') }}</p>
+                <p class="mt-1 text-sm text-ink-soft">{{ $t('worker.rest_day_body') }}</p>
             </div>
 
-            <!-- Selfie step -->
-            <div v-else class="space-y-3">
-                <p class="text-center text-sm"
-                    :class="cameraFailed ? 'text-status-warn' : 'text-ink-soft'">
-                    {{ cameraFailed ? $t('worker.camera_denied') : $t('worker.camera_prompt') }}
-                </p>
+            <template v-else>
+                <!-- Weekend work offer for this worker (check-in unlocked) -->
+                <div v-if="weekend.offer" class="mb-3 rounded-lg border border-accent/40 bg-accent-soft p-4 text-center shadow-card">
+                    <p class="text-sm font-semibold text-accent">{{ $t('worker.weekend_offer_title') }}</p>
+                    <p v-if="weekend.offer.project" class="mt-1 text-sm text-ink">
+                        {{ $t('worker.detail_project') }}: {{ weekend.offer.project }}
+                    </p>
+                    <p class="mt-0.5 text-xs text-ink-soft">{{ $t('worker.weekend_rate_applied') }}</p>
+                </div>
 
-                <SelfieCapture v-if="!cameraFailed" ref="camera" @captured="onCaptured" @error="onCameraError" />
-
-                <VButton v-if="!photoBlob && !cameraFailed" class="w-full" size="lg" @click="camera.capture()">
-                    {{ $t('worker.take_photo') }}
-                </VButton>
-
-                <template v-else>
-                    <p v-if="statusLine" class="text-center text-xs text-muted">{{ statusLine }}</p>
-                    <VButton class="w-full" size="lg" :loading="busy" @click="submitCheckIn">
+                <div v-if="!cameraOpen" class="space-y-3">
+                    <VButton class="w-full rounded-xl text-lg font-semibold" size="lg" @click="beginCheckIn">
                         {{ $t('worker.check_in') }}
                     </VButton>
-                    <button v-if="!cameraFailed" type="button" class="w-full py-2 text-sm text-ink-soft"
-                        @click="beginCheckIn">
-                        {{ $t('worker.retake') }}
-                    </button>
-                </template>
-            </div>
+                    <!-- Absence reporting only on normal weekdays -->
+                    <VButton v-if="!weekend.is_weekend" variant="danger" size="lg" class="w-full rounded-xl" @click="absenceOpen = true">
+                        {{ $t('worker.report_absence') }}
+                    </VButton>
+                </div>
+
+                <!-- Selfie step -->
+                <div v-else class="space-y-3">
+                    <p class="text-center text-sm"
+                        :class="cameraFailed ? 'text-status-warn' : 'text-ink-soft'">
+                        {{ cameraFailed ? $t('worker.camera_denied') : $t('worker.camera_prompt') }}
+                    </p>
+
+                    <SelfieCapture v-if="!cameraFailed" ref="camera" @captured="onCaptured" @error="onCameraError" />
+
+                    <VButton v-if="!photoBlob && !cameraFailed" class="w-full" size="lg" @click="camera.capture()">
+                        {{ $t('worker.take_photo') }}
+                    </VButton>
+
+                    <template v-else>
+                        <p v-if="statusLine" class="text-center text-xs text-muted">{{ statusLine }}</p>
+                        <VButton class="w-full" size="lg" :loading="busy" @click="submitCheckIn">
+                            {{ $t('worker.check_in') }}
+                        </VButton>
+                        <button v-if="!cameraFailed" type="button" class="w-full py-2 text-sm text-ink-soft"
+                            @click="beginCheckIn">
+                            {{ $t('worker.retake') }}
+                        </button>
+                    </template>
+                </div>
+            </template>
         </template>
 
         <!-- STATE: checked in → confirmation card + live counter, then check out -->
@@ -339,10 +359,6 @@ const noteTextForm = useForm({ attendance_id: null, text_note: '', duration_seco
                         <dt class="text-ink-soft">{{ $t('worker.detail_project') }}</dt>
                         <dd class="font-medium text-ink">{{ today.project }}</dd>
                     </div>
-                    <div v-if="today.amount !== null" class="mt-1 flex items-center justify-between border-t border-line pt-2">
-                        <dt class="font-medium text-accent">{{ $t('worker.summary_amount') }}</dt>
-                        <dd class="tabular-nums text-lg font-semibold text-accent">{{ eur(today.amount) }}</dd>
-                    </div>
                 </dl>
             </div>
             <div class="rounded-lg border border-line bg-surface-raised p-4 text-center text-sm text-ink-soft shadow-card">
@@ -373,7 +389,7 @@ const noteTextForm = useForm({ attendance_id: null, text_note: '', duration_seco
                 <li v-for="adv in pending_advances" :key="adv.payroll_month"
                     class="flex items-center justify-between text-sm">
                     <span class="text-ink-soft">{{ adv.payroll_month ?? '—' }}</span>
-                    <span class="tabular-nums font-medium text-status-warn">{{ eur(adv.amount) }}</span>
+                    <span class="font-medium text-status-warn">{{ $t('worker.advance_pending') }}</span>
                 </li>
             </ul>
         </div>
@@ -398,11 +414,6 @@ const noteTextForm = useForm({ attendance_id: null, text_note: '', duration_seco
                 </div>
             </div>
 
-            <!-- Salary earned this month -->
-            <div class="mb-4 flex items-center justify-between rounded-lg border border-accent/40 bg-accent-soft px-4 py-3 shadow-card">
-                <span class="text-sm font-medium text-accent">{{ $t('worker.month_earned') }}</span>
-                <span class="tabular-nums text-xl font-semibold text-accent">{{ eur(month.earned) }}</span>
-            </div>
 
             <!-- Calendar -->
             <div class="rounded-lg border border-line bg-surface-raised p-3 shadow-card">

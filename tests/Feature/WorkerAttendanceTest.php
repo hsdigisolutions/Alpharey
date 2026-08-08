@@ -22,6 +22,10 @@ use Illuminate\Support\Facades\Storage;
  * the worker's own reason through to the CRM.
  */
 beforeEach(function (): void {
+    // Weekends are days off (a check-in needs a weekend offer), so pin the clock
+    // to a weekday for the ordinary punch-flow tests. 2026-08-10 is a Monday.
+    $this->travelTo('2026-08-10 09:00');
+
     $this->company = Company::factory()->create();
     // Pre-acknowledged: the notice gate has its own test (WorkerPrivacyNoticeTest);
     // here we exercise the punch flow, which sits behind an acknowledged notice.
@@ -37,6 +41,8 @@ beforeEach(function (): void {
 
     $this->worker = $this->employee->fresh()->user;
 });
+
+afterEach(fn () => $this->travelBack());
 
 it('records a check-in with GPS and a selfie', function (): void {
     Storage::fake('local');

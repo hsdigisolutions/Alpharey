@@ -31,9 +31,11 @@ class WorkerDashboardService
      *     present: int,
      *     absent: int,
      *     hours: float,
-     *     earned: float,
-     *     calendar: list<array{day:int, weekday:int, status:string, day_type:string|null, hours:float|null, quantity:float|null, project:string|null, total:float|null, is_today:bool}>
+     *     calendar: list<array{day:int, weekday:int, status:string, day_type:string|null, hours:float|null, quantity:float|null, project:string|null, is_today:bool}>
      * }
+     *
+     * Deliberately carries NO money: a worker never sees wage/earning amounts
+     * (client rule 2026-08-08) — only hours, day type, and the project.
      */
     public function forMonth(Employee $employee, ?string $month = null): array
     {
@@ -52,14 +54,13 @@ class WorkerDashboardService
             // The worker has no company session, so the project's tenant scope
             // would resolve to null — drop it (the row already pins to them).
             ->with(['project' => fn ($q) => $q->withoutGlobalScope(CompanyScope::class)->select('id', 'name')])
-            ->get(['id', 'date', 'status', 'day_type', 'hours_worked', 'quantity', 'total_amount', 'project_id']);
+            ->get(['id', 'date', 'status', 'day_type', 'hours_worked', 'quantity', 'project_id']);
 
         $byDate = $rows->keyBy(fn (Attendance $r): string => $r->date->toDateString());
 
         $present = 0;
         $absent = 0;
         $hours = 0.0;
-        $earned = 0.0;
         $calendar = [];
 
         $cursor = $start->copy();
@@ -84,7 +85,6 @@ class WorkerDashboardService
                 'hours' => $row !== null ? (float) $row->hours_worked : null,
                 'quantity' => $row !== null && $row->quantity !== null ? (float) $row->quantity : null,
                 'project' => $row?->project?->name,
-                'total' => $row !== null ? (float) $row->total_amount : null,
                 // The one day the worker can actually act on — highlighted, and
                 // it is the only date any punch ever writes to (server-enforced).
                 'is_today' => $cursor->isSameDay($today),
@@ -93,14 +93,10 @@ class WorkerDashboardService
             $cursor->addDay();
         }
 
-        // Hours and earnings are the real attendance figures — the same numbers
-        // the payroll run reads. For an hourly/daily worker this is their exact
-        // pay so far; a monthly-salaried worker's per-day total is 0 here, so
-        // the amount reflects attendance, not the fixed salary (payroll adds
-        // that separately). Worth surfacing to the client for confirmation.
+        // Hours only — the same attendance figure the grid shows. No earnings:
+        // workers must never see money amounts (client rule 2026-08-08).
         foreach ($rows as $row) {
             $hours += (float) $row->hours_worked;
-            $earned += (float) $row->total_amount;
         }
 
         return [
@@ -110,7 +106,6 @@ class WorkerDashboardService
             'present' => $present,
             'absent' => $absent,
             'hours' => round($hours, 2),
-            'earned' => round($earned, 2),
             'calendar' => $calendar,
         ];
     }

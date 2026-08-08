@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Status: Phase 9 in progress — hardening (2026-08-01)
 
 **Every screen 01–26 is built (Phase 8 complete).** Phase 9 is hardening, UAT, and
-launch — no new screens. Current: **712 Pest tests / 4154 assertions passing (1
+launch — no new screens. Current: **726 Pest tests / 4185 assertions passing (1
 skipped) · Pint clean · Larastan level 6 clean · `composer audit` + `npm audit`
 clean · production Vite build working.**
 
@@ -53,6 +53,48 @@ weekend work **FS** in coral on both the standalone grid and the employee tab. *
 the bulk "Vino / No vino / No convocado" distinction has no data difference (No
 vino/No convocado both = no record, no penalty), so selection = "came"; the notice
 explains it. Follow-up if the client wants those states persisted.
+
+### Weekend offers + auto day-type + PWA money-hiding (2026-08-08)
+
+Three linked changes to the attendance / Worker PWA.
+
+**1. Worker PWA shows NO money.** Workers must never see wage amounts. Removed
+the "Earned this month" card, the check-out "Day total", the pending-advance €
+figures (now just "Deducción pendiente"), and per-day amounts from the calendar
+detail. Defence in depth, not UI hiding: `WorkerDashboardService` no longer puts
+`earned` or per-cell `total` in the payload, `WorkerController::todayPayload()`
+drops `amount`, and `pendingAdvances()` drops `amount`.
+
+**2. Automatic day-type detection on check-out.** The worker never picks a type;
+`AttendanceService::applyAutoDayType()` grades the day from the hours worked
+(called from `WorkerAttendanceService::checkOut` after hours are computed):
+`hours >= full → full` · `hours >= half → half` · else `hourly`. Thresholds are
+per-company Settings — keys `attendance.full_day_threshold.{companyId}` /
+`half_day_threshold.{companyId}` (default 6 / 3), edited on Screen 26. Migration
+`2026_08_08_000003` adds `auto_day_type` + `is_auto_detected` (both server-set,
+NOT fillable). Guards: **weekends are never auto-graded** (voluntary work), and a
+**purely hourly worker** (no `daily_wage`) stays hourly — grading to a full day
+would price a daily rate they don't have. An admin day_type edit through
+`AttendanceService::update()` flips `is_auto_detected` off (a manual override) but
+keeps `auto_day_type` as the detection record. Admin grid badges: **A** (info) =
+auto-detected · **✎** = manually overridden. Tests: `AutoDayTypeTest` (7).
+
+**3. Weekend Work Offers — Sat/Sun are days off by default.** A worker cannot
+punch in on a weekend unless an admin has published an offer for that date AND
+invited them. Migration `2026_08_08_000004` adds `weekend_work_offers`
+(company_id, project_id, offer_date, weekend_rate_type, weekend_rate_amount,
+`invited_employee_ids` JSON, created_by; unique per company+date). Admin publishes
+from the Attendance screen ("Oferta de trabajo fin de semana" modal → date must be
+a weekend, project, rate ×1/×1.5/×2/especial, invited workers). `WorkerController`
+sends the PWA a `weekend` payload: on a rest day it shows *"Hoy es día de
+descanso"* and hides check-in; on an invited offer it shows *"Trabajo disponible
+hoy (fin de semana)"* + project and unlocks check-in.
+`WorkerAttendanceService::checkIn()` enforces it server-side (weekend + no invite
+→ ValidationException) and carries the offer's weekend rate onto the row so the
+premium prices automatically. Invited-membership is checked in PHP
+(`WeekendWorkOffer::invites()`) for MySQL/SQLite portability. Tests:
+`WeekendOfferTest` (9 — blocked/allowed/not-invited/weekday/tenancy + admin
+store/weekday-reject/cross-company destroy).
 
 ### Project Profitability report — P&L per project (2026-08-08)
 

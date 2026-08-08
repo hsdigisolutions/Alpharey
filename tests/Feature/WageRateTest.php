@@ -5,10 +5,12 @@ use App\Models\Attendance;
 use App\Models\Company;
 use App\Models\Employee;
 use App\Models\EmployeeWageRate;
+use App\Models\Payroll;
 use App\Models\User;
 use App\Services\Attendance\AttendanceService;
 use App\Services\Employees\WageRateService;
 use App\Services\Payroll\PayrollService;
+use Illuminate\Validation\ValidationException;
 
 beforeEach(function (): void {
     $this->companyA = Company::factory()->create();
@@ -98,7 +100,7 @@ it('rejects a new rate dated on or before the current one', function (): void {
     makeRate($e, 'daily', '50', '2026-07-01', null);
 
     $this->service->createRate($e, ['effective_from' => '2026-06-15', 'wage_type' => 'daily', 'rate' => '70']);
-})->throws(Illuminate\Validation\ValidationException::class);
+})->throws(ValidationException::class);
 
 // ── Attendance snapshots follow the date ────────────────────────────────────
 
@@ -138,7 +140,7 @@ it('breaks a two-rate month into periods that reconcile to gross', function (): 
     }
 
     app(PayrollService::class)->calculateMonth($this->companyA->id, '2026-07');
-    $payroll = App\Models\Payroll::withoutGlobalScopes()->where('employee_id', $e->id)->firstOrFail();
+    $payroll = Payroll::withoutGlobalScopes()->where('employee_id', $e->id)->firstOrFail();
 
     $periods = $payroll->rate_periods;
 
@@ -166,7 +168,7 @@ it('handles three rate changes in one month', function (): void {
     }
 
     app(PayrollService::class)->calculateMonth($this->companyA->id, '2026-07');
-    $payroll = App\Models\Payroll::withoutGlobalScopes()->where('employee_id', $e->id)->firstOrFail();
+    $payroll = Payroll::withoutGlobalScopes()->where('employee_id', $e->id)->firstOrFail();
 
     expect($payroll->rate_periods)->toHaveCount(3)
         ->and((float) $payroll->days_amount)->toBe(180.0); // 50 + 60 + 70
@@ -183,7 +185,7 @@ it('never reprices attendance in a paid month', function (): void {
     $row = $svc->create(['employee_id' => $e->id, 'date' => '2026-07-05', 'mode' => 'project_based', 'hours_worked' => 8, 'status' => 'present']);
 
     // Pay the month.
-    App\Models\Payroll::withoutGlobalScopes()->create([
+    Payroll::withoutGlobalScopes()->create([
         'company_id' => $this->companyA->id,
         'employee_id' => $e->id,
         'month' => '2026-07',
