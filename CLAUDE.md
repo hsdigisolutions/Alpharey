@@ -5,9 +5,40 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Status: Phase 9 in progress — hardening (2026-08-01)
 
 **Every screen 01–26 is built (Phase 8 complete).** Phase 9 is hardening, UAT, and
-launch — no new screens. Current: **726 Pest tests / 4185 assertions passing (1
+launch — no new screens. Current: **730 Pest tests / 4198 assertions passing (1
 skipped) · Pint clean · Larastan level 6 clean · `composer audit` + `npm audit`
 clean · production Vite build working.**
+
+### Payroll auto-calc hardening + vehicle fines (2026-08-08)
+
+Fixes to the monthly payroll run and how vehicle fines reach it.
+
+**Zero-priced jornada repair.** `PayrollService::rowAmount()` re-derives a
+full/half day left at `total_amount = 0` by the day-type back-fill migration
+(the reclassification set `day_type = full` on old zero-priced rows without
+re-pricing) from the DAILY rate in force on that date (`WageRateService::ratesForDate`,
+wage history else live field). It is **freeze-safe**: a correctly-priced row
+(total ≠ 0) is untouched, so `PayrollTest`'s "uses the snapshot rate even after
+a raise" still holds. Used by both the gross and `dayTypeSummary()`; empty
+summary lines (a 0-hour open check-in) are filtered out.
+
+**Vehicle fines never auto-deduct.** Migration `2026_08_08_000005` adds
+`deduct_from_salary` + `deduction_month` to `vehicle_fines` (both server-set, not
+fillable). `PayrollService::vehicleFinesFor()` now sums ONLY fines the admin has
+explicitly flagged (`deduct_from_salary` + matching `deduction_month` +
+`employee_id`) — the old `charged_to = 'employee'` auto-deduction is gone.
+`VehicleController::deductFine()` (`PUT /vehicles/{v}/fines/{fine}/deduct-salary`)
+flags/unflags per fine; Vehicles Show → Fines tab has a "Deducir de nómina"
+button + month picker and an undo. A company-charged fine still creates its
+Expense as before.
+
+**UI polish.** Payroll hours render `28h 57m` (not 28.95); an amber warning shows
+when net pay is negative; the breakdown modal renders the day-type detail line
+("Jornadas completas: 4 días × 50 €"). Worker Expenses table normalises the
+category to its label (`fuel → Combustible`), never a raw `worker.expense_cat_*`
+key (added the missing `fuel` key). Tests: `PayrollTest` (+3 — fine
+never/only-when-flagged, zero-jornada re-derivation), `VehicleExtensionTest` (+1
+flag/unflag).
 
 ### Subcontractor (thaekedar) module (2026-08-07)
 

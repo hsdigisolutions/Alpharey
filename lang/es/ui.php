@@ -1644,6 +1644,12 @@ return [
         'paid_at' => 'Fecha de pago',
         'expense_linked' => 'Gasto',
         'log_fine' => 'Registrar multa',
+        'deduct_salary' => 'Deducir de nómina',
+        'deduct_salary_hint' => 'La multa se deducirá de la nómina de:',
+        'deduction_month' => 'Mes de nómina',
+        'deduct_confirm' => 'Deducir',
+        'fine_deducted' => 'Deducida',
+        'fine_undeduct' => 'Quitar',
         'fine_saved' => 'Multa registrada / Fine logged',
         'fine_deleted' => 'Multa eliminada / Fine removed',
         // Combustible

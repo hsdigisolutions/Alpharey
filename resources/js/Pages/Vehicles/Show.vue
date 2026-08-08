@@ -139,6 +139,27 @@ function deleteFine(f) {
     askDelete(f.description ?? '',
         () => router.delete(`/vehicles/${props.vehicle.id}/fines/${f.id}`, { preserveScroll: true }));
 }
+
+// Explicit salary deduction — a fine NEVER auto-deducts. The admin picks the
+// month here; the fine's own employee is the one charged.
+const deductTarget = ref(null);
+const deductForm = useForm({ deduct_from_salary: true, employee_id: null, deduction_month: '' });
+function openDeduct(f) {
+    deductTarget.value = f;
+    deductForm.deduct_from_salary = true;
+    deductForm.employee_id = f.employee_id;
+    deductForm.deduction_month = f.deduction_month ?? new Date().toISOString().slice(0, 7);
+}
+function submitDeduct() {
+    deductForm.put(`/vehicles/${props.vehicle.id}/fines/${deductTarget.value.id}/deduct-salary`, {
+        preserveScroll: true,
+        onSuccess: () => { deductTarget.value = null; },
+    });
+}
+function stopDeduct(f) {
+    router.put(`/vehicles/${props.vehicle.id}/fines/${f.id}/deduct-salary`,
+        { deduct_from_salary: false }, { preserveScroll: true });
+}
 const finesTotal = computed(() =>
     props.fines.reduce((s, f) => s + (f.amount ?? 0), 0).toFixed(2));
 
@@ -449,11 +470,40 @@ const sessionColumns = [
                         </VBadge>
                     </td>
                     <td class="px-3 py-2.5 text-end">
-                        <VButton v-if="can.edit" variant="ghost" size="sm" icon="trash" @click="deleteFine(f)" />
+                        <div class="flex items-center justify-end gap-1">
+                            <!-- Salary deduction: flagged shows the month + a way to undo; else offer it -->
+                            <VBadge v-if="f.deduct_from_salary" status="warn">
+                                <Bilingual k="vehicles.fine_deducted" inline /> {{ f.deduction_month }}
+                            </VBadge>
+                            <VButton v-if="can.edit && f.deduct_from_salary" variant="ghost" size="sm" @click="stopDeduct(f)">
+                                <Bilingual k="vehicles.fine_undeduct" inline />
+                            </VButton>
+                            <VButton v-else-if="can.edit && f.employee_id" variant="ghost" size="sm" @click="openDeduct(f)">
+                                <Bilingual k="vehicles.deduct_salary" inline />
+                            </VButton>
+                            <VButton v-if="can.edit" variant="ghost" size="sm" icon="trash" @click="deleteFine(f)" />
+                        </div>
                     </td>
                 </tr>
                 <template v-if="fines.length === 0" #empty><VEmptyState icon="vehicles" /></template>
             </VTable>
+
+            <!-- Deduct-from-salary modal -->
+            <VModal :open="deductTarget !== null" title-key="vehicles.deduct_salary" @close="deductTarget = null">
+                <div v-if="deductTarget" class="space-y-4">
+                    <p class="text-sm text-ink-soft">
+                        <Bilingual k="vehicles.deduct_salary_hint" inline />
+                        <span class="font-medium text-ink">{{ deductTarget.employee ?? '—' }}</span>
+                    </p>
+                    <FormField k="vehicles.deduction_month" :error="deductForm.errors.deduction_month">
+                        <VInput v-model="deductForm.deduction_month" type="month" />
+                    </FormField>
+                </div>
+                <template #footer>
+                    <VButton variant="ghost" @click="deductTarget = null"><Bilingual k="common.cancel" inline /></VButton>
+                    <VButton :loading="deductForm.processing" @click="submitDeduct"><Bilingual k="vehicles.deduct_confirm" inline /></VButton>
+                </template>
+            </VModal>
         </template>
 
         <!-- ══════════ Tab: Kilometraje ══════════ -->

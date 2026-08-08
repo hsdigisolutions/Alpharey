@@ -248,6 +248,31 @@ it('logs a fine charged to an employee without creating an expense', function ()
         ->and($fine->employee_id)->toBe($employee->id);
 });
 
+it('flags and unflags a fine for salary deduction (never automatic)', function (): void {
+    $vehicle = Vehicle::factory()->create(['company_id' => $this->company->id]);
+    $employee = Employee::factory()->create(['company_id' => $this->company->id]);
+    $fine = VehicleFine::factory()->create([
+        'company_id' => $this->company->id, 'vehicle_id' => $vehicle->id,
+        'employee_id' => $employee->id, 'amount' => '75', 'charged_to' => 'employee',
+    ]);
+
+    // Flag it for a specific month.
+    $this->put("/vehicles/{$vehicle->id}/fines/{$fine->id}/deduct-salary", [
+        'deduct_from_salary' => true, 'deduction_month' => '2026-08',
+    ])->assertSessionHasNoErrors();
+
+    expect($fine->fresh()->deduct_from_salary)->toBeTrue()
+        ->and($fine->fresh()->deduction_month)->toBe('2026-08');
+
+    // Unflag it.
+    $this->put("/vehicles/{$vehicle->id}/fines/{$fine->id}/deduct-salary", [
+        'deduct_from_salary' => false,
+    ])->assertSessionHasNoErrors();
+
+    expect($fine->fresh()->deduct_from_salary)->toBeFalse()
+        ->and($fine->fresh()->deduction_month)->toBeNull();
+});
+
 it('auto-detects the driver from the daily assignment log on the fine date', function (): void {
     $vehicle = Vehicle::factory()->create(['company_id' => $this->company->id]);
     $employee = Employee::factory()->create(['company_id' => $this->company->id]);

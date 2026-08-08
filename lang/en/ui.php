@@ -1640,6 +1640,12 @@ return [
         'paid_at' => 'Paid date',
         'expense_linked' => 'Expense',
         'log_fine' => 'Log fine',
+        'deduct_salary' => 'Deduct from salary',
+        'deduct_salary_hint' => 'The fine will be deducted from the salary of:',
+        'deduction_month' => 'Payroll month',
+        'deduct_confirm' => 'Deduct',
+        'fine_deducted' => 'Deducted',
+        'fine_undeduct' => 'Remove',
         'fine_saved' => 'Multa registrada / Fine logged',
         'fine_deleted' => 'Multa eliminada / Fine removed',
         // Fuel
