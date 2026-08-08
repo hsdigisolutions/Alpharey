@@ -4,13 +4,16 @@ namespace App\Http\Controllers;
 
 use App\Enums\WorkerExpenseStatus;
 use App\Http\Controllers\Admin\Concerns\ResolvesCompanyContext;
+use App\Models\Employee;
 use App\Models\WorkerExpense;
+use App\Rules\OwnCompanyEmployee;
 use App\Services\Audit\AuditLogger;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response as InertiaResponse;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
@@ -54,8 +57,54 @@ class WorkerExpenseAdminController extends Controller
 
         return Inertia::render('WorkerExpenses/Index', [
             'expenses' => $expenses,
-            'can' => ['approve' => Gate::allows('expenses.approve')],
+            // For the admin "New worker expense" form (add on behalf of a worker).
+            'employees' => Employee::query()
+                ->where('company_id', $companyId)
+                ->where('active', true)
+                ->orderBy('full_name')
+                ->get(['id', 'full_name', 'employee_code'])
+                ->map(fn ($e) => ['id' => $e->id, 'full_name' => $e->full_name, 'employee_code' => $e->employee_code])
+                ->all(),
+            'categories' => ['fuel', 'transport', 'materials', 'tools', 'food', 'other'],
+            'can' => [
+                'approve' => Gate::allows('expenses.approve'),
+                'create' => Gate::allows('expenses.create'),
+            ],
         ]);
+    }
+
+    /**
+     * Admin adds a worker expense from the CRM (not the phone app), on behalf of
+     * a worker. Entered deliberately by an authorised admin, so it is approved on
+     * the spot — it then flows into that month's payroll reimbursements like any
+     * approved worker expense.
+     */
+    public function store(Request $request): RedirectResponse
+    {
+        Gate::authorize('expenses.create');
+
+        $validated = $request->validate([
+            'employee_id' => ['required', 'integer', new OwnCompanyEmployee],
+            'date' => ['required', 'date'],
+            'amount' => ['required', 'numeric', 'min:0.01', 'max:999999'],
+            'category' => ['required', 'string', Rule::in(['fuel', 'transport', 'materials', 'tools', 'food', 'other'])],
+            'description' => ['nullable', 'string', 'max:500'],
+        ]);
+
+        $expense = new WorkerExpense([
+            'employee_id' => $validated['employee_id'],
+            'date' => $validated['date'],
+            'amount' => $validated['amount'],
+            'category' => $validated['category'],
+            'description' => $validated['description'] ?? '',
+        ]);
+        // company_id is filled by BelongsToCompany; status is not fillable.
+        $expense->status = WorkerExpenseStatus::Approved;
+        $expense->approved_by = Auth::id();
+        $expense->approved_at = now();
+        $expense->save();
+
+        return back()->with('success', __('ui.worker_expenses.created'));
     }
 
     public function approve(WorkerExpense $workerExpense): RedirectResponse

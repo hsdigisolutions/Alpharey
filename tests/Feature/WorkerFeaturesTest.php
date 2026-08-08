@@ -13,6 +13,7 @@ use App\Models\User;
 use App\Models\Vehicle;
 use App\Models\VehicleSession;
 use App\Models\WorkerExpense;
+use App\Services\Payroll\PayrollService;
 use App\Services\Workers\VehicleSessionService;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
@@ -33,6 +34,24 @@ function workerWithEmployee(array $employeeOverrides = []): array
 
     return [$user, $employee, $company];
 }
+
+it('lets an admin add a worker expense from the CRM, approved and payroll-bound', function () {
+    [, $employee, $company] = workerWithEmployee(['daily_wage' => '50']);
+    $admin = User::factory()->companyAdmin()->forCompany($company)->create();
+
+    $this->actingAs($admin)->post('/worker-expenses', [
+        'employee_id' => $employee->id, 'date' => '2026-05-04',
+        'amount' => '25', 'category' => 'fuel', 'description' => 'Diesel',
+    ])->assertRedirect()->assertSessionHasNoErrors();
+
+    $expense = WorkerExpense::withoutGlobalScopes()->where('employee_id', $employee->id)->firstOrFail();
+    expect($expense->status)->toBe(WorkerExpenseStatus::Approved)
+        ->and($expense->company_id)->toBe($company->id);
+
+    // Approved worker expenses fold into that month's payroll reimbursements.
+    $payroll = app(PayrollService::class)->calculateFor($employee, $company->id, '2026-05');
+    expect((float) $payroll->getAttribute('reimbursements'))->toBe(25.0);
+});
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Feature 1 — Voice note

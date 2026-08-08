@@ -83,6 +83,8 @@ const advanceOpen = ref(false);
 const advanceForm = useForm({
     employee_id: '', amount: null, reason: '',
     request_date: props.month + '-01', payroll_month: props.month,
+    // Added from Payroll = approve + deduct this month immediately.
+    approve: true,
 });
 function openAdvance() {
     advanceForm.reset();

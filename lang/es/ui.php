@@ -1468,6 +1468,8 @@ return [
     'worker_expenses' => [
         'title' => 'Gastos de Trabajadores',
         'subtitle' => 'Gastos enviados desde la app',
+        'new' => 'Nuevo gasto',
+        'created' => 'Gasto creado',
         'employee' => 'Empleado',
         'date' => 'Fecha',
         'amount' => 'Importe',

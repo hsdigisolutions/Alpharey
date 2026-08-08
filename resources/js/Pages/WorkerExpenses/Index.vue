@@ -4,16 +4,36 @@ import { Head, router, useForm } from '@inertiajs/vue3';
 import { route } from 'ziggy-js';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import Bilingual from '@/Components/Bilingual.vue';
+import FormField from '@/Components/ui/FormField.vue';
 import VButton from '@/Components/ui/VButton.vue';
 import VBadge from '@/Components/ui/VBadge.vue';
+import VInput from '@/Components/ui/VInput.vue';
 import VModal from '@/Components/ui/VModal.vue';
+import VSelect from '@/Components/ui/VSelect.vue';
 import VTextarea from '@/Components/ui/VTextarea.vue';
 import VPagination from '@/Components/ui/VPagination.vue';
 
 const props = defineProps({
     expenses: { type: Object, required: true },
+    employees: { type: Array, default: () => [] },
+    categories: { type: Array, default: () => [] },
     can: { type: Object, default: () => ({}) },
 });
+
+// ── New worker expense (admin adds on behalf of a worker) ────────────────────
+const createOpen = ref(false);
+const createForm = useForm({ employee_id: '', date: null, amount: null, category: 'fuel', description: '' });
+function openCreate() {
+    createForm.reset();
+    createForm.category = 'fuel';
+    createOpen.value = true;
+}
+function submitCreate() {
+    createForm.post('/worker-expenses', {
+        preserveScroll: true,
+        onSuccess: () => { createOpen.value = false; createForm.reset(); },
+    });
+}
 
 function eur(v) {
     return `${Number(v ?? 0).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`;
@@ -63,6 +83,9 @@ function approve(expense) {
             <h1 class="text-title font-semibold text-ink">
                 <Bilingual k="worker_expenses.title" />
             </h1>
+            <VButton v-if="can.create" icon="plus" @click="openCreate">
+                <Bilingual k="worker_expenses.new" inline />
+            </VButton>
         </div>
 
         <!-- Table -->
@@ -160,6 +183,36 @@ function approve(expense) {
                     </VButton>
                 </div>
             </form>
+        </VModal>
+
+        <!-- New worker expense (admin, on behalf of a worker) -->
+        <VModal :open="createOpen" title-key="worker_expenses.new" @close="createOpen = false">
+            <form id="wexp-form" class="grid gap-4 sm:grid-cols-2" @submit.prevent="submitCreate">
+                <FormField k="worker_expenses.employee" :error="createForm.errors.employee_id" required class="sm:col-span-2">
+                    <VSelect v-model="createForm.employee_id">
+                        <option value="" disabled>—</option>
+                        <option v-for="e in employees" :key="e.id" :value="e.id">{{ e.full_name }} ({{ e.employee_code }})</option>
+                    </VSelect>
+                </FormField>
+                <FormField k="worker_expenses.date" :error="createForm.errors.date" required>
+                    <VInput v-model="createForm.date" type="date" />
+                </FormField>
+                <FormField k="worker_expenses.amount" :error="createForm.errors.amount" required>
+                    <VInput v-model="createForm.amount" type="number" step="0.01" min="0.01" />
+                </FormField>
+                <FormField k="worker_expenses.category" :error="createForm.errors.category" required>
+                    <VSelect v-model="createForm.category">
+                        <option v-for="c in categories" :key="c" :value="c">{{ $t('worker.expense_cat_' + c) }}</option>
+                    </VSelect>
+                </FormField>
+                <FormField k="worker_expenses.description" :error="createForm.errors.description" class="sm:col-span-2">
+                    <VTextarea v-model="createForm.description" :rows="2" />
+                </FormField>
+            </form>
+            <template #footer>
+                <VButton variant="ghost" @click="createOpen = false"><Bilingual k="common.cancel" inline /></VButton>
+                <VButton type="submit" form="wexp-form" :loading="createForm.processing"><Bilingual k="common.save" inline /></VButton>
+            </template>
         </VModal>
     </AppLayout>
 </template>

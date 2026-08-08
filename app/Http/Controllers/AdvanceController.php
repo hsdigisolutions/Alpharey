@@ -6,6 +6,7 @@ use App\Enums\AdvanceStatus;
 use App\Models\Advance;
 use App\Models\AdvanceCategory;
 use App\Rules\OwnCompanyEmployee;
+use App\Services\Payroll\PayrollService;
 use App\Support\CurrentCompany;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -33,12 +34,36 @@ class AdvanceController extends Controller
             'reason' => ['nullable', 'string', 'max:1000'],
             'request_date' => ['required', 'date'],
             'payroll_month' => ['nullable', 'regex:/^\d{4}-\d{2}$/'],
+            // Added straight from the Payroll screen = a deliberate deduction:
+            // approve it on the spot so it comes off this month's pay, instead of
+            // sitting Pending (a Pending advance never deducts).
+            'approve' => ['nullable', 'boolean'],
         ]);
 
-        $advance = new Advance($validated);
-        $advance->company_id = app(CurrentCompany::class)->id();
-        $advance->status = AdvanceStatus::Pending;
+        $companyId = app(CurrentCompany::class)->id();
+        $autoApprove = ($validated['approve'] ?? false) && Gate::allows('payroll.approve');
+
+        $advanceData = $validated;
+        unset($advanceData['approve']);
+
+        $advance = new Advance($advanceData);
+        $advance->company_id = $companyId;
+
+        if ($autoApprove) {
+            $advance->status = AdvanceStatus::Approved;
+            $advance->approved_by = Auth::id();
+            $advance->approved_at = now();
+        } else {
+            $advance->status = AdvanceStatus::Pending;
+        }
+
         $advance->save();
+
+        // Reflect an approved advance immediately: recompute the month it targets
+        // so the payroll row shows the deduction without a second "Calculate".
+        if ($autoApprove && $companyId !== null && $advance->payroll_month !== null) {
+            app(PayrollService::class)->calculateMonth($companyId, $advance->payroll_month);
+        }
 
         return back()->with('success', __('ui.advances.saved'));
     }

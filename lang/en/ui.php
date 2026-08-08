@@ -1464,6 +1464,8 @@ return [
     'worker_expenses' => [
         'title' => 'Worker Expenses',
         'subtitle' => 'Expenses submitted via the worker app',
+        'new' => 'New expense',
+        'created' => 'Expense created',
         'employee' => 'Employee',
         'date' => 'Date',
         'amount' => 'Amount',

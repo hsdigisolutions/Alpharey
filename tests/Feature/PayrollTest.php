@@ -382,6 +382,37 @@ it('does not pay a soft-deleted employee', function (): void {
 // Vehicle fines never auto-deduct — the admin flags each one explicitly.
 // ─────────────────────────────────────────────────────────────────────────────
 
+it('approves and deducts an advance added straight from the payroll screen', function (): void {
+    $employee = hourlyEmployee(rate: 20, days: 2, hours: 8); // 320 gross
+
+    // The Payroll page advance modal posts approve=true.
+    $this->actingAs($this->admin)->post('/advances', [
+        'employee_id' => $employee->id, 'amount' => '50',
+        'request_date' => $this->month.'-03', 'payroll_month' => $this->month,
+        'approve' => true,
+    ])->assertRedirect()->assertSessionHasNoErrors();
+
+    $advance = Advance::withoutGlobalScopes()->where('employee_id', $employee->id)->firstOrFail();
+    expect($advance->status)->toBe(AdvanceStatus::Approved);
+
+    // calculateMonth ran on save, so the row already carries the deduction.
+    $payroll = Payroll::withoutGlobalScopes()->where('employee_id', $employee->id)->firstOrFail();
+    expect((float) $payroll->getAttribute('advance_deductions'))->toBe(50.0)
+        ->and((float) $payroll->getAttribute('net_amount'))->toBe(270.0); // 320 - 50
+});
+
+it('leaves an advance Pending when not flagged for approval', function (): void {
+    $employee = hourlyEmployee(rate: 20, days: 1, hours: 8);
+
+    $this->actingAs($this->admin)->post('/advances', [
+        'employee_id' => $employee->id, 'amount' => '50',
+        'request_date' => $this->month.'-03', 'payroll_month' => $this->month,
+    ])->assertRedirect();
+
+    expect(Advance::withoutGlobalScopes()->where('employee_id', $employee->id)->first()->status)
+        ->toBe(AdvanceStatus::Pending);
+});
+
 it('never auto-deducts a vehicle fine charged to an employee', function (): void {
     $employee = hourlyEmployee(rate: 20, days: 1, hours: 8); // 160 gross
     $vehicle = Vehicle::factory()->create(['company_id' => $this->company->id]);

@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Status: Phase 9 in progress — hardening (2026-08-01)
 
 **Every screen 01–26 is built (Phase 8 complete).** Phase 9 is hardening, UAT, and
-launch — no new screens. Current: **733 Pest tests / 4206 assertions passing (1
+launch — no new screens. Current: **736 Pest tests / 4218 assertions passing (1
 skipped) · Pint clean · Larastan level 6 clean · `composer audit` + `npm audit`
 clean · production Vite build working.**
 
@@ -54,6 +54,22 @@ unmatched route skips the web middleware (so `HandleInertiaRequests::share()`
 never ships the dictionary) — the exception respond hook now passes `lang` +
 `locale` explicitly, fixing every error page CRM-wide. Tests: `PayrollTest`
 (+1 fuel), `SettingsScreenTest` (+2 thresholds save/validate).
+
+**Follow-up 2 (same day).** (1) **Advance from Payroll now deducts.** The advance
+quick-add posted `status = Pending`, but payroll only deducts Approved/Deducted
+advances — so a just-added advance showed nothing. `AdvanceController::store()`
+now accepts `approve` (the Payroll modal sends `true`); when set AND the user has
+`payroll.approve` it creates the advance Approved and re-runs `calculateMonth` so
+the deduction shows immediately. Without the flag it stays Pending (unchanged).
+(2) **Admin "Nuevo gasto" on Worker Expenses.** `WorkerExpenseAdminController::store()`
+(`POST /worker-expenses`, gate `expenses.create`) lets an admin add a worker
+expense from the CRM on behalf of a worker — created Approved, so it folds into
+that month's payroll reimbursements like a phone-submitted one. Index now ships
+`employees` + `categories` + `can.create`; the page has a New-expense modal.
+(3) **Leave** New Request auto-fills "Total days" from the working days between
+the dates (was a manual field whose blank/mismatch silently failed the save).
+Tests: `PayrollTest` (+2 advance approve/pending), `WorkerFeaturesTest` (+1 admin
+worker-expense → payroll).
 
 ### Subcontractor (thaekedar) module (2026-08-07)
 

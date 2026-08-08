@@ -294,6 +294,7 @@ Route::middleware(['auth', 'active', 'two_factor', 'not_worker'])->group(functio
 
     // Feature 2 — Worker PWA expense review (admin)
     Route::get('/worker-expenses', [WorkerExpenseAdminController::class, 'index'])->name('worker-expenses.index');
+    Route::post('/worker-expenses', [WorkerExpenseAdminController::class, 'store'])->name('worker-expenses.store');
     Route::post('/worker-expenses/{workerExpense}/approve', [WorkerExpenseAdminController::class, 'approve'])->name('worker-expenses.approve');
     Route::post('/worker-expenses/{workerExpense}/reject', [WorkerExpenseAdminController::class, 'reject'])->name('worker-expenses.reject');
     Route::get('/worker-expenses/{workerExpense}/receipt', [WorkerExpenseAdminController::class, 'downloadReceipt'])->name('worker-expenses.receipt');
