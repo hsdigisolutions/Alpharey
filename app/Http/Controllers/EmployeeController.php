@@ -15,6 +15,7 @@ use App\Services\Documents\DocumentStatus;
 use App\Services\Employees\EmployeeQueryFilter;
 use App\Services\Employees\EmployeeService;
 use App\Services\Employees\WageRateService;
+use App\Support\CurrentCompany;
 use App\Support\DocumentTypes;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -84,6 +85,10 @@ class EmployeeController extends Controller
             ],
             'visibleColumns' => UserColumnSetting::for($request->user(), 'employees'),
             'canSeeWages' => $canSeeWages,
+            // The trade-type catalogue for the create/edit form's dropdown.
+            'designationOptions' => ProjectDesignationRateController::optionsFor(
+                app(CurrentCompany::class)->id(),
+            ),
             'can' => [
                 'create' => Gate::allows('employees.create'),
                 'edit' => Gate::allows('employees.edit'),
@@ -103,7 +108,7 @@ class EmployeeController extends Controller
         return Inertia::render('Employees/Detail', [
             'employee' => array_merge($employee->only([
                 'id', 'employee_code', 'full_name', 'email', 'mobile', 'phone', 'city', 'address',
-                'department', 'designation', 'team_leader_id', 'active', 'is_contracted',
+                'department', 'designation', 'designation_id', 'team_leader_id', 'active', 'is_contracted',
                 'default_check_in', 'default_check_out', 'commission_percent',
                 'has_driving_license', 'has_company_vehicle', 'can_use_vehicles', 'notes',
             ]), [
@@ -162,6 +167,7 @@ class EmployeeController extends Controller
             'attendanceEmployee' => Gate::allows('attendance.view') ? $this->attendanceEmployeePayload($employee, $canSeeWages, $wageRates) : null,
             'canManageAttendance' => Gate::allows('attendance.create'),
             'canSeeWages' => $canSeeWages,
+            'designationOptions' => ProjectDesignationRateController::optionsFor(app(CurrentCompany::class)->id()),
             'can' => [
                 'edit' => Gate::allows('employees.edit'),
                 'delete' => Gate::allows('employees.delete'),

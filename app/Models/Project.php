@@ -93,6 +93,14 @@ class Project extends Model
     }
 
     /**
+     * @return HasMany<ProjectDesignationRate, $this>
+     */
+    public function designationRates(): HasMany
+    {
+        return $this->hasMany(ProjectDesignationRate::class);
+    }
+
+    /**
      * @return HasMany<Alert, $this>
      */
     public function alerts(): HasMany

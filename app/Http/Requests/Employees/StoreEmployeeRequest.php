@@ -34,6 +34,8 @@ class StoreEmployeeRequest extends FormRequest
             'address' => ['nullable', 'string', 'max:255'],
             'department' => ['nullable', 'string', 'max:100'],
             'designation' => ['nullable', 'string', 'max:100'],
+            // The trade type (Feature 1); drives project designation rates.
+            'designation_id' => ['nullable', 'integer', 'exists:designations,id'],
             'team_leader_id' => ['nullable', 'integer', Rule::exists('employees', 'id')],
             'joining_date' => ['nullable', 'date'],
             'leaving_date' => ['nullable', 'date', 'after_or_equal:joining_date'],

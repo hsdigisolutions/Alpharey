@@ -5,7 +5,7 @@
  * fields only render when the server sent them (permission-filtered).
  */
 import { computed, watch } from 'vue';
-import { useForm } from '@inertiajs/vue3';
+import { useForm, usePage } from '@inertiajs/vue3';
 import FormField from '@/Components/ui/FormField.vue';
 import VButton from '@/Components/ui/VButton.vue';
 import VCheckbox from '@/Components/ui/VCheckbox.vue';
@@ -25,9 +25,17 @@ const props = defineProps({
 
 const emit = defineEmits(['close']);
 
+// Trade-type catalogue (Feature 1) shipped on the page props.
+const designationOptions = computed(() => usePage().props.designationOptions ?? []);
+// Keep the display string in sync with the picked type (grid/list show it).
+function onDesignationChange() {
+    const picked = designationOptions.value.find((d) => String(d.id) === String(form.designation_id));
+    form.designation = picked ? picked.name : '';
+}
+
 const blank = {
     full_name: '', nif: '', email: '', mobile: '', phone: '', city: '', address: '',
-    department: '', designation: '', joining_date: null, leaving_date: null,
+    department: '', designation: '', designation_id: '', joining_date: null, leaving_date: null,
     active: true, is_contracted: false, default_check_in: '09:00', default_check_out: '17:00',
     wage_type: '', wage_rate: null, base_salary: null, daily_wage: null, per_meter_rate: null,
     commission_percent: null, payment_method: '', iban: '', bank_name: '',
@@ -106,8 +114,11 @@ const showBank = computed(() => !form.payment_method || form.payment_method === 
                     <FormField k="employees.department" :error="form.errors.department">
                         <VInput v-model="form.department" />
                     </FormField>
-                    <FormField k="employees.designation" :error="form.errors.designation">
-                        <VInput v-model="form.designation" />
+                    <FormField k="employees.designation" :error="form.errors.designation_id">
+                        <VSelect v-model="form.designation_id" @update:model-value="onDesignationChange">
+                            <option value="">—</option>
+                            <option v-for="d in designationOptions" :key="d.id" :value="d.id">{{ d.name }}</option>
+                        </VSelect>
                     </FormField>
                     <FormField k="employees.joining_date" :error="form.errors.joining_date">
                         <VDateInput v-model="form.joining_date" />

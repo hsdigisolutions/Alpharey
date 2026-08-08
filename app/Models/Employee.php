@@ -54,7 +54,7 @@ class Employee extends Model
      */
     protected $fillable = [
         'full_name', 'nif', 'email', 'mobile', 'phone', 'city', 'address',
-        'department', 'designation', 'team_leader_id', 'joining_date',
+        'department', 'designation', 'designation_id', 'team_leader_id', 'joining_date',
         'leaving_date', 'active', 'is_contracted', 'default_check_in',
         'default_check_out', 'wage_type', 'wage_rate', 'base_salary',
         'daily_wage', 'per_meter_rate', 'commission_percent', 'payment_method',
@@ -157,6 +157,14 @@ class Employee extends Model
     public function teamLeader(): BelongsTo
     {
         return $this->belongsTo(self::class, 'team_leader_id');
+    }
+
+    /**
+     * @return BelongsTo<Designation, $this>
+     */
+    public function designationType(): BelongsTo
+    {
+        return $this->belongsTo(Designation::class, 'designation_id');
     }
 
     /**

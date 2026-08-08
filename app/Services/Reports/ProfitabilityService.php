@@ -3,12 +3,16 @@
 namespace App\Services\Reports;
 
 use App\Enums\BillingType;
+use App\Enums\ProjectRateType;
 use App\Models\Attendance;
 use App\Models\Expense;
 use App\Models\Invoice;
 use App\Models\Project;
+use App\Models\ProjectDesignationRate;
 use App\Models\Scopes\CompanyScope;
 use App\Models\SubcontractorPayment;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
@@ -150,6 +154,245 @@ class ProfitabilityService
         }
 
         return $result;
+    }
+
+    /**
+     * Feature 3 — the daily production P&L for one project, with a per-worker
+     * breakdown per day, monthly rollups, and KPI figures.
+     *
+     * INCOME per attendance row uses the CLIENT rate: a project-designation rate
+     * for the worker's designation if one is set, else the project's single
+     * client_hour_rate / client_meter_rate. COST is the worker's frozen day total
+     * (what payroll pays), plus that date's approved project expenses.
+     *
+     * @return array{days: list<array<string, mixed>>, months: list<array<string, mixed>>, totals: array<string, mixed>, kpis: array<string, mixed>}
+     */
+    public function dailyPnl(Project $project, ?string $from = null, ?string $to = null): array
+    {
+        $companyId = (int) $project->company_id;
+
+        /** @var Collection<int, ProjectDesignationRate> $rates */
+        $rates = ProjectDesignationRate::query()
+            ->withoutGlobalScope(CompanyScope::class)
+            ->where('project_id', $project->id)
+            ->get()->keyBy('designation_id');
+
+        $clientHour = (float) ($project->client_hour_rate ?? 0);
+        $clientMeter = (float) ($project->client_meter_rate ?? 0);
+
+        $rows = Attendance::query()
+            ->withoutGlobalScope(CompanyScope::class)
+            ->where('company_id', $companyId)
+            ->where('project_id', $project->id)
+            ->whereIn('status', ['present', 'late', 'early_leave'])
+            ->when($from !== null, fn ($q) => $q->whereDate('date', '>=', $from))
+            ->when($to !== null, fn ($q) => $q->whereDate('date', '<=', $to))
+            ->with(['employee' => fn ($q) => $q->withoutGlobalScope(CompanyScope::class)
+                ->select('id', 'full_name', 'designation', 'designation_id')])
+            ->orderBy('date')
+            ->get();
+
+        /** @var Collection<string, float> $expensesByDate */
+        $expensesByDate = Expense::query()
+            ->withoutGlobalScope(CompanyScope::class)
+            ->where('company_id', $companyId)->where('project_id', $project->id)->where('approved', true)
+            ->when($from !== null, fn ($q) => $q->whereDate('date', '>=', $from))
+            ->when($to !== null, fn ($q) => $q->whereDate('date', '<=', $to))
+            ->selectRaw('date, COALESCE(SUM(total),0) as total')
+            ->groupBy('date')->pluck('total', 'date');
+
+        // Group rows by date, building the per-worker lines as we go.
+        $byDate = [];
+        foreach ($rows as $r) {
+            $date = $r->date->toDateString();
+            $hours = (float) $r->hours_worked;
+            $income = $this->rowIncome($r, $rates, $clientHour, $clientMeter);
+            $cost = (float) $r->total_amount;
+
+            $byDate[$date] ??= ['hours' => 0.0, 'income' => 0.0, 'labour' => 0.0, 'workers' => []];
+            $byDate[$date]['hours'] += $hours;
+            $byDate[$date]['income'] += $income;
+            $byDate[$date]['labour'] += $cost;
+            $byDate[$date]['workers'][] = [
+                'worker' => $r->employee?->full_name,
+                'designation' => $r->employee?->designation,
+                'hours' => round($hours, 2),
+                'client_rate' => $this->unitClientRate($r, $rates, $clientHour, $clientMeter),
+                'worker_rate' => $this->unitWorkerRate($r, $rates),
+                'income' => round($income, 2),
+                'cost' => round($cost, 2),
+                'profit' => round($income - $cost, 2),
+            ];
+        }
+
+        // Assemble day rows (newest first) + accumulate month + total figures.
+        $days = [];
+        $months = [];
+        $tHours = $tIncome = $tLabour = $tExpenses = 0.0;
+
+        foreach ($byDate as $date => $d) {
+            $expenses = (float) ($expensesByDate[$date] ?? 0);
+            $cost = round($d['labour'] + $expenses, 2);
+            $income = round($d['income'], 2);
+            $profit = round($income - $cost, 2);
+            [$margin, $health] = $this->classify($income, $cost, $profit);
+            $margin ??= 0.0;
+
+            $days[] = [
+                'date' => $date,
+                'workers_count' => count($d['workers']),
+                'hours' => round($d['hours'], 2),
+                'income' => $income,
+                'labour' => round($d['labour'], 2),
+                'expenses' => round($expenses, 2),
+                'profit' => $profit,
+                'margin' => $margin,
+                'health' => $health,
+                'workers' => $d['workers'],
+            ];
+
+            $tHours += $d['hours'];
+            $tIncome += $d['income'];
+            $tLabour += $d['labour'];
+            $tExpenses += $expenses;
+
+            $month = substr($date, 0, 7);
+            $months[$month] ??= ['income' => 0.0, 'labour' => 0.0, 'expenses' => 0.0, 'hours' => 0.0, 'days' => []];
+            $months[$month]['income'] += $d['income'];
+            $months[$month]['labour'] += $d['labour'];
+            $months[$month]['expenses'] += $expenses;
+            $months[$month]['hours'] += $d['hours'];
+            $months[$month]['days'][$date] = true;
+        }
+
+        usort($days, fn (array $a, array $b): int => strcmp($b['date'], $a['date']));
+
+        $monthRows = [];
+        foreach ($months as $month => $m) {
+            $income = round($m['income'], 2);
+            $cost = round($m['labour'] + $m['expenses'], 2);
+            $profit = round($income - $cost, 2);
+            [$margin] = $this->classify($income, $cost, $profit);
+            $margin ??= 0.0;
+            $monthRows[] = [
+                'month' => $month,
+                'days_worked' => count($m['days']),
+                'hours' => round($m['hours'], 2),
+                'income' => $income,
+                'labour' => round($m['labour'], 2),
+                'expenses' => round($m['expenses'], 2),
+                'cost' => $cost,
+                'profit' => $profit,
+                'margin' => $margin,
+            ];
+        }
+        usort($monthRows, fn (array $a, array $b): int => strcmp($b['month'], $a['month']));
+
+        $totalCost = round($tLabour + $tExpenses, 2);
+        $totalProfit = round($tIncome - $totalCost, 2);
+        [$totalMargin] = $this->classify(round($tIncome, 2), $totalCost, $totalProfit);
+        $totalMargin ??= 0.0;
+
+        return [
+            'days' => $days,
+            'months' => $monthRows,
+            'totals' => [
+                'hours' => round($tHours, 2),
+                'income' => round($tIncome, 2),
+                'labour' => round($tLabour, 2),
+                'expenses' => round($tExpenses, 2),
+                'cost' => $totalCost,
+                'profit' => $totalProfit,
+                'margin' => $totalMargin,
+            ],
+            'kpis' => $this->pnlKpis($project, $days, $monthRows, $totalProfit, $totalMargin),
+        ];
+    }
+
+    /**
+     * The client revenue an attendance row earns: a project-designation rate for
+     * the worker's designation if set, else the project's single client rate.
+     *
+     * @param  Collection<int, ProjectDesignationRate>  $rates
+     */
+    private function rowIncome(Attendance $r, Collection $rates, float $clientHour, float $clientMeter): float
+    {
+        $hours = (float) $r->hours_worked;
+        $qty = (float) ($r->quantity ?? 0);
+        $isHalf = $r->day_type?->value === 'half';
+        $isPerMeter = $r->day_type?->value === 'per_meter';
+
+        $designationId = $r->employee?->designation_id;
+        $rate = $designationId !== null ? $rates->get($designationId) : null;
+
+        if ($rate instanceof ProjectDesignationRate) {
+            $client = (float) $rate->client_rate;
+
+            return match ($rate->rate_type) {
+                ProjectRateType::PerHour => $hours * $client,
+                ProjectRateType::PerDay => ($isHalf ? 0.5 : 1.0) * $client,
+                ProjectRateType::PerMeter => $qty * $client,
+            };
+        }
+
+        return $isPerMeter ? $qty * $clientMeter : $hours * $clientHour;
+    }
+
+    /**
+     * @param  Collection<int, ProjectDesignationRate>  $rates
+     */
+    private function unitClientRate(Attendance $r, Collection $rates, float $clientHour, float $clientMeter): float
+    {
+        $rate = $r->employee?->designation_id !== null ? $rates->get($r->employee->designation_id) : null;
+
+        if ($rate instanceof ProjectDesignationRate) {
+            return (float) $rate->client_rate;
+        }
+
+        return $r->day_type?->value === 'per_meter' ? $clientMeter : $clientHour;
+    }
+
+    /**
+     * @param  Collection<int, ProjectDesignationRate>  $rates
+     */
+    private function unitWorkerRate(Attendance $r, Collection $rates): float
+    {
+        $rate = $r->employee?->designation_id !== null ? $rates->get($r->employee->designation_id) : null;
+
+        if ($rate instanceof ProjectDesignationRate) {
+            return (float) $rate->worker_rate;
+        }
+
+        return (float) ($r->hourly_rate_snapshot ?? $r->wage_rate_snapshot ?? 0);
+    }
+
+    /**
+     * KPI cards: today, this month, whole project, and days left to the end date.
+     *
+     * @param  list<array<string, mixed>>  $days
+     * @param  list<array<string, mixed>>  $months
+     * @return array<string, mixed>
+     */
+    private function pnlKpis(Project $project, array $days, array $months, float $totalProfit, float $totalMargin): array
+    {
+        $today = Carbon::now()->toDateString();
+        $thisMonth = Carbon::now()->format('Y-m');
+
+        $todayRow = collect($days)->firstWhere('date', $today);
+        $monthRow = collect($months)->firstWhere('month', $thisMonth);
+
+        $daysRemaining = null;
+        if ($project->end_date !== null) {
+            $daysRemaining = (int) max(0, Carbon::now()->startOfDay()
+                ->diffInDays($project->end_date->copy()->startOfDay(), false));
+        }
+
+        return [
+            'today' => ['profit' => $todayRow['profit'] ?? 0.0, 'margin' => $todayRow['margin'] ?? 0.0],
+            'this_month' => ['profit' => $monthRow['profit'] ?? 0.0, 'margin' => $monthRow['margin'] ?? 0.0],
+            'total' => ['profit' => $totalProfit, 'margin' => $totalMargin],
+            'days_remaining' => $daysRemaining,
+        ];
     }
 
     /**

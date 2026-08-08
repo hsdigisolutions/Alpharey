@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Status: Phase 9 in progress — hardening (2026-08-01)
 
 **Every screen 01–26 is built (Phase 8 complete).** Phase 9 is hardening, UAT, and
-launch — no new screens. Current: **736 Pest tests / 4218 assertions passing (1
+launch — no new screens. Current: **744 Pest tests / 4251 assertions passing (1
 skipped) · Pint clean · Larastan level 6 clean · `composer audit` + `npm audit`
 clean · production Vite build working.**
 
@@ -198,6 +198,44 @@ hourly/per-meter/fixed/outsourced/subcontractor math, margin traffic light,
 dashboard tally + tenancy, day/month breakdown, report gating). The worked
 example (client 20/h · 320 h · labour 4.640 · gastos 450 → ingresos 6.400 ·
 beneficio 1.310 · margen 20,5 %) is pinned by the hourly test's ratios.
+
+### Worker designations + project rates + daily P&L (2026-08-09)
+
+Three linked features around per-trade pricing.
+
+**1. Designations (Feature 1).** New `designations` table (migration
+`2026_08_09_000001`, group-wide defaults with `company_id` null, same shape as
+leave/expense categories) seeded with 14 trades (Maestro/Mistri … Otro).
+Employees gain a nullable `designation_id` FK (the free-text `designation` is
+kept for display). The employee form's Designation field is now a dropdown of the
+catalogue (`Designation::scopeForCompany`); `EmployeeController` ships
+`designationOptions`, `StoreEmployeeRequest` validates `designation_id`.
+
+**2. Project rates per designation (Feature 2).** `project_designation_rates`
+(migration `..._000002`; one row per project+designation: `client_rate`,
+`worker_rate`, `rate_type` = `App\Enums\ProjectRateType` per_hour/per_day/
+per_meter). CRUD via `ProjectDesignationRateController`
+(`POST/DELETE /projects/{project}/designation-rates`, `projects.edit`); UI is a
+table + inline add row on the Project **Resumen** tab. **`AttendanceService::
+applyProjectDesignationRate()` is the load-bearing bit**: when a row is on a
+project AND a rate exists for that worker's designation, it FREEZES the project
+`worker_rate` (by rate_type: per_hour→hourly, per_day→full jornada / half kept,
+per_meter→metres) onto the attendance snapshot — so payroll (which reads the
+frozen total) automatically pays the project rate. No project rate → the profile
+rate, unchanged (every existing test still passes). Same freeze guarantee: a
+later rate change never rewrites a priced day.
+
+**3. Daily production P&L (Feature 3).** `ProfitabilityService::dailyPnl()`
+returns per-day rows (workers / hours / client income / labour cost / expenses /
+profit / margin + traffic-light health), each expandable to a per-worker
+breakdown, plus monthly rollups, totals, and KPI figures (today / this month /
+project total / days remaining). INCOME uses the CLIENT rate (project-designation
+rate for the worker's designation, else the project's single `client_hour_rate`);
+COST is the worker's frozen day total + that date's approved project expenses.
+Surfaced on the Project **Rentabilidad** tab (wage-gated) with a daily/monthly
+toggle, coloured rows, and KPI cards. Tests: `DesignationRateTest` (7 — pricing
+per type, fallback, freeze, CRUD, tenancy), `ProfitabilityDailyTest` (1 — the
+worked example: 4 workers, income 600 · cost 424 · profit 176).
 
 ### Nightly auto-absent sweep (2026-08-08)
 

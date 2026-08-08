@@ -17,6 +17,7 @@ import VCard from '@/Components/ui/VCard.vue';
 import VConfirmDialog from '@/Components/ui/VConfirmDialog.vue';
 import VCurrencyInput from '@/Components/ui/VCurrencyInput.vue';
 import VEmptyState from '@/Components/ui/VEmptyState.vue';
+import VInput from '@/Components/ui/VInput.vue';
 import VSelect from '@/Components/ui/VSelect.vue';
 import VTabs from '@/Components/ui/VTabs.vue';
 import VTextarea from '@/Components/ui/VTextarea.vue';
@@ -40,6 +41,10 @@ const props = defineProps({
     canViewExpenses: { type: Boolean, default: false },
     canSeeWages: { type: Boolean, default: false },
     profitability: { type: Object, default: null },
+    dailyPnl: { type: Object, default: null },
+    designationRates: { type: Array, default: () => [] },
+    designations: { type: Array, default: () => [] },
+    rateTypes: { type: Array, default: () => [] },
     can: { type: Object, required: true },
 });
 
@@ -48,6 +53,7 @@ const showEdit = ref(false);
 
 const tabs = [
     { key: 'summary', labelKey: 'projects.tab_summary' },
+    ...(props.canSeeWages ? [{ key: 'profitability', labelKey: 'projects.tab_profitability' }] : []),
     { key: 'workers', labelKey: 'projects.tab_workers', count: props.workers.length },
     { key: 'attendance', labelKey: 'projects.tab_attendance' },
     { key: 'measurements', labelKey: 'projects.tab_measurements' },
@@ -88,6 +94,39 @@ function addWorker() { workerForm.post(`/projects/${props.project.id}/workers`, 
 function removeWorker(worker) {
     askDelete(worker.name ?? '',
         () => router.delete(`/projects/${props.project.id}/workers/${worker.id}`, { preserveScroll: true }));
+}
+
+// designation rates (Feature 2)
+const rateForm = useForm({ designation_id: '', client_rate: null, worker_rate: null, rate_type: 'per_hour' });
+function addRate() {
+    rateForm.post(`/projects/${props.project.id}/designation-rates`, {
+        preserveScroll: true, onSuccess: () => { rateForm.reset(); rateForm.rate_type = 'per_hour'; },
+    });
+}
+function removeRate(r) {
+    askDelete(r.designation ?? '',
+        () => router.delete(`/projects/${props.project.id}/designation-rates/${r.id}`, { preserveScroll: true }));
+}
+function rateTypeLabel(t) {
+    return { per_hour: '€/h', per_day: '€/día', per_meter: '€/m²' }[t] ?? t;
+}
+
+// daily / monthly P&L (Feature 3)
+const pnlView = ref('daily');
+const expandedDay = ref(null);
+function toggleDay(date) { expandedDay.value = expandedDay.value === date ? null : date; }
+function hoursHM(h) {
+    const hh = Math.floor(Math.max(0, Number(h) || 0));
+    const mm = Math.round((Math.max(0, Number(h) || 0) - hh) * 60);
+    return `${hh}h ${String(mm).padStart(2, '0')}m`;
+}
+function pct(v) { return `${Number(v ?? 0).toFixed(1)}%`; }
+// Row background by margin: >15 green · 5–15 amber · <5/neg red.
+function rowTone(margin) {
+    const m = Number(margin);
+    if (m > 15) return 'bg-status-ok-soft';
+    if (m >= 5) return 'bg-status-warn-soft';
+    return 'bg-status-danger-soft';
 }
 
 // immutable notes
@@ -194,6 +233,196 @@ function destroy() {
                             <p v-if="c.phone" class="text-xs text-muted">{{ c.phone }}</p>
                             <p v-if="c.email" class="text-xs text-muted">{{ c.email }}</p>
                         </div>
+                    </div>
+                </VCard>
+
+                <!-- Feature 2 — per-designation rates (client + worker) -->
+                <VCard v-if="canSeeWages" title-key="project_rates.title" class="lg:col-span-2" :padded="false">
+                    <table class="w-full text-sm">
+                        <thead class="bg-surface-sunken text-[11px] uppercase tracking-wide text-muted">
+                            <tr>
+                                <th class="px-4 py-2 text-start"><Bilingual k="project_rates.designation" inline /></th>
+                                <th class="px-4 py-2 text-end"><Bilingual k="project_rates.client_rate" inline /></th>
+                                <th class="px-4 py-2 text-end"><Bilingual k="project_rates.worker_rate" inline /></th>
+                                <th class="px-4 py-2 text-start"><Bilingual k="project_rates.rate_type" inline /></th>
+                                <th class="px-4 py-2"></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="r in designationRates" :key="r.id" class="border-b border-line">
+                                <td class="px-4 py-2.5">{{ r.designation }}</td>
+                                <td class="tabular-nums px-4 py-2.5 text-end">{{ eur(r.client_rate) }} {{ rateTypeLabel(r.rate_type) }}</td>
+                                <td class="tabular-nums px-4 py-2.5 text-end">{{ eur(r.worker_rate) }} {{ rateTypeLabel(r.rate_type) }}</td>
+                                <td class="px-4 py-2.5 text-ink-soft">{{ $t(`project_rates.type_${r.rate_type}`) }}</td>
+                                <td class="px-4 py-2.5 text-end">
+                                    <VButton v-if="can.edit" variant="ghost" size="sm" icon="trash" @click="removeRate(r)" />
+                                </td>
+                            </tr>
+                            <tr v-if="designationRates.length === 0">
+                                <td colspan="5" class="px-4 py-4 text-center text-sm text-muted">{{ $t('project_rates.empty') }}</td>
+                            </tr>
+                        </tbody>
+                        <tfoot v-if="can.edit">
+                            <tr class="border-t border-line bg-surface-sunken/40">
+                                <td class="px-3 py-2">
+                                    <VSelect v-model="rateForm.designation_id" class="w-full">
+                                        <option value="">—</option>
+                                        <option v-for="d in designations" :key="d.id" :value="d.id">{{ d.name }}</option>
+                                    </VSelect>
+                                </td>
+                                <td class="px-3 py-2"><VInput v-model="rateForm.client_rate" type="number" step="0.01" min="0" class="w-24" /></td>
+                                <td class="px-3 py-2"><VInput v-model="rateForm.worker_rate" type="number" step="0.01" min="0" class="w-24" /></td>
+                                <td class="px-3 py-2">
+                                    <VSelect v-model="rateForm.rate_type" class="w-full">
+                                        <option v-for="t in rateTypes" :key="t" :value="t">{{ $t(`project_rates.type_${t}`) }}</option>
+                                    </VSelect>
+                                </td>
+                                <td class="px-3 py-2 text-end">
+                                    <VButton size="sm" icon="plus" :loading="rateForm.processing" @click="addRate"><Bilingual k="project_rates.add" inline /></VButton>
+                                </td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </VCard>
+            </div>
+
+            <!-- Rentabilidad — daily / monthly production P&L (Feature 3) -->
+            <div v-else-if="tab === 'profitability'" class="space-y-5">
+                <!-- KPI cards -->
+                <div v-if="dailyPnl" class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                    <VCard>
+                        <p class="text-xs text-muted">{{ $t('profitability.kpi_today') }}</p>
+                        <p class="mt-1 text-lg font-semibold" :class="dailyPnl.kpis.today.profit >= 0 ? 'text-status-ok' : 'text-status-danger'">
+                            {{ eur(dailyPnl.kpis.today.profit) }} <span class="text-xs">({{ pct(dailyPnl.kpis.today.margin) }})</span>
+                        </p>
+                    </VCard>
+                    <VCard>
+                        <p class="text-xs text-muted">{{ $t('profitability.kpi_month') }}</p>
+                        <p class="mt-1 text-lg font-semibold" :class="dailyPnl.kpis.this_month.profit >= 0 ? 'text-status-ok' : 'text-status-danger'">
+                            {{ eur(dailyPnl.kpis.this_month.profit) }} <span class="text-xs">({{ pct(dailyPnl.kpis.this_month.margin) }})</span>
+                        </p>
+                    </VCard>
+                    <VCard>
+                        <p class="text-xs text-muted">{{ $t('profitability.kpi_total') }}</p>
+                        <p class="mt-1 text-lg font-semibold" :class="dailyPnl.kpis.total.profit >= 0 ? 'text-status-ok' : 'text-status-danger'">
+                            {{ eur(dailyPnl.kpis.total.profit) }} <span class="text-xs">({{ pct(dailyPnl.kpis.total.margin) }})</span>
+                        </p>
+                    </VCard>
+                    <VCard>
+                        <p class="text-xs text-muted">{{ $t('profitability.kpi_days_left') }}</p>
+                        <p class="mt-1 text-lg font-semibold text-ink">{{ dailyPnl.kpis.days_remaining ?? '—' }}</p>
+                    </VCard>
+                </div>
+
+                <!-- Daily / monthly toggle -->
+                <div class="flex gap-2">
+                    <VButton :variant="pnlView === 'daily' ? 'primary' : 'secondary'" size="sm" @click="pnlView = 'daily'"><Bilingual k="profitability.view_daily" inline /></VButton>
+                    <VButton :variant="pnlView === 'monthly' ? 'primary' : 'secondary'" size="sm" @click="pnlView = 'monthly'"><Bilingual k="profitability.view_monthly" inline /></VButton>
+                </div>
+
+                <!-- Daily table with expandable per-worker rows -->
+                <VCard v-if="pnlView === 'daily'" :padded="false">
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm">
+                            <thead class="bg-surface-sunken text-[11px] uppercase tracking-wide text-muted">
+                                <tr>
+                                    <th class="px-4 py-2 text-start"><Bilingual k="profitability.date" inline /></th>
+                                    <th class="px-4 py-2 text-end"><Bilingual k="profitability.workers" inline /></th>
+                                    <th class="px-4 py-2 text-end"><Bilingual k="profitability.total_hours" inline /></th>
+                                    <th class="px-4 py-2 text-end"><Bilingual k="profitability.income" inline /></th>
+                                    <th class="px-4 py-2 text-end"><Bilingual k="profitability.labour_cost" inline /></th>
+                                    <th class="px-4 py-2 text-end"><Bilingual k="profitability.other_expenses" inline /></th>
+                                    <th class="px-4 py-2 text-end"><Bilingual k="profitability.profit" inline /></th>
+                                    <th class="px-4 py-2 text-end"><Bilingual k="profitability.margin" inline /></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <template v-for="d in dailyPnl.days" :key="d.date">
+                                    <tr class="cursor-pointer border-b border-line" :class="rowTone(d.margin)" @click="toggleDay(d.date)">
+                                        <td class="px-4 py-2.5 font-medium">{{ d.date }}</td>
+                                        <td class="tabular-nums px-4 py-2.5 text-end">{{ d.workers_count }}</td>
+                                        <td class="tabular-nums px-4 py-2.5 text-end">{{ hoursHM(d.hours) }}</td>
+                                        <td class="tabular-nums px-4 py-2.5 text-end">{{ eur(d.income) }}</td>
+                                        <td class="tabular-nums px-4 py-2.5 text-end">{{ eur(d.labour) }}</td>
+                                        <td class="tabular-nums px-4 py-2.5 text-end">{{ eur(d.expenses) }}</td>
+                                        <td class="tabular-nums px-4 py-2.5 text-end font-semibold">{{ eur(d.profit) }}</td>
+                                        <td class="tabular-nums px-4 py-2.5 text-end">{{ pct(d.margin) }}</td>
+                                    </tr>
+                                    <tr v-if="expandedDay === d.date">
+                                        <td colspan="8" class="bg-surface-sunken/40 px-4 py-3">
+                                            <table class="w-full text-xs">
+                                                <thead class="text-[10px] uppercase text-muted">
+                                                    <tr>
+                                                        <th class="py-1 text-start"><Bilingual k="profitability.worker" inline /></th>
+                                                        <th class="py-1 text-start"><Bilingual k="profitability.designation" inline /></th>
+                                                        <th class="py-1 text-end"><Bilingual k="profitability.total_hours" inline /></th>
+                                                        <th class="py-1 text-end"><Bilingual k="profitability.client_rate" inline /></th>
+                                                        <th class="py-1 text-end"><Bilingual k="profitability.worker_rate" inline /></th>
+                                                        <th class="py-1 text-end"><Bilingual k="profitability.income" inline /></th>
+                                                        <th class="py-1 text-end"><Bilingual k="profitability.labour_cost" inline /></th>
+                                                        <th class="py-1 text-end"><Bilingual k="profitability.profit" inline /></th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    <tr v-for="(w, i) in d.workers" :key="i" class="border-t border-line">
+                                                        <td class="py-1">{{ w.worker }}</td>
+                                                        <td class="py-1 text-ink-soft">{{ w.designation ?? '—' }}</td>
+                                                        <td class="tabular-nums py-1 text-end">{{ hoursHM(w.hours) }}</td>
+                                                        <td class="tabular-nums py-1 text-end">{{ eur(w.client_rate) }}</td>
+                                                        <td class="tabular-nums py-1 text-end">{{ eur(w.worker_rate) }}</td>
+                                                        <td class="tabular-nums py-1 text-end">{{ eur(w.income) }}</td>
+                                                        <td class="tabular-nums py-1 text-end">{{ eur(w.cost) }}</td>
+                                                        <td class="tabular-nums py-1 text-end font-medium">{{ eur(w.profit) }}</td>
+                                                    </tr>
+                                                </tbody>
+                                            </table>
+                                        </td>
+                                    </tr>
+                                </template>
+                                <tr v-if="dailyPnl.days.length === 0"><td colspan="8" class="px-4 py-6 text-center text-muted">{{ $t('profitability.no_data') }}</td></tr>
+                                <tr v-else class="border-t-2 border-line-strong font-semibold">
+                                    <td class="px-4 py-2.5">{{ $t('profitability.total') }}</td>
+                                    <td></td>
+                                    <td class="tabular-nums px-4 py-2.5 text-end">{{ hoursHM(dailyPnl.totals.hours) }}</td>
+                                    <td class="tabular-nums px-4 py-2.5 text-end">{{ eur(dailyPnl.totals.income) }}</td>
+                                    <td class="tabular-nums px-4 py-2.5 text-end">{{ eur(dailyPnl.totals.labour) }}</td>
+                                    <td class="tabular-nums px-4 py-2.5 text-end">{{ eur(dailyPnl.totals.expenses) }}</td>
+                                    <td class="tabular-nums px-4 py-2.5 text-end">{{ eur(dailyPnl.totals.profit) }}</td>
+                                    <td class="tabular-nums px-4 py-2.5 text-end">{{ pct(dailyPnl.totals.margin) }}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </VCard>
+
+                <!-- Monthly summary -->
+                <VCard v-else :padded="false">
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm">
+                            <thead class="bg-surface-sunken text-[11px] uppercase tracking-wide text-muted">
+                                <tr>
+                                    <th class="px-4 py-2 text-start"><Bilingual k="profitability.month" inline /></th>
+                                    <th class="px-4 py-2 text-end"><Bilingual k="profitability.days_worked" inline /></th>
+                                    <th class="px-4 py-2 text-end"><Bilingual k="profitability.income" inline /></th>
+                                    <th class="px-4 py-2 text-end"><Bilingual k="profitability.labour_cost" inline /></th>
+                                    <th class="px-4 py-2 text-end"><Bilingual k="profitability.other_expenses" inline /></th>
+                                    <th class="px-4 py-2 text-end"><Bilingual k="profitability.profit" inline /></th>
+                                    <th class="px-4 py-2 text-end"><Bilingual k="profitability.margin" inline /></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr v-for="m in dailyPnl.months" :key="m.month" class="border-b border-line" :class="rowTone(m.margin)">
+                                    <td class="px-4 py-2.5 font-medium">{{ m.month }}</td>
+                                    <td class="tabular-nums px-4 py-2.5 text-end">{{ m.days_worked }}</td>
+                                    <td class="tabular-nums px-4 py-2.5 text-end">{{ eur(m.income) }}</td>
+                                    <td class="tabular-nums px-4 py-2.5 text-end">{{ eur(m.labour) }}</td>
+                                    <td class="tabular-nums px-4 py-2.5 text-end">{{ eur(m.expenses) }}</td>
+                                    <td class="tabular-nums px-4 py-2.5 text-end font-semibold">{{ eur(m.profit) }}</td>
+                                    <td class="tabular-nums px-4 py-2.5 text-end">{{ pct(m.margin) }}</td>
+                                </tr>
+                                <tr v-if="dailyPnl.months.length === 0"><td colspan="7" class="px-4 py-6 text-center text-muted">{{ $t('profitability.no_data') }}</td></tr>
+                            </tbody>
+                        </table>
                     </div>
                 </VCard>
             </div>

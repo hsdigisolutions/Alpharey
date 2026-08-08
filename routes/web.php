@@ -41,6 +41,7 @@ use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\PayrollController;
 use App\Http\Controllers\ProjectController;
+use App\Http\Controllers\ProjectDesignationRateController;
 use App\Http\Controllers\ProjectWorkerController;
 use App\Http\Controllers\ProposalController;
 use App\Http\Controllers\ReportController;
@@ -249,6 +250,9 @@ Route::middleware(['auth', 'active', 'two_factor', 'not_worker'])->group(functio
     Route::delete('/projects/{project}', [ProjectController::class, 'destroy'])->name('projects.destroy');
     Route::post('/projects/{project}/workers', [ProjectWorkerController::class, 'store'])->name('projects.workers.store');
     Route::delete('/projects/{project}/workers/{rate}', [ProjectWorkerController::class, 'destroy'])->name('projects.workers.destroy');
+    // Feature 2 — per-designation rates (client + worker) on a project.
+    Route::post('/projects/{project}/designation-rates', [ProjectDesignationRateController::class, 'store'])->name('projects.designation-rates.store');
+    Route::delete('/projects/{project}/designation-rates/{designationRate}', [ProjectDesignationRateController::class, 'destroy'])->name('projects.designation-rates.destroy');
     Route::post('/projects/{project}/remarks', [ProjectWorkerController::class, 'storeRemark'])->name('projects.remarks.store');
     Route::post('/projects/{project}/alerts', [ProjectWorkerController::class, 'storeAlert'])->name('projects.alerts.store');
 

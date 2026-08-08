@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Enums\ProjectPriority;
+use App\Enums\ProjectRateType;
 use App\Enums\ProjectStatus;
 use App\Enums\VatRate;
 use App\Http\Requests\Projects\StoreProjectRequest;
@@ -12,6 +13,7 @@ use App\Models\Employee;
 use App\Models\Expense;
 use App\Models\Invoice;
 use App\Models\Project;
+use App\Models\ProjectDesignationRate;
 use App\Services\Documents\DocumentStatus;
 use App\Services\Reports\ProfitabilityService;
 use App\Support\CurrentCompany;
@@ -189,6 +191,20 @@ class ProjectController extends Controller
             // so gated by the same wage right as the workers' rates.
             'canSeeWages' => $canSeeWages,
             'profitability' => $canSeeWages ? $profitability->forProject($project, null, null, false) : null,
+            // Feature 3 — daily / monthly production P&L (wage-gated).
+            'dailyPnl' => $canSeeWages ? $profitability->dailyPnl($project, null, null) : null,
+            // Feature 2 — per-designation rates + the designation catalogue.
+            'designationRates' => $project->designationRates()->with('designation:id,name')->get()
+                ->map(fn (ProjectDesignationRate $r) => [
+                    'id' => $r->id,
+                    'designation_id' => $r->designation_id,
+                    'designation' => $r->designation?->name,
+                    'client_rate' => (float) $r->client_rate,
+                    'worker_rate' => (float) $r->worker_rate,
+                    'rate_type' => $r->rate_type->value,
+                ]),
+            'designations' => ProjectDesignationRateController::optionsFor($project->company_id),
+            'rateTypes' => array_map(fn (ProjectRateType $t) => $t->value, ProjectRateType::cases()),
             'can' => [
                 'edit' => Gate::allows('projects.edit'),
                 'delete' => Gate::allows('projects.delete'),
