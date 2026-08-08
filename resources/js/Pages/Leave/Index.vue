@@ -4,7 +4,7 @@
  * balances table. Approving books the days into the attendance grid, which is
  * why the confirm copy says so rather than just "approve".
  */
-import { reactive, ref } from 'vue';
+import { reactive, ref, watch } from 'vue';
 import { Head, router, useForm } from '@inertiajs/vue3';
 import { ensureCompanySelected } from '@/composables/useCompanyGate';
 import AppLayout from '@/Layouts/AppLayout.vue';
@@ -71,6 +71,22 @@ function submit() {
         onSuccess: () => (showModal.value = false),
     });
 }
+
+// Auto-fill "Total days" from the working days (Mon–Fri) between the two dates,
+// so the request can't be rejected for a blank or mismatched count. The admin
+// can still override it (e.g. a half day).
+watch([() => form.start_date, () => form.end_date], ([start, end]) => {
+    if (!start || !end) return;
+    const s = new Date(start);
+    const e = new Date(end);
+    if (Number.isNaN(s.getTime()) || Number.isNaN(e.getTime()) || e < s) return;
+    let weekdays = 0;
+    for (const d = new Date(s); d <= e; d.setDate(d.getDate() + 1)) {
+        const dow = d.getDay();
+        if (dow !== 0 && dow !== 6) weekdays++;
+    }
+    form.total_days = weekdays || '';
+});
 
 /* Review */
 const reviewing = ref(null);
