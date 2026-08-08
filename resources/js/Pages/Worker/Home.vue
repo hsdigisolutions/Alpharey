@@ -41,6 +41,15 @@ const monthLabel = computed(() => {
     return new Date(y, m - 1, 1).toLocaleDateString(loc, { month: 'long', year: 'numeric' });
 });
 
+// The weekend offer's rate, shown by its actual type (normal / ×1.5 / ×2 /
+// especial) — not a blanket "special rate".
+const weekendRateLabel = computed(() => ({
+    normal: t('attendance.offer_rate_normal'),
+    'x1.5': t('attendance.offer_rate_x15'),
+    'x2': t('attendance.offer_rate_x2'),
+    custom: t('attendance.offer_rate_custom'),
+}[props.weekend.offer?.rate_type] ?? ''));
+
 // Hours as "28h 57m" rather than a raw decimal (28.95).
 function hoursHM(h) {
     const hh = Math.floor(Math.max(0, Number(h) || 0));
@@ -272,7 +281,7 @@ const noteTextForm = useForm({ attendance_id: null, text_note: '', duration_seco
                     <p v-if="weekend.offer.project" class="mt-1 text-sm text-ink">
                         {{ $t('worker.detail_project') }}: {{ weekend.offer.project }}
                     </p>
-                    <p class="mt-0.5 text-xs text-ink-soft">{{ $t('worker.weekend_rate_applied') }}</p>
+                    <p class="mt-0.5 text-xs text-ink-soft">{{ weekendRateLabel }}</p>
                 </div>
 
                 <div v-if="!cameraOpen" class="space-y-3">
