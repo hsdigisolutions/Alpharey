@@ -72,9 +72,11 @@ drops `amount`, and `pendingAdvances()` drops `amount`.
 per-company Settings — keys `attendance.full_day_threshold.{companyId}` /
 `half_day_threshold.{companyId}` (default 6 / 3), edited on Screen 26. Migration
 `2026_08_08_000003` adds `auto_day_type` + `is_auto_detected` (both server-set,
-NOT fillable). Guards: **weekends are never auto-graded** (voluntary work), and a
-**purely hourly worker** (no `daily_wage`) stays hourly — grading to a full day
-would price a daily rate they don't have. An admin day_type edit through
+NOT fillable). A weekend worked day (reachable only via an invited offer) IS
+graded like a weekday — a full 10 h Saturday is a full day (daily rate), then the
+offer's weekend premium rides on top; it is NOT priced hours × hourly (that gave
+a ~10× overcharge). Guard: a **purely hourly worker** (no `daily_wage`) stays
+hourly — grading to a full day would price a daily rate they don't have. An admin day_type edit through
 `AttendanceService::update()` flips `is_auto_detected` off (a manual override) but
 keeps `auto_day_type` as the detection record. Admin grid badges: **A** (info) =
 auto-detected · **✎** = manually overridden. Tests: `AutoDayTypeTest` (7).

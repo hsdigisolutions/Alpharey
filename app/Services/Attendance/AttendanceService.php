@@ -228,13 +228,11 @@ class AttendanceService
      */
     public function applyAutoDayType(Attendance $attendance, Employee $employee): void
     {
-        // Weekend work is VOLUNTARY (Sat/Sun — the F2 weekend model): a weekend
-        // day is NEVER auto-graded into a paid full/half day. The hours stand
-        // and an admin applies any weekend rate by hand. So auto-detection is a
-        // weekday-only rule.
-        if ($attendance->date->isWeekend()) {
-            return;
-        }
+        // Weekend days reach here ONLY when the worker was invited via an offer
+        // and actually came in, so they ARE graded like a weekday (full/half by
+        // hours) — otherwise a full 10 h Saturday would price hours × hourly rate
+        // instead of a full day. The weekend PREMIUM (the offer's rate) is then
+        // layered on top by recompute()'s applyWeekendPremium().
 
         // Full/half grading prices from the DAILY (jornada) rate — it only makes
         // sense for a worker who has one. A purely hourly worker keeps their

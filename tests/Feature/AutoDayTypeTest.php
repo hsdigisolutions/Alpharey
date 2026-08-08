@@ -70,11 +70,12 @@ it('keeps a purely hourly worker on hourly even past the full-day threshold', fu
         ->and((float) $att->total_amount)->toBeGreaterThan(0.0);
 });
 
-it('never auto-detects on a weekend', function (): void {
+it('grades a weekend day too (offered work is a full/half day, not hours × hourly)', function (): void {
     $employee = Employee::factory()->forCompany($this->company)->create([
         'wage_type' => 'daily', 'daily_wage' => '80',
     ]);
-    // 2026-08-08 is a Saturday.
+    // 2026-08-08 is a Saturday — a worker only reaches here via an invited offer,
+    // so a full day is graded like a weekday (the weekend premium rides on top).
     $att = Attendance::factory()->create([
         'company_id' => $this->company->id, 'employee_id' => $employee->id,
         'date' => '2026-08-08', 'status' => 'present', 'day_type' => 'hourly', 'hours_worked' => '7',
@@ -83,8 +84,9 @@ it('never auto-detects on a weekend', function (): void {
     $this->service->applyAutoDayType($att->fresh(), $employee);
     $att->refresh();
 
-    expect($att->is_auto_detected)->toBeFalse()
-        ->and($att->day_type)->toBe(DayType::Hourly);
+    expect($att->is_auto_detected)->toBeTrue()
+        ->and($att->day_type)->toBe(DayType::Full)
+        ->and((float) $att->total_amount)->toBe(80.0); // daily rate, no premium set
 });
 
 it('marks an admin day-type edit as a manual override', function (): void {
