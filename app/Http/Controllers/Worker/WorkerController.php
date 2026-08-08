@@ -219,6 +219,11 @@ class WorkerController extends Controller
             'attendance_id' => $today->id,
             'check_in' => $today->check_in,
             'check_out' => $today->check_out,
+            // Absolute check-in instant (ISO, with offset) so the live "time
+            // worked" counter is computed from real elapsed time — never from the
+            // "HH:mm" label parsed in the phone's own timezone (that was off by
+            // the phone↔server offset).
+            'check_in_at' => $today->check_in_at?->toIso8601String(),
             'hours' => $today->check_out !== null ? (float) $today->hours_worked : null,
             'project' => $project,
             // Evidence the GPS fix landed — drives the "ubicación capturada"

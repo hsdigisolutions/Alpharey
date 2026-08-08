@@ -59,11 +59,20 @@ if (props.today.state === 'checked_in') {
 onUnmounted(() => { if (ticker) clearInterval(ticker); });
 
 const workedSoFar = computed(() => {
-    if (!props.today.check_in) return hoursHM(0);
-    const [hh, mm] = String(props.today.check_in).split(':').map(Number);
-    const start = new Date();
-    start.setHours(hh, mm, 0, 0);
-    const diff = (nowTs.value - start.getTime()) / 3600000;
+    // Use the absolute check-in instant (UTC/ISO) so the elapsed time is correct
+    // regardless of the phone's timezone. Falls back to the "HH:mm" label only if
+    // the timestamp is missing (legacy rows).
+    let startMs = null;
+    if (props.today.check_in_at) {
+        startMs = Date.parse(props.today.check_in_at);
+    } else if (props.today.check_in) {
+        const [hh, mm] = String(props.today.check_in).split(':').map(Number);
+        const s = new Date();
+        s.setHours(hh, mm, 0, 0);
+        startMs = s.getTime();
+    }
+    if (startMs === null || Number.isNaN(startMs)) return hoursHM(0);
+    const diff = (nowTs.value - startMs) / 3600000;
     return hoursHM(diff > 0 ? diff : 0);
 });
 
