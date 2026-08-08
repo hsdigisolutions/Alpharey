@@ -359,6 +359,10 @@ class PayrollService
             $groups[$key]['amount'] = round($groups[$key]['amount'] + $amount, 2);
         }
 
+        // Drop empty lines (e.g. an open check-in with 0 hours) so the payslip
+        // shows only day types that actually paid something.
+        $groups = array_filter($groups, fn (array $g): bool => $g['units'] > 0 || $g['amount'] > 0);
+
         if ($groups === []) {
             return null;
         }
