@@ -1363,6 +1363,7 @@ return [
         'note_text_placeholder' => 'Or type a note here…',
         'note_submit' => 'Save note',
         // Feature 2 — expense categories + desc
+        'expense_cat_fuel' => 'Fuel',
         'expense_cat_transport' => 'Transport',
         'expense_cat_materials' => 'Materials',
         'expense_cat_tools' => 'Tools',
@@ -1918,6 +1919,7 @@ return [
         'other_deductions' => 'Other Deductions',
         'manual_additions' => 'Manual Additions',
         'net_pay' => 'NET PAY',
+        'net_negative_warning' => 'Net pay is negative. Advances or deductions exceed gross pay. Review before approving.',
         'adjustments' => 'Manual adjustments',
         'notes' => 'Notes',
         'summary_employees' => 'Employees',

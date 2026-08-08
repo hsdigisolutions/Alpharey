@@ -374,3 +374,60 @@ it('does not pay a soft-deleted employee', function (): void {
     expect(Payroll::query()->withoutGlobalScopes()
         ->where('employee_id', $employee->id)->where('month', $this->month)->exists())->toBeFalse();
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Vehicle fines never auto-deduct — the admin flags each one explicitly.
+// ─────────────────────────────────────────────────────────────────────────────
+
+it('never auto-deducts a vehicle fine charged to an employee', function (): void {
+    $employee = hourlyEmployee(rate: 20, days: 1, hours: 8); // 160 gross
+    $vehicle = App\Models\Vehicle::factory()->create(['company_id' => $this->company->id]);
+    App\Models\VehicleFine::factory()->create([
+        'company_id' => $this->company->id, 'vehicle_id' => $vehicle->id, 'employee_id' => $employee->id,
+        'fine_date' => $this->month.'-10', 'amount' => '200', 'charged_to' => 'employee',
+        // NOT flagged for salary deduction.
+    ]);
+
+    $payroll = app(PayrollService::class)->calculateFor($employee, $this->company->id, $this->month);
+
+    expect((float) $payroll->getAttribute('fine_deductions'))->toBe(0.0)
+        ->and((float) $payroll->getAttribute('net_amount'))->toBe(160.0);
+});
+
+it('deducts a vehicle fine only once the admin flags it for this month', function (): void {
+    $employee = hourlyEmployee(rate: 20, days: 1, hours: 8); // 160 gross
+    $vehicle = App\Models\Vehicle::factory()->create(['company_id' => $this->company->id]);
+    App\Models\VehicleFine::factory()->create([
+        'company_id' => $this->company->id, 'vehicle_id' => $vehicle->id, 'employee_id' => $employee->id,
+        'fine_date' => $this->month.'-10', 'amount' => '50', 'charged_to' => 'employee',
+        'deduct_from_salary' => true, 'deduction_month' => $this->month,
+    ]);
+
+    $payroll = app(PayrollService::class)->calculateFor($employee, $this->company->id, $this->month);
+
+    expect((float) $payroll->getAttribute('fine_deductions'))->toBe(50.0)
+        ->and((float) $payroll->getAttribute('net_amount'))->toBe(110.0);
+});
+
+it('re-derives a jornada left at 0 by the day-type back-fill from the daily rate', function (): void {
+    // The day-type migration reclassified an old zero-priced row to day_type=full
+    // without re-pricing it: total_amount stays 0. Payroll must still pay the day
+    // from the daily rate rather than silently paying nothing.
+    $employee = Employee::factory()->forCompany($this->company)->create([
+        'wage_type' => 'daily', 'daily_wage' => '50',
+    ]);
+    foreach ([3, 4, 6, 7] as $d) {
+        Attendance::factory()->create([
+            'company_id' => $this->company->id, 'employee_id' => $employee->id,
+            'date' => sprintf('%s-%02d', $this->month, $d), 'status' => 'present',
+            'day_type' => 'full', 'hours_worked' => '7', 'total_amount' => '0',
+            'wage_rate_snapshot' => '80', 'hourly_rate_snapshot' => null,
+        ]);
+    }
+
+    $payroll = app(PayrollService::class)->calculateFor($employee, $this->company->id, $this->month);
+
+    // 4 full days × the CURRENT daily rate (50) = 200 — not the stale 80, not 0.
+    expect((float) $payroll->getAttribute('days_amount'))->toBe(200.0)
+        ->and((float) $payroll->getAttribute('gross_pay'))->toBe(200.0);
+});

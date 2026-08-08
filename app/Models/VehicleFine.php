@@ -27,6 +27,8 @@ use Illuminate\Support\Carbon;
  * @property string|null $authority
  * @property string|null $file_path
  * @property string $charged_to
+ * @property bool $deduct_from_salary
+ * @property string|null $deduction_month
  * @property bool $paid
  * @property Carbon|null $paid_at
  * @property int|null $expense_id
@@ -55,6 +57,7 @@ class VehicleFine extends Model
             'paid_at' => 'date:Y-m-d',
             'amount' => 'decimal:2',
             'paid' => 'boolean',
+            'deduct_from_salary' => 'boolean',
         ];
     }
 

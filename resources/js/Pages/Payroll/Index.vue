@@ -70,6 +70,13 @@ function dtNum(n) {
         : f.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+// Hours as "28h 57m" rather than the raw decimal 28.95.
+function hoursHM(h) {
+    const hh = Math.floor(Math.max(0, Number(h) || 0));
+    const mm = Math.round((Math.max(0, Number(h) || 0) - hh) * 60);
+    return `${hh}h ${String(mm).padStart(2, '0')}m`;
+}
+
 /* ---------- manual adjustments ---------- */
 const adjustingId = ref(null);
 const adjusting = computed(() => props.rows.find((r) => r.id === adjustingId.value) ?? null);
@@ -173,7 +180,7 @@ const columns = [
                     <span class="block text-xs text-muted">{{ r.designation ?? '—' }}</span>
                 </td>
                 <td class="tabular-nums px-3 py-2.5 text-end text-sm">{{ r.attendance_days }}</td>
-                <td class="tabular-nums px-3 py-2.5 text-end text-sm">{{ r.attendance_hours }}</td>
+                <td class="tabular-nums px-3 py-2.5 text-end text-sm">{{ hoursHM(r.attendance_hours) }}</td>
                 <td class="px-3 py-2.5 text-sm text-ink-soft">
                     <Bilingual v-if="r.wage_type" :k="`employees.wage_${r.wage_type}`" inline />
                     <span v-else>—</span>
@@ -244,7 +251,7 @@ const columns = [
                             <dd>{{ eur(breakdown.days_amount) }}</dd>
                         </div>
                         <div class="flex justify-between gap-4">
-                            <dt><Bilingual k="payroll.attendance_hours" inline /> <span class="text-muted">({{ breakdown.attendance_hours }} h)</span></dt>
+                            <dt><Bilingual k="payroll.attendance_hours" inline /> <span class="text-muted">({{ hoursHM(breakdown.attendance_hours) }})</span></dt>
                             <dd>{{ eur(breakdown.hours_amount) }}</dd>
                         </div>
                     </template>
@@ -257,7 +264,7 @@ const columns = [
                         <dd>{{ eur(breakdown.project_expenses) }}</dd>
                     </div>
                     <div class="flex justify-between gap-4">
-                        <dt><Bilingual k="payroll.overtime_pay" inline /> <span class="text-muted">({{ breakdown.overtime_hours }} h)</span></dt>
+                        <dt><Bilingual k="payroll.overtime_pay" inline /> <span class="text-muted">({{ hoursHM(breakdown.overtime_hours) }})</span></dt>
                         <dd>{{ eur(breakdown.overtime_pay) }}</dd>
                     </div>
 
@@ -283,11 +290,18 @@ const columns = [
                         <dd>+ {{ eur(breakdown.manual_additions) }}</dd>
                     </div>
 
-                    <div class="flex justify-between gap-4 border-t-2 border-line-strong pt-2 text-base font-bold">
+                    <div class="flex justify-between gap-4 border-t-2 border-line-strong pt-2 text-base font-bold"
+                        :class="Number(breakdown.net_amount) < 0 ? 'text-status-danger' : ''">
                         <dt><Bilingual k="payroll.net_pay" inline /></dt>
                         <dd>{{ eur(breakdown.net_amount) }}</dd>
                     </div>
                 </dl>
+
+                <!-- Net pay went negative: advances/deductions exceed gross. -->
+                <p v-if="Number(breakdown.net_amount) < 0"
+                    class="rounded-md bg-status-warn-soft px-3 py-2 text-xs text-status-warn">
+                    {{ $t('payroll.net_negative_warning') }}
+                </p>
 
                 <p v-if="breakdown.notes" class="rounded-md bg-surface-sunken px-3 py-2 text-xs text-ink-soft">
                     {{ breakdown.notes }}

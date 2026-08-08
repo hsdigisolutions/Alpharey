@@ -23,6 +23,17 @@ function statusVariant(status) {
     return { pending: 'warn', approved: 'ok', rejected: 'danger' }[status] ?? 'neutral';
 }
 
+// Normalise a stored category (a bare code 'fuel', a stray full key
+// 'worker.expense_cat_fuel', or a label 'Transport') to its lang KEY so the
+// table always shows a proper name, never a raw key.
+const KNOWN_CATS = ['fuel', 'transport', 'materials', 'tools', 'food', 'other'];
+function categoryKey(category) {
+    const code = String(category ?? 'other')
+        .replace(/^worker\.expense_cat_/, '')
+        .toLowerCase();
+    return 'worker.expense_cat_' + (KNOWN_CATS.includes(code) ? code : 'other');
+}
+
 // ── Reject modal ─────────────────────────────────────────────────────────────
 const rejectTarget = ref(null);
 const rejectForm = useForm({ reason: '' });
@@ -84,7 +95,7 @@ function approve(expense) {
                         <td class="px-4 py-3 tabular-nums text-ink-soft">{{ e.date }}</td>
                         <td class="px-4 py-3 text-right tabular-nums font-medium text-ink">{{ eur(e.amount) }}</td>
                         <td class="px-4 py-3 text-ink-soft">
-                            <Bilingual :k="'worker.expense_cat_' + e.category" inline />
+                            <Bilingual :k="categoryKey(e.category)" inline />
                         </td>
                         <td class="max-w-xs px-4 py-3">
                             <p class="truncate text-ink-soft">{{ e.description || '—' }}</p>

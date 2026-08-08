@@ -17,6 +17,7 @@ use App\Models\VehicleFine;
 use App\Models\VehicleFuelRecord;
 use App\Models\VehicleMaintenanceHistory;
 use App\Models\VehicleSession;
+use App\Rules\OwnCompanyEmployee;
 use App\Services\Vehicles\VehicleCompliance;
 use App\Services\Vehicles\VehicleService;
 use Illuminate\Database\Eloquent\Builder;
@@ -195,6 +196,8 @@ class VehicleController extends Controller
                 'paid' => $f->paid,
                 'paid_at' => $f->paid_at?->toDateString(),
                 'has_expense' => $f->expense_id !== null,
+                'deduct_from_salary' => $f->deduct_from_salary,
+                'deduction_month' => $f->deduction_month,
             ])->values(),
             'fuel_records' => $vehicle->fuelRecords->map(fn ($r): array => [
                 'id' => $r->id,
@@ -348,6 +351,39 @@ class VehicleController extends Controller
         $this->vehicles->deleteFine($fine);
 
         return back()->with('success', __('ui.vehicles.fine_deleted'));
+    }
+
+    /**
+     * Explicitly deduct (or stop deducting) a fine from a worker's salary. A
+     * fine NEVER comes off pay on its own — the admin decides here, per fine,
+     * naming the employee and the payroll month it lands in.
+     */
+    public function deductFine(Request $request, Vehicle $vehicle, VehicleFine $fine): RedirectResponse
+    {
+        Gate::authorize('vehicles.edit');
+        abort_unless($fine->vehicle_id === $vehicle->id, 404);
+
+        $validated = $request->validate([
+            'deduct_from_salary' => ['required', 'boolean'],
+            'employee_id' => ['nullable', 'integer', new OwnCompanyEmployee],
+            'deduction_month' => ['nullable', 'required_if:deduct_from_salary,true', 'date_format:Y-m'],
+        ]);
+
+        $fine->deduct_from_salary = (bool) $validated['deduct_from_salary'];
+
+        if ($fine->deduct_from_salary) {
+            // A salary deduction must name the worker whose pay it comes off.
+            $employeeId = $validated['employee_id'] ?? $fine->employee_id;
+            abort_if($employeeId === null, 422);
+            $fine->employee_id = (int) $employeeId;
+            $fine->deduction_month = $validated['deduction_month'];
+        } else {
+            $fine->deduction_month = null;
+        }
+
+        $fine->save();
+
+        return back()->with('success', __('ui.vehicles.fine_saved'));
     }
 
     public function storeFuel(StoreFuelRequest $request, Vehicle $vehicle): RedirectResponse

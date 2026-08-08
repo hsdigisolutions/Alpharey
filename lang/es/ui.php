@@ -1367,11 +1367,12 @@ return [
         'note_text_placeholder' => 'O escriba una nota aquí…',
         'note_submit' => 'Guardar nota',
         // Feature 2 — categorías de gasto
+        'expense_cat_fuel' => 'Combustible',
         'expense_cat_transport' => 'Transporte',
         'expense_cat_materials' => 'Materiales',
         'expense_cat_tools' => 'Herramientas',
-        'expense_cat_food' => 'Dieta',
-        'expense_cat_other' => 'Otros',
+        'expense_cat_food' => 'Comida',
+        'expense_cat_other' => 'Otro',
         'expense_desc_placeholder' => '¿Para qué fue este gasto?',
         // Feature 4 — vehículos
         'my_expenses' => 'Mis gastos',
@@ -1922,6 +1923,7 @@ return [
         'other_deductions' => 'Otras deducciones',
         'manual_additions' => 'Añadidos manuales',
         'net_pay' => 'NETO A PAGAR',
+        'net_negative_warning' => 'El salario neto es negativo. Los anticipos o deducciones superan el salario bruto. Revise antes de aprobar.',
         'adjustments' => 'Ajustes manuales',
         'notes' => 'Notas',
         'summary_employees' => 'Empleados',

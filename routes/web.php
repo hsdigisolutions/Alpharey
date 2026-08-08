@@ -369,6 +369,7 @@ Route::middleware(['auth', 'active', 'two_factor', 'not_worker'])->group(functio
     Route::delete('/vehicles/{vehicle}/daily-assignments/{assignment}', [VehicleController::class, 'destroyDailyAssignment'])->name('vehicles.daily-assignments.destroy');
     Route::post('/vehicles/{vehicle}/fines', [VehicleController::class, 'storeFine'])->name('vehicles.fines.store');
     Route::delete('/vehicles/{vehicle}/fines/{fine}', [VehicleController::class, 'destroyFine'])->name('vehicles.fines.destroy');
+    Route::put('/vehicles/{vehicle}/fines/{fine}/deduct-salary', [VehicleController::class, 'deductFine'])->name('vehicles.fines.deduct');
     Route::post('/vehicles/{vehicle}/fuel', [VehicleController::class, 'storeFuel'])->name('vehicles.fuel.store');
     Route::delete('/vehicles/{vehicle}/fuel/{fuelRecord}', [VehicleController::class, 'destroyFuel'])->name('vehicles.fuel.destroy');
 

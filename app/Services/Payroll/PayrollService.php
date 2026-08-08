@@ -20,6 +20,7 @@ use App\Models\Payroll;
 use App\Models\Scopes\CompanyScope;
 use App\Models\VehicleFine;
 use App\Models\WorkerExpense;
+use App\Services\Employees\WageRateService;
 use App\Support\PeriodLock;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
@@ -52,7 +53,10 @@ use Illuminate\Support\Facades\DB;
  */
 class PayrollService
 {
-    public function __construct(private readonly PeriodLock $lock) {}
+    public function __construct(
+        private readonly PeriodLock $lock,
+        private readonly WageRateService $wageRates,
+    ) {}
 
     /**
      * Statuses that count as a worked/attended day.
@@ -130,7 +134,7 @@ class PayrollService
         $perMeterAmount = 0.0;
 
         foreach ($paidRows as $record) {
-            $total = (float) $record->total_amount;
+            $total = $this->rowAmount($record, $employee);
 
             match ($this->effectiveDayType($record)) {
                 DayType::Full, DayType::Half => $fullHalfAmount += $total,
@@ -162,7 +166,7 @@ class PayrollService
 
         // Per-day-type breakdown for the payslip (jornadas completas/medias/horas/metros).
         $attendanceEarnings = $daysAmount + $hoursAmount + $overtimePay + $perMeterAmount;
-        $dayTypeSummary = $attendanceEarnings > 0 ? $this->dayTypeSummary($paidRows) : null;
+        $dayTypeSummary = $attendanceEarnings > 0 ? $this->dayTypeSummary($paidRows, $employee) : null;
 
         $reimbursements = $this->reimbursementsFor($employee->id, $month)
             + $this->pwaExpensesFor($employee->id, $month);
@@ -325,7 +329,7 @@ class PayrollService
      * @param  Collection<int, Attendance>  $paidRows
      * @return list<array<string, mixed>>|null
      */
-    private function dayTypeSummary(Collection $paidRows): ?array
+    private function dayTypeSummary(Collection $paidRows, Employee $employee): ?array
     {
         $order = ['full' => 0, 'half' => 1, 'hourly' => 2, 'per_meter' => 3];
         $groups = [];
@@ -335,7 +339,9 @@ class PayrollService
             $weekend = (bool) $record->is_weekend;
             $perMeterRate = (float) ($record->wage_rate_snapshot ?? 0);
             $hourly = (float) ($record->hourly_rate_snapshot ?? 0);
-            $total = (float) $record->total_amount;
+            // Same re-derivation as the gross, so a back-fill-broken jornada row
+            // shows its real amount here too rather than 0.
+            $total = $this->rowAmount($record, $employee);
 
             // full/half price per unit is the day's own total (units = 1), so a
             // rate change splits into its own group and a leave row with no rate
@@ -362,6 +368,35 @@ class PayrollService
             ?: (($a['weekend'] <=> $b['weekend']) ?: ($b['rate'] <=> $a['rate'])));
 
         return $list;
+    }
+
+    /**
+     * The amount a worked day contributes. Normally the frozen total_amount —
+     * which the freeze tests pin (a raise never rewrites a priced day). But a
+     * daily (full/half) row left at 0 by the day-type back-fill migration (its
+     * old hourly-priced total was 0 and the reclassification never re-priced it)
+     * would silently pay nothing. For that broken case ONLY — total is 0 and the
+     * row is not a manual override — re-derive the jornada from the daily rate in
+     * force on that date (wage history, else the live field). Correctly-priced
+     * rows (total ≠ 0) are untouched, so freeze behaviour is unchanged.
+     */
+    private function rowAmount(Attendance $record, Employee $employee): float
+    {
+        $total = (float) $record->total_amount;
+
+        if ($total !== 0.0 || $record->manual_wage_override) {
+            return $total;
+        }
+
+        $type = $this->effectiveDayType($record);
+
+        if ($type === DayType::Full || $type === DayType::Half) {
+            $daily = (float) ($this->wageRates->ratesForDate($employee, $record->date)['daily'] ?? 0);
+
+            return $type === DayType::Half ? round($daily * 0.5, 2) : $daily;
+        }
+
+        return $total;
     }
 
     /**
@@ -466,19 +501,17 @@ class PayrollService
     }
 
     /**
-     * Vehicle fines charged to the employee in this month — auto-deducted from
-     * net pay so the admin does not have to enter them manually in other_deductions.
-     * Only fines with charged_to = 'employee' are deducted; company-charged fines
-     * create an Expense on the company and never touch the payslip.
+     * Vehicle fines deducted from this month's pay. A fine NEVER auto-deducts:
+     * the admin must explicitly flag it "deduct from salary" and pick the month
+     * (VehicleFineController::deductFromSalary), which sets deduct_from_salary +
+     * deduction_month. Only those fines, for this employee and month, are taken.
      */
     private function vehicleFinesFor(int $employeeId, string $month): float
     {
-        [$start, $end] = $this->bounds($month);
-
         return round((float) VehicleFine::query()->withoutGlobalScopes()
             ->where('employee_id', $employeeId)
-            ->where('charged_to', 'employee')
-            ->whereBetween('fine_date', [$start, $end])
+            ->where('deduct_from_salary', true)
+            ->where('deduction_month', $month)
             ->sum('amount'), 2);
     }
 
