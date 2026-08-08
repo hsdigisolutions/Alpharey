@@ -121,6 +121,25 @@ function go(routeName) {
             </div>
         </div>
 
+        <!-- Profitability widget -->
+        <div v-if="data.profitability" class="mt-6">
+            <h2 class="mb-3 text-sm font-semibold text-ink"><Bilingual k="dashboard.profitability_panel" inline /></h2>
+            <div class="grid grid-cols-3 gap-4">
+                <VCard class="text-center">
+                    <p class="tabular-nums text-3xl font-semibold text-status-ok">{{ data.profitability.profitable }}</p>
+                    <p class="mt-1 text-xs text-ink-soft">🟢 {{ $t('dashboard.profit_profitable') }}</p>
+                </VCard>
+                <VCard class="text-center">
+                    <p class="tabular-nums text-3xl font-semibold text-status-warn">{{ data.profitability.at_risk }}</p>
+                    <p class="mt-1 text-xs text-ink-soft">🟡 {{ $t('dashboard.profit_at_risk') }}</p>
+                </VCard>
+                <VCard class="text-center">
+                    <p class="tabular-nums text-3xl font-semibold text-status-danger">{{ data.profitability.loss }}</p>
+                    <p class="mt-1 text-xs text-ink-soft">🔴 {{ $t('dashboard.profit_loss') }}</p>
+                </VCard>
+            </div>
+        </div>
+
         <!-- Bottom panels -->
         <div class="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
             <VCard>

@@ -38,6 +38,8 @@ const props = defineProps({
     expenses: { type: Array, default: () => [] },
     canViewInvoices: { type: Boolean, default: false },
     canViewExpenses: { type: Boolean, default: false },
+    canSeeWages: { type: Boolean, default: false },
+    profitability: { type: Object, default: null },
     can: { type: Object, required: true },
 });
 
@@ -58,6 +60,16 @@ const tabs = [
 const statusBadge = { active: 'ok', in_progress: 'info', completed: 'ok', cancelled: 'danger', on_hold: 'warn' };
 const priorityBadge = { low: 'neutral', medium: 'info', high: 'warn', urgent: 'danger' };
 const canSeeWages = props.can.edit;
+
+// Profitability formatting. Margin colour: > 15 % green · 5–15 % amber ·
+// < 5 % or negative red — mirrors the server's classification.
+function eur(value) {
+    if (value === null || value === undefined) return '—';
+    return `${Number(value).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`;
+}
+const marginTone = {
+    ok: 'text-status-ok', warn: 'text-status-warn', danger: 'text-status-danger', neutral: 'text-ink-soft',
+};
 
 const contactCards = [
     { k: 'projects.jefe_de_obra', name: props.project.jefe_de_obra, phone: props.project.jefe_phone, email: props.project.jefe_email },
@@ -108,6 +120,63 @@ function destroy() {
         <div class="mt-5">
             <!-- Resumen -->
             <div v-if="tab === 'summary'" class="grid gap-5 lg:grid-cols-2">
+                <!-- Rentabilidad (P&L) — gated by the wage right server-side -->
+                <VCard v-if="profitability" title-key="profitability.title" class="lg:col-span-2">
+                    <div class="grid gap-5 sm:grid-cols-2">
+                        <dl class="divide-y divide-line text-sm">
+                            <div class="flex justify-between py-2">
+                                <dt class="text-ink-soft">{{ $t('profitability.client_billing') }}</dt>
+                                <dd class="tabular-nums">{{ profitability.client_hour_rate !== null ? `${eur(profitability.client_hour_rate)}/h` : '—' }}</dd>
+                            </div>
+                            <div class="flex justify-between py-2">
+                                <dt class="text-ink-soft">{{ $t('profitability.labour_cost') }} <span class="text-muted">{{ $t('profitability.avg') }}</span></dt>
+                                <dd class="tabular-nums">{{ profitability.avg_cost_per_hour !== null ? `${eur(profitability.avg_cost_per_hour)}/h` : '—' }}</dd>
+                            </div>
+                            <div class="flex justify-between py-2">
+                                <dt class="text-ink-soft">{{ $t('profitability.margin_per_hour') }}</dt>
+                                <dd class="tabular-nums font-medium" :class="marginTone[profitability.health]">
+                                    {{ profitability.margin_per_hour !== null ? `${eur(profitability.margin_per_hour)}/h` : '—' }}
+                                </dd>
+                            </div>
+                            <div class="flex justify-between py-2">
+                                <dt class="text-ink-soft">{{ $t('profitability.total_hours') }}</dt>
+                                <dd class="tabular-nums">{{ profitability.hours }} h</dd>
+                            </div>
+                        </dl>
+                        <dl class="divide-y divide-line text-sm">
+                            <div class="flex justify-between py-2">
+                                <dt class="text-ink-soft">{{ $t('profitability.total_revenue') }}</dt>
+                                <dd class="tabular-nums font-medium">{{ eur(profitability.revenue) }}</dd>
+                            </div>
+                            <div class="flex justify-between py-2">
+                                <dt class="text-ink-soft">{{ $t('profitability.labour_cost') }}</dt>
+                                <dd class="tabular-nums">{{ eur(profitability.labour_cost) }}</dd>
+                            </div>
+                            <div class="flex justify-between py-2">
+                                <dt class="text-ink-soft">{{ $t('profitability.other_expenses') }}</dt>
+                                <dd class="tabular-nums">{{ eur(profitability.expenses) }}</dd>
+                            </div>
+                            <div v-if="profitability.subcontractor_cost > 0" class="flex justify-between py-2">
+                                <dt class="text-ink-soft">{{ $t('profitability.subcontractor') }}</dt>
+                                <dd class="tabular-nums">{{ eur(profitability.subcontractor_cost) }}</dd>
+                            </div>
+                        </dl>
+                    </div>
+                    <div class="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-line bg-surface-sunken px-4 py-3">
+                        <div>
+                            <p class="text-xs uppercase tracking-wide text-muted">{{ $t('profitability.gross_profit') }}</p>
+                            <p class="tabular-nums text-2xl font-semibold" :class="marginTone[profitability.health]">{{ eur(profitability.profit) }}</p>
+                        </div>
+                        <div class="text-end">
+                            <p class="text-xs uppercase tracking-wide text-muted">{{ $t('profitability.margin') }}</p>
+                            <p class="tabular-nums text-2xl font-semibold" :class="marginTone[profitability.health]">
+                                {{ profitability.margin !== null ? `${profitability.margin.toLocaleString('es-ES')} %` : '—' }}
+                            </p>
+                        </div>
+                    </div>
+                    <p v-if="profitability.outsourced" class="mt-3 text-xs text-ink-soft">{{ $t('profitability.outsourced_note') }}</p>
+                </VCard>
+
                 <VCard title-key="projects.section_budget">
                     <dl class="divide-y divide-line">
                         <div class="flex justify-between py-2"><dt><Bilingual k="projects.budget" class="text-xs text-muted" /></dt><dd class="tabular-nums text-sm">{{ project.budget ?? '—' }}</dd></div>

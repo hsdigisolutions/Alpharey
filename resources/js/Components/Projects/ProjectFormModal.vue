@@ -28,6 +28,7 @@ const blank = {
     billing_type: '', vat_rate: null, jefe_de_obra: '', encargado: '', seguridad: '',
     coordinator: '', start_date: null, end_date: null, budget: null,
     estimated_hours: null, estimated_meters: null, description: '',
+    client_hour_rate: null, client_meter_rate: null, outsource_cost: null,
 };
 const form = useForm({ ...blank });
 
@@ -85,6 +86,15 @@ const billingTypes = ['fixed', 'hourly', 'per_meter', 'milestone'];
                 <FormField k="projects.jefe_de_obra"><VInput v-model="form.jefe_de_obra" /></FormField>
                 <FormField k="projects.encargado"><VInput v-model="form.encargado" /></FormField>
             </div>
+
+            <!-- Rentabilidad: what we bill the client + outsourcing cost -->
+            <p class="mt-4 mb-2 text-xs font-semibold uppercase tracking-wide text-muted">{{ $t('projects.section_profitability') }}</p>
+            <div class="grid gap-4 sm:grid-cols-3">
+                <FormField k="projects.client_hour_rate" :error="form.errors.client_hour_rate"><VCurrencyInput v-model="form.client_hour_rate" /></FormField>
+                <FormField k="projects.client_meter_rate" :error="form.errors.client_meter_rate"><VCurrencyInput v-model="form.client_meter_rate" /></FormField>
+                <FormField k="projects.outsource_cost" :error="form.errors.outsource_cost"><VCurrencyInput v-model="form.outsource_cost" /></FormField>
+            </div>
+
             <FormField k="projects.description"><VTextarea v-model="form.description" :rows="2" /></FormField>
         </form>
         <template #footer>

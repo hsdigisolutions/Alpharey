@@ -40,10 +40,14 @@ class ReportService
     /** The report modules this service can produce. */
     public const MODULES = [
         'employees', 'attendance', 'payroll', 'financial',
-        'documents', 'projects', 'commission', 'timesheet', 'deployments',
+        'documents', 'projects', 'profitability', 'commission', 'timesheet', 'deployments',
     ];
 
-    public function __construct(private readonly DocumentStatus $documentStatus) {}
+    public function __construct(
+        private readonly DocumentStatus $documentStatus,
+        private readonly ProfitabilityService $profitability,
+        private readonly CurrentCompany $currentCompany,
+    ) {}
 
     /**
      * @param  array{from?: string|null, to?: string|null}  $filters
@@ -51,6 +55,13 @@ class ReportService
      */
     public function for(string $module, array $filters): array
     {
+        // Profitability keeps the raw filters (project/client + an OPTIONAL,
+        // possibly-null range meaning "all time") rather than the year-to-date
+        // default the other modules assume.
+        if ($module === 'profitability') {
+            return $this->profitability->report($this->currentCompany->id() ?? 0, $filters);
+        }
+
         [$from, $to] = $this->range($filters);
 
         return match ($module) {

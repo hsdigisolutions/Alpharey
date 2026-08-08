@@ -16,6 +16,7 @@ use App\Models\Expense;
 use App\Models\Invoice;
 use App\Models\Project;
 use App\Services\Documents\DocumentStatus;
+use App\Services\Reports\ProfitabilityService;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 
@@ -36,7 +37,10 @@ class DashboardService
 {
     private const CACHE_TTL_SECONDS = 120;
 
-    public function __construct(private readonly DocumentStatus $documentStatus) {}
+    public function __construct(
+        private readonly DocumentStatus $documentStatus,
+        private readonly ProfitabilityService $profitability,
+    ) {}
 
     /**
      * @return array<string, mixed>
@@ -48,6 +52,7 @@ class DashboardService
             'charts' => $this->charts(),
             'expiring' => $this->expiringDocuments(),
             'activity' => $this->recentActivity($companyId),
+            'profitability' => $this->profitability->dashboardCounts($companyId),
         ]);
     }
 

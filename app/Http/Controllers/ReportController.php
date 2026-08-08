@@ -4,6 +4,8 @@ namespace App\Http\Controllers;
 
 use App\Exports\ReportExport;
 use App\Http\Controllers\Admin\Concerns\ResolvesCompanyContext;
+use App\Models\Client;
+use App\Models\Project;
 use App\Services\Reports\ReportService;
 use App\Support\CurrentCompany;
 use Barryvdh\DomPDF\Facade\Pdf;
@@ -36,6 +38,8 @@ class ReportController extends Controller
         'payroll' => 'payroll.view',
         'commission' => 'commission_reports.view',
         'financial' => 'invoices.view',
+        // Profitability exposes labour cost + margins — treat it as pay data.
+        'profitability' => 'payroll.view',
     ];
 
     public function __construct(private readonly ReportService $reports) {}
@@ -53,6 +57,12 @@ class ReportController extends Controller
             'modules' => $this->availableModules(),
             'report' => $this->canSee($module) ? $this->reports->for($module, $this->filters($request)) : null,
             'blocked' => ! $this->canSee($module),
+            // Profitability offers project + client dropdowns; other modules
+            // don't need them, so only pay for the query on that module.
+            'projectOptions' => $module === 'profitability'
+                ? Project::query()->orderBy('name')->get(['id', 'name'])->all() : [],
+            'clientOptions' => $module === 'profitability'
+                ? Client::query()->orderBy('name')->get(['id', 'name'])->all() : [],
         ]);
     }
 
@@ -99,13 +109,15 @@ class ReportController extends Controller
     }
 
     /**
-     * @return array{from: string|null, to: string|null}
+     * @return array{from: string|null, to: string|null, project_id: int|null, client_id: int|null}
      */
     private function filters(Request $request): array
     {
         return [
             'from' => $request->filled('from') ? $request->string('from')->value() : null,
             'to' => $request->filled('to') ? $request->string('to')->value() : null,
+            'project_id' => $request->filled('project_id') ? (int) $request->integer('project_id') : null,
+            'client_id' => $request->filled('client_id') ? (int) $request->integer('client_id') : null,
         ];
     }
 

@@ -33,6 +33,7 @@ class ReportExport implements FromArray, WithHeadings, WithTitle
             'attendance' => ['Empleado / Employee', 'Días / Days', 'Horas / Hours'],
             'payroll' => ['Empleado / Employee', 'Neto / Net'],
             'projects' => ['Proyecto / Project', 'Horas / Hours'],
+            'profitability' => ['Proyecto / Project', 'Cliente / Client', 'Horas / Hours', 'Ingresos / Revenue', 'Coste MO / Labour', 'Gastos / Expenses', 'Beneficio / Profit', 'Margen % / Margin %'],
             'commission' => ['Empleado / Employee', 'Proyecto / Project', '%', 'Original', 'Ajustado / Adjusted', 'Estado / Status'],
             'timesheet' => ['Empleado / Employee', 'Proyecto / Project', 'Horas / Hours'],
             'deployments' => ['Empleado / Employee', 'De / From', 'A / To', 'Proyecto / Project', 'Inicio / Start', 'Fin / End', 'Facturación / Billing', 'Estado / Status'],
@@ -51,6 +52,9 @@ class ReportExport implements FromArray, WithHeadings, WithTitle
             'attendance' => array_map(fn (array $r): array => [$r['employee'], $r['days'], $r['hours']], $this->report['by_employee']),
             'payroll' => array_map(fn (array $r): array => [$r['employee'], $r['net']], $this->report['by_employee']),
             'projects' => array_map(fn (array $r): array => [$r['project'], $r['hours']], $this->report['hours_per_project']),
+            'profitability' => array_map(fn (array $r): array => [
+                $r['project'], $r['client'], $r['hours'], $r['revenue'], $r['coste_mo'], $r['gastos'], $r['profit'], $r['margin'] ?? '—',
+            ], $this->report['rows']),
             'commission' => array_map(fn (array $r): array => [$r['employee'], $r['project'], $r['percent'], $r['original'], $r['adjusted'], $r['status']], $this->report['rows']),
             'timesheet' => array_map(fn (array $r): array => [$r['employee'], $r['project'], $r['hours']], $this->report['rows']),
             'deployments' => array_map(fn (array $r): array => [$r['employee'], $r['from'], $r['to'], $r['project'], $r['start'], $r['end'], $r['billing_method'], $r['status']], $this->report['rows']),

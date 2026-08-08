@@ -44,6 +44,11 @@ class StoreProjectRequest extends FormRequest
             'budget' => ['nullable', 'numeric', 'min:0', 'max:99999999'],
             'estimated_hours' => ['nullable', 'numeric', 'min:0'],
             'estimated_meters' => ['nullable', 'numeric', 'min:0'],
+            // Profitability: what we bill the CLIENT (revenue side) + the cost of
+            // an outsourced project. Never sensitive pay data.
+            'client_hour_rate' => ['nullable', 'numeric', 'min:0', 'max:99999999'],
+            'client_meter_rate' => ['nullable', 'numeric', 'min:0', 'max:99999999'],
+            'outsource_cost' => ['nullable', 'numeric', 'min:0', 'max:99999999'],
             'outsourced' => ['boolean'],
             'google_drive_link' => ['nullable', 'string', 'max:255'],
             'document_url' => ['nullable', 'string', 'max:255'],

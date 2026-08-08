@@ -31,6 +31,9 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $start_date
  * @property Carbon|null $end_date
  * @property bool $outsourced
+ * @property numeric-string|null $client_hour_rate
+ * @property numeric-string|null $client_meter_rate
+ * @property numeric-string|null $outsource_cost
  */
 class Project extends Model
 {
@@ -48,6 +51,7 @@ class Project extends Model
         'billing_type', 'vat_rate', 'jefe_de_obra', 'jefe_phone', 'jefe_email',
         'encargado', 'seguridad', 'coordinator', 'start_date', 'end_date',
         'budget', 'estimated_hours', 'estimated_meters', 'outsourced',
+        'client_hour_rate', 'client_meter_rate', 'outsource_cost',
         'outsourced_employee_id', 'google_drive_link', 'document_url',
         'forma_de_pago', 'fecha_de_cobro', 'pre_invoice_rule', 'invoice_rule',
         'due_rule', 'color_code', 'description',
@@ -65,6 +69,9 @@ class Project extends Model
             'budget' => 'decimal:2',
             'estimated_hours' => 'decimal:2',
             'estimated_meters' => 'decimal:2',
+            'client_hour_rate' => 'decimal:2',
+            'client_meter_rate' => 'decimal:2',
+            'outsource_cost' => 'decimal:2',
             'outsourced' => 'boolean',
         ];
     }

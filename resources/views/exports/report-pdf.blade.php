@@ -45,6 +45,8 @@
         $table = match ($module) {
             'attendance', 'payroll' => $report['by_employee'] ?? [],
             'projects' => $report['hours_per_project'] ?? [],
+            // Drop the internal project_id (a drill-down key) from the printout.
+            'profitability' => array_map(fn ($r) => Illuminate\Support\Arr::except($r, 'project_id'), $report['rows'] ?? []),
             'commission', 'timesheet', 'deployments' => $report['rows'] ?? [],
             'financial' => $report['unpaid_invoices'] ?? [],
             default => [],

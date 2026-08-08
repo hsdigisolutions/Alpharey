@@ -13,6 +13,7 @@ use App\Models\Expense;
 use App\Models\Invoice;
 use App\Models\Project;
 use App\Services\Documents\DocumentStatus;
+use App\Services\Reports\ProfitabilityService;
 use App\Support\CurrentCompany;
 use App\Support\DocumentTypes;
 use Illuminate\Database\Eloquent\Builder;
@@ -118,7 +119,7 @@ class ProjectController extends Controller
         ];
     }
 
-    public function show(Project $project, DocumentStatus $status): Response
+    public function show(Project $project, DocumentStatus $status, ProfitabilityService $profitability): Response
     {
         Gate::authorize('projects.view');
 
@@ -131,6 +132,9 @@ class ProjectController extends Controller
                 'estimated_hours', 'estimated_meters', 'outsourced', 'google_drive_link',
                 'document_url', 'forma_de_pago', 'fecha_de_cobro', 'color_code', 'description',
             ]), [
+                'client_hour_rate' => $project->client_hour_rate !== null ? (float) $project->client_hour_rate : null,
+                'client_meter_rate' => $project->client_meter_rate !== null ? (float) $project->client_meter_rate : null,
+                'outsource_cost' => $project->outsource_cost !== null ? (float) $project->outsource_cost : null,
                 'status' => $project->status->value,
                 'priority' => $project->priority->value,
                 'billing_type' => $project->billing_type?->value,
@@ -181,6 +185,10 @@ class ProjectController extends Controller
             'expenses' => Gate::allows('expenses.view') ? $this->projectExpenses($project) : [],
             'canViewInvoices' => Gate::allows('invoices.view'),
             'canViewExpenses' => Gate::allows('expenses.view'),
+            // Profitability (P&L) for the Resumen tab — labour cost + margins,
+            // so gated by the same wage right as the workers' rates.
+            'canSeeWages' => $canSeeWages,
+            'profitability' => $canSeeWages ? $profitability->forProject($project, null, null, false) : null,
             'can' => [
                 'edit' => Gate::allows('projects.edit'),
                 'delete' => Gate::allows('projects.delete'),

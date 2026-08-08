@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Status: Phase 9 in progress — hardening (2026-08-01)
 
 **Every screen 01–26 is built (Phase 8 complete).** Phase 9 is hardening, UAT, and
-launch — no new screens. Current: **702 Pest tests / 4094 assertions passing (1
+launch — no new screens. Current: **712 Pest tests / 4154 assertions passing (1
 skipped) · Pint clean · Larastan level 6 clean · `composer audit` + `npm audit`
 clean · production Vite build working.**
 
@@ -53,6 +53,45 @@ weekend work **FS** in coral on both the standalone grid and the employee tab. *
 the bulk "Vino / No vino / No convocado" distinction has no data difference (No
 vino/No convocado both = no record, no penalty), so selection = "came"; the notice
 explains it. Follow-up if the client wants those states persisted.
+
+### Project Profitability report — P&L per project (2026-08-08)
+
+Revenue − cost per project, all server-side + company-scoped. Migration
+`2026_08_08_000002_add_billing_rates_to_projects` adds `client_hour_rate`,
+`client_meter_rate` (revenue side) and `outsource_cost` to `projects` (nullable,
+plain decimals — not pay data; in `$fillable`, form rules on
+`StoreProjectRequest`, form fields in `ProjectFormModal`).
+
+**`App\Services\Reports\ProfitabilityService`** is the single authority:
+- **Revenue** by `billing_type`: `hourly` → `client_hour_rate × Σ hours`;
+  `per_meter` → `client_meter_rate × Σ metres` (metres = `Σ quantity WHERE
+  day_type=per_meter`); everything else (`fixed`/`milestone`) → `Σ paid SALE
+  invoices`.
+- **Cost** = labour (`Σ attendance.total_amount`) + approved project expenses
+  (`expenses.total WHERE approved`) + paid subcontractor payments. An
+  **outsourced** project swaps its own labour for the flat `outsource_cost`
+  (attendance labour ignored). Subcontractor auto-expenses are created
+  `approved=false`, so summing *approved* expenses never double-counts them —
+  paid subcontractor payments are added separately.
+- **Margin** = profit/revenue×100; health **> 15 green · 5–15 amber · < 5 or
+  negative red** (no revenue with a cost = red; nothing = neutral).
+- Cached per company (`Cache::remember`, 600s) behind a signature = MAX(updated_at)
+  of attendance/expenses/projects/subcontractor payments, so a new punch or
+  expense mints a fresh key and the P&L recomputes — no observers.
+
+**Surfaces:** (1) Project Detail → **Resumen** tab profitability card (gated by
+`payroll.view || employees.edit`, colour-coded margin). (2) Reports → new
+**`profitability`** module (gate `payroll.view`) with company + client + project
+filters; company-wide colour-coded table, and a day + month drill-down when a
+project is selected (breakdowns are labour-basis, matching the spec examples).
+PDF + Excel export both handle it (`ReportExport` + `report-pdf.blade`; the PDF
+drops the internal `project_id`). (3) Dashboard → profitability widget
+(profitable/at-risk/loss counts) via `DashboardService` +
+`ProfitabilityService::dashboardCounts()`. Tests: `ProfitabilityTest` (10 —
+hourly/per-meter/fixed/outsourced/subcontractor math, margin traffic light,
+dashboard tally + tenancy, day/month breakdown, report gating). The worked
+example (client 20/h · 320 h · labour 4.640 · gastos 450 → ingresos 6.400 ·
+beneficio 1.310 · margen 20,5 %) is pinned by the hourly test's ratios.
 
 ### Nightly auto-absent sweep (2026-08-08)
 
