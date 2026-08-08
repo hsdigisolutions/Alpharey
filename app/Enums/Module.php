@@ -38,26 +38,35 @@ enum Module: string
     {
         $a = PermissionAction::class;
 
+        // Only actions a real gate checks are shown — a toggle that grants a
+        // permission no code reads would mislead the admin. Modules omit Export
+        // when they have no export feature, Approve when they have no approval
+        // workflow, Delete when the record is never deleted.
         return match ($this) {
-            self::Employees => [$a::View, $a::Create, $a::Edit, $a::Delete, $a::Export, $a::Approve],
+            // Modules with a full CRUD + Excel/PDF export.
+            self::Employees,
             self::Projects,
             self::Clients,
+            self::Invoices,
+            self::Proposals => [$a::View, $a::Create, $a::Edit, $a::Delete, $a::Export],
+            // CRUD without an export feature.
             self::Vendors,
             self::Vehicles,
             self::Inventory,
-            self::Subcontractors,
-            self::Proposals => [$a::View, $a::Create, $a::Edit, $a::Delete, $a::Export],
-            self::Invoices,
-            self::Expenses,
-            self::Deployments => [$a::View, $a::Create, $a::Edit, $a::Delete, $a::Export, $a::Approve],
+            self::Subcontractors => [$a::View, $a::Create, $a::Edit, $a::Delete],
+            self::Expenses => [$a::View, $a::Create, $a::Edit, $a::Delete, $a::Export, $a::Approve],
+            // Deployments: create → complete/cancel + a cross-charge approval;
+            // never deleted (decision 25), no export.
+            self::Deployments => [$a::View, $a::Create, $a::Edit, $a::Approve],
             self::Attendance => [$a::View, $a::Create, $a::Edit, $a::Delete, $a::Export],
             self::Payroll => [$a::View, $a::Create, $a::Edit, $a::Download, $a::Export, $a::Approve],
-            self::Documents => [$a::View, $a::Delete, $a::Upload, $a::Download, $a::Export, $a::Approve],
+            self::Documents => [$a::View, $a::Delete, $a::Upload, $a::Download, $a::Approve],
             self::Reports => [$a::View, $a::Export],
             self::CallPanel => [$a::View, $a::Create, $a::Edit, $a::Delete],
             self::CommissionReports => [$a::View, $a::Edit, $a::Export, $a::Approve],
+            // Leave + Measurements: CRUD + approval, no export feature.
             self::LeaveManagement,
-            self::Measurements => [$a::View, $a::Create, $a::Edit, $a::Delete, $a::Export, $a::Approve],
+            self::Measurements => [$a::View, $a::Create, $a::Edit, $a::Delete, $a::Approve],
         };
     }
 }

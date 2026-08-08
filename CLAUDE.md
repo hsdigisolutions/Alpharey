@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Status: Phase 9 in progress — hardening (2026-08-01)
 
 **Every screen 01–26 is built (Phase 8 complete).** Phase 9 is hardening, UAT, and
-launch — no new screens. Current: **749 Pest tests / 4289 assertions passing (1
+launch — no new screens. Current: **753 Pest tests / 4384 assertions passing (1
 skipped) · Pint clean · Larastan level 6 clean · `composer audit` + `npm audit`
 clean · production Vite build working.**
 
@@ -198,6 +198,29 @@ hourly/per-meter/fixed/outsourced/subcontractor math, margin traffic light,
 dashboard tally + tenancy, day/month breakdown, report gating). The worked
 example (client 20/h · 320 h · labour 4.640 · gastos 450 → ingresos 6.400 ·
 beneficio 1.310 · margen 20,5 %) is pinned by the hourly test's ratios.
+
+### Permission matrix cleanup — no dead toggles (2026-08-09)
+
+Audited every module × action in the matrix against real gate usage. The Module
+enum's 19 cases cover every gated prefix (no orphan gates), but `Module::actions()`
+was offering **11 toggles no code checked** — each one misled an admin into
+thinking they had granted something. Removed:
+
+- `employees.approve`, `invoices.approve` — neither module has an approval
+  workflow (invoices are drafted → paid).
+- `deployments.delete` — deployments are create → complete/cancel, never deleted
+  (decision 25).
+- `export` on Documents / Vendors / Vehicles / Leave / Measurements / Inventory /
+  Deployments / Subcontractors — those modules have no export feature.
+
+New guard: `PermissionFuzzTest` "offers no dead toggle" reads every app + resources
+source file and asserts each matrix-applicable ability appears in the code, so a
+future non-functional toggle fails the suite. (Gate REGISTRATION is unchanged —
+all 19×8 gates still exist; only the grantable/visible set in the matrix shrank.)
+
+Not gaps (verified): Compliance is gated `documents.view`; Today's Report follows
+the Dashboard pattern (open to authenticated users, pay data stripped without
+`payroll.view`).
 
 ### Project Detail: Attendance + Measurements tabs (2026-08-09)
 

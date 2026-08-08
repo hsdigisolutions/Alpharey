@@ -171,3 +171,25 @@ it('registers a gate for every module and action (no ability left undefined)', f
         expect(Gate::has($ability))->toBeTrue("ability {$ability} must be a defined gate");
     }
 });
+
+it('offers no dead toggle — every applicable ability is checked in the code', function (): void {
+    // Read every app + frontend source file once; each matrix-applicable ability
+    // must appear somewhere (a Gate::allows/authorize, can:, or a Vue can.* prop).
+    $haystack = '';
+    foreach ([base_path('app'), base_path('resources')] as $dir) {
+        $it = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($dir, FilesystemIterator::SKIP_DOTS));
+        foreach ($it as $file) {
+            if (in_array($file->getExtension(), ['php', 'vue'], true)) {
+                $haystack .= file_get_contents($file->getPathname());
+            }
+        }
+    }
+
+    foreach (Module::cases() as $module) {
+        foreach ($module->actions() as $action) {
+            $ability = $module->value.'.'.$action->value;
+            expect(str_contains($haystack, $ability))
+                ->toBeTrue("the permission matrix offers '{$ability}' but no code checks it (dead toggle)");
+        }
+    }
+});
