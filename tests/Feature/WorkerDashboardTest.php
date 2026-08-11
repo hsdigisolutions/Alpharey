@@ -17,9 +17,14 @@ beforeEach(function (): void {
     $this->service = app(WorkerDashboardService::class);
 });
 
-it('counts present and absent days and sums hours and pay', function (): void {
+it('counts present and absent days and sums hours', function (): void {
+    // Fix "today" to Thu 7 May so the past-weekday window is deterministic.
+    $this->travelTo('2026-05-07 10:00');
+    $this->employee->update(['joining_date' => '2026-05-04']);
     $month = '2026-05';
 
+    // Mon 4 + Tue 5 present, Wed 6 a recorded absence. Today (Thu 7) is still
+    // in progress, so there is no gap weekday to compute.
     Attendance::factory()->create([
         'company_id' => $this->company->id, 'employee_id' => $this->employee->id,
         'date' => "$month-04", 'status' => 'present', 'hours_worked' => '8', 'total_amount' => '160',
@@ -41,9 +46,13 @@ it('counts present and absent days and sums hours and pay', function (): void {
         // No 'earned' — workers never see money amounts (client rule 2026-08-08).
         ->and($data)->not->toHaveKey('earned')
         ->and($data['calendar'])->toHaveCount(31); // May has 31 days
+
+    $this->travelBack();
 });
 
 it('marks each calendar day with the right status', function (): void {
+    $this->travelTo('2026-05-04 10:00'); // today = Mon 4 May
+    $this->employee->update(['joining_date' => '2026-05-04']);
     $month = '2026-05';
 
     Attendance::factory()->create([
@@ -57,18 +66,38 @@ it('marks each calendar day with the right status', function (): void {
     // 4 May 2026 is a Monday (weekday 0) with a present record.
     expect($byDay[4]['status'])->toBe('present')
         ->and($byDay[4]['weekday'])->toBe(0)
-        // A day with no record is grey, never auto-marked absent.
+        // 7 May is in the future (today is the 4th) — grey, not absent.
         ->and($byDay[7]['status'])->toBe('none')
         // 3 May 2026 is a Sunday — grey.
         ->and($byDay[3]['status'])->toBe('none');
+
+    $this->travelBack();
 });
 
-it('never counts a day with no record as an absence', function (): void {
-    // The app must not accuse a worker of an absence they never reported.
-    $data = $this->service->forMonth($this->employee, '2026-05');
+it('counts a past weekday with no record as an absence', function (): void {
+    // Fix 2 (client 2026-08-11): a weekday the worker was employed for, with no
+    // attendance at all, IS an absence — shown live, before the nightly sweep.
+    $this->travelTo('2026-05-08 10:00'); // today = Fri 8 May
+    $this->employee->update(['joining_date' => '2026-05-04']);
 
-    expect($data['absent'])->toBe(0)
-        ->and($data['present'])->toBe(0);
+    // Only Mon 4 present. Tue 5, Wed 6, Thu 7 are past weekdays with no record.
+    Attendance::factory()->create([
+        'company_id' => $this->company->id, 'employee_id' => $this->employee->id,
+        'date' => '2026-05-04', 'status' => 'present', 'hours_worked' => '8', 'total_amount' => '160',
+    ]);
+
+    $data = $this->service->forMonth($this->employee, '2026-05');
+    $byDay = collect($data['calendar'])->keyBy('day');
+
+    expect($data['present'])->toBe(1)
+        ->and($data['absent'])->toBe(3)
+        // A computed (no-row) absence is flagged so the UI shades it lighter.
+        ->and($byDay[7]['status'])->toBe('absent')
+        ->and($byDay[7]['is_auto_generated'])->toBeTrue()
+        // A day before the joining date is never the worker's absence.
+        ->and($byDay[1]['status'])->toBe('none');
+
+    $this->travelBack();
 });
 
 it('only ever sees the worker\'s own rows', function (): void {

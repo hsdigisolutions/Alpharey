@@ -21,15 +21,24 @@ worker-direct notifications only — nothing with a euro figure reaches the wire
 not merely the UI. Tests in `WorkerFeaturesTest` now assert those props are
 `missing` from the payload.
 
-**Locale-aware calendar labels + legend.** `Worker/Components/MonthCalendar.vue`
-no longer shows bare letters (C/M/P). Each cell renders a short code through a
-translation key so it follows the worker's language: full → **PF/FD** (green),
-half → **PH/HD** (amber), partial hours → the actual hours e.g. `2h` (blue),
-absent → **AU/AB** (light red, lighter when auto-generated via the new
-`is_auto_generated` cell flag), leave → **PE/LV** (blue), weekend worked →
-**FS/WE** (purple), weekend-no-work → empty grey. A locale-aware legend sits
-under the grid (the old duplicate legend in `Home.vue` was removed). Keys:
-`worker.cal_*` + `worker.legend_*` in both dictionaries.
+**Calendar labels + legend.** `Worker/Components/MonthCalendar.vue` no longer
+shows bare Spanish letters (C/M/P). Each cell renders a short code — **the SAME
+in both languages** (client request 2026-08-11): full → **PF** (green), half →
+**PH** (amber), partial hours → the actual hours e.g. `2h` (blue), absent → **A**
+(light red, lighter when auto-generated or computed), leave → **L** (blue),
+weekend worked → **WE** (purple), weekend-no-work → empty grey. The legend words
+under the grid stay locale-aware (Completo/Full day …). Keys: `worker.cal_*` +
+`worker.legend_*`.
+
+**Absent count is live, not cron-dependent.** `WorkerDashboardService::cellStatus`
+now treats a PAST weekday the worker was employed for (≥ `joining_date`, not a
+weekend, before today) with NO attendance row as an **absence** — shown
+immediately so "Days absent" is right without waiting for the nightly
+`attendance:auto-absent` sweep (which later writes the real row; the two agree).
+A computed absence carries `is_auto_generated = true` so the cell shades lighter
+than a manually-entered one. This reverses the earlier "never mark an unrecorded
+day absent" rule (`WorkerDashboardTest` updated to pin the new behaviour with a
+fixed clock + joining date).
 
 **Locale-aware weekday headers.** The calendar column headers were hardcoded
 Spanish single letters (`L M X J V S D`) — unreadable in English (X = Wednesday).

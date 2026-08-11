@@ -66,7 +66,7 @@ class WorkerDashboardService
         $cursor = $start->copy();
         while ($cursor->lte($end)) {
             $row = $byDate->get($cursor->toDateString());
-            $status = $this->cellStatus($row, $cursor, $today);
+            $status = $this->cellStatus($row, $cursor, $today, $employee->joining_date);
 
             if ($status === 'present') {
                 $present++;
@@ -85,8 +85,9 @@ class WorkerDashboardService
                 'hours' => $row !== null ? (float) $row->hours_worked : null,
                 'quantity' => $row !== null && $row->quantity !== null ? (float) $row->quantity : null,
                 'project' => $row?->project?->name,
-                // A nightly auto-absence is shaded lighter than a manual one.
-                'is_auto_generated' => $row !== null && $row->is_auto_generated,
+                // A manual absence is solid red; a nightly auto-absence AND a
+                // computed no-record absence (no row yet) are shaded lighter.
+                'is_auto_generated' => $row !== null ? $row->is_auto_generated : ($status === 'absent'),
                 // The one day the worker can actually act on — highlighted, and
                 // it is the only date any punch ever writes to (server-enforced).
                 'is_today' => $cursor->isSameDay($today),
@@ -119,7 +120,7 @@ class WorkerDashboardService
      *  - leave   : an approved leave day (blue, shown distinct from absent)
      *  - none    : grey — a weekend, a future date, or a day with no record yet
      */
-    private function cellStatus(?Attendance $row, Carbon $day, Carbon $today): string
+    private function cellStatus(?Attendance $row, Carbon $day, Carbon $today, ?Carbon $joiningDate): string
     {
         if ($row !== null) {
             if (in_array($row->status->value, self::WORKED, true)) {
@@ -129,16 +130,22 @@ class WorkerDashboardService
             return $row->status->value; // absent | leave
         }
 
-        // No record. A future date or a weekend is simply grey, not "absent" —
-        // a worker has not failed to show up for a day that has not happened,
-        // or for a Sunday.
-        if ($day->isWeekend() || $day->gt($today)) {
+        // No record. A weekend, today (not over yet), or a future date is grey —
+        // a worker has not failed to show up for a day that has not happened, or
+        // for a Sunday.
+        if ($day->isWeekend() || $day->gte($today)) {
             return 'none';
         }
 
-        // A past weekday with no record: still grey, not auto-marked absent.
-        // Absence is a positive act (the worker reports it, or a clerk enters
-        // it); the app must not accuse someone of an absence they never had.
-        return 'none';
+        // A day before the worker joined is not their absence.
+        if ($joiningDate !== null && $day->lt($joiningDate->copy()->startOfDay())) {
+            return 'none';
+        }
+
+        // A PAST weekday the worker was employed for, with no record at all =
+        // an absence (Fix 2: "no check-in on a weekday = Absent"). Shown live so
+        // the count is right immediately, without waiting for the nightly
+        // attendance:auto-absent sweep — which later writes the real row.
+        return 'absent';
     }
 }

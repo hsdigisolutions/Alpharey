@@ -1387,12 +1387,14 @@ return [
         'legend_present' => 'Presente',
         'legend_absent' => 'Ausente',
         'legend_none' => 'Sin registro',
-        // Calendar cell codes (short) + legend labels (long). Locale-aware.
+        // Calendar cell codes — the SAME short codes in both languages (client
+        // request 2026-08-11): PF / PH / A / L / WE. The legend words below stay
+        // locale-aware.
         'cal_full' => 'PF',
         'cal_half' => 'PH',
-        'cal_absent' => 'AU',
-        'cal_leave' => 'PE',
-        'cal_weekend' => 'FS',
+        'cal_absent' => 'A',
+        'cal_leave' => 'L',
+        'cal_weekend' => 'WE',
         'legend_full' => 'Completo',
         'legend_half' => 'Media',
         'legend_leave' => 'Permiso',
