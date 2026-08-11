@@ -8,6 +8,7 @@ use App\Models\Attendance;
 use App\Models\Employee;
 use App\Models\Project;
 use App\Models\Scopes\CompanyScope;
+use App\Services\Attendance\AttendanceService;
 use App\Services\Workers\WorkerAttendanceService;
 use App\Services\Workers\WorkerDashboardService;
 use App\Support\NotificationPresenter;
@@ -46,7 +47,7 @@ class WorkerController extends Controller
                 'company' => $employee->company?->name,
                 'can_use_vehicles' => $employee->can_use_vehicles,
             ],
-            'today' => $this->todayPayload($today),
+            'today' => $this->todayPayload($today, $this->fullDayThreshold($employee)),
             // Weekend gating: a Sat/Sun is a rest day unless an admin offer
             // invites this worker (then the offer's project is shown + check-in
             // is allowed). Weekdays are always workable.
@@ -166,6 +167,16 @@ class WorkerController extends Controller
     }
 
     /**
+     * The company's full-day threshold (hours) — the target that turns the
+     * check-out button from amber (day not yet complete) to green.
+     */
+    private function fullDayThreshold(Employee $employee): float
+    {
+        return app(AttendanceService::class)
+            ->dayTypeThresholds((int) $employee->company_id)['full'];
+    }
+
+    /**
      * Today's status for the home screen — enough for the check-in confirmation
      * card and the check-out day summary. The project name is loaded with the
      * tenant scope DROPPED: a worker has no CRM session, so a scoped read comes
@@ -174,7 +185,7 @@ class WorkerController extends Controller
      *
      * @return array<string, mixed>
      */
-    private function todayPayload(?Attendance $today): array
+    private function todayPayload(?Attendance $today, float $fullDayThreshold): array
     {
         if ($today === null) {
             return ['state' => 'none'];
@@ -202,6 +213,9 @@ class WorkerController extends Controller
             // the phone↔server offset).
             'check_in_at' => $today->check_in_at?->toIso8601String(),
             'hours' => $today->check_out !== null ? (float) $today->hours_worked : null,
+            // The full-day target (hours) so the check-out button can turn green
+            // once the worker has put in a full day, amber before that.
+            'full_day_threshold' => $fullDayThreshold,
             'project' => $project,
             // Evidence the GPS fix landed — drives the "ubicación capturada"
             // line and the amber "no capturada" warning on the confirmation.

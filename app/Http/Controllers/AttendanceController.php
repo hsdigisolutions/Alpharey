@@ -16,6 +16,7 @@ use App\Models\ProjectEmployeeRate;
 use App\Models\Scopes\CompanyScope;
 use App\Services\Attendance\AttendanceService;
 use App\Services\Audit\AuditLogger;
+use App\Support\AttendanceAbsence;
 use App\Support\CurrentCompany;
 use App\Support\PeriodLock;
 use Illuminate\Http\RedirectResponse;
@@ -43,16 +44,17 @@ class AttendanceController extends Controller
         $start = $month->copy()->startOfMonth();
         $end = $month->copy()->endOfMonth();
 
-        // Own active employees…
-        $employees = Employee::query()->where('active', true)->orderBy('full_name')
-            ->get(['id', 'full_name', 'designation'])
-            ->map(fn (Employee $e): array => [
-                'id' => $e->id,
-                'full_name' => $e->full_name,
-                'designation' => $e->designation,
-                'deployed' => false,
-                'home_company' => null,
-            ]);
+        // Own active employees… (joining_date kept for the live-absence sweep).
+        $ownEmployees = Employee::query()->where('active', true)->orderBy('full_name')
+            ->get(['id', 'full_name', 'designation', 'joining_date']);
+
+        $employees = $ownEmployees->map(fn (Employee $e): array => [
+            'id' => $e->id,
+            'full_name' => $e->full_name,
+            'designation' => $e->designation,
+            'deployed' => false,
+            'home_company' => null,
+        ]);
 
         // …plus employees from OTHER companies deployed INTO this one whose
         // deployment overlaps the shown month (Phase 5 — they log hours against
@@ -100,6 +102,39 @@ class AttendanceController extends Controller
                 'has_voice_note' => $notedAttendanceIds->has($record->id),
                 'location_mismatch' => (bool) $record->location_mismatch,
             ];
+        }
+
+        // Live absences: an own employee's unrecorded past weekday (on/after
+        // joining) is shown as an auto-absence immediately — the same rule the
+        // worker PWA uses (AttendanceAbsence), so both views agree without
+        // waiting for the nightly attendance:auto-absent sweep. Deployed-in
+        // workers are excluded (their HOME company owns their absences).
+        $today = now()->startOfDay();
+        $virtualAbsences = [];
+        foreach ($ownEmployees as $emp) {
+            $cursor = $start->copy();
+            while ($cursor->lte($end)) {
+                $day = (int) $cursor->format('j');
+                if (! isset($grid[$emp->id][$day])
+                    && AttendanceAbsence::isUnrecordedAbsence($cursor, $today, $emp->joining_date)) {
+                    $grid[$emp->id][$day] = [
+                        'id' => null, // no real row — clicking it opens "new entry"
+                        'status' => 'absent',
+                        'day_type' => null,
+                        'is_weekend' => false,
+                        'is_auto' => true, // lighter shade, like a nightly auto-absence
+                        'is_auto_detected' => false,
+                        'is_overridden' => false,
+                        'hours' => 0.0,
+                        'quantity' => null,
+                        'project' => null,
+                        'has_voice_note' => false,
+                        'location_mismatch' => false,
+                    ];
+                    $virtualAbsences[$emp->id] = ($virtualAbsences[$emp->id] ?? 0) + 1;
+                }
+                $cursor->addDay();
+            }
         }
 
         // When the acting user can see wage data, compute a per-employee hourly
@@ -165,6 +200,25 @@ class AttendanceController extends Controller
                     : null,
             ];
         });
+
+        // Fold the live absences into the "Absences" column so the summary and
+        // the grid agree. An employee with ONLY live absences gets a fresh row.
+        foreach ($virtualAbsences as $empId => $count) {
+            if ($summary->has($empId)) {
+                $row = $summary->get($empId);
+                $row['absences'] += $count;
+                $summary->put($empId, $row);
+            } else {
+                $summary->put($empId, [
+                    'days_present' => 0,
+                    'hours' => 0.0,
+                    'overtime' => 0.0,
+                    'absences' => $count,
+                    'leave' => 0,
+                    'total_wage' => $canSeeWage ? 0.0 : null,
+                ]);
+            }
+        }
 
         // When ?edit=ID is present the frontend requests it as a partial
         // reload (Inertia `only: ['editing']`) to populate the edit modal.

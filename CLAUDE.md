@@ -30,15 +30,22 @@ weekend worked → **WE** (purple), weekend-no-work → empty grey. The legend w
 under the grid stay locale-aware (Completo/Full day …). Keys: `worker.cal_*` +
 `worker.legend_*`.
 
-**Absent count is live, not cron-dependent.** `WorkerDashboardService::cellStatus`
-now treats a PAST weekday the worker was employed for (≥ `joining_date`, not a
-weekend, before today) with NO attendance row as an **absence** — shown
-immediately so "Days absent" is right without waiting for the nightly
-`attendance:auto-absent` sweep (which later writes the real row; the two agree).
-A computed absence carries `is_auto_generated = true` so the cell shades lighter
-than a manually-entered one. This reverses the earlier "never mark an unrecorded
-day absent" rule (`WorkerDashboardTest` updated to pin the new behaviour with a
-fixed clock + joining date).
+**Absent count is live, not cron-dependent — across ALL calendars.** A PAST
+weekday the worker was employed for (≥ `joining_date`, not a weekend, before
+today) with NO attendance row is shown as an **absence** immediately, without
+waiting for the nightly `attendance:auto-absent` sweep (which later writes the
+real row; the two agree). The rule lives in ONE place — `App\Support\
+AttendanceAbsence::isUnrecordedAbsence()` — and all three calendars call it so
+they **agree by construction**: the worker PWA (`WorkerDashboardService`), the
+standalone admin grid (`AttendanceController::index` — adds a virtual `id:null`
+absent cell + folds the count into the summary's Absences), and the Employee
+detail → Asistencia tab (`EmployeeController::attendanceTabPayload`). A computed
+absence carries `is_auto = true` so the cell shades lighter; its `id` is null so
+clicking it opens "new entry" (record what really happened). Deployed-in workers
+are excluded from the host grid (their HOME company owns their absences). This
+reverses the earlier "never mark an unrecorded day absent" rule. Tests:
+`WorkerDashboardTest`, `AttendanceTest` (grid cell + summary), and
+`EmployeeAttendanceTabTest` each pin it with a fixed clock + joining date.
 
 **Locale-aware weekday headers.** The calendar column headers were hardcoded
 Spanish single letters (`L M X J V S D`) — unreadable in English (X = Wednesday).

@@ -6,6 +6,7 @@
  */
 import { computed, ref } from 'vue';
 import { Head, router, usePage } from '@inertiajs/vue3';
+import { t } from '@/translate';
 import { ensureCompanySelected } from '@/composables/useCompanyGate';
 import AppIcon from '@/Components/AppIcon.vue';
 import AppLayout from '@/Layouts/AppLayout.vue';
@@ -59,15 +60,16 @@ function cellClass(cell) {
     return dayTypeStyle[cell.day_type] ?? cellStyle.present;
 }
 
-// Marker: FS weekend · C completa · M media · hours for hourly · metres for per-meter · A absent.
+// Marker uses the SAME codes as the worker PWA (single source, client request):
+// WE weekend · PF full · PH half · A absent · L leave · hours/metres otherwise.
 function cellContent(cell) {
     if (!cell) return '';
-    if (cell.status === 'absent') return 'A';
-    if (cell.status === 'leave') return 'V';
-    if (cell.is_weekend) return 'FS';
+    if (cell.status === 'absent') return t('worker.cal_absent');   // A
+    if (cell.status === 'leave') return t('worker.cal_leave');     // L
+    if (cell.is_weekend) return t('worker.cal_weekend');           // WE
     switch (cell.day_type) {
-        case 'full': return 'C';
-        case 'half': return 'M';
+        case 'full': return t('worker.cal_full');   // PF
+        case 'half': return t('worker.cal_half');   // PH
         case 'per_meter': return cell.quantity ?? '·';
         default: return cell.hours;
     }
@@ -127,7 +129,9 @@ function openCell(employeeId, day) {
     const cell = props.grid[employeeId]?.[day];
     const date = `${props.month}-${String(day).padStart(2, '0')}`;
 
-    if (cell) {
+    // A live-computed absence (no real row) has id === null — open "new entry"
+    // for that day so an admin can record what actually happened.
+    if (cell && cell.id) {
         // Fetch the full record via partial reload, then open
         router.get('/attendance', { month: props.month, edit: cell.id }, {
             preserveScroll: true, preserveState: true, only: ['editing'],

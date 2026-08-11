@@ -101,30 +101,6 @@ function select(cell) {
             </button>
         </div>
 
-        <!-- Legend — locale-aware codes so the grid is legible in ES or EN. -->
-        <div class="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-ink-soft">
-            <span class="flex items-center gap-1">
-                <span class="inline-block h-2.5 w-2.5 rounded-sm bg-status-ok-soft" />
-                {{ t('worker.cal_full') }} {{ t('worker.legend_full') }}
-            </span>
-            <span class="flex items-center gap-1">
-                <span class="inline-block h-2.5 w-2.5 rounded-sm bg-status-warn-soft" />
-                {{ t('worker.cal_half') }} {{ t('worker.legend_half') }}
-            </span>
-            <span class="flex items-center gap-1">
-                <span class="inline-block h-2.5 w-2.5 rounded-sm bg-status-danger-soft" />
-                {{ t('worker.cal_absent') }} {{ t('worker.legend_absent') }}
-            </span>
-            <span class="flex items-center gap-1">
-                <span class="inline-block h-2.5 w-2.5 rounded-sm bg-status-info-soft" />
-                {{ t('worker.cal_leave') }} {{ t('worker.legend_leave') }}
-            </span>
-            <span class="flex items-center gap-1">
-                <span class="inline-block h-2.5 w-2.5 rounded-sm bg-accent-soft" />
-                {{ t('worker.cal_weekend') }} {{ t('worker.legend_weekend') }}
-            </span>
-        </div>
-
         <!-- Tapped-day detail -->
         <div v-if="selected" class="mt-3 rounded-lg border border-line bg-surface-sunken p-3 text-sm">
             <div class="mb-1 flex items-center justify-between">

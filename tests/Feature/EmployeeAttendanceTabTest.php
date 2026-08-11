@@ -33,6 +33,31 @@ it('returns a month grid and summary on the attendance tab', function (): void {
         );
 });
 
+it('marks an unrecorded past weekday as a live absence on the tab', function (): void {
+    $this->actingAs($this->admin);
+    // today = Fri 3 Jul 2026; joined Wed 1 Jul. Wed present, Thu no record → a
+    // live absence; Fri (today) is still in progress.
+    $this->travelTo('2026-07-03 10:00');
+    $this->employee->update(['joining_date' => '2026-07-01']);
+    app(AttendanceService::class)->create([
+        'employee_id' => $this->employee->id, 'date' => '2026-07-01',
+        'mode' => 'project_based', 'day_type' => 'full', 'status' => 'present',
+    ]);
+
+    $this->get("/employees/{$this->employee->id}?att_month=2026-07")
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('attendanceTab.summary.present', 1)
+            ->where('attendanceTab.summary.absences', 1)        // Thu 2 Jul
+            ->where('attendanceTab.summary.auto_absences', 1)
+            ->where('attendanceTab.grid.2.status', 'absent')
+            ->where('attendanceTab.grid.2.is_auto', true)
+            ->where('attendanceTab.grid.2.id', null)
+        );
+
+    $this->travelBack();
+});
+
 it('hides the wage total from a viewer without wage access', function (): void {
     // A manager with employees.view + attendance.view but NOT payroll.view / employees.edit.
     $user = User::factory()->forCompany($this->company)->create();

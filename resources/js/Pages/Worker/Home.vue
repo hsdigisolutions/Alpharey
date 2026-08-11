@@ -96,7 +96,9 @@ onUnmounted(() => {
     if (bellTimer) clearInterval(bellTimer);
 });
 
-const workedSoFar = computed(() => {
+// Live worked hours (decimal) since check-in — the source for both the "Hours"
+// readout and the check-out button state.
+const workedHours = computed(() => {
     // Use the absolute check-in instant (UTC/ISO) so the elapsed time is correct
     // regardless of the phone's timezone. Falls back to the "HH:mm" label only if
     // the timestamp is missing (legacy rows).
@@ -109,10 +111,16 @@ const workedSoFar = computed(() => {
         s.setHours(hh, mm, 0, 0);
         startMs = s.getTime();
     }
-    if (startMs === null || Number.isNaN(startMs)) return hoursHM(0);
+    if (startMs === null || Number.isNaN(startMs)) return 0;
     const diff = (nowTs.value - startMs) / 3600000;
-    return hoursHM(diff > 0 ? diff : 0);
+    return diff > 0 ? diff : 0;
 });
+
+const workedSoFar = computed(() => hoursHM(workedHours.value));
+
+// Has the worker put in a full day? Drives the check-out button colour:
+// green once the full-day threshold is met, amber (a warning) before that.
+const dayComplete = computed(() => workedHours.value >= (props.today.full_day_threshold ?? 8));
 
 // --- Check IN: selfie, then a GPS fix, then submit ---
 const camera = ref(null);
@@ -415,9 +423,13 @@ const noteTextForm = useForm({ attendance_id: null, text_note: '', duration_seco
             </div>
 
             <p v-if="statusLine" class="mb-2 text-center text-xs text-muted">{{ statusLine }}</p>
-            <VButton variant="secondary" class="w-full" size="lg" :loading="busy" @click="openCheckOut">
+            <!-- Green once a full day is in, amber (a warning) before that. -->
+            <VButton :variant="dayComplete ? 'success' : 'warning'" class="w-full" size="lg" :loading="busy" @click="openCheckOut">
                 {{ $t('worker.check_out') }}
             </VButton>
+            <p class="mt-2 text-center text-xs" :class="dayComplete ? 'text-status-ok' : 'text-status-warn'">
+                {{ dayComplete ? $t('worker.day_complete') : $t('worker.day_incomplete') }}
+            </p>
         </template>
 
         <!-- STATE: checked out → the closed-day summary with the day's total -->
@@ -563,7 +575,7 @@ const noteTextForm = useForm({ attendance_id: null, text_note: '', duration_seco
                     <VButton variant="ghost" class="flex-1" type="button" @click="checkOutOpen = false">
                         {{ $t('common.cancel') }}
                     </VButton>
-                    <VButton variant="secondary" class="flex-1" :loading="busy" @click="submitCheckOut">
+                    <VButton :variant="dayComplete ? 'success' : 'warning'" class="flex-1" :loading="busy" @click="submitCheckOut">
                         {{ $t('worker.confirm_check_out') }}
                     </VButton>
                 </div>

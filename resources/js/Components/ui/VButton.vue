@@ -2,7 +2,7 @@
 import AppIcon from '@/Components/AppIcon.vue';
 
 const props = defineProps({
-    variant: { type: String, default: 'primary' }, // primary | secondary | ghost | danger
+    variant: { type: String, default: 'primary' }, // primary | secondary | ghost | danger | success | warning
     size: { type: String, default: 'md' }, // md | sm
     type: { type: String, default: 'button' },
     icon: { type: String, default: null },
@@ -15,6 +15,8 @@ const variants = {
     secondary: 'border border-line bg-surface-raised text-ink hover:bg-surface-hover',
     ghost: 'text-ink-soft hover:bg-surface-sunken hover:text-ink',
     danger: 'bg-status-danger text-white hover:opacity-90 shadow-card',
+    success: 'bg-status-ok text-white hover:opacity-90 shadow-card',
+    warning: 'bg-status-warn text-white hover:opacity-90 shadow-card',
 };
 
 const sizes = {

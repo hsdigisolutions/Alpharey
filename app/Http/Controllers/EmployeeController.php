@@ -15,6 +15,7 @@ use App\Services\Documents\DocumentStatus;
 use App\Services\Employees\EmployeeQueryFilter;
 use App\Services\Employees\EmployeeService;
 use App\Services\Employees\WageRateService;
+use App\Support\AttendanceAbsence;
 use App\Support\CurrentCompany;
 use App\Support\DocumentTypes;
 use Illuminate\Http\RedirectResponse;
@@ -260,6 +261,30 @@ class EmployeeController extends Controller
             ];
         }
 
+        // Live absences: an unrecorded past weekday (on/after joining) shows as
+        // an auto-absence immediately — the same shared rule the worker PWA and
+        // the standalone grid use, so all three agree without the nightly sweep.
+        $today = now()->startOfDay();
+        $virtualAbsences = 0;
+        $cursor = $start->copy();
+        while ($cursor->lte($end)) {
+            $day = (int) $cursor->format('j');
+            if (! isset($grid[$day]) && AttendanceAbsence::isUnrecordedAbsence($cursor, $today, $employee->joining_date)) {
+                $grid[$day] = [
+                    'id' => null, // no real row — clicking it opens "new entry"
+                    'status' => 'absent',
+                    'day_type' => null,
+                    'is_auto' => true,
+                    'hours' => 0.0,
+                    'quantity' => null,
+                    'project' => null,
+                    'total' => $canSeeWages ? 0.0 : null,
+                ];
+                $virtualAbsences++;
+            }
+            $cursor->addDay();
+        }
+
         $weekend = [];
         for ($d = 1; $d <= $start->daysInMonth; $d++) {
             $weekend[$d] = $start->copy()->day($d)->isWeekend();
@@ -267,6 +292,8 @@ class EmployeeController extends Controller
 
         // status is an enum cast, so compare ->value (the Phase 4 grid-summary bug).
         $worked = $records->filter(fn (Attendance $r) => in_array($r->status->value, ['present', 'late', 'early_leave'], true));
+        $realAbsences = $records->filter(fn (Attendance $r) => $r->status->value === 'absent')->count();
+        $realAutoAbsences = $records->filter(fn (Attendance $r) => $r->status->value === 'absent' && $r->is_auto_generated)->count();
 
         return [
             'month' => $month,
@@ -278,8 +305,8 @@ class EmployeeController extends Controller
                 'half_days' => $worked->filter(fn (Attendance $r) => $r->day_type?->value === 'half')->count(),
                 'hours' => round((float) $records->sum(fn (Attendance $r) => (float) $r->hours_worked), 2),
                 'overtime' => round((float) $records->sum(fn (Attendance $r) => (float) $r->overtime_hours), 2),
-                'absences' => $records->filter(fn (Attendance $r) => $r->status->value === 'absent')->count(),
-                'auto_absences' => $records->filter(fn (Attendance $r) => $r->status->value === 'absent' && $r->is_auto_generated)->count(),
+                'absences' => $realAbsences + $virtualAbsences,
+                'auto_absences' => $realAutoAbsences + $virtualAbsences,
                 'leaves' => $records->filter(fn (Attendance $r) => $r->status->value === 'leave')->count(),
                 'total_wage' => $canSeeWages ? round((float) $records->sum(fn (Attendance $r) => (float) $r->total_amount), 2) : null,
             ],

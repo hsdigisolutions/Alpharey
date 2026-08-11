@@ -5,6 +5,7 @@ namespace App\Services\Workers;
 use App\Models\Attendance;
 use App\Models\Employee;
 use App\Models\Scopes\CompanyScope;
+use App\Support\AttendanceAbsence;
 use Illuminate\Support\Carbon;
 
 /**
@@ -130,22 +131,9 @@ class WorkerDashboardService
             return $row->status->value; // absent | leave
         }
 
-        // No record. A weekend, today (not over yet), or a future date is grey —
-        // a worker has not failed to show up for a day that has not happened, or
-        // for a Sunday.
-        if ($day->isWeekend() || $day->gte($today)) {
-            return 'none';
-        }
-
-        // A day before the worker joined is not their absence.
-        if ($joiningDate !== null && $day->lt($joiningDate->copy()->startOfDay())) {
-            return 'none';
-        }
-
-        // A PAST weekday the worker was employed for, with no record at all =
-        // an absence (Fix 2: "no check-in on a weekday = Absent"). Shown live so
-        // the count is right immediately, without waiting for the nightly
-        // attendance:auto-absent sweep — which later writes the real row.
-        return 'absent';
+        // No record: an unrecorded past weekday the worker was employed for is a
+        // live absence (shared rule → the admin grid + employee tab agree);
+        // everything else (weekend, today, future, pre-joining) is grey.
+        return AttendanceAbsence::isUnrecordedAbsence($day, $today, $joiningDate) ? 'absent' : 'none';
     }
 }

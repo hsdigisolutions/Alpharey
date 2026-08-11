@@ -165,12 +165,13 @@ function attCellClass(day) {
 function attCellMarker(day) {
     const cell = props.attendanceTab.grid[day];
     if (!cell) return '';
-    if (props.attendanceTab.weekend[day] && cell.status === 'present') return 'FS';
-    if (cell.status === 'absent') return 'A';
-    if (cell.status === 'leave') return 'V';
+    // Same codes as the worker PWA + Screen 11 (client request): PF/PH/A/L/WE.
+    if (props.attendanceTab.weekend[day] && cell.status === 'present') return t('worker.cal_weekend'); // WE
+    if (cell.status === 'absent') return t('worker.cal_absent'); // A
+    if (cell.status === 'leave') return t('worker.cal_leave');   // L
     switch (cell.day_type) {
-        case 'full': return 'C';
-        case 'half': return 'M';
+        case 'full': return t('worker.cal_full');   // PF
+        case 'half': return t('worker.cal_half');   // PH
         case 'per_meter': return cell.quantity ?? '·';
         default: return cell.hours;
     }
@@ -186,7 +187,8 @@ function attMonthNav(delta) {
 
 function openAttCell(day) {
     const cell = props.attendanceTab.grid[day];
-    if (cell) {
+    // A live-computed absence (no real row) has id === null — open "new entry".
+    if (cell && cell.id) {
         router.get(`/employees/${props.employee.id}`,
             { att_month: props.attendanceTab.month, att_edit: cell.id },
             { only: ['attendanceEditing'], preserveState: true, preserveScroll: true });
@@ -436,12 +438,12 @@ function destroy() {
                         </div>
                         <!-- Legend -->
                         <div class="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted">
-                            <span><span class="inline-block h-2 w-2 rounded-full bg-status-ok"></span> C · <Bilingual k="attendance.day_type_full" inline /></span>
-                            <span><span class="inline-block h-2 w-2 rounded-full bg-status-warn"></span> M · <Bilingual k="attendance.day_type_half" inline /></span>
+                            <span><span class="inline-block h-2 w-2 rounded-full bg-status-ok"></span> {{ t('worker.cal_full') }} · <Bilingual k="attendance.day_type_full" inline /></span>
+                            <span><span class="inline-block h-2 w-2 rounded-full bg-status-warn"></span> {{ t('worker.cal_half') }} · <Bilingual k="attendance.day_type_half" inline /></span>
                             <span><span class="inline-block h-2 w-2 rounded-full bg-status-info"></span> <Bilingual k="attendance.day_type_hourly" inline /></span>
-                            <span><span class="inline-block h-2 w-2 rounded-full bg-accent"></span> FS · <Bilingual k="attendance.weekend" inline /></span>
-                            <span><span class="inline-block h-2 w-2 rounded-full bg-status-danger"></span> A · <Bilingual k="attendance.status_absent" inline /></span>
-                            <span><span class="inline-block h-2 w-2 rounded-full bg-status-info"></span> V · <Bilingual k="attendance.status_leave" inline /></span>
+                            <span><span class="inline-block h-2 w-2 rounded-full bg-accent"></span> {{ t('worker.cal_weekend') }} · <Bilingual k="attendance.weekend" inline /></span>
+                            <span><span class="inline-block h-2 w-2 rounded-full bg-status-danger"></span> {{ t('worker.cal_absent') }} · <Bilingual k="attendance.status_absent" inline /></span>
+                            <span><span class="inline-block h-2 w-2 rounded-full bg-status-info"></span> {{ t('worker.cal_leave') }} · <Bilingual k="attendance.status_leave" inline /></span>
                         </div>
                     </VCard>
 

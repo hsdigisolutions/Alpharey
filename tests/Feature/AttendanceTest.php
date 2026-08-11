@@ -24,8 +24,11 @@ it('renders the calendar grid for the current month', function (): void {
 });
 
 it('counts present days in the monthly summary (enum-cast status)', function (): void {
-    $employee = Employee::factory()->forCompany($this->companyA)->create();
-    $month = now()->format('Y-m');
+    // Fixed clock: today = Thu 4 Jun 2026. Mon 1 / Tue 2 / Wed 3 are all
+    // recorded, so there are no unrecorded gap weekdays to live-mark absent.
+    $this->travelTo('2026-06-04 10:00');
+    $employee = Employee::factory()->forCompany($this->companyA)->create(['joining_date' => '2026-06-01']);
+    $month = '2026-06';
 
     Attendance::factory()->create(['company_id' => $this->companyA->id, 'employee_id' => $employee->id, 'date' => "$month-01", 'status' => 'present']);
     Attendance::factory()->create(['company_id' => $this->companyA->id, 'employee_id' => $employee->id, 'date' => "$month-02", 'status' => 'present']);
@@ -35,6 +38,27 @@ it('counts present days in the monthly summary (enum-cast status)', function ():
         ->assertInertia(fn (Assert $page) => $page
             ->where("summary.{$employee->id}.days_present", 2)
             ->where("summary.{$employee->id}.absences", 1));
+
+    $this->travelBack();
+});
+
+it('shows a live absence on the admin grid for an unrecorded past weekday', function (): void {
+    // today = Thu 4 Jun 2026; joined Mon 1 Jun. Mon + Wed present, Tue has no
+    // record → a live auto-absence in both the grid and the summary.
+    $this->travelTo('2026-06-04 10:00');
+    $employee = Employee::factory()->forCompany($this->companyA)->create(['joining_date' => '2026-06-01']);
+
+    Attendance::factory()->create(['company_id' => $this->companyA->id, 'employee_id' => $employee->id, 'date' => '2026-06-01', 'status' => 'present']);
+    Attendance::factory()->create(['company_id' => $this->companyA->id, 'employee_id' => $employee->id, 'date' => '2026-06-03', 'status' => 'present']);
+
+    $this->actingAs($this->admin)->get('/attendance')
+        ->assertInertia(fn (Assert $page) => $page
+            ->where("summary.{$employee->id}.absences", 1)       // Tue 2 Jun
+            ->where("grid.{$employee->id}.2.status", 'absent')
+            ->where("grid.{$employee->id}.2.is_auto", true)
+            ->where("grid.{$employee->id}.2.id", null));
+
+    $this->travelBack();
 });
 
 it('denies attendance without view permission', function (): void {
