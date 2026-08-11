@@ -26,6 +26,7 @@ const props = defineProps({
     overtimePolicies: { type: Array, default: () => [] },
     overtimeTypes: { type: Array, default: () => [] },
     dayTypeThresholds: { type: Object, default: () => ({ full: 6, half: 3 }) },
+    maxLocationDistance: { type: Number, default: 500 },
     notificationMatrix: { type: Array, default: null },
     systemHealth: { type: Object, default: null },
 });
@@ -81,6 +82,7 @@ function sendTest() {
 const thresholdForm = useForm({
     full_day_threshold: props.dayTypeThresholds.full,
     half_day_threshold: props.dayTypeThresholds.half,
+    max_location_distance: props.maxLocationDistance,
 });
 
 function saveThresholds() {
@@ -268,6 +270,12 @@ function deletePolicy(p) {
                         <input v-model="thresholdForm.half_day_threshold" type="number" step="0.5" min="0" max="24"
                             class="w-40 rounded-md border border-line-strong bg-surface-sunken px-3 py-1.5 text-sm text-ink focus:border-accent focus:outline-none" />
                         <span v-if="thresholdForm.errors.half_day_threshold" class="text-xs text-status-danger">{{ thresholdForm.errors.half_day_threshold }}</span>
+                    </label>
+                    <label class="flex flex-col gap-1">
+                        <span class="text-xs font-medium text-ink-soft">{{ $t('attendance.max_location_distance') }}</span>
+                        <input v-model="thresholdForm.max_location_distance" type="number" step="10" min="50" max="100000"
+                            class="w-40 rounded-md border border-line-strong bg-surface-sunken px-3 py-1.5 text-sm text-ink focus:border-accent focus:outline-none" />
+                        <span v-if="thresholdForm.errors.max_location_distance" class="text-xs text-status-danger">{{ thresholdForm.errors.max_location_distance }}</span>
                     </label>
                     <VButton type="submit" :loading="thresholdForm.processing"><Bilingual k="common.save" inline /></VButton>
                 </form>

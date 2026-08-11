@@ -29,6 +29,7 @@ enum NotificationType: string
     case LeavePending = 'leave_pending';
     // Attendance / vehicles
     case WorkerGpsMissing = 'worker_gps_missing';
+    case WorkerLocationMismatch = 'worker_location_mismatch';
     case ShortHours = 'short_hours';
     case AutoAbsent = 'auto_absent';
     case VehicleExpiry = 'vehicle_expiry';
@@ -70,12 +71,13 @@ enum NotificationType: string
             // Sign-off / money-settled events are Super-Admin-visible.
             self::PayrollApproved,
             self::InvoicePaid => [UserRole::SuperAdmin],
-            // Requests awaiting review + short-shift alerts reach the managers
-            // who action them too.
+            // Requests awaiting review + short-shift / location-mismatch alerts
+            // reach the managers who action them too.
             self::AdvancePending,
             self::ExpensePending,
             self::LeavePending,
-            self::ShortHours => [UserRole::Admin, UserRole::Manager],
+            self::ShortHours,
+            self::WorkerLocationMismatch => [UserRole::Admin, UserRole::Manager],
             // Worker-direct types go to one specific user, never a role.
             self::AdvanceDecided, self::ExpenseDecided, self::LeaveDecided,
             self::WeekendOffer, self::CallFollowUp => [],
@@ -100,6 +102,7 @@ enum NotificationType: string
             self::ExpensePending, self::ExpenseDecided => 'expenses',
             self::LeavePending, self::LeaveDecided => 'leave',
             self::WorkerGpsMissing => 'alert',
+            self::WorkerLocationMismatch => 'alert',
             self::ShortHours => 'attendance',
             self::AutoAbsent => 'attendance',
             self::VehicleExpiry, self::VehicleNotReturned => 'vehicles',
@@ -123,7 +126,8 @@ enum NotificationType: string
             self::AdvancePending, self::AdvanceDecided,
             self::ExpensePending, self::ExpenseDecided,
             self::LeavePending, self::LeaveDecided,
-            self::WorkerGpsMissing, self::ShortHours, self::AutoAbsent, self::WeekendOffer => 'workers',
+            self::WorkerGpsMissing, self::WorkerLocationMismatch, self::ShortHours,
+            self::AutoAbsent, self::WeekendOffer => 'workers',
             default => 'other',
         };
     }

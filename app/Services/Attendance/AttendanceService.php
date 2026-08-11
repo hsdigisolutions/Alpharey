@@ -42,6 +42,9 @@ class AttendanceService
 
     public const DEFAULT_HALF_DAY_THRESHOLD = 3.0;
 
+    /** Max check-out distance (metres) from check-in before an alert — per company. */
+    public const DEFAULT_MAX_LOCATION_DISTANCE = 500.0;
+
     public function __construct(
         private readonly PeriodLock $lock,
         private readonly WageRateService $wageRates,
@@ -220,6 +223,18 @@ class AttendanceService
                 $this->settings->get('attendance.half_day_threshold', self::DEFAULT_HALF_DAY_THRESHOLD),
             ),
         ];
+    }
+
+    /**
+     * The company's maximum allowed check-out distance from check-in (metres).
+     * Per-company setting wins over the group default, then the coded default.
+     */
+    public function maxLocationDistance(int $companyId): float
+    {
+        return (float) $this->settings->get(
+            "attendance.max_location_distance.{$companyId}",
+            $this->settings->get('attendance.max_location_distance', self::DEFAULT_MAX_LOCATION_DISTANCE),
+        );
     }
 
     /**

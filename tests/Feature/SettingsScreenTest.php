@@ -42,23 +42,26 @@ it('updates general settings', function (): void {
         ->and($settings->get('general.session_timeout_minutes'))->toBe(45);
 });
 
-it('saves the per-company auto day-type thresholds', function (): void {
+it('saves the per-company auto day-type thresholds + max location distance', function (): void {
     $this->actingAs($this->companyAdmin)->put('/admin/settings/attendance', [
         'full_day_threshold' => 7,
         'half_day_threshold' => 4,
+        'max_location_distance' => 750,
     ])->assertRedirect()->assertSessionHasNoErrors();
 
-    $thresholds = app(AttendanceService::class)
-        ->dayTypeThresholds($this->company->id);
+    $service = app(AttendanceService::class);
+    $thresholds = $service->dayTypeThresholds($this->company->id);
 
     expect($thresholds['full'])->toBe(7.0)
-        ->and($thresholds['half'])->toBe(4.0);
+        ->and($thresholds['half'])->toBe(4.0)
+        ->and($service->maxLocationDistance($this->company->id))->toBe(750.0);
 });
 
 it('rejects a half-day threshold above the full-day threshold', function (): void {
     $this->actingAs($this->companyAdmin)->put('/admin/settings/attendance', [
         'full_day_threshold' => 6,
         'half_day_threshold' => 8,
+        'max_location_distance' => 500,
     ])->assertSessionHasErrors('half_day_threshold');
 });
 

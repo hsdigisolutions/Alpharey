@@ -87,6 +87,7 @@ class HandleInertiaRequests extends Middleware
             'flash' => [
                 'success' => $request->session()->get('success'),
                 'error' => $request->session()->get('error'),
+                'warning' => $request->session()->get('warning'),
             ],
             // Ziggy route manifest — passed via Inertia instead of the @routes
             // inline script, which is blocked by the production CSP (script-src

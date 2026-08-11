@@ -47,9 +47,12 @@ class SettingsController extends Controller
                 'id', 'name', 'type', 'rate', 'daily_threshold_hours', 'accumulate_hours_per_day', 'notes',
             ]),
             'overtimeTypes' => array_map(fn (OvertimePolicyType $t) => $t->value, OvertimePolicyType::cases()),
-            // Auto day-type thresholds (hours), per the active company.
+            // Auto day-type thresholds (hours) + max check-out distance (metres),
+            // per the active company.
             'dayTypeThresholds' => app(AttendanceService::class)
                 ->dayTypeThresholds(app(CurrentCompany::class)->id() ?? 0),
+            'maxLocationDistance' => app(AttendanceService::class)
+                ->maxLocationDistance(app(CurrentCompany::class)->id() ?? 0),
             // Notification matrix + system health are brand-level → Super Admin only
             'notificationMatrix' => $isSuperAdmin ? $rules->matrix() : null,
             'systemHealth' => $isSuperAdmin ? $health->check() : null,
@@ -88,10 +91,13 @@ class SettingsController extends Controller
         $validated = $request->validate([
             'full_day_threshold' => ['required', 'numeric', 'min:0.5', 'max:24'],
             'half_day_threshold' => ['required', 'numeric', 'min:0', 'max:24', 'lte:full_day_threshold'],
+            // Max check-out distance from check-in (metres) before a mismatch alert.
+            'max_location_distance' => ['required', 'numeric', 'min:50', 'max:100000'],
         ]);
 
         $settings->set("attendance.full_day_threshold.{$companyId}", (float) $validated['full_day_threshold']);
         $settings->set("attendance.half_day_threshold.{$companyId}", (float) $validated['half_day_threshold']);
+        $settings->set("attendance.max_location_distance.{$companyId}", (float) $validated['max_location_distance']);
 
         return back()->with('success', __('ui.settings.saved'));
     }

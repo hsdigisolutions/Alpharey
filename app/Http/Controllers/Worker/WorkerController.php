@@ -94,9 +94,18 @@ class WorkerController extends Controller
         $employee = $this->resolveEmployee($request);
         $this->requirePrivacyNotice($employee);
 
-        $this->attendance->checkIn($employee, $request->location(), $request->file('photo'));
+        $attendance = $this->attendance->checkIn($employee, $request->location(), $request->file('photo'));
 
-        return redirect()->route('worker.home')->with('success', __('ui.worker.checked_in'));
+        $redirect = redirect()->route('worker.home')->with('success', __('ui.worker.checked_in'));
+
+        // Poor GPS accuracy (IP-based / weak signal) can't anchor the day — warn
+        // the worker; the punch still stands (GPS is evidence, not a gate).
+        if ($attendance->check_in_accuracy !== null
+            && (float) $attendance->check_in_accuracy > WorkerAttendanceService::LOCATION_ACCURACY_LIMIT) {
+            $redirect->with('warning', __('ui.worker.gps_weak'));
+        }
+
+        return $redirect;
     }
 
     public function checkOut(CheckOutRequest $request): RedirectResponse
@@ -104,9 +113,15 @@ class WorkerController extends Controller
         $employee = $this->resolveEmployee($request);
         $this->requirePrivacyNotice($employee);
 
-        $this->attendance->checkOut($employee, $request->location(), $request->file('work_attachment'));
+        $attendance = $this->attendance->checkOut($employee, $request->location(), $request->file('work_attachment'));
 
-        return redirect()->route('worker.home')->with('success', __('ui.worker.checked_out'));
+        $redirect = redirect()->route('worker.home')->with('success', __('ui.worker.checked_out'));
+
+        if ($attendance->location_mismatch) {
+            $redirect->with('warning', __('ui.worker.location_far'));
+        }
+
+        return $redirect;
     }
 
     /**

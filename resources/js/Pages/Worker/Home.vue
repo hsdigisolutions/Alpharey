@@ -33,6 +33,7 @@ const props = defineProps({
 
 const page = usePage();
 const flashError = computed(() => page.props.flash?.error);
+const flashWarning = computed(() => page.props.flash?.warning);
 
 // ── PWA notification bell ────────────────────────────────────────────────────
 const notifOpen = ref(false);
@@ -364,6 +365,9 @@ const noteTextForm = useForm({ attendance_id: null, text_note: '', duration_seco
 
         <p v-if="flashError" class="mb-4 rounded-md bg-status-danger-soft px-3 py-2 text-center text-sm text-status-danger">
             {{ flashError }}
+        </p>
+        <p v-if="flashWarning" class="mb-4 flex items-center justify-center gap-1.5 rounded-md bg-status-warn-soft px-3 py-2 text-center text-sm text-status-warn">
+            <span>⚠️</span>{{ flashWarning }}
         </p>
 
         <!-- STATE: nothing yet today → check in (or report absence) -->

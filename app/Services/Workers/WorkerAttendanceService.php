@@ -36,6 +36,13 @@ use Illuminate\Validation\ValidationException;
  */
 class WorkerAttendanceService
 {
+    /**
+     * GPS fixes worse than this (metres) are IP-based / mock locations, not real
+     * GPS — a ±50 km check-in cannot say the worker moved 500 m, so such a fix is
+     * never used as the reference point for the distance-mismatch alert.
+     */
+    public const LOCATION_ACCURACY_LIMIT = 1000.0;
+
     public function __construct(
         private readonly AttendanceService $attendance,
         private readonly PeriodLock $lock,
@@ -195,8 +202,33 @@ class WorkerAttendanceService
         });
 
         $this->notifyIfShortShift($employee, $attendance);
+        $this->notifyIfLocationMismatch($employee, $attendance);
 
         return $attendance;
+    }
+
+    /**
+     * A check-out flagged too far from a TRUSTWORTHY check-in pings the Company
+     * Admins + Managers to review. Only fires when applyMismatch actually set the
+     * flag (so a poor-accuracy reference point never triggers it).
+     */
+    private function notifyIfLocationMismatch(Employee $employee, Attendance $attendance): void
+    {
+        if (! $attendance->location_mismatch) {
+            return;
+        }
+
+        $metres = (int) round($this->attendance->maxLocationDistance((int) $employee->company_id));
+
+        $this->notifications->dispatch(NotificationType::WorkerLocationMismatch, (int) $employee->company_id, [
+            'title_es' => "Salida lejos de la entrada — {$employee->full_name}",
+            'title_en' => "Check-out far from check-in — {$employee->full_name}",
+            'body_es' => "{$employee->full_name} ha fichado la salida a más de {$metres} m de su entrada. Revisar.",
+            'body_en' => "{$employee->full_name} checked out more than {$metres} m from check-in location. Please review.",
+            'entity' => $employee->full_name,
+            'company' => $employee->company?->name,
+            'url' => '/attendance',
+        ]);
     }
 
     /**
@@ -326,9 +358,14 @@ class WorkerAttendanceService
     }
 
     /**
-     * Flag when check-out GPS is > 500 m from check-in GPS. Null when either
-     * fix is unavailable (location_denied or no coordinates). GPS is evidence,
-     * not a gate — the punch stands regardless.
+     * Flag when the check-out GPS is further than the company's allowed distance
+     * (default 500 m) from the CHECK-IN GPS. GPS is evidence, not a gate — the
+     * punch always stands; this only sets a flag an admin reviews.
+     *
+     * Crucially, the check-in fix is only used as the reference point when it is
+     * TRUSTWORTHY: a poor-accuracy check-in (e.g. ±50 km IP-based location) is
+     * skipped entirely — comparing against it produced spurious >500 m alerts
+     * (the real bug). Distance is a true Haversine great-circle in metres.
      *
      * @param  array{lat: float|null, lng: float|null, accuracy: float|null, denied: bool}  $location
      */
@@ -342,6 +379,13 @@ class WorkerAttendanceService
             return;
         }
 
+        // Unreliable reference point → never compare (this is the fix). A missing
+        // check-in accuracy is treated as unreliable too.
+        $checkInAccuracy = $attendance->check_in_accuracy !== null ? (float) $attendance->check_in_accuracy : null;
+        if ($checkInAccuracy === null || $checkInAccuracy > self::LOCATION_ACCURACY_LIMIT) {
+            return;
+        }
+
         $metres = $this->haversine(
             (float) $attendance->check_in_lat,
             (float) $attendance->check_in_lng,
@@ -349,7 +393,8 @@ class WorkerAttendanceService
             $location['lng'],
         );
 
-        $attendance->location_mismatch = $metres > 500;
+        $limit = $this->attendance->maxLocationDistance((int) $attendance->company_id);
+        $attendance->location_mismatch = $metres > $limit;
     }
 
     /** Haversine great-circle distance in metres. */

@@ -225,6 +225,15 @@ function mapsUrl(loc) {
 function formatCoords(loc) {
     return `${(+loc.lat).toFixed(5)}°N, ${(+loc.lng).toFixed(5)}°E`;
 }
+
+// GPS accuracy badge — green ≤50 m (excellent), amber ≤500 m (acceptable),
+// red >500 m (poor — an IP-based/mock fix that must not anchor the day).
+function accuracyClass(accuracy) {
+    const a = Math.round(accuracy);
+    if (a <= 50) return 'bg-status-ok-soft text-status-ok';
+    if (a <= 500) return 'bg-status-warn-soft text-status-warn';
+    return 'bg-status-danger-soft text-status-danger';
+}
 </script>
 
 <template>
@@ -362,7 +371,9 @@ function formatCoords(loc) {
                                 class="text-accent underline-offset-2 hover:underline">
                                 <Bilingual k="attendance.view_map" inline />
                             </a>
-                            <span v-if="record.worker.check_in.accuracy" class="ms-1 text-xs text-muted">±{{ Math.round(record.worker.check_in.accuracy) }}m</span>
+                            <span v-if="record.worker.check_in.accuracy"
+                                class="tabular-nums ms-1 inline-block rounded px-1.5 py-0.5 text-[11px] font-medium"
+                                :class="accuracyClass(record.worker.check_in.accuracy)">±{{ Math.round(record.worker.check_in.accuracy) }}m</span>
                             <p class="mt-0.5 font-mono text-[11px] text-muted">{{ formatCoords(record.worker.check_in) }}</p>
                         </dd>
                     </div>
@@ -373,7 +384,9 @@ function formatCoords(loc) {
                                 class="text-accent underline-offset-2 hover:underline">
                                 <Bilingual k="attendance.view_map" inline />
                             </a>
-                            <span v-if="record.worker.check_out.accuracy" class="ms-1 text-xs text-muted">±{{ Math.round(record.worker.check_out.accuracy) }}m</span>
+                            <span v-if="record.worker.check_out.accuracy"
+                                class="tabular-nums ms-1 inline-block rounded px-1.5 py-0.5 text-[11px] font-medium"
+                                :class="accuracyClass(record.worker.check_out.accuracy)">±{{ Math.round(record.worker.check_out.accuracy) }}m</span>
                             <p class="mt-0.5 font-mono text-[11px] text-muted">{{ formatCoords(record.worker.check_out) }}</p>
                         </dd>
                     </div>

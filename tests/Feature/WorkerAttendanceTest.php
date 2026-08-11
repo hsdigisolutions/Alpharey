@@ -139,6 +139,65 @@ it('does not raise the GPS alert when a location is captured', function (): void
     Notification::assertNothingSent();
 });
 
+it('does NOT flag a location mismatch when the check-in GPS was inaccurate (the bug fix)', function (): void {
+    Notification::fake();
+    // Check in with a garbage ±50 km fix (IP-based), far from the check-out.
+    $this->actingAs($this->worker)->post('/worker/check-in', [
+        'lat' => 29.88, 'lng' => 71.77, 'accuracy' => 50000, 'denied' => false,
+    ])->assertRedirect();
+
+    $this->travelTo('2026-08-10 12:00');
+    $this->actingAs($this->worker)->post('/worker/check-out', [
+        'lat' => 30.07, 'lng' => 71.16, 'accuracy' => 100, 'denied' => false,
+        'work_attachment' => UploadedFile::fake()->image('site.jpg'),
+    ])->assertRedirect();
+
+    $row = Attendance::withoutGlobalScopes()->where('employee_id', $this->employee->id)->firstOrFail();
+    // The guard skips the comparison entirely, so the flag is never set (null).
+    expect($row->location_mismatch)->not->toBeTrue();
+    Notification::assertNotSentTo(
+        User::where('role', 'admin')->where('company_id', $this->company->id)->get(),
+        SystemNotification::class,
+        fn (SystemNotification $n) => ($n->toDatabase($this->worker)['type'] ?? null) === 'worker_location_mismatch',
+    );
+});
+
+it('flags a mismatch and alerts admins when an accurate check-in is far from check-out', function (): void {
+    Notification::fake();
+    $this->actingAs($this->worker)->post('/worker/check-in', [
+        'lat' => 40.4, 'lng' => -3.7, 'accuracy' => 25, 'denied' => false,
+    ])->assertRedirect();
+
+    $this->travelTo('2026-08-10 12:00');
+    $this->actingAs($this->worker)->post('/worker/check-out', [
+        'lat' => 41.0, 'lng' => -4.0, 'accuracy' => 30, 'denied' => false,
+        'work_attachment' => UploadedFile::fake()->image('site.jpg'),
+    ])->assertRedirect();
+
+    $row = Attendance::withoutGlobalScopes()->where('employee_id', $this->employee->id)->firstOrFail();
+    expect($row->location_mismatch)->toBeTrue();
+    Notification::assertSentTo(
+        User::where('role', 'admin')->where('company_id', $this->company->id)->get(),
+        SystemNotification::class,
+        fn (SystemNotification $n) => ($n->toDatabase($this->worker)['type'] ?? null) === 'worker_location_mismatch',
+    );
+});
+
+it('does not flag a mismatch when check-out is close to an accurate check-in', function (): void {
+    $this->actingAs($this->worker)->post('/worker/check-in', [
+        'lat' => 40.4, 'lng' => -3.7, 'accuracy' => 20, 'denied' => false,
+    ])->assertRedirect();
+
+    $this->travelTo('2026-08-10 12:00');
+    $this->actingAs($this->worker)->post('/worker/check-out', [
+        'lat' => 40.4001, 'lng' => -3.7001, 'accuracy' => 20, 'denied' => false,
+        'work_attachment' => UploadedFile::fake()->image('site.jpg'),
+    ])->assertRedirect();
+
+    $row = Attendance::withoutGlobalScopes()->where('employee_id', $this->employee->id)->firstOrFail();
+    expect($row->location_mismatch)->toBeFalse();
+});
+
 it('refuses a second check-in on the same day', function (): void {
     $this->actingAs($this->worker)->post('/worker/check-in', ['denied' => true]);
 

@@ -5,9 +5,35 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Status: Phase 9 in progress — hardening (2026-08-01)
 
 **Every screen 01–26 is built (Phase 8 complete).** Phase 9 is hardening, UAT, and
-launch — no new screens. Current: **769 Pest tests / 4467 assertions passing (1
+launch — no new screens. Current: **772 Pest tests / 4479 assertions passing (1
 skipped) · Pint clean · Larastan level 6 clean · `composer audit` + `npm audit`
 clean · production Vite build working.**
+
+### GPS check-out mismatch — accuracy guard + configurable distance (2026-08-11)
+
+Investigated a report of the >500 m "check-out far from check-in" alert firing
+spuriously. **The distance logic was already correct** — it compares check-in vs
+check-out (Option A), the threshold was 500 m (not 5 m), and `haversine()` returns
+metres. **The real bug: the reference point.** A check-in fix with ±50 000 m
+accuracy (an IP-based / mock location, not real GPS) was being used as the anchor,
+so any real check-out read as >500 m away.
+
+Fixes: **(1) Accuracy guard** — `WorkerAttendanceService::applyMismatch` now skips
+the comparison entirely when the check-in accuracy is missing OR worse than
+`LOCATION_ACCURACY_LIMIT` (1000 m). An untrustworthy anchor never raises the alert.
+**(2) Configurable distance** — the 500 m threshold is now a per-company Setting
+(`attendance.max_location_distance.{id}`, default 500, read via
+`AttendanceService::maxLocationDistance()`, edited on Screen 26; `PUT
+/admin/settings/attendance` validates it). **(3) Genuine-mismatch alert** — when a
+TRUSTWORTHY check-in is truly beyond the limit, `NotificationType::
+WorkerLocationMismatch` (→ Admin + Manager) fires with the metres in the body; the
+worker sees a `warning` flash ("Your check-out location is far…"). A poor-accuracy
+check-in also flashes a "GPS signal weak" warning (the punch always stands — GPS is
+evidence, not a gate). **(4) Accuracy badges** — the admin attendance modal shows
+the ± accuracy as a coloured pill (green ≤50 m · amber ≤500 m · red >500 m) so an
+IP-based fix is obvious. Tests: `WorkerAttendanceTest` (+3 — inaccurate anchor
+skipped, accurate-far alerts admins, near-is-fine), `SettingsScreenTest` (distance
+save). The `flash` shared prop gained a `warning` channel.
 
 ### Worker PWA — required check-out attachment + UI polish (2026-08-11)
 
