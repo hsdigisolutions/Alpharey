@@ -7,6 +7,7 @@ use App\Models\Company;
 use App\Models\Employee;
 use App\Models\User;
 use App\Support\WorkerPrivacyNotice;
+use Illuminate\Http\UploadedFile;
 
 /**
  * The geolocation + selfie privacy notice gate.
@@ -60,7 +61,8 @@ it('refuses a check-in until the notice is acknowledged', function (): void {
 it('refuses a check-out until the notice is acknowledged', function (): void {
     [$user] = unacknowledgedWorker($this->company);
 
-    $this->actingAs($user)->post('/worker/check-out', ['denied' => true])->assertForbidden();
+    // Attachment supplied so the request validates and reaches the privacy gate.
+    $this->actingAs($user)->post('/worker/check-out', ['denied' => true, 'work_attachment' => UploadedFile::fake()->image('site.jpg')])->assertForbidden();
 });
 
 it('records the acknowledgement, with the version, and audits it', function (): void {

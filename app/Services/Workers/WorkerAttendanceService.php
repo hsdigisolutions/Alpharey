@@ -139,10 +139,11 @@ class WorkerAttendanceService
     /**
      * End the day. Requires an open check-in with no check-out yet; the hours
      * and total are recomputed from the two clock times by AttendanceService.
+     * A proof-of-work attachment (site photo or document) is stored on the row.
      *
      * @param  array{lat: float|null, lng: float|null, accuracy: float|null, denied: bool}  $location
      */
-    public function checkOut(Employee $employee, array $location): Attendance
+    public function checkOut(Employee $employee, array $location, ?UploadedFile $attachment = null): Attendance
     {
         $today = now()->toDateString();
         $attendance = $this->todayFor($employee, $today);
@@ -161,7 +162,15 @@ class WorkerAttendanceService
 
         $this->lock->assertOpen($employee->company_id, $today, 'check_out');
 
-        $attendance = DB::transaction(function () use ($employee, $attendance, $location): Attendance {
+        // Store the proof-of-work file BEFORE the transaction (a file write is
+        // not transactional). Private disk, per-employee folder, randomized name.
+        $attachmentPath = null;
+        if ($attachment !== null) {
+            $stored = $attachment->store("attendance-checkout/{$employee->company_id}/{$employee->id}", 'local');
+            $attachmentPath = $stored === false ? null : $stored;
+        }
+
+        $attendance = DB::transaction(function () use ($employee, $attendance, $location, $attachment, $attachmentPath): Attendance {
             // update() recomputes hours_worked + total_amount from the snapshot.
             $attendance = $this->attendance->update($attendance, [
                 'check_out' => now()->format('H:i'),
@@ -173,6 +182,11 @@ class WorkerAttendanceService
             $this->attendance->applyAutoDayType($attendance, $employee);
 
             $attendance->check_out_at = now();
+            if ($attachmentPath !== null) {
+                // NOT fillable — set directly; keep the original name for display.
+                $attendance->check_out_attachment_path = $attachmentPath;
+                $attendance->check_out_attachment_name = $attachment?->getClientOriginalName();
+            }
             $this->applyLocation($attendance, 'check_out', $location);
             $this->applyMismatch($attendance, $location);
             $attendance->save();

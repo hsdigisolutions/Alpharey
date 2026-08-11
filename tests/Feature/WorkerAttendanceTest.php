@@ -2,6 +2,7 @@
 
 use App\Enums\AttendanceStatus;
 use App\Models\Attendance;
+use App\Models\AuditLog;
 use App\Models\Company;
 use App\Models\Employee;
 use App\Models\LockedPeriod;
@@ -22,6 +23,9 @@ use Illuminate\Support\Facades\Storage;
  * the worker's own reason through to the CRM.
  */
 beforeEach(function (): void {
+    // Check-out stores a proof-of-work attachment on the local disk — fake it.
+    Storage::fake('local');
+
     // Weekends are days off (a check-in needs a weekend offer), so pin the clock
     // to a weekday for the ordinary punch-flow tests. 2026-08-10 is a Monday.
     $this->travelTo('2026-08-10 09:00');
@@ -100,7 +104,7 @@ it('notifies admins about a short shift under the half-day threshold', function 
     $this->actingAs($this->worker)->post('/worker/check-in', ['denied' => true])->assertRedirect();
 
     $this->travelTo('2026-08-10 10:30');
-    $this->actingAs($this->worker)->post('/worker/check-out', ['denied' => true])->assertRedirect();
+    $this->actingAs($this->worker)->post('/worker/check-out', ['denied' => true, 'work_attachment' => UploadedFile::fake()->image('site.jpg')])->assertRedirect();
 
     Notification::assertSentTo(
         User::where('role', 'admin')->where('company_id', $this->company->id)->get(),
@@ -116,7 +120,7 @@ it('does not raise a short-shift alert for a full-length day', function (): void
 
     // Check out after 8 h — well over the half-day threshold.
     $this->travelTo('2026-08-10 17:00');
-    $this->actingAs($this->worker)->post('/worker/check-out', ['denied' => true])->assertRedirect();
+    $this->actingAs($this->worker)->post('/worker/check-out', ['denied' => true, 'work_attachment' => UploadedFile::fake()->image('site.jpg')])->assertRedirect();
 
     Notification::assertNotSentTo(
         User::where('role', 'admin')->where('company_id', $this->company->id)->get(),
@@ -156,7 +160,7 @@ it('computes hours and pay on check-out from the frozen snapshot', function (): 
 
     $this->travel(8)->hours();
 
-    $this->actingAs($this->worker)->post('/worker/check-out', ['denied' => true])->assertRedirect();
+    $this->actingAs($this->worker)->post('/worker/check-out', ['denied' => true, 'work_attachment' => UploadedFile::fake()->image('site.jpg')])->assertRedirect();
 
     $row = Attendance::withoutGlobalScopes()->where('employee_id', $this->employee->id)->firstOrFail();
 
@@ -171,8 +175,49 @@ it('computes hours and pay on check-out from the frozen snapshot', function (): 
     $this->travelBack();
 });
 
-it('refuses check-out without a check-in', function (): void {
+it('requires a proof-of-work attachment to check out', function (): void {
+    $this->actingAs($this->worker)->post('/worker/check-in', ['denied' => true])->assertRedirect();
+    $this->travelTo('2026-08-10 17:00');
+
+    // No work_attachment → validation refuses it and the day stays open.
     $this->actingAs($this->worker)->post('/worker/check-out', ['denied' => true])
+        ->assertSessionHasErrors('work_attachment');
+
+    $row = Attendance::withoutGlobalScopes()->where('employee_id', $this->employee->id)->firstOrFail();
+    expect($row->check_out)->toBeNull();
+});
+
+it('stores the proof-of-work attachment on check-out', function (): void {
+    $this->actingAs($this->worker)->post('/worker/check-in', ['denied' => true])->assertRedirect();
+    $this->travelTo('2026-08-10 17:00');
+
+    $this->actingAs($this->worker)->post('/worker/check-out', [
+        'denied' => true, 'work_attachment' => UploadedFile::fake()->image('site.jpg'),
+    ])->assertRedirect()->assertSessionHasNoErrors();
+
+    $row = Attendance::withoutGlobalScopes()->where('employee_id', $this->employee->id)->firstOrFail();
+    expect($row->check_out)->not->toBeNull()
+        ->and($row->check_out_attachment_path)->not->toBeNull()
+        ->and($row->check_out_attachment_name)->toBe('site.jpg');
+    Storage::disk('local')->assertExists($row->check_out_attachment_path);
+});
+
+it('serves the check-out attachment to an admin and audits it', function (): void {
+    $this->actingAs($this->worker)->post('/worker/check-in', ['denied' => true])->assertRedirect();
+    $this->travelTo('2026-08-10 17:00');
+    $this->actingAs($this->worker)->post('/worker/check-out', [
+        'denied' => true, 'work_attachment' => UploadedFile::fake()->image('site.jpg'),
+    ])->assertRedirect();
+    $row = Attendance::withoutGlobalScopes()->where('employee_id', $this->employee->id)->firstOrFail();
+
+    $admin = User::where('role', 'admin')->where('company_id', $this->company->id)->firstOrFail();
+    $this->actingAs($admin)->get("/attendance/{$row->id}/checkout-attachment")->assertOk();
+
+    expect(AuditLog::where('action', 'viewed')->where('description', 'Check-out attachment')->exists())->toBeTrue();
+});
+
+it('refuses check-out without a check-in', function (): void {
+    $this->actingAs($this->worker)->post('/worker/check-out', ['denied' => true, 'work_attachment' => UploadedFile::fake()->image('site.jpg')])
         ->assertSessionHasErrors('check_out');
 });
 

@@ -101,7 +101,7 @@ function logout() {
 <template>
     <div class="min-h-screen bg-surface text-ink"
         style="padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom)">
-        <div class="mx-auto w-full max-w-md px-4 py-5">
+        <div class="mx-auto my-4 w-full max-w-md rounded-2xl border border-line bg-surface px-4 py-5 shadow-card sm:my-6">
             <!-- Identity + logout -->
             <header class="mb-4 flex items-center gap-3">
                 <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-accent text-sm font-bold text-on-accent shadow-sm">AR</span>

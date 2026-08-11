@@ -176,11 +176,15 @@ function openCheckOut() {
     noteTextForm.text_note = '';
     audioBlob.value = null;
     audioDuration.value = null;
+    attachmentFile.value = null;
     isRecording.value = false;
     checkOutOpen.value = true;
 }
 
 async function submitCheckOut() {
+    // The proof-of-work attachment is required — the server enforces it too.
+    if (!attachmentFile.value) return;
+
     busy.value = true;
     statusLine.value = t('worker.getting_location');
     checkOutOpen.value = false;
@@ -194,12 +198,15 @@ async function submitCheckOut() {
     const capturedAudio = audioBlob.value;
     const capturedAudioDuration = audioDuration.value;
 
-    router.post('/worker/check-out', {
-        lat: loc.lat,
-        lng: loc.lng,
-        accuracy: loc.accuracy,
-        denied: loc.denied,
-    }, {
+    const data = new FormData();
+    data.append('lat', loc.lat ?? '');
+    data.append('lng', loc.lng ?? '');
+    data.append('accuracy', loc.accuracy ?? '');
+    data.append('denied', loc.denied ? '1' : '0');
+    data.append('work_attachment', attachmentFile.value);
+
+    router.post('/worker/check-out', data, {
+        forceFormData: true,
         onSuccess: () => {
             if (hasNote) {
                 const nd = new FormData();
@@ -238,6 +245,13 @@ const checkOutOpen = ref(false);
 const isRecording = ref(false);
 const audioBlob = ref(null);
 const audioDuration = ref(null);
+
+// Required proof-of-work attachment at check-out: a site photo or a document.
+const attachmentFile = ref(null);
+const attachmentName = computed(() => attachmentFile.value?.name ?? '');
+function onAttachmentChange(e) {
+    attachmentFile.value = e.target.files?.[0] ?? null;
+}
 let mediaRecorder = null;
 let audioChunks = [];
 let recordingStart = null;
@@ -279,8 +293,9 @@ const noteTextForm = useForm({ attendance_id: null, text_note: '', duration_seco
              read it. The server also refuses a punch without it. -->
         <PrivacyNotice v-if="!privacy_acknowledged" />
 
-        <!-- Today's status banner -->
-        <div class="mb-4 rounded-lg border border-line bg-surface-raised p-4 text-center shadow-card">
+        <!-- Today's status banner. Hidden once checked out — the day summary
+             card below already tells the whole story. -->
+        <div v-if="today.state !== 'checked_out'" class="mb-4 rounded-lg border border-line bg-surface-raised p-4 text-center shadow-card">
             <p v-if="today.state === 'none' && weekend.rest_day" class="text-sm font-medium text-status-info">
                 {{ $t('worker.rest_day_title') }}
             </p>
@@ -289,9 +304,6 @@ const noteTextForm = useForm({ attendance_id: null, text_note: '', duration_seco
             </p>
             <p v-else-if="today.state === 'checked_in'" class="text-sm font-medium text-status-ok">
                 {{ $t('worker.status_checked_in').replace(':time', today.check_in) }}
-            </p>
-            <p v-else-if="today.state === 'checked_out'" class="text-sm font-medium text-ink">
-                {{ $t('worker.status_checked_out').replace(':hours', today.hours ?? 0) }}
             </p>
             <p v-else-if="today.state === 'absent'" class="text-sm font-medium text-status-warn">
                 {{ $t('worker.status_absent') }}
@@ -545,7 +557,20 @@ const noteTextForm = useForm({ attendance_id: null, text_note: '', duration_seco
                     </div>
                 </dl>
 
-                <!-- Note section -->
+                <!-- Required proof-of-work: a site photo, or a document. -->
+                <p class="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">{{ $t('worker.work_attachment') }}</p>
+                <label class="mb-1 flex cursor-pointer flex-col items-center gap-1 rounded-lg border-2 border-dashed px-3 py-4 text-center transition-colors"
+                    :class="attachmentFile ? 'border-status-ok bg-status-ok-soft' : 'border-line-strong bg-surface-sunken'">
+                    <span class="text-2xl">{{ attachmentFile ? '✅' : '📷' }}</span>
+                    <span class="text-sm font-medium text-ink">{{ attachmentName || $t('worker.work_attachment_prompt') }}</span>
+                    <span class="text-xs text-muted">{{ $t('worker.work_attachment_hint') }}</span>
+                    <input type="file" accept="image/*,.pdf,.doc,.docx" capture="environment" class="hidden" @change="onAttachmentChange" />
+                </label>
+                <p class="mb-4 text-xs" :class="attachmentFile ? 'text-status-ok' : 'text-status-warn'">
+                    {{ attachmentFile ? $t('worker.work_attachment_added') : $t('worker.work_attachment_required') }}
+                </p>
+
+                <!-- Note section (optional) -->
                 <p class="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">{{ $t('worker.voice_note') }}</p>
                 <div class="mb-3 flex flex-col items-center gap-2">
                     <div v-if="audioBlob" class="w-full rounded-md bg-status-ok-soft px-3 py-2 text-sm text-status-ok">
@@ -575,7 +600,7 @@ const noteTextForm = useForm({ attendance_id: null, text_note: '', duration_seco
                     <VButton variant="ghost" class="flex-1" type="button" @click="checkOutOpen = false">
                         {{ $t('common.cancel') }}
                     </VButton>
-                    <VButton :variant="dayComplete ? 'success' : 'warning'" class="flex-1" :loading="busy" @click="submitCheckOut">
+                    <VButton :variant="dayComplete ? 'success' : 'warning'" class="flex-1" :loading="busy" :disabled="!attachmentFile" @click="submitCheckOut">
                         {{ $t('worker.confirm_check_out') }}
                     </VButton>
                 </div>

@@ -47,6 +47,8 @@ use Illuminate\Support\Carbon;
  * @property numeric-string|null $check_out_lat
  * @property numeric-string|null $check_out_lng
  * @property string|null $check_in_photo_path
+ * @property string|null $check_out_attachment_path
+ * @property string|null $check_out_attachment_name
  * @property bool $location_denied
  * @property bool|null $location_mismatch
  * @property string|null $worker_note

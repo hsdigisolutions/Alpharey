@@ -74,13 +74,14 @@ class AttendanceController extends Controller
             ->with('project:id,name')
             ->get();
 
-        // Which of these attendance rows carry a worker voice/text note — a
-        // single query keyed by attendance_id so the grid can show a mic marker
-        // without an N+1. Scoped to the same company as the rows above.
-        $notedAttendanceIds = AttendanceVoiceNote::query()
+        // Which of these attendance rows carry a worker note — one query, keyed
+        // by attendance_id so the grid can mark it without an N+1. We also track
+        // whether the note has AUDIO, so the cell can show a mic for a voice note
+        // and a plain note glyph for a text-only note (not everything is a mic).
+        $noteHasAudio = AttendanceVoiceNote::query()
             ->whereIn('attendance_id', $records->pluck('id'))
-            ->pluck('attendance_id')
-            ->flip();
+            ->get(['attendance_id', 'audio_path'])
+            ->mapWithKeys(fn (AttendanceVoiceNote $n): array => [$n->attendance_id => $n->audio_path !== null]);
 
         // grid[employee_id][day] = cell
         $grid = [];
@@ -99,7 +100,8 @@ class AttendanceController extends Controller
                 'hours' => (float) $record->hours_worked,
                 'quantity' => $record->quantity !== null ? (float) $record->quantity : null,
                 'project' => $record->project?->name,
-                'has_voice_note' => $notedAttendanceIds->has($record->id),
+                'has_voice_note' => $noteHasAudio->has($record->id),
+                'voice_note_has_audio' => (bool) $noteHasAudio->get($record->id, false),
                 'location_mismatch' => (bool) $record->location_mismatch,
             ];
         }
@@ -341,6 +343,23 @@ class AttendanceController extends Controller
     }
 
     /**
+     * The worker's proof-of-work attachment (site photo / document) captured at
+     * check-out. Same gated + audited private-file rules as the selfie.
+     */
+    public function checkOutAttachment(Attendance $attendance, AuditLogger $audit): StreamedResponse
+    {
+        Gate::authorize('attendance.view');
+
+        $path = $attendance->check_out_attachment_path;
+
+        abort_if($path === null || ! Storage::disk('local')->exists($path), 404);
+
+        $audit->log('viewed', $attendance, null, null, 'Check-out attachment', 'attendance');
+
+        return Storage::disk('local')->download($path, $attendance->check_out_attachment_name ?? 'attachment');
+    }
+
+    /**
      * @return array<string, mixed>
      */
     private function payload(Attendance $attendance): array
@@ -388,6 +407,9 @@ class AttendanceController extends Controller
                 'check_in' => $this->coords($attendance->check_in_lat, $attendance->check_in_lng, $attendance->check_in_accuracy),
                 'check_out' => $this->coords($attendance->check_out_lat, $attendance->check_out_lng, $attendance->check_out_accuracy),
                 'has_photo' => $attendance->check_in_photo_path !== null,
+                // Proof-of-work file captured at check-out (site photo / doc).
+                'has_checkout_attachment' => $attendance->check_out_attachment_path !== null,
+                'checkout_attachment_name' => $attendance->check_out_attachment_name,
             ] : null,
             // Voice/text note captured at check-out. Independent of the worker
             // capture block above (a note can exist without GPS/selfie data).

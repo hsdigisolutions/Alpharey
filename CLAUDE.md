@@ -5,9 +5,32 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Status: Phase 9 in progress — hardening (2026-08-01)
 
 **Every screen 01–26 is built (Phase 8 complete).** Phase 9 is hardening, UAT, and
-launch — no new screens. Current: **764 Pest tests / 4416 assertions passing (1
+launch — no new screens. Current: **769 Pest tests / 4467 assertions passing (1
 skipped) · Pint clean · Larastan level 6 clean · `composer audit` + `npm audit`
 clean · production Vite build working.**
+
+### Worker PWA — required check-out attachment + UI polish (2026-08-11)
+
+**Proof-of-work attachment required at check-out.** A worker cannot close the day
+without uploading a site photo OR a document. Migration
+`2026_08_11_000001` adds `attendance.check_out_attachment_path` +
+`check_out_attachment_name` (server-set, NOT fillable). `CheckOutRequest` (extends
+`PunchRequest`) makes `work_attachment` required (`mimes:jpg,jpeg,png,webp,pdf,doc,docx`,
+max 8 MB); `WorkerController::checkOut` uses it and `WorkerAttendanceService::checkOut`
+stores the file on the PRIVATE disk (`attendance-checkout/{company}/{employee}`,
+randomized name) and records the original name. The check-out sheet has a required
+file field (camera-capable), the Confirm button is disabled until a file is picked,
+and the server enforces it too. Admins download it through a gated + audited route
+(`GET /attendance/{attendance}/checkout-attachment`, mirrors the selfie route) —
+surfaced as a download link in the attendance modal. Tests: `WorkerAttendanceTest`
+(+3 — required/refused, stored, admin download audited) and the existing check-out
+tests now supply a fake attachment.
+
+**UI polish (worker PWA):** the "Day complete · X h" banner no longer shows in the
+checked-out state (the day-summary card covers it); "Day finished. Nice work!" →
+**"See you tomorrow"** (`done_for_today`); the day-summary "Hours worked" label →
+**"Hours"** (`summary_hours`); the whole worker column now sits in a rounded
+`border-line` frame (`WorkerLayout`, page-surface fill so inner cards keep contrast).
 
 ### Worker PWA hardening — no money, locale labels, short-shift alert (2026-08-11)
 

@@ -424,6 +424,15 @@ function formatCoords(loc) {
                         <Bilingual k="attendance.view_selfie_full" inline />
                     </a>
                 </div>
+
+                <!-- Proof-of-work attachment captured at check-out (photo or doc). -->
+                <a v-if="record.worker.has_checkout_attachment" :href="`/attendance/${record.id}/checkout-attachment`"
+                    target="_blank" rel="noopener"
+                    class="mt-3 flex items-center gap-2 rounded-lg border border-line bg-surface-sunken px-3 py-2.5 text-sm text-accent hover:bg-surface-hover">
+                    <AppIcon name="file" class="h-4 w-4 shrink-0" />
+                    <span class="min-w-0 flex-1 truncate">{{ record.worker.checkout_attachment_name || $t('attendance.checkout_attachment') }}</span>
+                    <span class="shrink-0 text-xs">↓</span>
+                </a>
             </div>
 
             <!-- Voice/text note captured at check-out. Read-only. The heading

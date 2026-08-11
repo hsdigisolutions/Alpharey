@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Worker;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Worker\CheckOutRequest;
 use App\Http\Requests\Worker\PunchRequest;
 use App\Models\Attendance;
 use App\Models\Employee;
@@ -98,12 +99,12 @@ class WorkerController extends Controller
         return redirect()->route('worker.home')->with('success', __('ui.worker.checked_in'));
     }
 
-    public function checkOut(PunchRequest $request): RedirectResponse
+    public function checkOut(CheckOutRequest $request): RedirectResponse
     {
         $employee = $this->resolveEmployee($request);
         $this->requirePrivacyNotice($employee);
 
-        $this->attendance->checkOut($employee, $request->location());
+        $this->attendance->checkOut($employee, $request->location(), $request->file('work_attachment'));
 
         return redirect()->route('worker.home')->with('success', __('ui.worker.checked_out'));
     }
