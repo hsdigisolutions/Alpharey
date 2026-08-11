@@ -87,24 +87,26 @@ enum NotificationType: string
     }
 
     /**
-     * An emoji glyph for the bell / list, keyed by kind of event.
+     * The AppIcon (SVG) name for the bell / list — a proper line icon per kind
+     * of event, not an emoji. Rendered by <AppIcon :name="…"/> on the client.
      */
     public function icon(): string
     {
         return match ($this) {
-            self::DocumentExpiry, self::DocumentExpired => '📄',
-            self::PayrollReady, self::PayrollApproved => '✅',
-            self::InvoiceOverdue, self::InvoicePaid => '💰',
-            self::AdvancePending, self::AdvanceDecided => '💵',
-            self::ExpensePending, self::ExpenseDecided => '👷',
-            self::LeavePending, self::LeaveDecided => '🌴',
-            self::WorkerGpsMissing => '📍',
-            self::ShortHours => '⏱️',
-            self::AutoAbsent => '🚫',
-            self::VehicleExpiry, self::VehicleNotReturned => '🚗',
-            self::CallFollowUp => '📞',
-            self::WeekendOffer => '📅',
-            self::ProjectAlert, self::DeploymentEvent => '🔔',
+            self::DocumentExpiry, self::DocumentExpired => 'file',
+            self::PayrollReady, self::PayrollApproved => 'payroll',
+            self::InvoiceOverdue, self::InvoicePaid => 'invoices',
+            self::AdvancePending, self::AdvanceDecided => 'euro',
+            self::ExpensePending, self::ExpenseDecided => 'expenses',
+            self::LeavePending, self::LeaveDecided => 'leave',
+            self::WorkerGpsMissing => 'alert',
+            self::ShortHours => 'attendance',
+            self::AutoAbsent => 'attendance',
+            self::VehicleExpiry, self::VehicleNotReturned => 'vehicles',
+            self::CallFollowUp => 'calls',
+            self::WeekendOffer => 'calendar',
+            self::ProjectAlert => 'projects',
+            self::DeploymentEvent => 'deployments',
         };
     }
 

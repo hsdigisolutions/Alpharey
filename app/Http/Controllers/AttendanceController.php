@@ -356,7 +356,9 @@ class AttendanceController extends Controller
 
         $audit->log('viewed', $attendance, null, null, 'Check-out attachment', 'attendance');
 
-        return Storage::disk('local')->download($path, $attendance->check_out_attachment_name ?? 'attachment');
+        // Served INLINE so an image renders in an <img>/tab and a PDF opens in
+        // the tab; a doc/docx the browser can't display simply downloads.
+        return Storage::disk('local')->response($path, $attendance->check_out_attachment_name);
     }
 
     /**
@@ -408,8 +410,11 @@ class AttendanceController extends Controller
                 'check_out' => $this->coords($attendance->check_out_lat, $attendance->check_out_lng, $attendance->check_out_accuracy),
                 'has_photo' => $attendance->check_in_photo_path !== null,
                 // Proof-of-work file captured at check-out (site photo / doc).
+                // is_image lets the modal render a photo inline vs a doc download.
                 'has_checkout_attachment' => $attendance->check_out_attachment_path !== null,
                 'checkout_attachment_name' => $attendance->check_out_attachment_name,
+                'checkout_attachment_is_image' => $attendance->check_out_attachment_name !== null
+                    && preg_match('/\.(jpg|jpeg|png|webp|gif)$/i', $attendance->check_out_attachment_name) === 1,
             ] : null,
             // Voice/text note captured at check-out. Independent of the worker
             // capture block above (a note can exist without GPS/selfie data).

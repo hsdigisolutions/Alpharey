@@ -212,7 +212,7 @@ it('renders the notifications page with the presented items', function (): void 
             ->component('Notifications/Index')
             ->where('unread', 1)
             ->has('items', 1)
-            ->where('items.0.icon', '💰')
+            ->where('items.0.icon', 'invoices')
             ->where('items.0.category', 'invoices'));
 });
 

@@ -12,6 +12,7 @@ import { Head, router, useForm, usePage } from '@inertiajs/vue3';
 import { t } from '@/translate';
 import { getLocation } from '@/composables/useGeolocation';
 import WorkerLayout from '@/Layouts/WorkerLayout.vue';
+import AppIcon from '@/Components/AppIcon.vue';
 import SelfieCapture from '@/Components/Worker/SelfieCapture.vue';
 import MonthCalendar from '@/Components/Worker/MonthCalendar.vue';
 import PrivacyNotice from '@/Components/Worker/PrivacyNotice.vue';
@@ -94,6 +95,7 @@ let bellTimer = setInterval(() => {
 onUnmounted(() => {
     if (ticker) clearInterval(ticker);
     if (bellTimer) clearInterval(bellTimer);
+    if (recordingTimer) clearInterval(recordingTimer);
 });
 
 // Live worked hours (decimal) since check-in — the source for both the "Hours"
@@ -256,6 +258,14 @@ let mediaRecorder = null;
 let audioChunks = [];
 let recordingStart = null;
 
+// Live elapsed seconds while recording, so the sheet can show a running timer.
+const recordingElapsed = ref(0);
+let recordingTimer = null;
+const recordingLabel = computed(() => {
+    const s = recordingElapsed.value;
+    return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+});
+
 async function startRecording() {
     audioChunks = [];
     try {
@@ -268,6 +278,10 @@ async function startRecording() {
             stream.getTracks().forEach(t => t.stop());
         };
         recordingStart = Date.now();
+        recordingElapsed.value = 0;
+        recordingTimer = setInterval(() => {
+            recordingElapsed.value = Math.round((Date.now() - recordingStart) / 1000);
+        }, 500);
         mediaRecorder.start();
         isRecording.value = true;
     } catch (_) {
@@ -278,6 +292,7 @@ async function startRecording() {
 function stopRecording() {
     mediaRecorder?.stop();
     isRecording.value = false;
+    if (recordingTimer) { clearInterval(recordingTimer); recordingTimer = null; }
 }
 
 const noteTextForm = useForm({ attendance_id: null, text_note: '', duration_seconds: null });
@@ -315,7 +330,7 @@ const noteTextForm = useForm({ attendance_id: null, text_note: '', duration_seco
             <button type="button" class="flex w-full items-center justify-between px-4 py-3"
                 @click="notifOpen = !notifOpen">
                 <span class="flex items-center gap-2 text-sm font-medium text-ink">
-                    <span class="text-base">🔔</span>
+                    <AppIcon name="bell" class="h-4 w-4 text-ink-soft" />
                     {{ $t('worker.notifications') }}
                     <span v-if="notifUnread > 0"
                         class="tabular-nums inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-status-danger px-1.5 text-[11px] font-semibold text-white">
@@ -329,7 +344,9 @@ const noteTextForm = useForm({ attendance_id: null, text_note: '', duration_seco
                     class="flex w-full items-start gap-3 border-b border-line px-4 py-3 text-start last:border-0"
                     :class="{ 'bg-accent-soft/40': !item.read }"
                     @click="openNotification(item)">
-                    <span class="mt-0.5 shrink-0 text-base leading-none">{{ item.icon }}</span>
+                    <span class="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-surface-sunken text-ink-soft">
+                        <AppIcon :name="item.icon" class="h-4 w-4" />
+                    </span>
                     <span class="min-w-0 flex-1">
                         <span class="block text-sm leading-snug text-ink">{{ item.title }}</span>
                         <span v-if="item.body" class="mt-0.5 block text-xs leading-snug text-ink-soft">{{ item.body }}</span>
@@ -572,27 +589,40 @@ const noteTextForm = useForm({ attendance_id: null, text_note: '', duration_seco
 
                 <!-- Note section (optional) -->
                 <p class="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">{{ $t('worker.voice_note') }}</p>
-                <div class="mb-3 flex flex-col items-center gap-2">
+                <div class="mb-3">
+                    <!-- Recorded: show the length. -->
                     <div v-if="audioBlob" class="w-full rounded-md bg-status-ok-soft px-3 py-2 text-sm text-status-ok">
                         {{ $t('worker.note_recorded').replace(':s', audioDuration ?? 0) }}
                     </div>
-                    <template v-else>
-                        <div class="flex items-center gap-3">
-                            <button v-if="!isRecording" type="button"
-                                class="flex h-12 w-12 items-center justify-center rounded-full bg-status-danger text-on-accent shadow-raised"
-                                @click="startRecording">
-                                <span class="h-3.5 w-3.5 rounded-full bg-white" />
-                            </button>
-                            <button v-else type="button"
-                                class="flex h-12 w-12 animate-pulse items-center justify-center rounded-full bg-status-danger text-on-accent shadow-raised"
-                                @click="stopRecording">
-                                <span class="h-3 w-3 rounded-sm bg-white" />
-                            </button>
-                            <p class="text-xs text-ink-soft">
-                                {{ isRecording ? $t('worker.note_recording') : $t('worker.note_tap_record') }}
-                            </p>
-                        </div>
-                    </template>
+
+                    <!-- Recording: a live pulsing indicator, running timer, and a
+                         clear "Stop recording" action. -->
+                    <button v-else-if="isRecording" type="button" @click="stopRecording"
+                        class="flex w-full items-center gap-3 rounded-lg border border-status-danger bg-status-danger-soft px-3 py-3 text-start">
+                        <span class="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-status-danger text-white">
+                            <span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-status-danger opacity-60" />
+                            <span class="relative h-3 w-3 rounded-sm bg-white" />
+                        </span>
+                        <span class="min-w-0 flex-1">
+                            <span class="block text-sm font-semibold text-status-danger">{{ $t('worker.note_stop_record') }}</span>
+                            <span class="tabular-nums block text-xs text-status-danger/80">{{ recordingLabel }}</span>
+                        </span>
+                        <span class="flex items-center gap-0.5" aria-hidden="true">
+                            <span class="w-1 animate-pulse rounded-full bg-status-danger" style="height:8px;animation-delay:0ms" />
+                            <span class="w-1 animate-pulse rounded-full bg-status-danger" style="height:16px;animation-delay:150ms" />
+                            <span class="w-1 animate-pulse rounded-full bg-status-danger" style="height:11px;animation-delay:300ms" />
+                            <span class="w-1 animate-pulse rounded-full bg-status-danger" style="height:18px;animation-delay:450ms" />
+                        </span>
+                    </button>
+
+                    <!-- Idle: a mic icon + a clear prompt. -->
+                    <button v-else type="button" @click="startRecording"
+                        class="flex w-full items-center gap-3 rounded-lg border border-line bg-surface-sunken px-3 py-3 text-start hover:bg-surface-hover">
+                        <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-status-danger text-white">
+                            <AppIcon name="mic" class="h-5 w-5" />
+                        </span>
+                        <span class="text-sm font-medium text-ink">{{ $t('worker.note_tap_record') }}</span>
+                    </button>
                 </div>
                 <VTextarea v-model="noteTextForm.text_note" :rows="2" :placeholder="$t('worker.note_text_placeholder')" class="mb-4" />
 

@@ -38,7 +38,7 @@ class NotificationPresenter
         return [
             'id' => $notification->id,
             'type' => $typeValue,
-            'icon' => $type?->icon() ?? '🔔',
+            'icon' => $type?->icon() ?? 'bell',
             'category' => $type?->category() ?? 'other',
             // Localised single strings — used by the worker PWA (one language).
             'title' => $isEn ? ($titleEn !== '' ? $titleEn : $titleEs) : $titleEs,

@@ -1436,7 +1436,8 @@ return [
         // Feature 1 — claves cortas para la hoja de nota
         'note_recorded' => ':s segundos grabados',
         'note_recording' => 'Grabando…',
-        'note_tap_record' => 'Toque para grabar',
+        'note_tap_record' => 'Toca para grabar tu nota de voz',
+        'note_stop_record' => 'Detener grabación',
         'note_text_placeholder' => 'O escriba una nota aquí…',
         'note_submit' => 'Guardar nota',
         // Feature 2 — categorías de gasto

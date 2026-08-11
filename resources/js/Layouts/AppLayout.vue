@@ -357,13 +357,15 @@ function switchLocale() {
                                 <Bilingual k="common.no_notifications" class="items-center text-sm text-muted" />
                             </div>
                             <button v-for="item in notificationItems" :key="item.id" type="button"
-                                class="flex w-full items-start gap-2 border-b border-line px-3 py-2.5 text-start last:border-0 hover:bg-surface-sunken"
+                                class="flex w-full items-start gap-2.5 border-b border-line px-3 py-2.5 text-start last:border-0 hover:bg-surface-sunken"
                                 :class="{ 'bg-accent-soft/40': !item.read, 'cursor-pointer': item.url }"
                                 @click="markRead(item.id, item.url)">
-                                <span class="mt-0.5 shrink-0 text-base leading-none">{{ item.icon }}</span>
+                                <span class="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-surface-sunken text-ink-soft">
+                                    <AppIcon :name="item.icon" class="h-3.5 w-3.5" />
+                                </span>
                                 <span class="min-w-0 flex-1">
-                                    <span class="block text-xs font-medium leading-snug">{{ item.title_es }}</span>
-                                    <span class="block text-[11px] leading-snug text-muted">{{ item.title_en }}</span>
+                                    <span class="block text-xs font-medium leading-snug">{{ item.title }}</span>
+                                    <span v-if="item.body" class="block text-[11px] leading-snug text-muted">{{ item.body }}</span>
                                     <span class="mt-0.5 block text-[10px] text-faint">{{ item.created_at }}</span>
                                 </span>
                                 <span v-if="!item.read" class="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-accent" />

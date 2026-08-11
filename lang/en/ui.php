@@ -1431,7 +1431,8 @@ return [
         // Feature 1 — note sheet keys (short names used by template)
         'note_recorded' => ':s seconds recorded',
         'note_recording' => 'Recording…',
-        'note_tap_record' => 'Tap to record',
+        'note_tap_record' => 'Tap to record your voice note',
+        'note_stop_record' => 'Stop recording',
         'note_text_placeholder' => 'Or type a note here…',
         'note_submit' => 'Save note',
         // Feature 2 — expense categories + desc
