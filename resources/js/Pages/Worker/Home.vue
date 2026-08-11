@@ -26,13 +26,29 @@ const props = defineProps({
     weekend: { type: Object, default: () => ({ is_weekend: false, rest_day: false, offer: null }) },
     // eslint-disable-next-line vue/prop-name-casing -- Inertia sends snake_case verbatim
     privacy_acknowledged: { type: Boolean, default: true },
-    // Feature 3 — advances
-    // eslint-disable-next-line vue/prop-name-casing
-    pending_advances: { type: Array, default: () => [] },
+    // Worker-direct notifications (PWA bell): { unread, items[] }
+    notifications: { type: Object, default: () => ({ unread: 0, items: [] }) },
 });
 
 const page = usePage();
 const flashError = computed(() => page.props.flash?.error);
+
+// ── PWA notification bell ────────────────────────────────────────────────────
+const notifOpen = ref(false);
+const notifItems = computed(() => props.notifications?.items ?? []);
+const notifUnread = computed(() => props.notifications?.unread ?? 0);
+
+function openNotification(item) {
+    router.post(`/worker/notifications/${item.id}/read`, {}, {
+        preserveScroll: !item.url,
+        preserveState: !item.url,
+        onSuccess: () => { if (item.url && item.url !== '/worker') router.visit(item.url); },
+    });
+}
+
+function markAllNotificationsRead() {
+    router.post('/worker/notifications/read-all', {}, { preserveScroll: true, preserveState: false });
+}
 
 // The month label follows the worker's language (was always Spanish before).
 const monthLabel = computed(() => {
@@ -65,7 +81,20 @@ let ticker = null;
 if (props.today.state === 'checked_in') {
     ticker = setInterval(() => { nowTs.value = Date.now(); }, 1000);
 }
-onUnmounted(() => { if (ticker) clearInterval(ticker); });
+
+// Bell without a WebSocket daemon (the cPanel host can't run one): poll the
+// notifications prop every 60 s via an Inertia partial reload. Pauses while the
+// tab is hidden. The 'worker' prop stays fresh too — cheap partial reload.
+let bellTimer = setInterval(() => {
+    if (document.visibilityState === 'visible') {
+        router.reload({ only: ['notifications'] });
+    }
+}, 60000);
+
+onUnmounted(() => {
+    if (ticker) clearInterval(ticker);
+    if (bellTimer) clearInterval(bellTimer);
+});
 
 const workedSoFar = computed(() => {
     // Use the absolute check-in instant (UTC/ISO) so the elapsed time is correct
@@ -261,6 +290,41 @@ const noteTextForm = useForm({ attendance_id: null, text_note: '', duration_seco
             </p>
         </div>
 
+        <!-- Notification bell: advance / expense / leave decided, weekend offer -->
+        <div v-if="notifItems.length" class="mb-4 rounded-lg border border-line bg-surface-raised shadow-card">
+            <button type="button" class="flex w-full items-center justify-between px-4 py-3"
+                @click="notifOpen = !notifOpen">
+                <span class="flex items-center gap-2 text-sm font-medium text-ink">
+                    <span class="text-base">🔔</span>
+                    {{ $t('worker.notifications') }}
+                    <span v-if="notifUnread > 0"
+                        class="tabular-nums inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-status-danger px-1.5 text-[11px] font-semibold text-white">
+                        {{ notifUnread }}
+                    </span>
+                </span>
+                <span class="text-xs text-muted">{{ notifOpen ? '▲' : '▼' }}</span>
+            </button>
+            <div v-if="notifOpen" class="border-t border-line">
+                <button v-for="item in notifItems" :key="item.id" type="button"
+                    class="flex w-full items-start gap-3 border-b border-line px-4 py-3 text-start last:border-0"
+                    :class="{ 'bg-accent-soft/40': !item.read }"
+                    @click="openNotification(item)">
+                    <span class="mt-0.5 shrink-0 text-base leading-none">{{ item.icon }}</span>
+                    <span class="min-w-0 flex-1">
+                        <span class="block text-sm leading-snug text-ink">{{ item.title }}</span>
+                        <span v-if="item.body" class="mt-0.5 block text-xs leading-snug text-ink-soft">{{ item.body }}</span>
+                        <span class="mt-0.5 block text-[11px] text-faint">{{ item.created_at }}</span>
+                    </span>
+                    <span v-if="!item.read" class="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-accent" />
+                </button>
+                <button v-if="notifUnread > 0" type="button"
+                    class="w-full py-2.5 text-center text-xs font-medium text-accent-hover"
+                    @click="markAllNotificationsRead">
+                    {{ $t('worker.notifications_mark_all') }}
+                </button>
+            </div>
+        </div>
+
         <p v-if="flashError" class="mb-4 rounded-md bg-status-danger-soft px-3 py-2 text-center text-sm text-status-danger">
             {{ flashError }}
         </p>
@@ -400,18 +464,6 @@ const noteTextForm = useForm({ attendance_id: null, text_note: '', duration_seco
             </a>
         </div>
 
-        <!-- Feature 3: Pending advances panel -->
-        <div v-if="pending_advances.length" class="mt-4 rounded-lg border border-line bg-status-warn-soft p-4 shadow-card">
-            <p class="mb-2 text-sm font-semibold text-status-warn">{{ $t('worker.advances_title') }}</p>
-            <ul class="space-y-1">
-                <li v-for="adv in pending_advances" :key="adv.payroll_month"
-                    class="flex items-center justify-between text-sm">
-                    <span class="text-ink-soft">{{ adv.payroll_month ?? '—' }}</span>
-                    <span class="font-medium text-status-warn">{{ $t('worker.advance_pending') }}</span>
-                </li>
-            </ul>
-        </div>
-
         <!-- ── Dashboard: this month ── -->
         <section class="mt-6">
             <h2 class="mb-3 text-sm font-semibold capitalize text-ink">{{ monthLabel }}</h2>
@@ -433,14 +485,9 @@ const noteTextForm = useForm({ attendance_id: null, text_note: '', duration_seco
             </div>
 
 
-            <!-- Calendar -->
+            <!-- Calendar (its own locale-aware legend lives inside the component) -->
             <div class="rounded-lg border border-line bg-surface-raised p-3 shadow-card">
                 <MonthCalendar :month="month" />
-                <div class="mt-3 flex flex-wrap justify-center gap-x-4 gap-y-1 border-t border-line pt-3 text-[11px] text-ink-soft">
-                    <span class="flex items-center gap-1.5"><span class="h-2 w-2 rounded-full bg-status-ok" />{{ $t('worker.legend_present') }}</span>
-                    <span class="flex items-center gap-1.5"><span class="h-2 w-2 rounded-full bg-status-danger" />{{ $t('worker.legend_absent') }}</span>
-                    <span class="flex items-center gap-1.5"><span class="h-2 w-2 rounded-full bg-surface-sunken ring-1 ring-line" />{{ $t('worker.legend_none') }}</span>
-                </div>
             </div>
         </section>
 

@@ -2,19 +2,18 @@
 
 namespace App\Http\Controllers\Worker;
 
-use App\Enums\AdvanceStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Worker\PunchRequest;
-use App\Models\Advance;
 use App\Models\Attendance;
 use App\Models\Employee;
 use App\Models\Project;
 use App\Models\Scopes\CompanyScope;
-use App\Models\WorkerExpense;
 use App\Services\Workers\WorkerAttendanceService;
 use App\Services\Workers\WorkerDashboardService;
+use App\Support\NotificationPresenter;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Notifications\DatabaseNotification;
 use Illuminate\Support\Carbon;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
@@ -58,12 +57,34 @@ class WorkerController extends Controller
             // notice before any punch. When false the app blocks check-in
             // behind the notice screen (the server refuses too — below).
             'privacy_acknowledged' => $employee->hasAcknowledgedPrivacyNotice(),
-            // Feature 3 — pending advance deductions visible on the dashboard.
-            'pending_advances' => $this->pendingAdvances($employee),
-            // Feature 2 — recent expense submissions (last 5) so the worker can
-            // see the status of what they sent.
-            'recent_expenses' => $this->recentExpenses($employee),
+            // Worker-direct notifications (advance/expense/leave decided, weekend
+            // offer) — the PWA bell. Unread count + the latest 10, normalised.
+            // NOTE: NO financial data (advances, deductions, expense amounts) is
+            // ever put on the worker payload — workers see attendance only
+            // (client rule 2026-08-08, reinforced here). Not merely UI-hidden.
+            'notifications' => $this->notificationsPayload($request),
         ]);
+    }
+
+    /**
+     * The worker's own notifications for the PWA bell (worker-direct types).
+     *
+     * @return array{unread: int, items: array<int, array<string, mixed>>}
+     */
+    private function notificationsPayload(Request $request): array
+    {
+        $user = $request->user();
+
+        if ($user === null) {
+            return ['unread' => 0, 'items' => []];
+        }
+
+        return [
+            'unread' => $user->unreadNotifications()->count(),
+            'items' => $user->notifications()->latest()->limit(10)->get()
+                ->map(fn (DatabaseNotification $n) => NotificationPresenter::present($n))
+                ->all(),
+        ];
     }
 
     public function checkIn(PunchRequest $request): RedirectResponse
@@ -109,50 +130,6 @@ class WorkerController extends Controller
         $this->attendance->reportAbsence($employee, $validated['note']);
 
         return redirect()->route('worker.home')->with('success', __('ui.worker.absence_saved'));
-    }
-
-    /**
-     * Approved advances not yet deducted from payroll — surfaced so the worker
-     * knows a deduction is coming, but WITHOUT the euro amount: workers never see
-     * money amounts (client rule 2026-08-08). Only the month + reason.
-     *
-     * @return list<array{reason: string|null, payroll_month: string|null}>
-     */
-    private function pendingAdvances(Employee $employee): array
-    {
-        return Advance::query()
-            ->withoutGlobalScope(CompanyScope::class)
-            ->where('employee_id', $employee->id)
-            ->where('status', AdvanceStatus::Approved->value)
-            ->latest('request_date')
-            ->get()
-            ->map(fn (Advance $a) => [
-                'reason' => $a->reason,
-                'payroll_month' => $a->payroll_month,
-            ])
-            ->all();
-    }
-
-    /**
-     * The worker's last 5 expense submissions with their current status.
-     *
-     * @return list<array{date: string, amount: float, category: string, status: string}>
-     */
-    private function recentExpenses(Employee $employee): array
-    {
-        return WorkerExpense::query()
-            ->withoutGlobalScope(CompanyScope::class)
-            ->where('employee_id', $employee->id)
-            ->latest()
-            ->limit(5)
-            ->get()
-            ->map(fn (WorkerExpense $e) => [
-                'date' => $e->date->toDateString(),
-                'amount' => (float) $e->amount,
-                'category' => $e->category,
-                'status' => $e->status->value,
-            ])
-            ->all();
     }
 
     /**

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\NotificationType;
 use App\Enums\PaymentMethod;
 use App\Enums\PayrollStatus;
 use App\Exports\PayrollExport;
@@ -9,6 +10,7 @@ use App\Http\Controllers\Admin\Concerns\ResolvesCompanyContext;
 use App\Models\LockedPeriod;
 use App\Models\Payroll;
 use App\Services\Audit\AuditLogger;
+use App\Services\Notifications\NotificationDispatcher;
 use App\Services\Payroll\PayrollService;
 use App\Services\Payroll\PayrollWorkflow;
 use App\Support\PeriodLock;
@@ -82,7 +84,17 @@ class PayrollController extends Controller
 
         $companyId = $this->contextCompanyId();
 
-        $count = $service->calculateMonth($companyId, $this->resolveMonth($request));
+        $month = $this->resolveMonth($request);
+        $count = $service->calculateMonth($companyId, $month);
+
+        // The month's payroll is ready to review — notify the admins/managers.
+        if ($count > 0) {
+            app(NotificationDispatcher::class)->dispatch(NotificationType::PayrollReady, $companyId, [
+                'title_es' => "Nómina lista para revisar ({$month})",
+                'title_en' => "Payroll ready to review ({$month})",
+                'entity' => $month, 'url' => '/payroll',
+            ]);
+        }
 
         return back()->with('success', __('ui.payroll.calculated', ['count' => $count]));
     }
@@ -92,8 +104,16 @@ class PayrollController extends Controller
         Gate::authorize('payroll.approve');
 
         $companyId = $this->contextCompanyId();
+        $month = $this->resolveMonth($request);
 
-        $workflow->approveAll($companyId, $this->resolveMonth($request));
+        $workflow->approveAll($companyId, $month);
+
+        // Approval is a Super-Admin-visible event (sign-off before payment).
+        app(NotificationDispatcher::class)->dispatch(NotificationType::PayrollApproved, $companyId, [
+            'title_es' => "Nómina aprobada ({$month})",
+            'title_en' => "Payroll approved ({$month})",
+            'entity' => $month, 'url' => '/payroll',
+        ]);
 
         return back()->with('success', __('ui.payroll.approved'));
     }

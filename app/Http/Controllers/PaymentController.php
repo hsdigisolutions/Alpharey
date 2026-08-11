@@ -2,10 +2,13 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\NotificationType;
 use App\Enums\PaymentMethod;
+use App\Enums\PaymentStatus;
 use App\Models\Invoice;
 use App\Models\Payment;
 use App\Services\Invoices\InvoiceTotals;
+use App\Services\Notifications\NotificationDispatcher;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -31,6 +34,8 @@ class PaymentController extends Controller
             'notes' => ['nullable', 'string', 'max:1000'],
         ]);
 
+        $wasPaid = $invoice->payment_status === PaymentStatus::Paid;
+
         DB::transaction(function () use ($invoice, $validated, $totals): void {
             $payment = new Payment($validated);
             $payment->invoice_id = $invoice->id;
@@ -42,6 +47,15 @@ class PaymentController extends Controller
             $totals->applyPaymentStatus($invoice);
             $invoice->save();
         });
+
+        // Fully-settled just now (not already paid) → Super-Admin-visible event.
+        if (! $wasPaid && $invoice->payment_status === PaymentStatus::Paid) {
+            app(NotificationDispatcher::class)->dispatch(NotificationType::InvoicePaid, $invoice->company_id, [
+                'title_es' => "Factura pagada: {$invoice->number}",
+                'title_en' => "Invoice paid: {$invoice->number}",
+                'entity' => $invoice->number, 'url' => '/invoices',
+            ]);
+        }
 
         return back()->with('success', __('ui.invoices.payment_saved'));
     }

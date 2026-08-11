@@ -1,12 +1,17 @@
 <script setup>
 /**
- * The worker's month at a glance. Each cell shows the day type:
- *   C  = jornada completa (green)   ·  M = media jornada (amber)
- *   hours = por horas (blue)        ·  m = por metros (coral)
- *   A  = ausente (red)              ·  grey = weekend / future / no record
+ * The worker's month at a glance. Each cell carries a short, LOCALE-AWARE label
+ * (never a bare letter) — resolved through translation keys so ES and EN read
+ * their own abbreviations:
+ *   full day  → PF / FD (green)      ·  half day → PH / HD (amber)
+ *   partial   → actual hours (blue)  ·  per_meter → metres (coral)
+ *   absent    → AU / AB (light red, lighter when auto-generated)
+ *   leave     → PE / LV (blue)       ·  weekend worked → FS / WE (purple)
+ *   weekend, no work → empty grey cell
  *
  * Read-only history. Tapping a day with a record reveals its detail (project,
- * hours, amount) below the grid. The grid starts on Monday (EU convention).
+ * hours) below the grid. The grid starts on Monday (EU convention). A legend
+ * under the grid explains the codes, also locale-aware.
  */
 import { computed, ref } from 'vue';
 import { t } from '@/translate';
@@ -15,15 +20,32 @@ const props = defineProps({
     month: { type: Object, required: true },
 });
 
-const weekdayLetters = ['L', 'M', 'X', 'J', 'V', 'S', 'D'];
+// Monday-first weekday headers, localised (Lun–Dom / Mon–Sun) — never the old
+// hardcoded Spanish letters, which were unreadable in English (X for Wed …).
+const weekdayLabels = computed(() => [
+    t('weekdays.mon'), t('weekdays.tue'), t('weekdays.wed'), t('weekdays.thu'),
+    t('weekdays.fri'), t('weekdays.sat'), t('weekdays.sun'),
+]);
 const leadingBlanks = computed(() => (props.month.calendar[0]?.weekday ?? 0));
 
 const selected = ref(null);
 
+// Sat = 5, Sun = 6 in the service's Monday-first weekday index.
+function isWeekend(cell) {
+    return cell.weekday >= 5;
+}
+
 function cellClass(cell) {
-    if (cell.status === 'absent') return 'bg-status-danger-soft text-status-danger';
+    if (cell.status === 'absent') {
+        // A nightly auto-absence reads lighter than a manual one.
+        return cell.is_auto_generated
+            ? 'bg-status-danger-soft/50 text-status-danger'
+            : 'bg-status-danger-soft text-status-danger';
+    }
     if (cell.status === 'leave') return 'bg-status-info-soft text-status-info';
     if (cell.status !== 'present') return 'bg-surface-sunken/60 text-muted';
+    // Weekend work is its own colour, regardless of the graded day type.
+    if (isWeekend(cell)) return 'bg-accent-soft text-accent';
     switch (cell.day_type) {
         case 'half': return 'bg-status-warn-soft text-status-warn';
         case 'hourly': return 'bg-status-info-soft text-status-info';
@@ -33,15 +55,16 @@ function cellClass(cell) {
 }
 
 function marker(cell) {
-    if (cell.status === 'absent') return 'A';
-    if (cell.status === 'leave') return 'P';
+    if (cell.status === 'absent') return t('worker.cal_absent');
+    if (cell.status === 'leave') return t('worker.cal_leave');
     if (cell.status !== 'present') return '';
+    if (isWeekend(cell)) return t('worker.cal_weekend');
     switch (cell.day_type) {
-        case 'full': return 'C';
-        case 'half': return 'M';
+        case 'full': return t('worker.cal_full');
+        case 'half': return t('worker.cal_half');
         case 'per_meter': return `${Math.round(cell.quantity ?? 0)}m`;
         case 'hourly': return `${Math.round((cell.hours ?? 0) * 10) / 10}h`;
-        default: return '';
+        default: return t('worker.cal_full');
     }
 }
 
@@ -59,7 +82,7 @@ function select(cell) {
 <template>
     <div>
         <div class="mb-2 grid grid-cols-7 gap-1 text-center">
-            <span v-for="letter in weekdayLetters" :key="letter" class="text-[11px] font-medium text-muted">{{ letter }}</span>
+            <span v-for="label in weekdayLabels" :key="label" class="text-[11px] font-medium text-muted">{{ label }}</span>
         </div>
 
         <div class="grid grid-cols-7 gap-1">
@@ -76,6 +99,30 @@ function select(cell) {
                 <span class="absolute start-1 top-0.5 text-[9px] opacity-70">{{ cell.day }}</span>
                 <span class="text-xs font-semibold leading-none">{{ marker(cell) }}</span>
             </button>
+        </div>
+
+        <!-- Legend — locale-aware codes so the grid is legible in ES or EN. -->
+        <div class="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-ink-soft">
+            <span class="flex items-center gap-1">
+                <span class="inline-block h-2.5 w-2.5 rounded-sm bg-status-ok-soft" />
+                {{ t('worker.cal_full') }} {{ t('worker.legend_full') }}
+            </span>
+            <span class="flex items-center gap-1">
+                <span class="inline-block h-2.5 w-2.5 rounded-sm bg-status-warn-soft" />
+                {{ t('worker.cal_half') }} {{ t('worker.legend_half') }}
+            </span>
+            <span class="flex items-center gap-1">
+                <span class="inline-block h-2.5 w-2.5 rounded-sm bg-status-danger-soft" />
+                {{ t('worker.cal_absent') }} {{ t('worker.legend_absent') }}
+            </span>
+            <span class="flex items-center gap-1">
+                <span class="inline-block h-2.5 w-2.5 rounded-sm bg-status-info-soft" />
+                {{ t('worker.cal_leave') }} {{ t('worker.legend_leave') }}
+            </span>
+            <span class="flex items-center gap-1">
+                <span class="inline-block h-2.5 w-2.5 rounded-sm bg-accent-soft" />
+                {{ t('worker.cal_weekend') }} {{ t('worker.legend_weekend') }}
+            </span>
         </div>
 
         <!-- Tapped-day detail -->

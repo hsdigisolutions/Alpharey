@@ -2,8 +2,11 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\NotificationType;
 use App\Http\Requests\Attendance\StoreWeekendOfferRequest;
+use App\Models\Employee;
 use App\Models\WeekendWorkOffer;
+use App\Services\Notifications\NotificationDispatcher;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Gate;
 
@@ -31,6 +34,17 @@ class WeekendWorkOfferController extends Controller
         ]);
         $offer->created_by = $request->user()?->id;
         $offer->save();
+
+        // Ping the invited workers' PWA bell: weekend work is available for them.
+        $date = $offer->offer_date->toDateString();
+        $invited = Employee::query()->whereIn('id', $offer->invited_employee_ids)->get();
+        app(NotificationDispatcher::class)->dispatchToEmployees(NotificationType::WeekendOffer, $invited, [
+            'title_es' => "Trabajo disponible el {$date}",
+            'title_en' => "Work available on {$date}",
+            'body_es' => "Hay trabajo disponible el {$date}. Puedes fichar ese día.",
+            'body_en' => "There is work available on {$date}. You can check in that day.",
+            'entity' => $date, 'url' => '/worker',
+        ]);
 
         return back()->with('success', __('ui.attendance.offer_saved'));
     }

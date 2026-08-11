@@ -86,6 +86,13 @@ function isWeekend(day) {
     return dow === 0 || dow === 6;
 }
 
+// Locale-aware weekday abbreviation for a day column (Lun–Dom / Mon–Sun).
+const weekdayKeys = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+function weekdayKey(day) {
+    const [y, m] = props.month.split('-').map(Number);
+    return weekdayKeys[new Date(y, m - 1, day).getDay()];
+}
+
 /* --- bulk modal --- */
 const showBulkModal = ref(false);
 
@@ -186,8 +193,11 @@ const monthLabel = computed(() => {
                         <th class="sticky start-0 z-10 min-w-40 bg-surface-sunken px-3 py-2 text-start">
                             <Bilingual k="attendance.employee" class="text-xs font-semibold text-ink-soft" />
                         </th>
-                        <th v-for="day in days" :key="day" class="w-9 px-1 py-2 text-center font-semibold"
-                            :class="isWeekend(day) ? 'text-faint' : 'text-ink-soft'">{{ day }}</th>
+                        <th v-for="day in days" :key="day" class="w-9 px-1 py-1.5 text-center font-semibold"
+                            :class="isWeekend(day) ? 'text-faint' : 'text-ink-soft'">
+                            <span class="block text-[9px] font-medium uppercase leading-none text-muted">{{ $t(`weekdays.${weekdayKey(day)}`) }}</span>
+                            <span class="block leading-tight">{{ day }}</span>
+                        </th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-line">

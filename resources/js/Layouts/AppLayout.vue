@@ -9,7 +9,7 @@
  * Non-dashboard destinations activate in their build phases — until then
  * they render as muted, disabled rows.
  */
-import { computed, ref, watch } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { Link, router, usePage } from '@inertiajs/vue3';
 import AppIcon from '@/Components/AppIcon.vue';
 import VAvatar from '@/Components/ui/VAvatar.vue';
@@ -93,6 +93,26 @@ function markRead(id, url) {
         onSuccess: () => { if (url) router.visit(url); },
     });
 }
+
+// Real-time-ish bell without a WebSocket daemon (the cPanel host can't run one):
+// poll the shared notifications prop every 60 s via an Inertia partial reload.
+// Pauses while the tab is hidden to avoid needless traffic.
+let bellTimer = null;
+
+function refreshBell() {
+    if (document.visibilityState !== 'visible') return;
+    router.reload({ only: ['notifications'] });
+}
+
+onMounted(() => {
+    if (page.props.auth.user) {
+        bellTimer = window.setInterval(refreshBell, 60000);
+    }
+});
+
+onUnmounted(() => {
+    if (bellTimer) window.clearInterval(bellTimer);
+});
 
 // Four most-used destinations; the fifth slot is the "Más" button below, which
 // opens EVERY module. Without it the bottom nav stranded ~18 destinations —
@@ -338,17 +358,21 @@ function switchLocale() {
                             </div>
                             <button v-for="item in notificationItems" :key="item.id" type="button"
                                 class="flex w-full items-start gap-2 border-b border-line px-3 py-2.5 text-start last:border-0 hover:bg-surface-sunken"
-                                :class="{ 'bg-accent-soft/40': !item.read, 'cursor-pointer': item.data.url }"
-                                @click="markRead(item.id, item.data.url)">
-                                <span class="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full"
-                                    :class="item.read ? 'bg-transparent' : 'bg-accent'" />
+                                :class="{ 'bg-accent-soft/40': !item.read, 'cursor-pointer': item.url }"
+                                @click="markRead(item.id, item.url)">
+                                <span class="mt-0.5 shrink-0 text-base leading-none">{{ item.icon }}</span>
                                 <span class="min-w-0 flex-1">
-                                    <span class="block text-xs font-medium leading-snug">{{ item.data.title_es }}</span>
-                                    <span class="block text-[11px] leading-snug text-muted">{{ item.data.title_en }}</span>
+                                    <span class="block text-xs font-medium leading-snug">{{ item.title_es }}</span>
+                                    <span class="block text-[11px] leading-snug text-muted">{{ item.title_en }}</span>
                                     <span class="mt-0.5 block text-[10px] text-faint">{{ item.created_at }}</span>
                                 </span>
+                                <span v-if="!item.read" class="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-accent" />
                             </button>
                         </div>
+                        <Link href="/notifications"
+                            class="block border-t border-line px-3 py-2 text-center text-xs font-medium text-accent-hover hover:bg-surface-sunken">
+                            <Bilingual k="common.view_all_notifications" inline class="text-xs" />
+                        </Link>
                     </VDropdown>
 
                     <!-- Language -->

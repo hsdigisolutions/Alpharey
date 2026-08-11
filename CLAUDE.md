@@ -5,9 +5,133 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Status: Phase 9 in progress — hardening (2026-08-01)
 
 **Every screen 01–26 is built (Phase 8 complete).** Phase 9 is hardening, UAT, and
-launch — no new screens. Current: **753 Pest tests / 4384 assertions passing (1
+launch — no new screens. Current: **764 Pest tests / 4416 assertions passing (1
 skipped) · Pint clean · Larastan level 6 clean · `composer audit` + `npm audit`
 clean · production Vite build working.**
+
+### Worker PWA hardening — no money, locale labels, short-shift alert (2026-08-11)
+
+A worker-side pass following the notification build.
+
+**No financial data on the worker payload (defence in depth).** The "Pending
+deductions" panel is gone from `Worker/Home.vue`, and `WorkerController::home`
+no longer ships `pending_advances` OR `recent_expenses` (the latter carried
+expense `amount`s and wasn't even rendered). Workers get attendance +
+worker-direct notifications only — nothing with a euro figure reaches the wire,
+not merely the UI. Tests in `WorkerFeaturesTest` now assert those props are
+`missing` from the payload.
+
+**Locale-aware calendar labels + legend.** `Worker/Components/MonthCalendar.vue`
+no longer shows bare letters (C/M/P). Each cell renders a short code through a
+translation key so it follows the worker's language: full → **PF/FD** (green),
+half → **PH/HD** (amber), partial hours → the actual hours e.g. `2h` (blue),
+absent → **AU/AB** (light red, lighter when auto-generated via the new
+`is_auto_generated` cell flag), leave → **PE/LV** (blue), weekend worked →
+**FS/WE** (purple), weekend-no-work → empty grey. A locale-aware legend sits
+under the grid (the old duplicate legend in `Home.vue` was removed). Keys:
+`worker.cal_*` + `worker.legend_*` in both dictionaries.
+
+**Locale-aware weekday headers.** The calendar column headers were hardcoded
+Spanish single letters (`L M X J V S D`) — unreadable in English (X = Wednesday).
+Now driven by shared `weekdays.*` keys (Mon-first: Lun–Dom / Mon–Sun) in every
+calendar: the worker `MonthCalendar`, the Employee-detail Asistencia tab, AND the
+admin Attendance grid (Screen 11) — where each day column now shows its weekday
+abbreviation above the date number. Verified live in both languages.
+
+**Day-type thresholds** already read from per-company Settings
+(`AttendanceService::dayTypeThresholds` → `attendance.full/half_day_threshold.{id}`,
+default 6/3) and freeze onto each row — unchanged, confirmed. Partial-hours =
+the `hourly` grade below the half threshold.
+
+**Short-shift alert (new `NotificationType::ShortHours`, role → Admin+Manager).**
+On check-out, `WorkerAttendanceService::notifyIfShortShift` fires when
+`0 < hours < half_day_threshold` — the admins/managers get "Jornada corta —
+{name}" + a bilingual body ("… solo 2h 30m … no alcanza media jornada"), linking
+to `/attendance`. Pinned by two `WorkerAttendanceTest` cases (fires under the
+threshold, silent for a full day).
+
+**Notifications render in the VIEWER's language (Fix 7).** Notifications store
+BOTH languages (title_es/title_en, and now optional body_es/body_en) — never a
+single app-default string. `NotificationPresenter` adds a `title`/`body`
+resolved to the signed-in user's saved locale (`app()->getLocale()`), used by
+the worker PWA (one language); the bilingual CRM bell/page still show both. The
+dispatcher + `SystemNotification` carry the optional bilingual body through to
+the DB + mail. The worker PWA now also **polls the bell every 60 s** (same
+WebSocket-less fallback as the CRM — Reverb is not installed). Verified live:
+the same two worker notifications render Spanish under ES and English under EN.
+
+**⚠️ Money-in-worker-notifications conflict (client decision needed).** The Fix 6
+spec text included euro amounts in the worker's advance/expense notifications
+("Tu anticipo de 200 € …"). That contradicts Fix 1 + the standing rule that
+workers never see money (2026-08-08). The stronger, repeated rule won: worker
+notifications stay **amount-free** ("Tu anticipo fue aprobado"). Flip only if the
+client explicitly wants amounts shown to workers.
+
+### Notification system — wired end to end (2026-08-09)
+
+The bell + notifications were mostly plumbing before (dispatcher/rules/matrix/
+mark-read existed, but almost nothing CALLED the dispatcher). This pass wires
+every trigger, builds the standalone page + a worker bell, and normalises the
+payload shape so the bell and the page agree.
+
+**Delivery mechanism.** Reverb/WebSockets are NOT installed and the cPanel host
+can't run a daemon, so the bell **polls every 60 s** (the spec's sanctioned
+fallback) via an Inertia partial reload of the shared `notifications` prop
+(`AppLayout.vue`, paused while the tab is hidden). No real-time socket in v1.
+
+**One presenter, one shape.** `App\Support\NotificationPresenter::present()`
+flattens any stored notification — `SystemNotification` OR
+`DocumentAlertNotification` — to `{id, type, icon, category, title_es, title_en,
+url, read, created_at}`. `NotificationType::icon()` (emoji) + `category()`
+(documents/payroll/invoices/vehicles/workers/other) are the single source; the
+bell (`HandleInertiaRequests`), the page, and the worker payload all go through
+it. `DocumentAlertNotification` payloads now carry a `type` + `url` too, so
+document/vehicle alerts render with the right glyph and land in the right filter.
+
+**Event triggers wired** (all through `NotificationDispatcher`):
+Advance request→`AdvancePending` (admin+manager) · advance decided→`AdvanceDecided`
+(worker bell) · Leave request→`LeavePending` · leave decided→`LeaveDecided`
+(worker) · Worker-expense submit (PWA + fuel)→`ExpensePending` · expense
+approved/rejected→`ExpenseDecided` (worker) · Payroll calculate→`PayrollReady`
+(admin) · approveAll→`PayrollApproved` (SA) · Invoice fully paid→`InvoicePaid`
+(SA, once, guarded on the Unpaid→Paid transition) · Weekend offer
+published→`WeekendOffer` to the invited workers (`dispatchToEmployees`). GPS-missing
+(`WorkerGpsMissing`) already fired from `WorkerAttendanceService`.
+
+**Time-based sweep** — new `notifications:scan` command (scheduled `dailyAt('08:00')`
+Madrid in `routes/console.php`): overdue unpaid SALE invoices (once, via a new
+`invoices.overdue_notified_at` flag — migration `2026_08_09_000004`, server-set,
+not fillable), vehicles out >24 h (reuses the `vehicle_sessions.overdue_alerted`
+flag), and call follow-ups due today (`CallFollowUp`→the caller, worker-direct).
+Nightly `attendance:auto-absent` now also emits a per-company `AutoAbsent` summary.
+Document + vehicle-expiry alerts stay in `verto:scan-documents` (unchanged
+schedule). **All console sweeps eager-load tenant-scoped relations with
+`withoutGlobalScopes()`** — a cron run has no current company, so a scoped
+relation resolves to null (caught by the new tests).
+
+**Worker-direct family.** `AdvanceDecided`/`ExpenseDecided`/`LeaveDecided`/
+`WeekendOffer`/`CallFollowUp` are `isWorkerDirect()` — delivered to ONE user via
+`dispatchToUser`/`dispatchToEmployees`, excluded from the Settings role matrix
+(`NotificationRules::matrix()` skips them). Default recipient roles
+(`NotificationType::defaultRoles`) follow the spec: payroll-ready / invoice-overdue
+/ GPS-missing / auto-absent / vehicle → Company Admin; advance/expense/leave
+pending → Admin+Manager; document-expired / deployment → SA+Admin; payroll-approved
+/ invoice-paid → SA. (Pinned by `NotificationRulesTest`'s default-fallback test.)
+
+**Surfaces.** (1) Header bell (`AppLayout`) — red unread badge, dropdown of the
+latest 10 with emoji + bilingual title + time-ago, mark-all-read, "Ver todas" →
+`/notifications`. (2) New **`/notifications`** page (`Notifications/Index.vue`,
+`NotificationController@index`) — filter tabs (Todas/No leídas/Documentos/Nóminas/
+Facturas/Vehículos/Trabajadores, category filter at the DB level on `data->type`
+so pagination stays right), unread=coral left-border rows, click→mark-read+navigate,
+"Marcar todo como leído" + "Eliminar leídas" (`deleteRead` → `readNotifications()`),
+25/page. (3) Worker PWA bell (`Worker/Home.vue`) — collapsible panel of
+worker-direct notifications, own read routes under `/worker/notifications/*` (the
+CRM routes are `not_worker`-gated). Tests: `NotificationTriggersTest` (10 — event
+triggers, the scan command's 3 sweeps, page render + presenter icon/category,
+delete-read). **Also fixed:** the attendance edit modal's note heading said "Voice
+note" even for a text-only note — now shows a mic + "Voice note" only when there is
+audio, else a file glyph + "Note".
 
 ### Payroll auto-calc hardening + vehicle fines (2026-08-08)
 

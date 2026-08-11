@@ -142,6 +142,12 @@ Route::middleware(['auth', 'active', 'worker'])->prefix('worker')->group(functio
     Route::post('/vehicles/{vehicle}/take', [WorkerVehicleController::class, 'take'])->name('worker.vehicles.take');
     Route::post('/vehicle-sessions/{session}/fuel', [WorkerVehicleController::class, 'logFuel'])->name('worker.vehicle-sessions.fuel');
     Route::post('/vehicle-sessions/{session}/return', [WorkerVehicleController::class, 'returnVehicle'])->name('worker.vehicle-sessions.return');
+
+    // PWA notification bell — workers can't reach the CRM /notifications routes
+    // (they are in the not_worker group), so they get their own read actions.
+    // Both operate on $request->user() (the worker), so no extra scoping needed.
+    Route::post('/notifications/read-all', [NotificationController::class, 'markAllRead'])->name('worker.notifications.read-all');
+    Route::post('/notifications/{id}/read', [NotificationController::class, 'markRead'])->name('worker.notifications.read');
 });
 
 /*
@@ -417,8 +423,10 @@ Route::middleware(['auth', 'active', 'two_factor', 'not_worker'])->group(functio
     // (pivot-validated in CurrentCompany::select — 403 for anyone else).
     Route::post('/company/{company}/switch', CompanySwitchController::class)->name('company.switch');
 
-    // Bell
+    // Bell + notifications page
+    Route::get('/notifications', [NotificationController::class, 'index'])->name('notifications.index');
     Route::post('/notifications/read-all', [NotificationController::class, 'markAllRead'])->name('notifications.read-all');
+    Route::post('/notifications/delete-read', [NotificationController::class, 'deleteRead'])->name('notifications.delete-read');
     Route::post('/notifications/{id}/read', [NotificationController::class, 'markRead'])->name('notifications.read');
 
     // Screen 02 + Screen 04 — Super Admin only

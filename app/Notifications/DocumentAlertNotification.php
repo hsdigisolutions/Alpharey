@@ -16,7 +16,7 @@ class DocumentAlertNotification extends Notification
     use Queueable;
 
     /**
-     * @param  array{kind: string, title_es: string, title_en: string, entity: string|null, company: string|null, days: int|null, document_id: string|null}  $payload
+     * @param  array{kind: string, title_es: string, title_en: string, entity: string|null, company: string|null, days: int|null, document_id: string|null, type?: string, url?: string}  $payload
      */
     public function __construct(private array $payload) {}
 

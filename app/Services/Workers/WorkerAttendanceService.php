@@ -161,7 +161,7 @@ class WorkerAttendanceService
 
         $this->lock->assertOpen($employee->company_id, $today, 'check_out');
 
-        return DB::transaction(function () use ($employee, $attendance, $location): Attendance {
+        $attendance = DB::transaction(function () use ($employee, $attendance, $location): Attendance {
             // update() recomputes hours_worked + total_amount from the snapshot.
             $attendance = $this->attendance->update($attendance, [
                 'check_out' => now()->format('H:i'),
@@ -179,6 +179,47 @@ class WorkerAttendanceService
 
             return $attendance;
         });
+
+        $this->notifyIfShortShift($employee, $attendance);
+
+        return $attendance;
+    }
+
+    /**
+     * A day that fell SHORT of the company's half-day threshold (worked, but
+     * under half a jornada) pings the Company Admins + Managers so they can
+     * check whether the short shift is correct. Fires only for a real, >0-hour
+     * day — a 0-hour open check-in is not a short shift.
+     */
+    private function notifyIfShortShift(Employee $employee, Attendance $attendance): void
+    {
+        $hours = (float) $attendance->hours_worked;
+        $half = $this->attendance->dayTypeThresholds($employee->company_id)['half'];
+
+        if ($hours <= 0 || $hours >= $half) {
+            return;
+        }
+
+        $hoursLabel = $this->hoursLabel($hours);
+
+        $this->notifications->dispatch(NotificationType::ShortHours, $employee->company_id, [
+            'title_es' => "Jornada corta — {$employee->full_name}",
+            'title_en' => "Short shift — {$employee->full_name}",
+            'body_es' => "{$employee->full_name} ha fichado solo {$hoursLabel} hoy. No alcanza media jornada. Revisar si es correcto.",
+            'body_en' => "{$employee->full_name} only clocked {$hoursLabel} today. Does not reach half day. Please review.",
+            'entity' => $employee->full_name,
+            'company' => $employee->company?->name,
+            'url' => '/attendance',
+        ]);
+    }
+
+    /** "2h 30m" from a decimal hours value, for the short-shift message. */
+    private function hoursLabel(float $hours): string
+    {
+        $h = (int) floor($hours);
+        $m = (int) round(($hours - $h) * 60);
+
+        return "{$h}h {$m}m";
     }
 
     /**

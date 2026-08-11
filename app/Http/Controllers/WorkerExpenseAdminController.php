@@ -2,12 +2,14 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\NotificationType;
 use App\Enums\WorkerExpenseStatus;
 use App\Http\Controllers\Admin\Concerns\ResolvesCompanyContext;
 use App\Models\Employee;
 use App\Models\WorkerExpense;
 use App\Rules\OwnCompanyEmployee;
 use App\Services\Audit\AuditLogger;
+use App\Services\Notifications\NotificationDispatcher;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -117,6 +119,8 @@ class WorkerExpenseAdminController extends Controller
         $workerExpense->rejection_reason = null;
         $workerExpense->save();
 
+        $this->notifyWorker($workerExpense, true);
+
         return back()->with('success', __('ui.worker_expenses.approved'));
     }
 
@@ -134,7 +138,23 @@ class WorkerExpenseAdminController extends Controller
         $workerExpense->approved_at = now();
         $workerExpense->save();
 
+        $this->notifyWorker($workerExpense, false);
+
         return back()->with('success', __('ui.worker_expenses.rejected'));
+    }
+
+    /** Tell the worker their expense was approved / rejected (PWA bell). */
+    private function notifyWorker(WorkerExpense $expense, bool $approved): void
+    {
+        app(NotificationDispatcher::class)->dispatchToUser(
+            NotificationType::ExpenseDecided,
+            $expense->employee?->user,
+            [
+                'title_es' => $approved ? 'Tu gasto fue aprobado' : 'Tu gasto fue rechazado',
+                'title_en' => $approved ? 'Your expense was approved' : 'Your expense was rejected',
+                'entity' => $expense->description, 'url' => '/worker',
+            ],
+        );
     }
 
     public function downloadReceipt(WorkerExpense $workerExpense): BinaryFileResponse

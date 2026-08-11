@@ -31,7 +31,7 @@ class WorkerDashboardService
      *     present: int,
      *     absent: int,
      *     hours: float,
-     *     calendar: list<array{day:int, weekday:int, status:string, day_type:string|null, hours:float|null, quantity:float|null, project:string|null, is_today:bool}>
+     *     calendar: list<array{day:int, weekday:int, status:string, day_type:string|null, hours:float|null, quantity:float|null, project:string|null, is_auto_generated:bool, is_today:bool}>
      * }
      *
      * Deliberately carries NO money: a worker never sees wage/earning amounts
@@ -54,7 +54,7 @@ class WorkerDashboardService
             // The worker has no company session, so the project's tenant scope
             // would resolve to null — drop it (the row already pins to them).
             ->with(['project' => fn ($q) => $q->withoutGlobalScope(CompanyScope::class)->select('id', 'name')])
-            ->get(['id', 'date', 'status', 'day_type', 'hours_worked', 'quantity', 'project_id']);
+            ->get(['id', 'date', 'status', 'day_type', 'hours_worked', 'quantity', 'project_id', 'is_auto_generated']);
 
         $byDate = $rows->keyBy(fn (Attendance $r): string => $r->date->toDateString());
 
@@ -85,6 +85,8 @@ class WorkerDashboardService
                 'hours' => $row !== null ? (float) $row->hours_worked : null,
                 'quantity' => $row !== null && $row->quantity !== null ? (float) $row->quantity : null,
                 'project' => $row?->project?->name,
+                // A nightly auto-absence is shaded lighter than a manual one.
+                'is_auto_generated' => $row !== null && $row->is_auto_generated,
                 // The one day the worker can actually act on — highlighted, and
                 // it is the only date any punch ever writes to (server-enforced).
                 'is_today' => $cursor->isSameDay($today),

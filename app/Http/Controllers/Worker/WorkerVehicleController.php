@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Worker;
 
+use App\Enums\NotificationType;
 use App\Http\Controllers\Controller;
 use App\Models\Employee;
 use App\Models\Scopes\CompanyScope;
@@ -9,6 +10,7 @@ use App\Models\Vehicle;
 use App\Models\VehicleFine;
 use App\Models\VehicleSession;
 use App\Models\WorkerExpense;
+use App\Services\Notifications\NotificationDispatcher;
 use App\Services\Workers\VehicleSessionService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -171,6 +173,17 @@ class WorkerVehicleController extends Controller
         }
 
         $expense->save();
+
+        // Fuel logged as a worker expense is a receipt awaiting admin review.
+        app(NotificationDispatcher::class)->dispatch(
+            NotificationType::ExpensePending,
+            (int) $employee->company_id,
+            [
+                'title_es' => "Nuevo gasto de combustible de {$employee->full_name}",
+                'title_en' => "New fuel expense from {$employee->full_name}",
+                'entity' => $employee->full_name, 'url' => '/worker-expenses',
+            ],
+        );
 
         return back()->with('success', __('ui.worker_vehicles.fuel_logged'));
     }

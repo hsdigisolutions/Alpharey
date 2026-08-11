@@ -3,9 +3,11 @@
 namespace App\Http\Controllers;
 
 use App\Enums\AdvanceStatus;
+use App\Enums\NotificationType;
 use App\Models\Advance;
 use App\Models\AdvanceCategory;
 use App\Rules\OwnCompanyEmployee;
+use App\Services\Notifications\NotificationDispatcher;
 use App\Services\Payroll\PayrollService;
 use App\Support\CurrentCompany;
 use Illuminate\Http\RedirectResponse;
@@ -69,6 +71,16 @@ class AdvanceController extends Controller
             app(PayrollService::class)->calculateMonth($companyId, $advance->payroll_month);
         }
 
+        // A request awaiting review pings the admins/managers.
+        if (! $autoApprove && $companyId !== null) {
+            $name = $advance->employee?->full_name;
+            app(NotificationDispatcher::class)->dispatch(NotificationType::AdvancePending, $companyId, [
+                'title_es' => "Nuevo anticipo pendiente: {$name}",
+                'title_en' => "New advance pending: {$name}",
+                'entity' => $name, 'url' => '/payroll',
+            ]);
+        }
+
         return back()->with('success', __('ui.advances.saved'));
     }
 
@@ -97,6 +109,18 @@ class AdvanceController extends Controller
         }
 
         $advance->save();
+
+        // Tell the worker their advance was approved / rejected (PWA bell).
+        $approved = $advance->status === AdvanceStatus::Approved;
+        app(NotificationDispatcher::class)->dispatchToUser(
+            NotificationType::AdvanceDecided,
+            $advance->employee?->user,
+            [
+                'title_es' => $approved ? 'Tu anticipo fue aprobado' : 'Tu anticipo fue rechazado',
+                'title_en' => $approved ? 'Your advance was approved' : 'Your advance was rejected',
+                'entity' => $advance->reason, 'url' => '/worker',
+            ],
+        );
 
         return back()->with('success', __('ui.advances.decided'));
     }

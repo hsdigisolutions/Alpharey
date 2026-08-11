@@ -5,7 +5,9 @@ namespace App\Http\Middleware;
 use App\Models\Company;
 use App\Models\User;
 use App\Support\CurrentCompany;
+use App\Support\NotificationPresenter;
 use Illuminate\Http\Request;
+use Illuminate\Notifications\DatabaseNotification;
 use Inertia\Middleware;
 use Tighten\Ziggy\Ziggy;
 
@@ -93,16 +95,13 @@ class HandleInertiaRequests extends Middleware
                 (new Ziggy)->toArray(),
                 ['location' => $request->url()],
             ),
-            // Bell: unread count + the latest few (REQUIREMENTS.md §12)
+            // Bell: unread count + the latest 10 (REQUIREMENTS.md §12), each
+            // normalised to a flat shape (icon/category/title/url) by the
+            // presenter so the dropdown and the /notifications page agree.
             'notifications' => $user === null ? null : [
                 'unread' => $user->unreadNotifications()->count(),
-                'items' => $user->notifications()->latest()->limit(8)->get()
-                    ->map(fn ($notification) => [
-                        'id' => $notification->id,
-                        'read' => $notification->read_at !== null,
-                        'created_at' => $notification->created_at?->diffForHumans(),
-                        'data' => $notification->data,
-                    ]),
+                'items' => $user->notifications()->latest()->limit(10)->get()
+                    ->map(fn (DatabaseNotification $n) => NotificationPresenter::present($n)),
             ],
         ]);
     }

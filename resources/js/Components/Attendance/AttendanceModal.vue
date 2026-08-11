@@ -426,12 +426,14 @@ function formatCoords(loc) {
                 </div>
             </div>
 
-            <!-- Voice/text note captured at check-out. Read-only. -->
+            <!-- Voice/text note captured at check-out. Read-only. The heading
+                 follows the note's kind: a mic + "Voice note" only when there is
+                 actual audio, otherwise a note glyph + "Note" for a text note. -->
             <div v-if="record?.voice_note" class="rounded-md border border-line bg-surface-sunken p-3">
                 <div class="mb-2 flex items-center gap-2">
-                    <AppIcon name="mic" class="h-4 w-4 text-ink-soft" />
-                    <Bilingual k="attendance.voice_note" inline class="text-sm font-medium" />
-                    <span v-if="record.voice_note.duration_seconds" class="text-xs text-muted">
+                    <AppIcon :name="record.voice_note.has_audio ? 'mic' : 'file'" class="h-4 w-4 text-ink-soft" />
+                    <Bilingual :k="record.voice_note.has_audio ? 'attendance.voice_note' : 'attendance.note'" inline class="text-sm font-medium" />
+                    <span v-if="record.voice_note.has_audio && record.voice_note.duration_seconds" class="text-xs text-muted">
                         {{ record.voice_note.duration_seconds }}s
                     </span>
                 </div>

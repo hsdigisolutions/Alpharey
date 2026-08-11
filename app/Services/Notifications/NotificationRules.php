@@ -83,6 +83,11 @@ class NotificationRules
         $out = [];
 
         foreach (NotificationType::cases() as $type) {
+            // Worker-direct types go to a specific user, not a role — not tunable.
+            if ($type->isWorkerDirect()) {
+                continue;
+            }
+
             $roles = [];
 
             foreach (UserRole::cases() as $role) {

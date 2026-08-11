@@ -18,7 +18,7 @@ class SystemNotification extends Notification
     use Queueable;
 
     /**
-     * @param  array{type: string, title_es: string, title_en: string, entity: string|null, company: string|null, url: string|null}  $payload
+     * @param  array{type: string, title_es: string, title_en: string, body_es?: string|null, body_en?: string|null, entity?: string|null, company?: string|null, url?: string|null}  $payload
      */
     public function __construct(private array $payload) {}
 
@@ -38,7 +38,15 @@ class SystemNotification extends Notification
             ->line($this->payload['title_es'])
             ->line($this->payload['title_en']);
 
-        if ($this->payload['entity'] !== null) {
+        if (($this->payload['body_es'] ?? null) !== null) {
+            $message->line($this->payload['body_es']);
+        }
+
+        if (($this->payload['body_en'] ?? null) !== null) {
+            $message->line($this->payload['body_en']);
+        }
+
+        if (($this->payload['entity'] ?? null) !== null) {
             $message->line($this->payload['entity']);
         }
 

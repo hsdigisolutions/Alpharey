@@ -2,10 +2,12 @@
 
 namespace App\Console\Commands;
 
+use App\Enums\NotificationType;
 use App\Models\Attendance;
 use App\Models\Company;
 use App\Models\Employee;
 use App\Models\Scopes\CompanyScope;
+use App\Services\Notifications\NotificationDispatcher;
 use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
 
@@ -60,6 +62,8 @@ class AutoAbsentCommand extends Command
             ->flip();
 
         $created = 0;
+        /** @var array<int, int> $perCompany */
+        $perCompany = [];
 
         foreach ($employees as $employee) {
             if (isset($already[$employee->id])) {
@@ -81,7 +85,18 @@ class AutoAbsentCommand extends Command
             $absence->is_weekend = false;
             $absence->save();
 
+            $perCompany[$employee->company_id] = ($perCompany[$employee->company_id] ?? 0) + 1;
             $created++;
+        }
+
+        // One summary per company that had auto-absences → its Company Admins.
+        $dispatcher = app(NotificationDispatcher::class);
+        foreach ($perCompany as $companyId => $count) {
+            $dispatcher->dispatch(NotificationType::AutoAbsent, $companyId, [
+                'title_es' => "Ausencias automáticas ({$dateStr}): {$count} trabajador(es)",
+                'title_en' => "Automatic absences ({$dateStr}): {$count} worker(s)",
+                'entity' => $dateStr, 'url' => '/attendance',
+            ]);
         }
 
         $this->info("Auto-absent {$dateStr}: {$created} absence(s) created.");

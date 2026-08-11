@@ -95,6 +95,8 @@ class ScanDocuments extends Command
 
                 $this->notifyCompanyAdmins($vehicle->company_id, [
                     'kind' => $daysLeft === 0 ? 'expired' : 'expiring',
+                    'type' => 'vehicle_expiry',
+                    'url' => '/vehicles',
                     'title_es' => $daysLeft === 0
                         ? "Vehículo — vence hoy: {$label}"
                         : "Vehículo — vence en {$daysLeft} días: {$label}",
@@ -149,6 +151,8 @@ class ScanDocuments extends Command
 
             $this->notifyCompanyAdmins($document->company_id, [
                 'kind' => $daysLeft === 0 ? 'expired' : 'expiring',
+                'type' => $daysLeft === 0 ? 'document_expired' : 'document_expiry',
+                'url' => '/documents',
                 'title_es' => $daysLeft === 0
                     ? "Documento vencido hoy: {$label}"
                     : "Documento vence en {$daysLeft} días: {$label}",
@@ -207,6 +211,8 @@ class ScanDocuments extends Command
 
                 $this->notifyCompanyAdmins($company->id, [
                     'kind' => $kind,
+                    'type' => $kind === 'monthly_overdue' ? 'document_expired' : 'document_expiry',
+                    'url' => '/documents',
                     'title_es' => match ($kind) {
                         'monthly_overdue' => "Documento mensual NO subido el mes pasado: {$typeKey}",
                         'monthly_urgent' => "Urgente: documento mensual pendiente (quedan 2 días): {$typeKey}",
@@ -234,6 +240,8 @@ class ScanDocuments extends Command
             User::query()->where('role', UserRole::SuperAdmin->value)->where('active', true)->get()
                 ->each(fn (User $admin) => $admin->notify(new DocumentAlertNotification([
                     'kind' => 'overdue_summary',
+                    'type' => 'document_expired',
+                    'url' => '/documents',
                     'title_es' => 'Resumen de documentos mensuales vencidos: '.$summary,
                     'title_en' => 'Overdue monthly documents summary: '.$summary,
                     'entity' => null,
@@ -249,7 +257,7 @@ class ScanDocuments extends Command
     }
 
     /**
-     * @param  array{kind: string, title_es: string, title_en: string, entity: string|null, company: string|null, days: int|null, document_id: string|null}  $payload
+     * @param  array{kind: string, title_es: string, title_en: string, entity: string|null, company: string|null, days: int|null, document_id: string|null, type?: string, url?: string}  $payload
      */
     private function notifyCompanyAdmins(?int $companyId, array $payload): void
     {

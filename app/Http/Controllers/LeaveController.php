@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Enums\LeaveStatus;
+use App\Enums\NotificationType;
 use App\Http\Controllers\Admin\Concerns\ResolvesCompanyContext;
 use App\Http\Requests\AdjustLeaveBalanceRequest;
 use App\Http\Requests\ReviewLeaveRequest;
@@ -13,6 +14,7 @@ use App\Models\LeaveBalance;
 use App\Models\LeaveCategory;
 use App\Services\Audit\AuditLogger;
 use App\Services\Leave\LeaveService;
+use App\Services\Notifications\NotificationDispatcher;
 use App\Support\CurrentCompany;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
@@ -78,12 +80,20 @@ class LeaveController extends Controller
             $this->storeAttachment($request, $leave, $companyId);
         }
 
+        $name = $leave->employee?->full_name;
+        app(NotificationDispatcher::class)->dispatch(NotificationType::LeavePending, $companyId, [
+            'title_es' => "Nueva solicitud de ausencia: {$name}",
+            'title_en' => "New leave request: {$name}",
+            'entity' => $name, 'url' => '/leave',
+        ]);
+
         return back()->with('success', __('ui.leave.requested'));
     }
 
     public function approve(ReviewLeaveRequest $request, Leave $leave): RedirectResponse
     {
         $this->leave->approve($leave, $request->string('review_notes')->value() ?: null);
+        $this->notifyWorker($leave, true);
 
         return back()->with('success', __('ui.leave.approved'));
     }
@@ -91,8 +101,32 @@ class LeaveController extends Controller
     public function reject(ReviewLeaveRequest $request, Leave $leave): RedirectResponse
     {
         $this->leave->reject($leave, $request->string('review_notes')->value() ?: null);
+        $this->notifyWorker($leave, false);
 
         return back()->with('success', __('ui.leave.rejected'));
+    }
+
+    /** Tell the worker their leave was approved / rejected (PWA bell). */
+    private function notifyWorker(Leave $leave, bool $approved): void
+    {
+        $from = $leave->start_date->toDateString();
+        $to = $leave->end_date->toDateString();
+
+        app(NotificationDispatcher::class)->dispatchToUser(
+            NotificationType::LeaveDecided,
+            $leave->employee?->user,
+            [
+                'title_es' => $approved ? 'Tu permiso fue aprobado' : 'Tu permiso fue rechazado',
+                'title_en' => $approved ? 'Your leave was approved' : 'Your leave was rejected',
+                'body_es' => $approved
+                    ? "Tu solicitud de permiso del {$from} al {$to} ha sido aprobada."
+                    : 'Tu solicitud de permiso ha sido rechazada.',
+                'body_en' => $approved
+                    ? "Your leave request from {$from} to {$to} has been approved."
+                    : 'Your leave request has been rejected.',
+                'entity' => $from, 'url' => '/worker',
+            ],
+        );
     }
 
     public function cancel(Request $request, Leave $leave): RedirectResponse

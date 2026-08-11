@@ -92,6 +92,39 @@ it('notifies the company admins when a worker checks in without GPS', function (
     );
 });
 
+it('notifies admins about a short shift under the half-day threshold', function (): void {
+    Notification::fake();
+
+    // Check in at 09:00 (beforeEach clock), then check out at 10:30 — 1.5 h,
+    // under the default 3 h half-day threshold → a short-shift alert.
+    $this->actingAs($this->worker)->post('/worker/check-in', ['denied' => true])->assertRedirect();
+
+    $this->travelTo('2026-08-10 10:30');
+    $this->actingAs($this->worker)->post('/worker/check-out', ['denied' => true])->assertRedirect();
+
+    Notification::assertSentTo(
+        User::where('role', 'admin')->where('company_id', $this->company->id)->get(),
+        SystemNotification::class,
+        fn (SystemNotification $n) => ($n->toDatabase($this->worker)['type'] ?? null) === 'short_hours',
+    );
+});
+
+it('does not raise a short-shift alert for a full-length day', function (): void {
+    Notification::fake();
+
+    $this->actingAs($this->worker)->post('/worker/check-in', ['denied' => true])->assertRedirect();
+
+    // Check out after 8 h — well over the half-day threshold.
+    $this->travelTo('2026-08-10 17:00');
+    $this->actingAs($this->worker)->post('/worker/check-out', ['denied' => true])->assertRedirect();
+
+    Notification::assertNotSentTo(
+        User::where('role', 'admin')->where('company_id', $this->company->id)->get(),
+        SystemNotification::class,
+        fn (SystemNotification $n) => ($n->toDatabase($this->worker)['type'] ?? null) === 'short_hours',
+    );
+});
+
 it('does not raise the GPS alert when a location is captured', function (): void {
     Notification::fake();
 

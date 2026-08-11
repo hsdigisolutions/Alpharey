@@ -362,7 +362,7 @@ describe('Feature 2 – worker expense', function () {
             ->assertForbidden();
     });
 
-    it('approved expenses appear on the worker dashboard', function () {
+    it('never ships expense amounts to the worker payload', function () {
         [$user, $employee, $company] = workerWithEmployee();
 
         WorkerExpense::factory()->for($employee)->for($company)->create([
@@ -371,21 +371,21 @@ describe('Feature 2 – worker expense', function () {
             'amount' => '50.00',
         ]);
 
-        // The home action returns recent_expenses in props
+        // Fix 1 (client rule 2026-08-08, reinforced): NO financial data ever
+        // reaches the worker payload — not merely hidden in the UI. The
+        // recent_expenses prop (which carried amounts) was removed entirely.
         $this->actingAs($user)
             ->get('/worker')
-            ->assertInertia(fn ($page) => $page->has('recent_expenses', 1)
-                ->where('recent_expenses.0.status', 'approved')
-            );
+            ->assertInertia(fn ($page) => $page->missing('recent_expenses'));
     });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Feature 3 — Advances panel
+// Feature 3 — No financial data on the worker PWA (Fix 1)
 // ─────────────────────────────────────────────────────────────────────────────
 
-describe('Feature 3 – advances panel', function () {
-    it('worker sees pending deductions on dashboard', function () {
+describe('Feature 3 – no financial data', function () {
+    it('never ships pending advances / deductions to the worker payload', function () {
         [$user, $employee, $company] = workerWithEmployee();
 
         Advance::factory()->for($employee)->for($company)->create([
@@ -394,22 +394,11 @@ describe('Feature 3 – advances panel', function () {
             'payroll_month' => '2026-07',
         ]);
 
-        // Workers never see money amounts (client rule 2026-08-08): the panel
-        // surfaces the pending deduction by month, without the euro figure.
+        // Workers see attendance only. The pending_advances prop (deductions)
+        // was removed from the payload entirely — defence in depth, not UI hiding.
         $this->actingAs($user)
             ->get('/worker')
-            ->assertInertia(fn ($page) => $page->has('pending_advances', 1)
-                ->where('pending_advances.0.payroll_month', '2026-07')
-                ->missing('pending_advances.0.amount')
-            );
-    });
-
-    it('worker sees no advances panel when none exist', function () {
-        [$user] = workerWithEmployee();
-
-        $this->actingAs($user)
-            ->get('/worker')
-            ->assertInertia(fn ($page) => $page->has('pending_advances', 0));
+            ->assertInertia(fn ($page) => $page->missing('pending_advances'));
     });
 });
 

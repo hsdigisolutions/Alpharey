@@ -121,7 +121,11 @@ function followUpOverdue(value) {
 // --- Asistencia tab ---
 const showAttModal = ref(false);
 const attNewDate = ref(null);
-const attWeekdays = ['L', 'M', 'X', 'J', 'V', 'S', 'D'];
+// Monday-first weekday headers, localised (Lun–Dom / Mon–Sun).
+const attWeekdays = computed(() => [
+    t('weekdays.mon'), t('weekdays.tue'), t('weekdays.wed'), t('weekdays.thu'),
+    t('weekdays.fri'), t('weekdays.sat'), t('weekdays.sun'),
+]);
 
 const attStatusStyle = {
     late: 'bg-status-warn-soft text-status-warn',

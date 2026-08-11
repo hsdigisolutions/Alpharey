@@ -38,6 +38,7 @@ use Illuminate\Support\Carbon;
  * @property Carbon $invoice_date
  * @property Carbon|null $due_date
  * @property Carbon|null $payment_date
+ * @property Carbon|null $overdue_notified_at
  * @property numeric-string $subtotal
  * @property VatRate|null $vat_rate
  * @property numeric-string $vat_amount
@@ -86,6 +87,7 @@ class Invoice extends Model
             'invoice_date' => 'date:Y-m-d',
             'due_date' => 'date:Y-m-d',
             'payment_date' => 'date:Y-m-d',
+            'overdue_notified_at' => 'datetime',
             'subtotal' => 'decimal:2',
             'vat_amount' => 'decimal:2',
             'discount_value' => 'decimal:2',
