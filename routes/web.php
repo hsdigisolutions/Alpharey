@@ -304,6 +304,9 @@ Route::middleware(['auth', 'active', 'two_factor', 'not_worker'])->group(functio
 
     // Screen 10 Gastos / Screen 09 Tab 6 — expenses
     Route::get('/expenses', [ExpenseController::class, 'index'])->name('expenses.index');
+    // Export routes BEFORE any /expenses/{param} route (decision 30).
+    Route::get('/expenses/export', [ExpenseController::class, 'export'])->name('expenses.export');
+    Route::get('/expenses/export-pdf', [ExpenseController::class, 'exportPdf'])->name('expenses.export-pdf');
     Route::post('/expenses', [ExpenseController::class, 'store'])->name('expenses.store');
     Route::get('/expenses/{expense}/receipt', [ExpenseController::class, 'downloadReceipt'])->name('expenses.receipt');
     Route::post('/expenses/{expense}', [ExpenseController::class, 'update'])->name('expenses.update');

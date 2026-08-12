@@ -62,6 +62,12 @@ function apply(extra = {}) {
     router.get('/expenses', { ...filters, ...extra }, { preserveScroll: true, preserveState: true });
 }
 
+// Export the current filtered view (built as a computed so the query string is
+// never assembled inline in the template).
+const exportQuery = computed(() => new URLSearchParams(
+    Object.fromEntries(Object.entries(filters).filter(([, v]) => v !== '' && v != null)),
+).toString());
+
 /* ---------- create / edit ---------- */
 const showModal = ref(false);
 const editingId = ref(null);
@@ -166,6 +172,14 @@ const columns = [
     <Head :title="$t('expenses.title')" />
     <AppLayout>
         <VPageHeader k="expenses.title">
+            <a v-if="can.export" :href="`/expenses/export?${exportQuery}`"
+                class="inline-flex items-center gap-1.5 rounded-md border border-line-strong bg-surface-raised px-3 py-1.5 text-sm text-ink hover:bg-surface-hover">
+                <AppIcon name="download" class="h-4 w-4" /> Excel
+            </a>
+            <a v-if="can.export" :href="`/expenses/export-pdf?${exportQuery}`"
+                class="inline-flex items-center gap-1.5 rounded-md border border-line-strong bg-surface-raised px-3 py-1.5 text-sm text-ink hover:bg-surface-hover">
+                <AppIcon name="download" class="h-4 w-4" /> PDF
+            </a>
             <VButton v-if="can.edit" variant="secondary" icon="settings" @click="showCategories = true">
                 <Bilingual k="expenses.manage_categories" inline />
             </VButton>

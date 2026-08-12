@@ -189,6 +189,18 @@ it('denies expenses without view permission', function (): void {
     $this->actingAs($user)->get('/expenses')->assertForbidden();
 });
 
+it('exports the filtered expenses to Excel and PDF', function (): void {
+    $this->actingAs($this->admin)->post('/expenses', expensePayload());
+
+    $this->actingAs($this->admin)->get('/expenses/export')->assertOk();
+
+    $this->actingAs($this->admin)->get('/expenses/export-pdf')
+        ->assertOk()
+        ->assertHeader('content-type', 'application/pdf');
+
+    expect(AuditLog::where('action', 'exported')->where('module', 'expenses')->count())->toBeGreaterThanOrEqual(1);
+});
+
 it('uploads a receipt and serves it to a viewer, audited', function (): void {
     Storage::fake('local');
 

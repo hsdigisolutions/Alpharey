@@ -7,6 +7,7 @@ use App\Enums\ExpenseType;
 use App\Enums\PaymentMethod;
 use App\Enums\PaymentStatus;
 use App\Enums\VatRate;
+use App\Exports\ExpensesExport;
 use App\Http\Controllers\Admin\Concerns\ResolvesCompanyContext;
 use App\Models\CompanyCard;
 use App\Models\Employee;
@@ -18,14 +19,19 @@ use App\Rules\OwnCompanyEmployee;
 use App\Rules\OwnCompanyProject;
 use App\Services\Audit\AuditLogger;
 use App\Support\CurrentCompany;
+use Barryvdh\DomPDF\Facade\Pdf;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response as HttpResponse;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
+use Maatwebsite\Excel\Facades\Excel;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
@@ -42,11 +48,15 @@ class ExpenseController extends Controller
 {
     use ResolvesCompanyContext;
 
-    public function index(Request $request): Response
+    /**
+     * The list query, shared by the screen and the Excel/PDF exports so that
+     * "export the filtered view" is literal and the two can never drift.
+     *
+     * @return Builder<Expense>
+     */
+    private function filteredQuery(Request $request): Builder
     {
-        Gate::authorize('expenses.view');
-
-        $expenses = Expense::query()
+        return Expense::query()
             ->with(['vendor:id,name', 'project:id,name', 'employee:id,full_name', 'category:id,name'])
             ->when($request->filled('search'), fn ($q) => $q->where('number', 'like', '%'.$request->string('search').'%'))
             ->when($request->filled('project_id'), fn ($q) => $q->where('project_id', $request->integer('project_id')))
@@ -59,7 +69,14 @@ class ExpenseController extends Controller
             ->when($request->filled('approval'), fn ($q) => $q->where('approved', $request->string('approval')->value() === 'approved'))
             ->when($request->filled('from'), fn ($q) => $q->whereDate('date', '>=', $request->string('from')))
             ->when($request->filled('to'), fn ($q) => $q->whereDate('date', '<=', $request->string('to')))
-            ->orderByDesc('date')->orderByDesc('id')
+            ->orderByDesc('date')->orderByDesc('id');
+    }
+
+    public function index(Request $request): Response
+    {
+        Gate::authorize('expenses.view');
+
+        $expenses = $this->filteredQuery($request)
             ->paginate(25)
             ->withQueryString()
             ->through(fn (Expense $e): array => $this->row($e));
@@ -136,6 +153,34 @@ class ExpenseController extends Controller
         $expense->save();
 
         return back()->with('success', __('ui.expenses.'.($validated['approved'] ? 'approved' : 'rejected')));
+    }
+
+    /**
+     * The CURRENT FILTERED VIEW as a spreadsheet — same query as the screen.
+     */
+    public function export(Request $request, AuditLogger $audit): BinaryFileResponse
+    {
+        Gate::authorize('expenses.export');
+
+        $rows = $this->filteredQuery($request)->get();
+        $audit->log('exported', new Expense, null, null, 'Expenses Excel', 'expenses');
+
+        return Excel::download(new ExpensesExport($rows), 'gastos.xlsx');
+    }
+
+    /**
+     * The CURRENT FILTERED VIEW as a PDF — same query as the screen.
+     */
+    public function exportPdf(Request $request, AuditLogger $audit): HttpResponse
+    {
+        Gate::authorize('expenses.export');
+
+        $rows = $this->filteredQuery($request)->get();
+        $audit->log('exported', new Expense, null, null, 'Expenses PDF', 'expenses');
+
+        $pdf = Pdf::loadView('exports.expenses-pdf', ['expenses' => $rows])->setPaper('a4', 'landscape');
+
+        return $pdf->download('gastos.pdf');
     }
 
     /**
