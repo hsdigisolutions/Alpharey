@@ -71,8 +71,9 @@ class ExpensesExport implements FromCollection, WithHeadings, WithMapping
             $expense->date->toDateString(),
             $expense->due_date?->toDateString(),
             (float) $expense->subtotal,
-            // Blank VAT stays blank — never 0% (DECISIONS.md)
-            $expense->vat_rate?->percent(),
+            // Blank VAT stays blank — never 0% (DECISIONS.md); a custom rate
+            // exports its typed percentage, not 0.
+            $expense->vat_rate?->effectivePercent($expense->vat_custom_percent),
             (float) $expense->vat_amount,
             (float) $expense->total,
             $expense->payment_method?->value,

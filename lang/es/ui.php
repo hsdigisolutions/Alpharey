@@ -1948,6 +1948,8 @@ return [
         'payment_partial' => 'Parcial',
         'payment_paid' => 'Pagada',
         'payment_pending' => 'Pendiente',
+        'paid_total' => 'Pagado',
+        'outstanding' => 'Pendiente de cobro',
         'payment_method' => 'Forma de pago',
         'payment_method_bank_transfer' => 'Transferencia bancaria',
         'payment_method_cash' => 'Efectivo',

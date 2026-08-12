@@ -210,6 +210,15 @@ function openEdit(row) {
 const payForm = useForm({ amount: '', payment_date: '', payment_method: '', reference: '' });
 const editingPayments = computed(() => props.editing?.payments ?? []);
 
+// Paid / outstanding / status summary so recording a payment gives clear feedback.
+const paymentSummary = computed(() => {
+    const e = props.editing;
+    if (!e) return null;
+    const total = Number(e.total) || 0;
+    const paid = Number(e.paid_amount) || 0;
+    return { total, paid, outstanding: Math.max(0, Math.round((total - paid) * 100) / 100), status: e.payment_status };
+});
+
 function logPayment() {
     payForm.post(`/invoices/${editingId.value}/payments`, {
         preserveScroll: true,
@@ -505,6 +514,19 @@ const columns = computed(() => [
             <template v-if="editingId">
                 <div class="mt-6 border-t border-line pt-5 space-y-3">
                     <Bilingual k="invoices.payments" class="text-[13px] font-semibold" />
+
+                    <!-- Paid / outstanding / status — clear feedback after recording. -->
+                    <div v-if="paymentSummary" class="tabular-nums flex flex-wrap items-center gap-x-5 gap-y-1 rounded-lg border border-line bg-surface-sunken px-3 py-2 text-sm">
+                        <span class="text-status-ok">
+                            <Bilingual k="invoices.paid_total" inline />: {{ eur(paymentSummary.paid) }}
+                        </span>
+                        <span :class="paymentSummary.outstanding > 0 ? 'text-status-warn' : 'text-ink-soft'">
+                            <Bilingual k="invoices.outstanding" inline />: {{ eur(paymentSummary.outstanding) }}
+                        </span>
+                        <VBadge :status="paymentBadge[paymentSummary.status] ?? 'neutral'" class="ms-auto">
+                            <Bilingual :k="`invoices.payment_${paymentSummary.status}`" inline />
+                        </VBadge>
+                    </div>
 
                     <!-- Existing payments list -->
                     <div v-if="editingPayments.length" class="space-y-1">

@@ -1943,6 +1943,8 @@ return [
         'payment_partial' => 'Partial',
         'payment_paid' => 'Paid',
         'payment_pending' => 'Pending',
+        'paid_total' => 'Paid',
+        'outstanding' => 'Outstanding',
         'payment_method' => 'Payment method',
         'payment_method_bank_transfer' => 'Bank transfer',
         'payment_method_cash' => 'Cash',

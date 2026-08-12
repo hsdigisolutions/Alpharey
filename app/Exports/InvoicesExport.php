@@ -76,8 +76,9 @@ class InvoicesExport implements FromCollection, WithHeadings, WithMapping
             $invoice->due_date?->toDateString(),
             (float) $invoice->subtotal,
             (float) $invoice->discount_amount,
-            // Blank VAT stays blank — never 0% (DECISIONS.md)
-            $invoice->vat_rate?->percent(),
+            // Blank VAT stays blank — never 0% (DECISIONS.md); a custom rate
+            // exports its typed percentage, not 0.
+            $invoice->vat_rate?->effectivePercent($invoice->vat_custom_percent),
             (float) $invoice->vat_amount,
             $invoice->retention_percent !== null ? (float) $invoice->retention_percent : null,
             (float) $invoice->retention_amount,
