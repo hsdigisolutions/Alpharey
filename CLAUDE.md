@@ -9,6 +9,55 @@ launch — no new screens. Current: **781 Pest tests / 4526 assertions passing (
 skipped) · Pint clean · Larastan level 6 clean · `composer audit` + `npm audit`
 clean · production Vite build working.**
 
+### Expenses & Invoices parity + Measurements audit (2026-08-12)
+
+Brought the new Expenses/Invoices modules up to (and past) the legacy VertoCRM
+reference, after a code + live-staging audit of the old system. Six committed
+increments (all gate-green; **792 Pest tests / 4588 assertions, 1 skipped**):
+
+- **Invoice PDF** now renders the issuing company's **logo** (base64-embedded
+  when `companies.logo_path` is set — DomPDF can't fetch remote assets) and the
+  full **address** block beside the CIF. *Open follow-up: no UI uploads a company
+  logo yet — a Settings company-logo upload would make the logo actually appear.*
+- **Admin expense receipt** made usable end to end: a file field on the form
+  (the `storeAttachment` backend was already wired) + a gated, audited download
+  route (`GET /expenses/{expense}/receipt`) + a per-row link (Rule 10 pattern).
+- **Expense list filters** expanded to match the legacy: search + Type +
+  Category + Payment-status (via a shared `filteredQuery`).
+- **Expense categories CRUD** — `ExpenseCategoryController` (store/update/destroy,
+  gated `expenses.edit`, tenancy-aware: own rows only, group defaults read-only;
+  a referenced category deactivates instead of deleting). Managed inline on the
+  Gastos screen ("Categories" modal). `ExpenseCategory::scopeForCompany`.
+- **"Bearable By"** (`App\Enums\BearableBy`: company/client/employee/unbillable,
+  migration `2026_08_12_000001`) replaces the plain reimbursable checkbox. The
+  controller derives `is_reimbursable` from the bearer; a `deduct_from_salary`
+  flag on an employee-borne cost comes OFF payroll in a new encrypted
+  `payrolls.expense_deductions` bucket (`PayrollService::expenseSalaryDeductionsFor`,
+  shown on the payslip + breakdown). Only CLIENT-bearable costs feed invoicing.
+- **Expense Excel + PDF export** (`ExpensesExport` + `exports.expenses-pdf`) of
+  the filtered view, gated `expenses.export` + audited; routes registered before
+  `/expenses/{param}` (decision 30).
+- **Invoice project auto-calc** (legacy "Method 2") — `GET /invoices/project-costs`
+  JSON endpoint with an admin-chosen basis: **costs** (labour + client-borne
+  approved expenses, itemised, × margin), **subtotal** (one line), or **meter**
+  (approved measured metres × the project's client meter rate). A "Calculate from
+  project" panel in the invoice slide-over prefills the editable line items;
+  InvoiceTotals still re-derives on save.
+- **Invoice reminders** wired at last — `NotificationType::InvoiceReminder`
+  (→ Company Admin) + a `notifications:scan` sweep that flags projects worked
+  this month but not yet invoiced, using the dormant `invoice_reminders` table as
+  the cadence guard (`reminder_days`, 0/null treated as 7).
+
+**Measurements — investigated, REPORTED ONLY (client decision, not yet fixed).**
+The audit found production tasks / task templates / daily-production exist only as
+three empty Phase-4 tables (`production_tasks`, `task_templates`, `task_progress`)
+with zero code, and — the real gap — **approved measurements do NOT feed billing
+or P&L**: `ProfitabilityService` computes per-meter revenue from **Attendance**
+(`day_type=per_meter`), never from the `measurements` table, despite docblocks
+claiming otherwise. No measurement export; no reject state (boolean approve only);
+no task categories/weightage. The client chose "report only" for now — building
+the production-task subsystem + wiring measurements→billing is a future module.
+
 ### Worker privacy CONSENT — full legal-evidence system (2026-08-11)
 
 Reworked the worker "privacy notice" from a single acknowledgement (a timestamp +
