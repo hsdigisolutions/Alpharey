@@ -7,6 +7,8 @@ const props = defineProps({
     disabled: { type: Boolean, default: false },
     invalid: { type: Boolean, default: false },
     id: { type: String, default: null },
+    // null = auto (search when the list is long); true/false forces it.
+    searchable: { type: Boolean, default: null },
 });
 
 const emit = defineEmits(['update:modelValue']);
@@ -15,7 +17,25 @@ const open = ref(false);
 const nativeRef = ref(null);
 const triggerRef = ref(null);
 const panelRef = ref(null);
+const searchRef = ref(null);
 const options = ref([]);
+const search = ref('');
+
+// A live filter appears automatically once the list is long enough to be worth
+// searching (clients, projects, workers, vendors…); short enum dropdowns stay
+// plain. Can be forced on/off with the `searchable` prop.
+const showSearch = computed(() => props.searchable ?? options.value.length > 7);
+
+const filteredOptions = computed(() => {
+    const q = search.value.trim().toLowerCase();
+    if (!q) return options.value;
+    return options.value.filter(o => String(o.label ?? '').toLowerCase().includes(q));
+});
+
+function pickFirst() {
+    const first = filteredOptions.value.find(o => !o.disabled);
+    if (first !== undefined) pick(first.value);
+}
 
 /* Read options from the hidden native <select> so v-for / $t() / dynamic
    values all just work — no VNode parsing needed. */
@@ -46,11 +66,17 @@ function onClickOutside(e) {
     open.value = false;
 }
 
-/* Scroll the active option into view each time the panel opens. */
+/* Reset the filter and either focus the search box or scroll the active option
+   into view, each time the panel opens. */
 watch(open, async (v) => {
     if (!v) return;
+    search.value = '';
     await nextTick();
-    panelRef.value?.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest' });
+    if (showSearch.value) {
+        searchRef.value?.focus();
+    } else {
+        panelRef.value?.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest' });
+    }
 });
 
 onMounted(() => {
@@ -103,7 +129,15 @@ onUnmounted(() => document.removeEventListener('mousedown', onClickOutside));
             <div v-if="open" ref="panelRef" role="listbox"
                 class="vselect-panel absolute z-50 mt-1 max-h-60 overflow-y-auto rounded-md border border-line bg-surface-raised shadow-raised"
                 style="width: max-content; min-width: 100%;">
-                <button v-for="opt in options" :key="opt.value"
+                <!-- Live search — appears for long lists (workers, projects, clients…). -->
+                <div v-if="showSearch" class="sticky top-0 z-10 border-b border-line bg-surface-raised p-1.5">
+                    <input ref="searchRef" v-model="search" type="text"
+                        :placeholder="$t('common.search')"
+                        class="w-full rounded-sm border border-line-strong bg-surface-sunken px-2.5 py-1.5 text-sm text-ink placeholder:text-muted focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
+                        @keydown.esc.prevent.stop="open = false"
+                        @keydown.enter.prevent="pickFirst()" />
+                </div>
+                <button v-for="opt in filteredOptions" :key="opt.value"
                     type="button" role="option"
                     :disabled="opt.disabled"
                     :aria-selected="String(opt.value) === String(modelValue ?? '')"
@@ -118,6 +152,9 @@ onUnmounted(() => document.removeEventListener('mousedown', onClickOutside));
                     <AppIcon v-if="String(opt.value) === String(modelValue ?? '')"
                         name="check" class="h-3.5 w-3.5 shrink-0 opacity-75" />
                 </button>
+                <p v-if="filteredOptions.length === 0" class="px-3 py-2 text-sm text-muted">
+                    {{ $t('common.search_no_results') }}
+                </p>
             </div>
         </Transition>
     </div>

@@ -1901,7 +1901,7 @@ return [
         'client_required' => 'Una factura de venta necesita un cliente / A sale invoice needs a client',
         'vendor_required' => 'Una factura de gasto necesita un proveedor / An expense invoice needs a vendor',
         'tab_sales' => 'Sales',
-        'tab_expenses' => 'Expenses',
+        'tab_expenses' => 'Purchase invoices',
         'calc_title' => 'Calculate from project',
         'calc_method' => 'Basis',
         'calc_costs' => 'Labour + expenses (itemised)',

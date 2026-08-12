@@ -1906,7 +1906,7 @@ return [
         'client_required' => 'Una factura de venta necesita un cliente / A sale invoice needs a client',
         'vendor_required' => 'Una factura de gasto necesita un proveedor / An expense invoice needs a vendor',
         'tab_sales' => 'Ventas',
-        'tab_expenses' => 'Gastos',
+        'tab_expenses' => 'Facturas de compra',
         'calc_title' => 'Calcular desde la obra',
         'calc_method' => 'Base',
         'calc_costs' => 'Mano de obra + gastos (detallado)',
