@@ -239,7 +239,7 @@ const monthLabel = computed(() => {
                                 class="pointer-events-none absolute start-0.5 top-0.5 h-2.5 w-2.5 text-status-warn"
                                 :title="$t('attendance.location_mismatch')" />
                             <!-- Day-type auto-detection: 'A' = system-detected, '✎' = admin override -->
-                            <span v-if="grid[emp.id]?.[day]?.is_auto_detected"
+                            <span v-if="grid[emp.id]?.[day]?.is_auto_detected && !grid[emp.id]?.[day]?.is_weekend"
                                 class="pointer-events-none absolute bottom-0 start-0.5 text-[7px] font-bold leading-none text-status-info"
                                 :title="$t('attendance.auto_detected')">A</span>
                             <span v-else-if="grid[emp.id]?.[day]?.is_overridden"
