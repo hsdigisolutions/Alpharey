@@ -271,10 +271,16 @@ it('creates, deactivates and deletes a custom expense category', function (): vo
     $this->actingAs($this->admin)->delete("/expense-categories/{$category->id}")->assertRedirect();
     expect(ExpenseCategory::find($category->id))->toBeNull();
 
-    // A referenced category is deactivated instead of deleted (keeps history).
+    // A referenced category cannot be deleted — deactivate it instead. (Web
+    // routes surface the block as a redirect-back-with-errors, the app's
+    // standard validation UX, mirroring the invoice-with-payments guard.)
     $used = ExpenseCategory::create(['company_id' => $this->company->id, 'name' => 'Herramientas', 'active' => true]);
     Expense::factory()->create(['company_id' => $this->company->id, 'expense_category_id' => $used->id]);
-    $this->actingAs($this->admin)->delete("/expense-categories/{$used->id}")->assertRedirect();
+    $this->actingAs($this->admin)->delete("/expense-categories/{$used->id}")->assertSessionHasErrors('category');
+    expect(ExpenseCategory::find($used->id))->not->toBeNull();
+
+    // …and deactivating it hides it from the active set.
+    $this->actingAs($this->admin)->put("/expense-categories/{$used->id}", ['name' => 'Herramientas', 'active' => false])->assertRedirect();
     expect($used->fresh()->active)->toBeFalse();
 });
 

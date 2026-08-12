@@ -8,6 +8,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 /**
  * Custom expense categories (the legacy "Categorías" the admin manages). A
@@ -70,12 +71,13 @@ class ExpenseCategoryController extends Controller
 
         abort_if($expenseCategory->company_id !== $this->contextCompanyId(), 404);
 
-        // Referenced categories carry history — deactivate rather than delete so
-        // existing expenses keep their label.
+        // A category with expenses carries history — refuse the delete (mirrors
+        // the invoice-with-payments guard). Deactivate it instead to hide it from
+        // the form dropdown while keeping existing expenses labelled.
         if ($expenseCategory->expenses()->exists()) {
-            $expenseCategory->update(['active' => false]);
-
-            return back()->with('success', __('ui.expenses.category_deactivated'));
+            throw ValidationException::withMessages([
+                'category' => __('ui.expenses.category_in_use'),
+            ]);
         }
 
         $expenseCategory->delete();

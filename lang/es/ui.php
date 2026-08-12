@@ -2018,6 +2018,7 @@ return [
         'category_saved' => 'Categoría guardada / Category saved',
         'category_deactivated' => 'Categoría desactivada (tiene gastos) / Category deactivated (has expenses)',
         'category_deleted' => 'Categoría eliminada / Category removed',
+        'category_in_use' => 'La categoría tiene gastos — desactívela en lugar de eliminarla / The category has expenses — deactivate it instead of deleting',
         'category_default' => 'Predeterminada del grupo',
         'category_active' => 'Activa',
         'category_inactive' => 'Inactiva',
