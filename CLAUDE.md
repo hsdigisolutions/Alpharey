@@ -48,6 +48,19 @@ increments (all gate-green; **792 Pest tests / 4588 assertions, 1 skipped**):
   this month but not yet invoiced, using the dormant `invoice_reminders` table as
   the cadence guard (`reminder_days`, 0/null treated as 7).
 
+**Deep-review pass (2026-08-12).** A full re-review of the six increments caught
+one real defect: `PayrollService::projectExpensesFor` reimbursed any approved
+employee+project expense regardless of `bearable_by`, so a CLIENT-borne project
+expense would be double-paid (reimbursed to the worker AND billed to the client).
+Fixed — it now requires `is_reimbursable` (symmetric with `reimbursementsFor`);
+pinned by a "no double-pay" test. Everything else verified working; added Method 1
+/ Method 3 / cross-company tests for the invoice auto-calc and a cross-company
+receipt-download test. **797 Pest tests / 4599 assertions, 1 skipped.** Note:
+`GET /invoices/project-costs` rejects another company's project with a 422
+(OwnCompanyProject rule) rather than a 404 — the input-validation convention used
+across the finance controllers; the security property (never acts on another
+company's project) holds either way.
+
 **Measurements — investigated, REPORTED ONLY (client decision, not yet fixed).**
 The audit found production tasks / task templates / daily-production exist only as
 three empty Phase-4 tables (`production_tasks`, `task_templates`, `task_progress`)
