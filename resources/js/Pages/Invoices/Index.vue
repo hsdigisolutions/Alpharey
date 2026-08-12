@@ -96,6 +96,32 @@ function openCreate() {
     panelOpen.value = true;
 }
 
+/* ---------- auto-calc from a project (legacy "Method 2") ---------- */
+const calc = reactive({ method: 'costs', margin: 0 });
+const calculating = ref(false);
+
+async function calcFromProject() {
+    if (!form.project_id) return;
+    calculating.value = true;
+    try {
+        const q = new URLSearchParams({
+            project_id: form.project_id, method: calc.method, margin: calc.margin || 0,
+        });
+        const res = await fetch(`/invoices/project-costs?${q.toString()}`, {
+            headers: { Accept: 'application/json' }, credentials: 'same-origin',
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (Array.isArray(data.lines) && data.lines.length) {
+            form.lines = data.lines.map((l) => ({
+                description: l.description, quantity: l.quantity, unit_price: l.unit_price,
+            }));
+        }
+    } finally {
+        calculating.value = false;
+    }
+}
+
 function addLine() {
     form.lines.push({ description: '', quantity: 1, unit_price: 0 });
 }
@@ -353,6 +379,28 @@ const columns = computed(() => [
                     <FormField k="invoices.due_date" :error="form.errors.due_date">
                         <VDateInput v-model="form.due_date" />
                     </FormField>
+                </div>
+
+                <!-- Auto-calc from the selected project (sale invoices only) -->
+                <div v-if="form.type === 'sale' && form.project_id"
+                    class="rounded-lg border border-line bg-surface-sunken p-3 space-y-3">
+                    <Bilingual k="invoices.calc_title" class="text-[13px] font-semibold" />
+                    <div class="grid items-end gap-2 sm:grid-cols-3">
+                        <FormField k="invoices.calc_method">
+                            <VSelect v-model="calc.method">
+                                <option value="costs">{{ $t('invoices.calc_costs') }}</option>
+                                <option value="subtotal">{{ $t('invoices.calc_subtotal') }}</option>
+                                <option value="meter">{{ $t('invoices.calc_meter') }}</option>
+                            </VSelect>
+                        </FormField>
+                        <FormField k="invoices.calc_margin">
+                            <VInput v-model="calc.margin" type="number" step="0.01" min="0" />
+                        </FormField>
+                        <VButton variant="secondary" :loading="calculating" @click="calcFromProject">
+                            <Bilingual k="invoices.calc_button" inline />
+                        </VButton>
+                    </div>
+                    <p class="text-xs text-muted">{{ $t('invoices.calc_hint') }}</p>
                 </div>
 
                 <!-- Line items -->

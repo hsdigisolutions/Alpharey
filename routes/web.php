@@ -294,6 +294,7 @@ Route::middleware(['auth', 'active', 'two_factor', 'not_worker'])->group(functio
     // Screen 10 — Invoices (Ventas / Gastos tabs) + payments
     Route::get('/invoices', [InvoiceController::class, 'index'])->name('invoices.index');
     Route::get('/invoices/export', [InvoiceController::class, 'export'])->name('invoices.export');
+    Route::get('/invoices/project-costs', [InvoiceController::class, 'projectCosts'])->name('invoices.project-costs');
     Route::get('/invoices/{invoice}', [InvoiceController::class, 'show'])->name('invoices.show');
     Route::post('/invoices', [InvoiceController::class, 'store'])->name('invoices.store');
     Route::put('/invoices/{invoice}', [InvoiceController::class, 'update'])->name('invoices.update');

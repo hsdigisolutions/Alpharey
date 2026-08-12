@@ -3,8 +3,10 @@
 use App\Enums\PaymentStatus;
 use App\Models\Client;
 use App\Models\Company;
+use App\Models\Expense;
 use App\Models\Invoice;
 use App\Models\Payment;
+use App\Models\Project;
 use App\Models\User;
 use App\Models\Vendor;
 use Inertia\Testing\AssertableInertia as Assert;
@@ -250,6 +252,28 @@ it('downloads an invoice PDF', function (): void {
 
     $this->actingAs($this->admin)->get("/invoices/{$invoice->id}/pdf")
         ->assertOk()->assertHeader('content-type', 'application/pdf');
+});
+
+it('auto-calculates invoice lines from a project using only client-borne costs', function (): void {
+    $project = Project::factory()->forCompany($this->company)->create();
+
+    // A client-borne approved expense feeds the invoice…
+    Expense::factory()->create([
+        'company_id' => $this->company->id, 'project_id' => $project->id,
+        'approved' => true, 'bearable_by' => 'client', 'subtotal' => '200', 'total' => '200', 'date' => '2026-06-11',
+    ]);
+    // …a company-borne one must NOT.
+    Expense::factory()->create([
+        'company_id' => $this->company->id, 'project_id' => $project->id,
+        'approved' => true, 'bearable_by' => 'company', 'subtotal' => '999', 'total' => '999', 'date' => '2026-06-11',
+    ]);
+
+    $res = $this->actingAs($this->admin)
+        ->getJson("/invoices/project-costs?project_id={$project->id}&method=subtotal&margin=10");
+
+    $res->assertOk();
+    // 200 client cost × 1.10 margin = 220; the 999 company cost is excluded.
+    expect((float) $res->json('lines.0.unit_price'))->toBe(220.0);
 });
 
 it('refuses to delete an invoice that has payments', function (): void {

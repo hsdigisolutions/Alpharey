@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\BearableBy;
 use App\Enums\InvoiceStatus;
 use App\Enums\InvoiceType;
 use App\Enums\PaymentMethod;
@@ -11,20 +12,28 @@ use App\Exports\InvoicesExport;
 use App\Http\Controllers\Admin\Concerns\ResolvesCompanyContext;
 use App\Http\Requests\Invoices\StoreInvoiceRequest;
 use App\Http\Requests\Invoices\UpdateInvoiceRequest;
+use App\Models\Attendance;
 use App\Models\Client;
 use App\Models\Company;
+use App\Models\Expense;
+use App\Models\ExpenseCategory;
 use App\Models\Invoice;
+use App\Models\Measurement;
 use App\Models\Project;
 use App\Models\Vendor;
+use App\Rules\OwnCompanyProject;
 use App\Services\Audit\AuditLogger;
 use App\Services\Invoices\InvoiceService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response as HttpResponse;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -189,6 +198,86 @@ class InvoiceController extends Controller
         $audit->log('exported', new Invoice, null, null, 'Invoices Excel ('.$tab->value.')', 'invoices');
 
         return Excel::download(new InvoicesExport($rows), 'facturas-'.$tab->value.'.xlsx');
+    }
+
+    /**
+     * Auto-calculate invoice line items from a project (the legacy "Method 2"),
+     * offering the admin three bases:
+     *  - costs   → labour + client-borne approved expenses, itemised, × margin
+     *  - subtotal→ one line: total project cost × margin
+     *  - meter   → approved measured metres × the project's client meter rate
+     * Only CLIENT-bearable expenses count (the Bearable-By rule). Returns JSON;
+     * the totals are still (re)derived server-side by InvoiceTotals on save.
+     */
+    public function projectCosts(Request $request): JsonResponse
+    {
+        Gate::authorize('invoices.create');
+
+        $data = $request->validate([
+            'project_id' => ['required', 'integer', new OwnCompanyProject],
+            'method' => ['required', Rule::in(['costs', 'subtotal', 'meter'])],
+            'margin' => ['nullable', 'numeric', 'min:0', 'max:1000'],
+            'from' => ['nullable', 'date'],
+            'to' => ['nullable', 'date'],
+        ]);
+
+        $projectId = (int) $data['project_id'];
+        $project = Project::findOrFail($projectId);
+        $margin = 1 + ((float) ($data['margin'] ?? 0)) / 100;
+        $from = $data['from'] ?? null;
+        $to = $data['to'] ?? null;
+
+        $inRange = function (Builder $q) use ($from, $to): Builder {
+            return $q->when($from, fn ($w) => $w->whereDate('date', '>=', $from))
+                ->when($to, fn ($w) => $w->whereDate('date', '<=', $to));
+        };
+
+        $labour = (float) $inRange(Attendance::query()->where('project_id', $projectId))->sum('total_amount');
+
+        /** @var Collection<int, Expense> $clientExpenses */
+        $clientExpenses = $inRange(Expense::query()
+            ->where('project_id', $projectId)
+            ->where('approved', true)
+            ->where('bearable_by', BearableBy::Client->value))
+            ->get(['expense_category_id', 'total']);
+
+        $lines = [];
+
+        if ($data['method'] === 'meter') {
+            $metres = (float) $inRange(Measurement::query()
+                ->where('project_id', $projectId)
+                ->where('approved', true))->sum('quantity');
+            $rate = (float) ($project->getAttribute('client_meter_rate') ?? 0);
+            $lines[] = [
+                'description' => __('ui.invoices.calc_meter_line'),
+                'quantity' => round($metres, 2),
+                'unit_price' => round($rate * $margin, 2),
+            ];
+        } elseif ($data['method'] === 'subtotal') {
+            $cost = ($labour + (float) $clientExpenses->sum(fn (Expense $e): float => (float) $e->total)) * $margin;
+            $lines[] = ['description' => $project->name, 'quantity' => 1, 'unit_price' => round($cost, 2)];
+        } else { // costs — itemised: labour + one line per expense category
+            if ($labour > 0) {
+                $lines[] = ['description' => __('ui.invoices.calc_labour_line'), 'quantity' => 1, 'unit_price' => round($labour * $margin, 2)];
+            }
+
+            foreach ($clientExpenses->groupBy('expense_category_id') as $rows) {
+                $amount = (float) $rows->sum(fn (Expense $e): float => (float) $e->total);
+                $categoryId = $rows->first()?->expense_category_id;
+                $name = $categoryId !== null ? ExpenseCategory::find($categoryId)?->name : null;
+                $lines[] = [
+                    'description' => $name ?? __('ui.invoices.calc_expenses_line'),
+                    'quantity' => 1,
+                    'unit_price' => round($amount * $margin, 2),
+                ];
+            }
+        }
+
+        if ($lines === []) {
+            $lines[] = ['description' => $project->name, 'quantity' => 1, 'unit_price' => 0];
+        }
+
+        return response()->json(['lines' => $lines]);
     }
 
     public function pdf(Invoice $invoice, AuditLogger $audit): HttpResponse
