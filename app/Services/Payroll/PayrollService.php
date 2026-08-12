@@ -445,6 +445,12 @@ class PayrollService
     /**
      * Worker project expenses: tagged to BOTH an employee and a project, they
      * are paid back through that month's payroll (REQUIREMENTS.md Screen 12).
+     *
+     * Only expenses the WORKER bears count (`is_reimbursable`, derived from
+     * bearable_by=employee & not salary-deducted). A client-borne expense on a
+     * project is billed to the client via the invoice, and a company-borne one
+     * is a company cost — neither is money owed back to the worker. Without this
+     * gate a client expense would be double-paid (reimbursed AND invoiced).
      */
     private function projectExpensesFor(int $employeeId, string $month): float
     {
@@ -456,6 +462,7 @@ class PayrollService
         return round((float) Expense::query()->withoutGlobalScopes()
             ->where('employee_id', $employeeId)
             ->whereNotNull('project_id')
+            ->where('is_reimbursable', true)
             ->where('approved', true)
             ->whereBetween('date', [$start, $end])
             ->sum('total'), 2);

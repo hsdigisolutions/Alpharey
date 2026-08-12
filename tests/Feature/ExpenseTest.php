@@ -64,10 +64,11 @@ it('feeds a worker project expense into that month payroll', function (): void {
         'wage_type' => 'hourly', 'wage_rate' => '20',
     ]);
 
-    // employee + project => worker project expense
+    // employee + project + employee-borne => worker project expense (reimbursed)
     $this->actingAs($this->admin)->post('/expenses', expensePayload([
         'employee_id' => $employee->id,
         'project_id' => $this->project->id,
+        'bearable_by' => 'employee',
         'date' => '2026-06-12',
         'subtotal' => 75,
     ]))->assertRedirect();
@@ -120,6 +121,31 @@ it('flags an employee cost for salary deduction and it comes off payroll', funct
     $payroll = Payroll::withoutGlobalScopes()->where('employee_id', $employee->id)->firstOrFail();
     expect((float) $payroll->getAttribute('expense_deductions'))->toBe(120.0)
         ->and((float) $payroll->getAttribute('net_amount'))->toBe(880.0); // 1000 base − 120
+});
+
+it('does not reimburse a client-borne project expense through payroll (no double-pay)', function (): void {
+    $employee = Employee::factory()->forCompany($this->company)->create([
+        'wage_type' => 'hourly', 'wage_rate' => '20',
+    ]);
+
+    // A client-borne expense on a project the worker happened to submit: it is
+    // billed to the client via the invoice, NOT paid back to the worker.
+    $this->actingAs($this->admin)->post('/expenses', expensePayload([
+        'employee_id' => $employee->id,
+        'project_id' => $this->project->id,
+        'bearable_by' => 'client',
+        'date' => '2026-06-12',
+        'subtotal' => 75,
+    ]))->assertRedirect();
+
+    $expense = Expense::withoutGlobalScopes()->firstOrFail();
+    $this->actingAs($this->admin)->post("/expenses/{$expense->id}/approve", ['approved' => true]);
+
+    app(PayrollService::class)->calculateMonth($this->company->id, '2026-06');
+    $payroll = Payroll::withoutGlobalScopes()->where('employee_id', $employee->id)->firstOrFail();
+
+    expect((float) $payroll->getAttribute('project_expenses'))->toBe(0.0)
+        ->and((float) $payroll->getAttribute('gross_pay'))->toBe(0.0);
 });
 
 it('keeps approval out of mass assignment', function (): void {
@@ -222,6 +248,18 @@ it('404s a receipt download when the expense has no file', function (): void {
     $expense = Expense::withoutGlobalScopes()->firstOrFail();
 
     $this->actingAs($this->admin)->get("/expenses/{$expense->id}/receipt")->assertNotFound();
+});
+
+it('cannot download a receipt from another company (404)', function (): void {
+    Storage::fake('local');
+    $other = Company::factory()->create();
+    $foreign = Expense::factory()->create(['company_id' => $other->id]);
+    $foreign->file_path = 'expenses/'.$other->id.'/x.pdf';
+    $foreign->save();
+    Storage::disk('local')->put($foreign->file_path, 'data');
+
+    // The global scope hides company B's expense from company A → 404, not 403.
+    $this->actingAs($this->admin)->get("/expenses/{$foreign->id}/receipt")->assertNotFound();
 });
 
 it('creates, deactivates and deletes a custom expense category', function (): void {

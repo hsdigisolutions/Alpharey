@@ -139,10 +139,11 @@ it('pulls worker project expenses into the month', function (): void {
     $employee = hourlyEmployee(rate: 20, days: 1, hours: 8); // 160 gross
     $project = Project::factory()->forCompany($this->company)->create();
 
-    // Tagged to employee + project -> worker project expense (approved)
+    // Tagged to employee + project, employee-borne -> worker project expense (approved)
     $projectExpense = Expense::factory()->create([
         'company_id' => $this->company->id, 'employee_id' => $employee->id,
-        'project_id' => $project->id, 'date' => $this->month.'-05', 'total' => '40',
+        'project_id' => $project->id, 'bearable_by' => 'employee', 'is_reimbursable' => true,
+        'date' => $this->month.'-05', 'total' => '40',
     ]);
     // Tagged to employee only + reimbursable -> reimbursement (approved)
     $reimbursement = Expense::factory()->create([

@@ -1,10 +1,13 @@
 <?php
 
 use App\Enums\PaymentStatus;
+use App\Models\Attendance;
 use App\Models\Client;
 use App\Models\Company;
+use App\Models\Employee;
 use App\Models\Expense;
 use App\Models\Invoice;
+use App\Models\Measurement;
 use App\Models\Payment;
 use App\Models\Project;
 use App\Models\User;
@@ -274,6 +277,74 @@ it('auto-calculates invoice lines from a project using only client-borne costs',
     $res->assertOk();
     // 200 client cost × 1.10 margin = 220; the 999 company cost is excluded.
     expect((float) $res->json('lines.0.unit_price'))->toBe(220.0);
+});
+
+it('auto-calculates by labour + client expenses (Method 1), excluding company costs', function (): void {
+    $project = Project::factory()->forCompany($this->company)->create();
+    $employee = Employee::factory()->forCompany($this->company)->create();
+
+    $att = Attendance::factory()->create([
+        'company_id' => $this->company->id, 'employee_id' => $employee->id,
+        'project_id' => $project->id, 'date' => '2026-06-10',
+    ]);
+    // The model recomputes total_amount on save from the frozen snapshots — read
+    // the persisted labour value and assert the endpoint's arithmetic against it.
+    $labour = (float) $att->fresh()->total_amount;
+
+    Expense::factory()->create([
+        'company_id' => $this->company->id, 'project_id' => $project->id, 'approved' => true,
+        'bearable_by' => 'client', 'subtotal' => '200', 'total' => '200', 'date' => '2026-06-11',
+    ]);
+    Expense::factory()->create([ // company-borne — excluded
+        'company_id' => $this->company->id, 'project_id' => $project->id, 'approved' => true,
+        'bearable_by' => 'company', 'subtotal' => '999', 'total' => '999', 'date' => '2026-06-11',
+    ]);
+
+    $res = $this->actingAs($this->admin)
+        ->getJson("/invoices/project-costs?project_id={$project->id}&method=costs&margin=10");
+
+    $res->assertOk();
+    $lines = collect($res->json('lines'));
+    // One labour line + one client-expense line (200×1.1 = 220); the 999 company
+    // cost is excluded. Both lines carry the 10% margin.
+    expect($lines)->toHaveCount(2)
+        ->and($lines->sum('unit_price'))->toBe(round($labour * 1.1, 2) + 220.0);
+});
+
+it('auto-calculates per metre from APPROVED measurements only (Method 3)', function (): void {
+    $project = Project::factory()->forCompany($this->company)->create(['client_meter_rate' => '12']);
+    $employee = Employee::factory()->forCompany($this->company)->create();
+
+    $approved = new Measurement([
+        'project_id' => $project->id, 'employee_id' => $employee->id,
+        'date' => '2026-06-10', 'quantity' => '30', 'unit' => 'm2', 'measurement_type' => 'area',
+    ]);
+    $approved->company_id = $this->company->id;
+    $approved->approved = true;
+    $approved->save();
+
+    $pending = new Measurement([ // not approved — excluded
+        'project_id' => $project->id, 'date' => '2026-06-11', 'quantity' => '999',
+        'unit' => 'm2', 'measurement_type' => 'area',
+    ]);
+    $pending->company_id = $this->company->id;
+    $pending->save();
+
+    $res = $this->actingAs($this->admin)
+        ->getJson("/invoices/project-costs?project_id={$project->id}&method=meter&margin=0");
+
+    $res->assertOk();
+    expect((float) $res->json('lines.0.quantity'))->toBe(30.0)
+        ->and((float) $res->json('lines.0.unit_price'))->toBe(12.0);
+});
+
+it('refuses project-costs for another company project', function (): void {
+    $other = Company::factory()->create();
+    $foreignProject = Project::factory()->forCompany($other)->create();
+
+    $this->actingAs($this->admin)
+        ->getJson("/invoices/project-costs?project_id={$foreignProject->id}&method=subtotal")
+        ->assertStatus(422); // OwnCompanyProject rejects it — never acts on another company's project
 });
 
 it('refuses to delete an invoice that has payments', function (): void {
