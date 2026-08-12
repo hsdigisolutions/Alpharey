@@ -42,6 +42,7 @@ const props = defineProps({
     vatOptions: { type: Array, required: true },
     paymentMethods: { type: Array, required: true },
     paymentStatuses: { type: Array, required: true },
+    bearableByOptions: { type: Array, required: true },
     can: { type: Object, required: true },
 });
 
@@ -68,7 +69,7 @@ const blank = {
     number: '', type: 'factura', expense_category_id: '', vendor_id: '', project_id: '',
     employee_id: '', company_card_id: '', date: null, due_date: null,
     subtotal: 0, vat_rate: null, payment_method: '', payment_status: 'unpaid',
-    is_reimbursable: false, notes: '', file: null,
+    bearable_by: 'company', deduct_from_salary: false, notes: '', file: null,
 };
 const form = useForm({ ...blank });
 const currentFile = ref(null);
@@ -331,11 +332,19 @@ const columns = [
                     </VSelect>
                 </FormField>
 
-                <label class="sm:col-span-2 flex items-center gap-2">
-                    <VCheckbox v-model="form.is_reimbursable">
-                        <Bilingual k="expenses.reimbursable" inline class="text-sm" />
+                <FormField k="expenses.bearable_by" :error="form.errors.bearable_by" required>
+                    <VSelect v-model="form.bearable_by">
+                        <option v-for="b in bearableByOptions" :key="b" :value="b">
+                            {{ $t(`expenses.bearable_${b}`) }}
+                        </option>
+                    </VSelect>
+                </FormField>
+                <label v-if="form.bearable_by === 'employee'" class="flex items-center gap-2 pt-6">
+                    <VCheckbox v-model="form.deduct_from_salary">
+                        <Bilingual k="expenses.deduct_from_salary" inline class="text-sm" />
                     </VCheckbox>
                 </label>
+                <p class="sm:col-span-2 -mt-2 text-xs text-muted">{{ $t('expenses.bearable_hint') }}</p>
 
                 <dl class="tabular-nums sm:col-span-2 space-y-1 rounded-lg border border-line bg-surface-sunken p-3 text-sm">
                     <div v-if="form.vat_rate" class="flex justify-between">

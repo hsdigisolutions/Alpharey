@@ -2005,6 +2005,13 @@ return [
         'category_default' => 'Group default',
         'category_active' => 'Active',
         'category_inactive' => 'Inactive',
+        'bearable_by' => 'Bearable by',
+        'bearable_company' => 'Company',
+        'bearable_client' => 'Client',
+        'bearable_employee' => 'Employee',
+        'bearable_unbillable' => 'Unbillable',
+        'bearable_hint' => 'Only client-borne costs feed project invoicing.',
+        'deduct_from_salary' => 'Deduct from worker salary',
     ],
 
     'commissions' => [
@@ -2091,6 +2098,7 @@ return [
         'advance_date' => 'Date',
         'advance_reason' => 'Reason',
         'fine_deductions' => 'Vehicle Fines',
+        'expense_deductions' => 'Expenses charged to worker',
         'other_deductions' => 'Other Deductions',
         'manual_additions' => 'Manual Additions',
         'net_pay' => 'NET PAY',

@@ -179,12 +179,13 @@ class PayrollService
 
         $advances = $this->advanceDeductionsFor($employee->id, $month);
         $fineDeductions = $this->vehicleFinesFor($employee->id, $month);
+        $expenseDeductions = $this->expenseSalaryDeductionsFor($employee->id, $month);
 
         // Clerk-entered adjustments survive a recalculation.
         $otherDeductions = (float) ($existing?->getAttribute('other_deductions') ?? 0);
         $manualAdditions = (float) ($existing?->getAttribute('manual_additions') ?? 0);
 
-        $net = $gross - $advances - $fineDeductions - $otherDeductions + $manualAdditions;
+        $net = $gross - $advances - $fineDeductions - $expenseDeductions - $otherDeductions + $manualAdditions;
 
         $payroll = $existing ?? new Payroll(['employee_id' => $employee->id, 'month' => $month]);
         $payroll->company_id = $companyId;
@@ -208,6 +209,7 @@ class PayrollService
         $payroll->gross_pay = (string) round($gross, 2);
         $payroll->advance_deductions = (string) round($advances, 2);
         $payroll->fine_deductions = (string) round($fineDeductions, 2);
+        $payroll->expense_deductions = (string) round($expenseDeductions, 2);
         $payroll->other_deductions = (string) round($otherDeductions, 2);
         $payroll->manual_additions = (string) round($manualAdditions, 2);
         $payroll->net_amount = (string) round($net, 2);
@@ -471,6 +473,23 @@ class PayrollService
             ->where('employee_id', $employeeId)
             ->whereNull('project_id')
             ->where('is_reimbursable', true)
+            ->where('approved', true)
+            ->whereBetween('date', [$start, $end])
+            ->sum('total'), 2);
+    }
+
+    /**
+     * Company-card / employee costs the admin flagged as recoverable from the
+     * worker (`deduct_from_salary`) — they come OFF this month's pay. Approved
+     * only, mirroring the reimbursement gate.
+     */
+    private function expenseSalaryDeductionsFor(int $employeeId, string $month): float
+    {
+        [$start, $end] = $this->bounds($month);
+
+        return round((float) Expense::query()->withoutGlobalScopes()
+            ->where('employee_id', $employeeId)
+            ->where('deduct_from_salary', true)
             ->where('approved', true)
             ->whereBetween('date', [$start, $end])
             ->sum('total'), 2);

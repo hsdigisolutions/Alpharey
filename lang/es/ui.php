@@ -2010,6 +2010,13 @@ return [
         'category_default' => 'Predeterminada del grupo',
         'category_active' => 'Activa',
         'category_inactive' => 'Inactiva',
+        'bearable_by' => 'A cargo de',
+        'bearable_company' => 'Empresa',
+        'bearable_client' => 'Cliente',
+        'bearable_employee' => 'Trabajador',
+        'bearable_unbillable' => 'No facturable',
+        'bearable_hint' => 'Solo los costes a cargo del cliente entran en la facturación de la obra.',
+        'deduct_from_salary' => 'Descontar de la nómina del trabajador',
     ],
 
     'commissions' => [
@@ -2096,6 +2103,7 @@ return [
         'advance_date' => 'Fecha',
         'advance_reason' => 'Motivo',
         'fine_deductions' => 'Multas de vehículo',
+        'expense_deductions' => 'Gastos a cargo del trabajador',
         'other_deductions' => 'Otras deducciones',
         'manual_additions' => 'Añadidos manuales',
         'net_pay' => 'NETO A PAGAR',

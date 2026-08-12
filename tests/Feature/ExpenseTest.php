@@ -28,6 +28,7 @@ function expensePayload(array $overrides = []): array
         'vendor_id' => test()->vendor->id,
         'date' => '2026-06-10',
         'subtotal' => 100,
+        'bearable_by' => 'company',
     ], $overrides);
 }
 
@@ -83,6 +84,42 @@ it('feeds a worker project expense into that month payroll', function (): void {
     // no attendance, so the 75 is the whole gross
     expect((float) $payroll->getAttribute('project_expenses'))->toBe(75.0)
         ->and((float) $payroll->getAttribute('gross_pay'))->toBe(75.0);
+});
+
+it('derives the reimbursable flag from an employee-borne bearer', function (): void {
+    $this->actingAs($this->admin)->post('/expenses', expensePayload([
+        'bearable_by' => 'employee',
+    ]))->assertRedirect();
+
+    expect(Expense::withoutGlobalScopes()->firstOrFail())
+        ->bearable_by->value->toBe('employee')
+        ->is_reimbursable->toBeTrue()
+        ->deduct_from_salary->toBeFalse();
+});
+
+it('flags an employee cost for salary deduction and it comes off payroll', function (): void {
+    $employee = Employee::factory()->forCompany($this->company)->create([
+        'wage_type' => 'monthly', 'base_salary' => '1000',
+    ]);
+
+    $this->actingAs($this->admin)->post('/expenses', expensePayload([
+        'employee_id' => $employee->id,
+        'bearable_by' => 'employee',
+        'deduct_from_salary' => true,
+        'date' => '2026-06-05',
+        'subtotal' => 120,
+    ]))->assertRedirect();
+
+    $expense = Expense::withoutGlobalScopes()->firstOrFail();
+    // A deduction is never reimbursed at the same time.
+    expect($expense->is_reimbursable)->toBeFalse()->and($expense->deduct_from_salary)->toBeTrue();
+
+    $this->actingAs($this->admin)->post("/expenses/{$expense->id}/approve", ['approved' => true]);
+    app(PayrollService::class)->calculateMonth($this->company->id, '2026-06');
+
+    $payroll = Payroll::withoutGlobalScopes()->where('employee_id', $employee->id)->firstOrFail();
+    expect((float) $payroll->getAttribute('expense_deductions'))->toBe(120.0)
+        ->and((float) $payroll->getAttribute('net_amount'))->toBe(880.0); // 1000 base − 120
 });
 
 it('keeps approval out of mass assignment', function (): void {

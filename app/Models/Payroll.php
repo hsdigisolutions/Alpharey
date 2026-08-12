@@ -34,6 +34,7 @@ use Illuminate\Support\Carbon;
  * @property array<int, string>|null $deployment_notes
  * @property array<int, array<string, mixed>>|null $rate_periods
  * @property array<int, array<string, mixed>>|null $day_type_summary
+ * @property numeric-string $expense_deductions
  */
 class Payroll extends Model
 {
@@ -50,7 +51,7 @@ class Payroll extends Model
     public array $auditExclude = [
         'wage_rate', 'base_salary', 'days_amount', 'hours_amount', 'overtime_pay',
         'reimbursements', 'project_expenses', 'gross_pay', 'advance_deductions',
-        'fine_deductions', 'other_deductions', 'manual_additions', 'net_amount',
+        'fine_deductions', 'expense_deductions', 'other_deductions', 'manual_additions', 'net_amount',
         'rate_periods', 'day_type_summary',
     ];
 
@@ -59,7 +60,7 @@ class Payroll extends Model
         'employee_id', 'month', 'attendance_days', 'attendance_hours', 'overtime_hours',
         'wage_type', 'wage_rate', 'base_salary', 'days_amount', 'hours_amount', 'rate_periods',
         'day_type_summary', 'overtime_pay', 'reimbursements', 'project_expenses', 'gross_pay',
-        'advance_deductions', 'fine_deductions', 'other_deductions', 'manual_additions',
+        'advance_deductions', 'fine_deductions', 'expense_deductions', 'other_deductions', 'manual_additions',
         'net_amount', 'status', 'payment_method', 'paid_at', 'notes', 'deployment_notes',
     ];
 
@@ -67,7 +68,7 @@ class Payroll extends Model
     protected $hidden = [
         'wage_rate', 'base_salary', 'days_amount', 'hours_amount', 'overtime_pay',
         'reimbursements', 'project_expenses', 'gross_pay', 'advance_deductions',
-        'fine_deductions', 'other_deductions', 'manual_additions', 'net_amount',
+        'fine_deductions', 'expense_deductions', 'other_deductions', 'manual_additions', 'net_amount',
         'rate_periods', 'day_type_summary',
     ];
 
@@ -97,6 +98,7 @@ class Payroll extends Model
             'gross_pay' => 'encrypted',
             'advance_deductions' => 'encrypted',
             'fine_deductions' => 'encrypted',
+            'expense_deductions' => 'encrypted',
             'other_deductions' => 'encrypted',
             'manual_additions' => 'encrypted',
             'net_amount' => 'encrypted',

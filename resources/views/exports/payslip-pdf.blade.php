@@ -130,6 +130,12 @@
             <td class="amount">− {{ $eur($payroll->fine_deductions) }}</td>
         </tr>
         @endif
+        @if((float)($payroll->expense_deductions ?? 0) > 0)
+        <tr>
+            <td>Gastos a cargo del trabajador</td>
+            <td class="amount">− {{ $eur($payroll->expense_deductions) }}</td>
+        </tr>
+        @endif
         <tr>
             <td>Otras deducciones</td>
             <td class="amount">− {{ $eur($payroll->other_deductions) }}</td>

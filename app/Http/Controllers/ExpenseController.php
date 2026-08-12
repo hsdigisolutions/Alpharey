@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\BearableBy;
 use App\Enums\ExpenseType;
 use App\Enums\PaymentMethod;
 use App\Enums\PaymentStatus;
@@ -79,6 +80,7 @@ class ExpenseController extends Controller
             'vatOptions' => VatRate::options(),
             'paymentMethods' => array_map(fn ($m) => $m->value, PaymentMethod::cases()),
             'paymentStatuses' => array_map(fn ($s) => $s->value, PaymentStatus::cases()),
+            'bearableByOptions' => BearableBy::values(),
             'can' => [
                 // Permission-only: shown to anyone who may create. The Vue gate
                 // routes a company-less Super Admin to the picker; the store's
@@ -99,6 +101,7 @@ class ExpenseController extends Controller
         $expense = new Expense($this->validated($request));
         $expense->company_id = $this->contextCompanyId();
         $this->applyTotals($expense);
+        $this->applyBearer($expense);
         $this->storeAttachment($request, $expense);
         $expense->save();
 
@@ -113,6 +116,7 @@ class ExpenseController extends Controller
 
         $expense->fill($this->validated($request));
         $this->applyTotals($expense);
+        $this->applyBearer($expense);
         $this->storeAttachment($request, $expense);
         $expense->save();
 
@@ -189,9 +193,28 @@ class ExpenseController extends Controller
             'payment_method' => ['nullable', Rule::enum(PaymentMethod::class)],
             'payment_status' => ['nullable', Rule::enum(PaymentStatus::class)],
             'payment_date' => ['nullable', 'date'],
-            'is_reimbursable' => ['nullable', 'boolean'],
+            'bearable_by' => ['required', Rule::enum(BearableBy::class)],
+            'deduct_from_salary' => ['nullable', 'boolean'],
             'notes' => ['nullable', 'string', 'max:2000'],
         ]);
+    }
+
+    /**
+     * Derive the reimbursement flag from the bearer (the legacy model, replacing
+     * the old manual checkbox): the worker is paid back only when THEY bear a
+     * cost they fronted — not when it is flagged for salary deduction (that is a
+     * company-card cost they must repay). Salary deduction only applies to an
+     * employee-borne cost.
+     */
+    private function applyBearer(Expense $expense): void
+    {
+        $bearer = $expense->bearable_by;
+
+        if ($bearer !== BearableBy::Employee) {
+            $expense->deduct_from_salary = false;
+        }
+
+        $expense->is_reimbursable = $bearer === BearableBy::Employee && ! $expense->deduct_from_salary;
     }
 
     /**
@@ -247,6 +270,8 @@ class ExpenseController extends Controller
             'payment_status' => $e->payment_status->value,
             'approved' => $e->approved,
             'is_reimbursable' => $e->is_reimbursable,
+            'bearable_by' => $e->bearable_by->value,
+            'deduct_from_salary' => $e->deduct_from_salary,
             'has_file' => $e->file_path !== null,
             'original_name' => $e->original_name,
         ];
