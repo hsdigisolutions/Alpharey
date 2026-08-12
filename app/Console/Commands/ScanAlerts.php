@@ -5,8 +5,11 @@ namespace App\Console\Commands;
 use App\Enums\InvoiceType;
 use App\Enums\NotificationType;
 use App\Enums\PaymentStatus;
+use App\Models\Attendance;
 use App\Models\EmployeeCallLog;
 use App\Models\Invoice;
+use App\Models\InvoiceReminder;
+use App\Models\Project;
 use App\Models\VehicleSession;
 use App\Services\Notifications\NotificationDispatcher;
 use Illuminate\Console\Command;
@@ -33,6 +36,7 @@ class ScanAlerts extends Command
     {
         $sent = 0;
         $sent += $this->scanOverdueInvoices($dispatcher);
+        $sent += $this->scanInvoiceReminders($dispatcher);
         $sent += $this->scanUnreturnedVehicles($dispatcher);
         $sent += $this->scanCallFollowUps($dispatcher);
 
@@ -69,6 +73,70 @@ class ScanAlerts extends Command
 
             $invoice->overdue_notified_at = now();
             $invoice->save();
+
+            $sent++;
+        }
+
+        return $sent;
+    }
+
+    /**
+     * A project with worked days THIS month but no sale invoice dated in it —
+     * "you've worked, remember to bill". The dormant invoice_reminders table is
+     * the cadence guard: a project is reminded again only after reminder_days
+     * (default 7) since the last reminder for the month.
+     */
+    private function scanInvoiceReminders(NotificationDispatcher $dispatcher): int
+    {
+        $month = now()->format('Y-m');
+        $start = now()->startOfMonth()->toDateString();
+        $end = now()->endOfMonth()->toDateString();
+
+        $projectIds = Attendance::query()->withoutGlobalScopes()
+            ->whereNotNull('project_id')
+            ->whereBetween('date', [$start, $end])
+            ->distinct()->pluck('project_id');
+
+        $sent = 0;
+
+        foreach ($projectIds as $projectId) {
+            $project = Project::withoutGlobalScopes()->find($projectId);
+
+            if ($project === null) {
+                continue;
+            }
+
+            $alreadyInvoiced = Invoice::query()->withoutGlobalScopes()
+                ->where('type', InvoiceType::Sale->value)
+                ->where('project_id', $projectId)
+                ->whereBetween('invoice_date', [$start, $end])
+                ->exists();
+
+            if ($alreadyInvoiced) {
+                continue;
+            }
+
+            $reminder = InvoiceReminder::withoutGlobalScopes()
+                ->firstOrNew(['project_id' => $projectId, 'month' => $month]);
+
+            // The column defaults to 0; treat 0/null as the standard 7-day cadence.
+            $days = (int) ($reminder->reminder_days ?: 7);
+
+            if ($reminder->last_sent_at !== null && $reminder->last_sent_at->gt(now()->subDays($days))) {
+                continue; // reminded within the cadence window already
+            }
+
+            $dispatcher->dispatch(NotificationType::InvoiceReminder, $project->company_id, [
+                'title_es' => "Obra sin facturar este mes: {$project->name}",
+                'title_en' => "Project not invoiced this month: {$project->name}",
+                'entity' => $project->name, 'url' => '/invoices',
+            ]);
+
+            $reminder->company_id = $project->company_id;
+            $reminder->period_start = $start;
+            $reminder->period_end = $end;
+            $reminder->last_sent_at = now();
+            $reminder->save();
 
             $sent++;
         }

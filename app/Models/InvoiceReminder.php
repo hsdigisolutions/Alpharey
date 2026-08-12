@@ -6,14 +6,18 @@ use App\Models\Concerns\Auditable;
 use App\Models\Concerns\BelongsToCompany;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Carbon;
 
 /**
  * Per-project invoice reminder schedule (Screen 10). The schedule is stored
- * here in Phase 6; the actual sending is wired in Phase 8 with the other
- * scheduled mail.
+ * here; the notifications:scan sweep sends the reminder and stamps last_sent_at,
+ * using reminder_days as the cadence guard.
  *
  * @property int $company_id
+ * @property int $project_id
  * @property string $month
+ * @property int|null $reminder_days
+ * @property Carbon|null $last_sent_at
  * @property array<int, string>|null $reminder_emails
  */
 class InvoiceReminder extends Model

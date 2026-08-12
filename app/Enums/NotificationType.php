@@ -23,6 +23,7 @@ enum NotificationType: string
     // Invoices
     case InvoiceOverdue = 'invoice_overdue';
     case InvoicePaid = 'invoice_paid';
+    case InvoiceReminder = 'invoice_reminder';
     // Requests pending review
     case AdvancePending = 'advance_pending';
     case ExpensePending = 'expense_pending';
@@ -97,7 +98,7 @@ enum NotificationType: string
         return match ($this) {
             self::DocumentExpiry, self::DocumentExpired => 'file',
             self::PayrollReady, self::PayrollApproved => 'payroll',
-            self::InvoiceOverdue, self::InvoicePaid => 'invoices',
+            self::InvoiceOverdue, self::InvoicePaid, self::InvoiceReminder => 'invoices',
             self::AdvancePending, self::AdvanceDecided => 'euro',
             self::ExpensePending, self::ExpenseDecided => 'expenses',
             self::LeavePending, self::LeaveDecided => 'leave',
@@ -121,7 +122,7 @@ enum NotificationType: string
         return match ($this) {
             self::DocumentExpiry, self::DocumentExpired => 'documents',
             self::PayrollReady, self::PayrollApproved => 'payroll',
-            self::InvoiceOverdue, self::InvoicePaid => 'invoices',
+            self::InvoiceOverdue, self::InvoicePaid, self::InvoiceReminder => 'invoices',
             self::VehicleExpiry, self::VehicleNotReturned => 'vehicles',
             self::AdvancePending, self::AdvanceDecided,
             self::ExpensePending, self::ExpenseDecided,

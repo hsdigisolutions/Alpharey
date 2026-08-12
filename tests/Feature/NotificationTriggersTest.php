@@ -8,6 +8,7 @@ use App\Enums\UserRole;
 use App\Enums\WageType;
 use App\Enums\WorkerExpenseStatus;
 use App\Models\Advance;
+use App\Models\Attendance;
 use App\Models\Company;
 use App\Models\Employee;
 use App\Models\EmployeeCallLog;
@@ -157,6 +158,44 @@ it('notifies admins about an overdue unpaid invoice, only once', function (): vo
     // A second sweep must not re-alert (overdue_notified_at is set).
     $this->artisan('notifications:scan')->assertSuccessful();
     Notification::assertSentToTimes($admin, SystemNotification::class, 1);
+});
+
+it('reminds admins about a project worked this month but not invoiced, once per cadence', function (): void {
+    Notification::fake();
+    [$company, $admin] = companyWithAdmin();
+    $project = Project::factory()->for($company)->create();
+    $employee = Employee::factory()->for($company)->create();
+
+    Attendance::factory()->create([
+        'company_id' => $company->id, 'employee_id' => $employee->id,
+        'project_id' => $project->id, 'date' => now()->startOfMonth()->toDateString(),
+    ]);
+
+    $this->artisan('notifications:scan')->assertSuccessful();
+    Notification::assertSentToTimes($admin, SystemNotification::class, 1);
+
+    // Second sweep is inside the cadence window — no re-reminder.
+    $this->artisan('notifications:scan')->assertSuccessful();
+    Notification::assertSentToTimes($admin, SystemNotification::class, 1);
+});
+
+it('does not remind when the project already has a sale invoice this month', function (): void {
+    Notification::fake();
+    [$company, $admin] = companyWithAdmin();
+    $project = Project::factory()->for($company)->create();
+    $employee = Employee::factory()->for($company)->create();
+
+    Attendance::factory()->create([
+        'company_id' => $company->id, 'employee_id' => $employee->id,
+        'project_id' => $project->id, 'date' => now()->startOfMonth()->toDateString(),
+    ]);
+    Invoice::factory()->create([
+        'company_id' => $company->id, 'type' => InvoiceType::Sale,
+        'project_id' => $project->id, 'invoice_date' => now()->startOfMonth()->toDateString(),
+    ]);
+
+    $this->artisan('notifications:scan')->assertSuccessful();
+    Notification::assertNotSentTo($admin, SystemNotification::class);
 });
 
 it('notifies the caller when a call follow-up is due today', function (): void {
