@@ -59,6 +59,35 @@ it('rejects a VAT value outside the official dropdown', function (): void {
         ->assertSessionHasErrors('vat_rate');
 });
 
+it('computes VAT from a custom rate', function (): void {
+    $this->actingAs($this->admin)->post('/expenses', expensePayload([
+        'subtotal' => 100, 'vat_rate' => 'custom', 'vat_custom_percent' => 7.5,
+    ]))->assertRedirect();
+
+    $expense = Expense::withoutGlobalScopes()->firstOrFail();
+
+    expect((float) $expense->vat_custom_percent)->toBe(7.5)
+        ->and((float) $expense->vat_amount)->toBe(7.5)
+        ->and((float) $expense->total)->toBe(107.5);
+});
+
+it('requires a percentage when the expense VAT rate is custom', function (): void {
+    $this->actingAs($this->admin)
+        ->post('/expenses', expensePayload(['vat_rate' => 'custom']))
+        ->assertSessionHasErrors('vat_custom_percent');
+});
+
+it('updates a non-approved expense', function (): void {
+    $this->actingAs($this->admin)->post('/expenses', expensePayload(['subtotal' => 100]));
+    $expense = Expense::withoutGlobalScopes()->firstOrFail();
+
+    $this->actingAs($this->admin)
+        ->post("/expenses/{$expense->id}", expensePayload(['subtotal' => 250]))
+        ->assertRedirect();
+
+    expect((float) $expense->fresh()->subtotal)->toBe(250.0);
+});
+
 it('feeds a worker project expense into that month payroll', function (): void {
     $employee = Employee::factory()->forCompany($this->company)->create([
         'wage_type' => 'hourly', 'wage_rate' => '20',

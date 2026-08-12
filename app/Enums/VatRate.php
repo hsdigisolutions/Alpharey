@@ -14,6 +14,9 @@ enum VatRate: string
     case Reducido = 'reducido';
     case Superreducido = 'superreducido';
     case Exento = 'exento';
+    // A custom rate the user types (client request 2026-08-12). The actual
+    // percentage is stored per record in vat_custom_percent, NOT here.
+    case Custom = 'custom';
 
     public function percent(): float
     {
@@ -22,7 +25,19 @@ enum VatRate: string
             self::Reducido => 10.0,
             self::Superreducido => 4.0,
             self::Exento => 0.0,
+            // Custom has no fixed percent — resolved from the record's
+            // vat_custom_percent via effectivePercent(); 0 is a safe fallback.
+            self::Custom => 0.0,
         };
+    }
+
+    /**
+     * The percentage to actually apply: a custom rate uses the per-record value;
+     * every other rate uses its fixed official percentage.
+     */
+    public function effectivePercent(?float $custom = null): float
+    {
+        return $this === self::Custom ? (float) ($custom ?? 0) : $this->percent();
     }
 
     public function labelEs(): string
@@ -32,6 +47,7 @@ enum VatRate: string
             self::Reducido => 'IVA Reducido 10%',
             self::Superreducido => 'IVA Superreducido 4%',
             self::Exento => 'Exento 0%',
+            self::Custom => 'IVA personalizado',
         };
     }
 
@@ -42,6 +58,7 @@ enum VatRate: string
             self::Reducido => 'VAT Reduced 10%',
             self::Superreducido => 'VAT Super-reduced 4%',
             self::Exento => 'Exempt 0%',
+            self::Custom => 'Custom VAT',
         };
     }
 
@@ -63,7 +80,8 @@ enum VatRate: string
         foreach (self::cases() as $case) {
             $options[] = [
                 'value' => $case->value,
-                'percent' => $case->percent(),
+                // Custom carries no fixed percent — the form shows a % input.
+                'percent' => $case === self::Custom ? null : $case->percent(),
                 'label_es' => $case->labelEs(),
                 'label_en' => $case->labelEn(),
             ];
@@ -73,11 +91,12 @@ enum VatRate: string
     }
 
     /**
-     * VAT amount for a subtotal under this rate, rounded to cents.
+     * VAT amount for a subtotal under this rate, rounded to cents. A custom rate
+     * uses $custom (the per-record vat_custom_percent).
      */
-    public function amountFor(float $subtotal): float
+    public function amountFor(float $subtotal, ?float $custom = null): float
     {
-        return round($subtotal * $this->percent() / 100, 2);
+        return round($subtotal * $this->effectivePercent($custom) / 100, 2);
     }
 
     /**
@@ -97,7 +116,9 @@ enum VatRate: string
         }
 
         foreach (self::cases() as $case) {
-            if (abs($case->percent() - (float) $percent) < 0.005) {
+            // Custom has no fixed percent — never resolve a legacy value to it
+            // (a 0% row must map to Exento, not Custom).
+            if ($case !== self::Custom && abs($case->percent() - (float) $percent) < 0.005) {
                 return $case;
             }
         }

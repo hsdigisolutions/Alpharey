@@ -12,7 +12,8 @@ it('maps every rate to the official Agencia Tributaria percentage', function ():
 it('offers blank as the first (default) dropdown option', function (): void {
     $options = VatRate::options();
 
-    expect($options)->toHaveCount(5)
+    // blank + 4 official Spain rates + Custom
+    expect($options)->toHaveCount(6)
         ->and($options[0]['value'])->toBeNull()
         ->and($options[0]['label_es'])->toBe('No aplica')
         ->and($options[0]['label_en'])->toBe('Not applicable');

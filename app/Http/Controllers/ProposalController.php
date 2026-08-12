@@ -52,6 +52,7 @@ class ProposalController extends Controller
                 'expiry_date' => $p->expiry_date?->toDateString(),
                 'subtotal' => $p->subtotal,
                 'vat_rate' => $p->vat_rate?->value,
+                'vat_custom_percent' => $p->vat_custom_percent,
                 'vat_amount' => $p->vat_amount,
                 'total_amount' => $p->total_amount,
                 'status' => $p->status->value,
@@ -128,7 +129,10 @@ class ProposalController extends Controller
         $data['subtotal'] = round($subtotal, 2);
 
         $rate = isset($data['vat_rate']) ? VatRate::tryFrom((string) $data['vat_rate']) : null;
-        $data['vat_amount'] = $rate?->amountFor($data['subtotal']);
+        // Only a custom rate keeps a typed percentage.
+        $customPercent = $rate === VatRate::Custom ? (float) ($data['vat_custom_percent'] ?? 0) : null;
+        $data['vat_custom_percent'] = $customPercent;
+        $data['vat_amount'] = $rate?->amountFor($data['subtotal'], $customPercent);
         $data['total_amount'] = round($data['subtotal'] + (float) ($data['vat_amount'] ?? 0), 2);
 
         return $data;

@@ -46,9 +46,14 @@ class InvoiceTotals
 
         $base = round($subtotal - $discount, 2);
 
+        // Only a custom rate keeps a custom percentage.
+        if ($invoice->vat_rate !== VatRate::Custom) {
+            $invoice->vat_custom_percent = null;
+        }
+
         // A null rate is "No aplica" — no VAT line, not 0% (DECISIONS.md).
         $vat = $invoice->vat_rate instanceof VatRate
-            ? $invoice->vat_rate->amountFor($base)
+            ? $invoice->vat_rate->amountFor($base, $invoice->vat_custom_percent)
             : 0.0;
 
         $retention = round($base * ((float) ($invoice->retention_percent ?? 0)) / 100, 2);

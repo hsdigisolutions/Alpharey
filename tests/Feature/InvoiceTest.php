@@ -347,6 +347,37 @@ it('refuses project-costs for another company project', function (): void {
         ->assertStatus(422); // OwnCompanyProject rejects it — never acts on another company's project
 });
 
+it('computes VAT from a custom rate', function (): void {
+    $this->actingAs($this->admin)->post('/invoices', invoicePayload([
+        'vat_rate' => 'custom', 'vat_custom_percent' => 7.5,
+        'lines' => [['description' => 'X', 'quantity' => 1, 'unit_price' => 100]],
+    ]))->assertRedirect();
+
+    $invoice = Invoice::withoutGlobalScopes()->firstOrFail();
+
+    expect($invoice->vat_rate->value)->toBe('custom')
+        ->and((float) $invoice->vat_custom_percent)->toBe(7.5)
+        ->and((float) $invoice->vat_amount)->toBe(7.5)   // 100 × 7.5%
+        ->and((float) $invoice->total)->toBe(107.5);
+});
+
+it('requires a percentage when the VAT rate is custom', function (): void {
+    $this->actingAs($this->admin)->post('/invoices', invoicePayload([
+        'vat_rate' => 'custom', // no vat_custom_percent supplied
+    ]))->assertSessionHasErrors('vat_custom_percent');
+});
+
+it('opens an invoice directly as a complete page (not blank)', function (): void {
+    $this->actingAs($this->admin)->post('/invoices', invoicePayload());
+    $invoice = Invoice::query()->firstOrFail();
+
+    // The payment-redirect / bookmark path lands here as a FULL visit — it must
+    // carry the whole page, not just `editing`, or the screen renders blank.
+    $this->actingAs($this->admin)->get("/invoices/{$invoice->id}")
+        ->assertInertia(fn (Assert $p) => $p->component('Invoices/Index')
+            ->has('invoices')->has('clients')->has('editing'));
+});
+
 it('refuses to delete an invoice that has payments', function (): void {
     // payments cascade on invoice delete — without this guard, removing a
     // paid invoice would erase the record of money actually received.

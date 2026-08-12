@@ -44,6 +44,8 @@ class StoreInvoiceRequest extends FormRequest
 
             // VAT: the VatRate dropdown only, and blank is valid (No aplica).
             'vat_rate' => ['nullable', Rule::enum(VatRate::class)],
+            // A custom rate needs its percentage; other rates ignore it.
+            'vat_custom_percent' => ['nullable', 'numeric', 'min:0', 'max:100', 'required_if:vat_rate,custom'],
             'discount_type' => ['nullable', Rule::enum(DiscountType::class)],
             'discount_value' => ['nullable', 'numeric', 'min:0', 'max:9999999'],
             'retention_percent' => ['nullable', 'numeric', 'min:0', 'max:100'],

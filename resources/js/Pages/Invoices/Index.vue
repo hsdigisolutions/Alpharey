@@ -78,7 +78,7 @@ const editingId = ref(null);
 const blank = {
     type: 'sale', sub_type: 'final', client_id: '', vendor_id: '', project_id: '',
     invoice_date: null, due_date: null, billing_type: '', billing_period: '',
-    vat_rate: null, discount_type: '', discount_value: 0, retention_percent: null,
+    vat_rate: null, vat_custom_percent: null, discount_type: '', discount_value: 0, retention_percent: null,
     status: 'draft', payment_method: '', payment_date: null, notes: '',
     lines: [{ description: '', quantity: 1, unit_price: 0 }],
 };
@@ -188,6 +188,7 @@ function openEdit(row) {
                 billing_type: e.billing_type ?? '',
                 billing_period: e.billing_period ?? '',
                 vat_rate: e.vat_rate ?? null,
+                vat_custom_percent: e.vat_custom_percent ?? null,
                 discount_type: e.discount_type ?? '',
                 discount_value: e.discount_value,
                 retention_percent: e.retention_percent,
@@ -239,7 +240,9 @@ const preview = computed(() => {
     if (form.discount_type === 'fixed') discount = Number(form.discount_value) || 0;
     discount = Math.min(discount, subtotal);
     const base = subtotal - discount;
-    const vat = rate?.percent ? base * rate.percent / 100 : 0;
+    // A custom rate uses the typed %; every other rate uses its fixed %.
+    const vatPct = form.vat_rate === 'custom' ? (Number(form.vat_custom_percent) || 0) : (rate?.percent || 0);
+    const vat = base * vatPct / 100;
     const retention = base * (Number(form.retention_percent) || 0) / 100;
     return { subtotal, discount, vat, retention, total: base + vat - retention };
 });
@@ -453,8 +456,8 @@ const columns = computed(() => [
 
                 <!-- Rates -->
                 <div class="grid gap-4 sm:grid-cols-2">
-                    <FormField k="invoices.vat" :error="form.errors.vat_rate">
-                        <VVatSelect v-model="form.vat_rate" :options="vatOptions" />
+                    <FormField k="invoices.vat" :error="form.errors.vat_rate || form.errors.vat_custom_percent">
+                        <VVatSelect v-model="form.vat_rate" v-model:custom-percent="form.vat_custom_percent" :options="vatOptions" />
                     </FormField>
                     <FormField k="invoices.retention" :error="form.errors.retention_percent">
                         <VInput v-model="form.retention_percent" type="number" step="0.01" min="0" max="100" />

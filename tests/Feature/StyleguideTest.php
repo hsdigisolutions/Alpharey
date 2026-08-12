@@ -7,7 +7,7 @@ it('renders the design-system styleguide outside production', function (): void 
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
             ->component('Styleguide')
-            ->has('vatOptions', 5)
+            ->has('vatOptions', 6)
             ->where('vatOptions.0.value', null)
             ->where('vatOptions.0.label_es', 'No aplica')
             ->where('vatOptions.1.percent', 21)

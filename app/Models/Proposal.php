@@ -19,6 +19,7 @@ use Illuminate\Support\Carbon;
  * @property string $number
  * @property ProposalStatus $status
  * @property VatRate|null $vat_rate
+ * @property float|null $vat_custom_percent
  * @property Carbon|null $proposal_date
  * @property Carbon|null $expiry_date
  * @property array<int, array<string, mixed>>|null $line_items
@@ -41,7 +42,7 @@ class Proposal extends Model
     protected $fillable = [
         'number', 'client_id', 'project_id', 'proposal_date', 'expiry_date', 'description',
         'line_items', 'estimated_quantity', 'estimated_total', 'subtotal',
-        'vat_rate', 'vat_amount', 'total_amount', 'status', 'notes',
+        'vat_rate', 'vat_custom_percent', 'vat_amount', 'total_amount', 'status', 'notes',
     ];
 
     protected function casts(): array
@@ -49,6 +50,7 @@ class Proposal extends Model
         return [
             'status' => ProposalStatus::class,
             'vat_rate' => VatRate::class,
+            'vat_custom_percent' => 'float',
             'proposal_date' => 'date:Y-m-d',
             'expiry_date' => 'date:Y-m-d',
             'line_items' => 'array',

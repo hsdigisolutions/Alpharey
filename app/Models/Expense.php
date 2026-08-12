@@ -40,6 +40,7 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $payment_date
  * @property numeric-string $subtotal
  * @property VatRate|null $vat_rate
+ * @property float|null $vat_custom_percent
  * @property numeric-string $vat_amount
  * @property numeric-string $total
  */
@@ -57,7 +58,7 @@ class Expense extends Model
     protected $fillable = [
         'number', 'type', 'expense_category_id', 'vendor_id', 'project_id',
         'employee_id', 'company_card_id', 'date', 'due_date', 'subtotal',
-        'vat_rate', 'vat_amount', 'total', 'payment_method', 'payment_status',
+        'vat_rate', 'vat_custom_percent', 'vat_amount', 'total', 'payment_method', 'payment_status',
         'payment_date', 'is_reimbursable', 'bearable_by', 'deduct_from_salary', 'notes',
     ];
 
@@ -68,6 +69,7 @@ class Expense extends Model
             'payment_status' => PaymentStatus::class,
             'payment_method' => PaymentMethod::class,
             'vat_rate' => VatRate::class,
+            'vat_custom_percent' => 'float',
             'bearable_by' => BearableBy::class,
             'date' => 'date:Y-m-d',
             'due_date' => 'date:Y-m-d',

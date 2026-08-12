@@ -235,6 +235,8 @@ class ExpenseController extends Controller
             'due_date' => ['nullable', 'date'],
             'subtotal' => ['required', 'numeric', 'min:0', 'max:9999999'],
             'vat_rate' => ['nullable', Rule::enum(VatRate::class)],
+            // A custom rate needs its percentage; other rates ignore it.
+            'vat_custom_percent' => ['nullable', 'numeric', 'min:0', 'max:100', 'required_if:vat_rate,custom'],
             'payment_method' => ['nullable', Rule::enum(PaymentMethod::class)],
             'payment_status' => ['nullable', Rule::enum(PaymentStatus::class)],
             'payment_date' => ['nullable', 'date'],
@@ -268,8 +270,15 @@ class ExpenseController extends Controller
      */
     private function applyTotals(Expense $expense): void
     {
+        // Only a custom rate keeps a custom percentage.
+        if ($expense->vat_rate !== VatRate::Custom) {
+            $expense->vat_custom_percent = null;
+        }
+
         $subtotal = (float) $expense->subtotal;
-        $vat = $expense->vat_rate instanceof VatRate ? $expense->vat_rate->amountFor($subtotal) : 0.0;
+        $vat = $expense->vat_rate instanceof VatRate
+            ? $expense->vat_rate->amountFor($subtotal, $expense->vat_custom_percent)
+            : 0.0;
 
         $expense->vat_amount = (string) $vat;
         $expense->total = (string) round($subtotal + $vat, 2);
@@ -302,21 +311,29 @@ class ExpenseController extends Controller
             'number' => $e->number,
             'type' => $e->type->value,
             'vendor' => $e->vendor?->name,
+            'vendor_id' => $e->vendor_id,
             'project' => $e->project?->name,
+            'project_id' => $e->project_id,
             'employee' => $e->employee?->full_name,
+            'employee_id' => $e->employee_id,
             'category' => $e->category?->name,
+            'expense_category_id' => $e->expense_category_id,
+            'company_card_id' => $e->company_card_id,
             'date' => $e->date->toDateString(),
             'due_date' => $e->due_date?->toDateString(),
             'subtotal' => (float) $e->subtotal,
             'vat_rate' => $e->vat_rate?->value,
+            'vat_custom_percent' => $e->vat_custom_percent,
             'vat_amount' => (float) $e->vat_amount,
             'total' => (float) $e->total,
             'payment_method' => $e->payment_method?->value,
             'payment_status' => $e->payment_status->value,
+            'payment_date' => $e->payment_date?->toDateString(),
             'approved' => $e->approved,
             'is_reimbursable' => $e->is_reimbursable,
             'bearable_by' => $e->bearable_by->value,
             'deduct_from_salary' => $e->deduct_from_salary,
+            'notes' => $e->notes,
             'has_file' => $e->file_path !== null,
             'original_name' => $e->original_name,
         ];

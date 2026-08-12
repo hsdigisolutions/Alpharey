@@ -41,6 +41,7 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $overdue_notified_at
  * @property numeric-string $subtotal
  * @property VatRate|null $vat_rate
+ * @property float|null $vat_custom_percent
  * @property numeric-string $vat_amount
  * @property numeric-string $discount_value
  * @property numeric-string $discount_amount
@@ -68,7 +69,7 @@ class Invoice extends Model
     protected $fillable = [
         'number', 'type', 'sub_type', 'client_id', 'vendor_id', 'project_id',
         'invoice_date', 'due_date', 'billing_type', 'billing_period',
-        'subtotal', 'vat_rate', 'vat_amount', 'discount_type', 'discount_value',
+        'subtotal', 'vat_rate', 'vat_custom_percent', 'vat_amount', 'discount_type', 'discount_value',
         'discount_amount', 'retention_percent', 'retention_amount', 'total',
         'paid_amount', 'status', 'payment_status', 'payment_date',
         'payment_method', 'notes',
@@ -83,6 +84,7 @@ class Invoice extends Model
             'payment_status' => PaymentStatus::class,
             'discount_type' => DiscountType::class,
             'vat_rate' => VatRate::class,
+            'vat_custom_percent' => 'float',
             'payment_method' => PaymentMethod::class,
             'invoice_date' => 'date:Y-m-d',
             'due_date' => 'date:Y-m-d',

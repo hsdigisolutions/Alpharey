@@ -43,7 +43,7 @@ function apply(extra = {}) { router.get('/proposals', { ...filters, ...extra }, 
 
 const showPanel = ref(false);
 const editing = ref(null);
-const blank = { client_id: '', project_id: '', proposal_date: null, expiry_date: null, description: '', line_items: [], vat_rate: null, status: 'draft', notes: '' };
+const blank = { client_id: '', project_id: '', proposal_date: null, expiry_date: null, description: '', line_items: [], vat_rate: null, vat_custom_percent: null, status: 'draft', notes: '' };
 const form = useForm({ ...blank });
 
 function open(proposal = null) {
@@ -57,7 +57,10 @@ function addLine() { form.line_items.push({ description: '', qty: 1, unit_price:
 function removeLine(i) { form.line_items.splice(i, 1); }
 
 const subtotal = computed(() => form.line_items.reduce((s, it) => s + (Number(it.qty) || 0) * (Number(it.unit_price) || 0), 0));
-const vatPct = computed(() => props.vatOptions.find((o) => o.value === form.vat_rate)?.percent ?? null);
+const vatPct = computed(() => {
+    if (form.vat_rate === 'custom') return Number(form.vat_custom_percent) || 0;
+    return props.vatOptions.find((o) => o.value === form.vat_rate)?.percent ?? null;
+});
 const vatAmount = computed(() => vatPct.value !== null ? Math.round(subtotal.value * vatPct.value) / 100 : null);
 const total = computed(() => subtotal.value + (vatAmount.value ?? 0));
 
@@ -156,7 +159,7 @@ const columns = [
 
                 <!-- VAT + totals -->
                 <div class="grid gap-4 sm:grid-cols-2">
-                    <FormField k="proposals.vat"><VVatSelect v-model="form.vat_rate" :options="vatOptions" /></FormField>
+                    <FormField k="proposals.vat" :error="form.errors.vat_custom_percent"><VVatSelect v-model="form.vat_rate" v-model:custom-percent="form.vat_custom_percent" :options="vatOptions" /></FormField>
                     <div class="rounded-md bg-surface-sunken p-3 text-sm">
                         <p class="tabular-nums flex justify-between"><span><Bilingual k="proposals.subtotal" inline /></span><span>{{ subtotal.toFixed(2) }} €</span></p>
                         <p class="tabular-nums flex justify-between text-ink-soft"><span>IVA / VAT</span><span>{{ vatAmount !== null ? vatAmount.toFixed(2) + ' €' : '—' }}</span></p>

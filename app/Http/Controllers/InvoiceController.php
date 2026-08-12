@@ -84,18 +84,22 @@ class InvoiceController extends Controller
             : InvoiceType::Sale;
     }
 
-    public function index(Request $request): Response
+    /**
+     * The shared page props for the invoices screen — used by both index() and
+     * show(). Keeping show() a COMPLETE page (not just `editing`) is what stops a
+     * full navigation to /invoices/{id} — e.g. the redirect after recording a
+     * payment — from rendering a blank page with missing required props.
+     *
+     * @return array<string, mixed>
+     */
+    private function pageProps(Request $request, InvoiceType $tab): array
     {
-        Gate::authorize('invoices.view');
-
-        $tab = $this->resolveTab($request);
-
         $invoices = $this->filteredQuery($request, $tab)
             ->paginate(25)
             ->withQueryString()
             ->through(fn (Invoice $i): array => $this->row($i));
 
-        return Inertia::render('Invoices/Index', [
+        return [
             'tab' => $tab->value,
             'invoices' => $invoices,
             'filters' => $request->only(['search', 'payment_status', 'project_id', 'from', 'to']),
@@ -117,36 +121,49 @@ class InvoiceController extends Controller
                 'delete' => Gate::allows('invoices.delete'),
                 'export' => Gate::allows('invoices.export'),
             ],
-        ]);
+        ];
+    }
+
+    public function index(Request $request): Response
+    {
+        Gate::authorize('invoices.view');
+
+        return Inertia::render('Invoices/Index', $this->pageProps($request, $this->resolveTab($request)));
     }
 
     /**
-     * The detail slide-panel payload (line items + payments), loaded on demand.
+     * A complete page with the slide-panel pre-opened (line items + payments).
+     * Reached both by the partial `only: ['editing']` reload from the list and by
+     * a full navigation (a payment redirect, a bookmarked URL) — hence the full
+     * props, so a full load is never blank.
      */
-    public function show(Invoice $invoice): Response
+    public function show(Request $request, Invoice $invoice): Response
     {
         Gate::authorize('invoices.view');
 
         $invoice->load(['lineItems', 'payments', 'client:id,name', 'vendor:id,name', 'project:id,name']);
 
-        return Inertia::render('Invoices/Index', [
-            'editing' => array_merge($this->row($invoice), [
-                'lines' => $invoice->lineItems->map(fn ($l): array => [
-                    'description' => $l->description,
-                    'quantity' => (float) $l->quantity,
-                    'unit_price' => (float) $l->unit_price,
-                    'line_total' => (float) $l->line_total,
-                ])->all(),
-                'payments' => $invoice->payments->map(fn ($p): array => [
-                    'id' => $p->id,
-                    'amount' => (float) $p->amount,
-                    'payment_date' => $p->payment_date->toDateString(),
-                    'payment_method' => $p->payment_method?->value,
-                    'reference' => $p->reference,
-                ])->all(),
-                'notes' => $invoice->notes,
-            ]),
-        ]);
+        return Inertia::render('Invoices/Index', array_merge(
+            $this->pageProps($request, $invoice->type),
+            [
+                'editing' => array_merge($this->row($invoice), [
+                    'lines' => $invoice->lineItems->map(fn ($l): array => [
+                        'description' => $l->description,
+                        'quantity' => (float) $l->quantity,
+                        'unit_price' => (float) $l->unit_price,
+                        'line_total' => (float) $l->line_total,
+                    ])->all(),
+                    'payments' => $invoice->payments->map(fn ($p): array => [
+                        'id' => $p->id,
+                        'amount' => (float) $p->amount,
+                        'payment_date' => $p->payment_date->toDateString(),
+                        'payment_method' => $p->payment_method?->value,
+                        'reference' => $p->reference,
+                    ])->all(),
+                    'notes' => $invoice->notes,
+                ]),
+            ],
+        ));
     }
 
     /**
@@ -353,7 +370,8 @@ class InvoiceController extends Controller
             'subtotal' => (float) $i->subtotal,
             // null vat_rate renders as "—", never as 0% (design-skill VAT rule)
             'vat_rate' => $i->vat_rate?->value,
-            'vat_percent' => $i->vat_rate?->percent(),
+            'vat_custom_percent' => $i->vat_custom_percent,
+            'vat_percent' => $i->vat_rate?->effectivePercent($i->vat_custom_percent),
             'vat_amount' => (float) $i->vat_amount,
             'discount_type' => $i->discount_type?->value,
             'discount_value' => (float) $i->discount_value,

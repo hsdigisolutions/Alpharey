@@ -10,20 +10,25 @@ import VDropdown from '@/Components/ui/VDropdown.vue';
 
 const props = defineProps({
     modelValue: { type: [String, null], default: null }, // VatRate value or null
+    // The typed percentage when the "Custom" rate is selected.
+    customPercent: { type: [Number, String, null], default: null },
     /** @type {Array<{value: string|null, percent: number|null, label_es: string, label_en: string}>} */
     options: { type: Array, required: true },
     disabled: { type: Boolean, default: false },
     invalid: { type: Boolean, default: false },
 });
 
-const emit = defineEmits(['update:modelValue']);
+const emit = defineEmits(['update:modelValue', 'update:customPercent']);
 
 const selected = computed(
     () => props.options.find((option) => option.value === props.modelValue) ?? props.options[0],
 );
+
+const isCustom = computed(() => props.modelValue === 'custom');
 </script>
 
 <template>
+  <div class="space-y-2">
     <VDropdown align="start" width="w-full min-w-56">
         <template #trigger="{ toggle }">
             <button type="button" :disabled="disabled"
@@ -57,4 +62,16 @@ const selected = computed(
             </ul>
         </template>
     </VDropdown>
+
+    <!-- Typed percentage for the Custom rate. -->
+    <div v-if="isCustom" class="relative">
+        <input type="number" step="0.01" min="0" max="100" :disabled="disabled"
+            :value="customPercent"
+            class="w-full rounded-md border bg-surface-sunken px-3 py-2 pe-8 text-sm text-ink placeholder:text-muted focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
+            :class="invalid ? 'border-status-danger' : 'border-line-strong'"
+            :placeholder="$t('vat.custom_placeholder')"
+            @input="emit('update:customPercent', $event.target.value === '' ? null : Number($event.target.value))" />
+        <span class="pointer-events-none absolute end-3 top-1/2 -translate-y-1/2 text-sm text-muted">%</span>
+    </div>
+  </div>
 </template>

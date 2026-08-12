@@ -57,7 +57,7 @@
     <table class="totals">
         <tr><td>Subtotal</td><td class="num">{{ number_format((float) $proposal->subtotal, 2, ',', '.') }} €</td></tr>
         <tr>
-            <td>IVA / VAT {{ $proposal->vat_rate ? $proposal->vat_rate->labelEs() : 'No aplica' }}</td>
+            <td>IVA / VAT {{ $proposal->vat_rate ? rtrim(rtrim(number_format($proposal->vat_rate->effectivePercent($proposal->vat_custom_percent), 2, ',', '.'), '0'), ',').'%' : 'No aplica' }}</td>
             <td class="num">{{ $proposal->vat_amount !== null ? number_format((float) $proposal->vat_amount, 2, ',', '.').' €' : '—' }}</td>
         </tr>
         <tr><td><strong>Total</strong></td><td class="num"><strong>{{ number_format((float) $proposal->total_amount, 2, ',', '.') }} €</strong></td></tr>

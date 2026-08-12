@@ -401,6 +401,7 @@ return [
         'reducido' => 'IVA Reducido 10%',
         'superreducido' => 'IVA Superreducido 4%',
         'exento' => 'Exento 0%',
+        'custom_placeholder' => 'Escribe el % de IVA',
     ],
 
     'employees' => [
@@ -2029,6 +2030,7 @@ return [
         'bearable_unbillable' => 'No facturable',
         'bearable_hint' => 'Solo los costes a cargo del cliente entran en la facturación de la obra.',
         'deduct_from_salary' => 'Descontar de la nómina del trabajador',
+        'approved_locked' => 'Gasto aprobado — bloqueado (retira la aprobación para editar).',
     ],
 
     'commissions' => [

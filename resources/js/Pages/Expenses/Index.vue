@@ -71,10 +71,11 @@ const exportQuery = computed(() => new URLSearchParams(
 /* ---------- create / edit ---------- */
 const showModal = ref(false);
 const editingId = ref(null);
+const editingApproved = ref(false); // approved expenses are view-only (locked server-side)
 const blank = {
     number: '', type: 'factura', expense_category_id: '', vendor_id: '', project_id: '',
     employee_id: '', company_card_id: '', date: null, due_date: null,
-    subtotal: 0, vat_rate: null, payment_method: '', payment_status: 'unpaid',
+    subtotal: 0, vat_rate: null, vat_custom_percent: null, payment_method: '', payment_status: 'unpaid',
     bearable_by: 'company', deduct_from_salary: false, notes: '', file: null,
 };
 const form = useForm({ ...blank });
@@ -89,8 +90,37 @@ function openCreate() {
     if (!ensureCompanySelected()) return;
 
     editingId.value = null;
+    editingApproved.value = false;
     Object.keys(blank).forEach((k) => { form[k] = blank[k]; });
     currentFile.value = null;
+    form.clearErrors();
+    showModal.value = true;
+}
+
+function openEdit(row) {
+    editingId.value = row.id;
+    editingApproved.value = row.approved;
+    Object.assign(form, {
+        number: row.number ?? '',
+        type: row.type,
+        expense_category_id: row.expense_category_id ?? '',
+        vendor_id: row.vendor_id ?? '',
+        project_id: row.project_id ?? '',
+        employee_id: row.employee_id ?? '',
+        company_card_id: row.company_card_id ?? '',
+        date: row.date,
+        due_date: row.due_date ?? null,
+        subtotal: row.subtotal,
+        vat_rate: row.vat_rate ?? null,
+        vat_custom_percent: row.vat_custom_percent ?? null,
+        payment_method: row.payment_method ?? '',
+        payment_status: row.payment_status ?? 'unpaid',
+        bearable_by: row.bearable_by ?? 'company',
+        deduct_from_salary: row.deduct_from_salary ?? false,
+        notes: row.notes ?? '',
+        file: null,
+    });
+    currentFile.value = row.original_name ?? null;
     form.clearErrors();
     showModal.value = true;
 }
@@ -146,7 +176,9 @@ const isWorkerProjectExpense = computed(() => Boolean(form.employee_id && form.p
 const preview = computed(() => {
     const subtotal = Number(form.subtotal) || 0;
     const rate = props.vatOptions.find((o) => o.value === form.vat_rate);
-    const vat = rate?.percent ? subtotal * rate.percent / 100 : 0;
+    // A custom rate uses the typed %; every other rate uses its fixed %.
+    const vatPct = form.vat_rate === 'custom' ? (Number(form.vat_custom_percent) || 0) : (rate?.percent || 0);
+    const vat = subtotal * vatPct / 100;
     return { vat, total: subtotal + vat };
 });
 
@@ -223,7 +255,8 @@ const columns = [
         </div>
 
         <VTable :columns="columns">
-            <tr v-for="r in expenses.data" :key="r.id" class="hover:bg-surface-hover">
+            <tr v-for="r in expenses.data" :key="r.id" class="cursor-pointer hover:bg-surface-hover"
+                @click="openEdit(r)">
                 <td class="tabular-nums px-3 py-2.5 text-sm">{{ r.date }}</td>
                 <td class="px-3 py-2.5 text-sm font-medium text-ink">{{ r.number ?? '—' }}</td>
                 <td class="px-3 py-2.5 text-sm text-ink-soft">
@@ -247,12 +280,17 @@ const columns = [
                         <Bilingual :k="r.approved ? 'expenses.is_approved' : 'expenses.pending'" inline />
                     </VBadge>
                 </td>
-                <td class="px-3 py-2.5 text-end">
+                <td class="px-3 py-2.5 text-end" @click.stop>
                     <span class="flex items-center justify-end gap-1.5">
                         <a v-if="r.has_file" :href="`/expenses/${r.id}/receipt`" target="_blank" rel="noopener"
                             class="text-ink-soft hover:text-accent" :title="$t('expenses.download_receipt')">
                             <AppIcon name="file" class="h-4 w-4" />
                         </a>
+                        <button v-if="can.edit && !r.approved" type="button"
+                            class="rounded-sm p-1.5 text-muted hover:text-ink" :title="$t('expenses.edit')"
+                            @click="openEdit(r)">
+                            <AppIcon name="edit" class="h-3.5 w-3.5" />
+                        </button>
                         <VButton v-if="can.approve && !r.approved" variant="ghost" size="sm" @click="approve(r, true)">
                             <Bilingual k="expenses.approve" inline />
                         </VButton>
@@ -325,8 +363,8 @@ const columns = [
                 <FormField k="expenses.subtotal" :error="form.errors.subtotal" required>
                     <VInput v-model="form.subtotal" type="number" step="0.01" min="0" />
                 </FormField>
-                <FormField k="expenses.vat" :error="form.errors.vat_rate">
-                    <VVatSelect v-model="form.vat_rate" :options="vatOptions" />
+                <FormField k="expenses.vat" :error="form.errors.vat_rate || form.errors.vat_custom_percent">
+                    <VVatSelect v-model="form.vat_rate" v-model:custom-percent="form.vat_custom_percent" :options="vatOptions" />
                 </FormField>
 
                 <FormField k="expenses.payment_method" :error="form.errors.payment_method">
@@ -386,8 +424,11 @@ const columns = [
                 </FormField>
             </form>
             <template #footer>
+                <span v-if="editingApproved" class="me-auto text-xs text-status-warn">
+                    {{ $t('expenses.approved_locked') }}
+                </span>
                 <VButton variant="ghost" @click="showModal = false"><Bilingual k="common.cancel" inline /></VButton>
-                <VButton type="submit" form="expense-form" :loading="form.processing">
+                <VButton v-if="!editingApproved" type="submit" form="expense-form" :loading="form.processing">
                     <Bilingual k="common.save" inline />
                 </VButton>
             </template>

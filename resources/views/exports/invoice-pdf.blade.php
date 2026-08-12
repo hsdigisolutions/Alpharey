@@ -101,7 +101,7 @@
         {{-- Blank VAT means NO VAT line at all — never print "0%" (DECISIONS.md) --}}
         @if ($invoice->vat_rate)
             <tr>
-                <td>IVA {{ rtrim(rtrim(number_format($invoice->vat_rate->percent(), 2, ',', '.'), '0'), ',') }}%</td>
+                <td>IVA {{ rtrim(rtrim(number_format($invoice->vat_rate->effectivePercent($invoice->vat_custom_percent), 2, ',', '.'), '0'), ',') }}%</td>
                 <td class="right">{{ $eur($invoice->vat_amount) }}</td>
             </tr>
         @endif

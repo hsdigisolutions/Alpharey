@@ -34,6 +34,7 @@ class StoreProposalRequest extends FormRequest
             'line_items.*.qty' => ['required_with:line_items', 'numeric', 'min:0'],
             'line_items.*.unit_price' => ['required_with:line_items', 'numeric', 'min:0'],
             'vat_rate' => ['nullable', Rule::enum(VatRate::class)],
+            'vat_custom_percent' => ['nullable', 'numeric', 'min:0', 'max:100', 'required_if:vat_rate,custom'],
             'estimated_quantity' => ['nullable', 'numeric', 'min:0'],
             'estimated_total' => ['nullable', 'numeric', 'min:0'],
             'status' => ['required', Rule::enum(ProposalStatus::class)],
