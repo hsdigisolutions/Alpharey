@@ -11,13 +11,18 @@ use App\Models\EmployeeWageRate;
 use App\Models\Payroll;
 use App\Models\Project;
 use App\Models\UserColumnSetting;
+use App\Models\WorkerConsent;
+use App\Services\Audit\AuditLogger;
 use App\Services\Documents\DocumentStatus;
 use App\Services\Employees\EmployeeQueryFilter;
 use App\Services\Employees\EmployeeService;
 use App\Services\Employees\WageRateService;
+use App\Services\Workers\WorkerConsentService;
 use App\Support\AttendanceAbsence;
 use App\Support\CurrentCompany;
 use App\Support\DocumentTypes;
+use App\Support\WorkerPrivacyNotice;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -167,6 +172,9 @@ class EmployeeController extends Controller
             'attendanceProjects' => Gate::allows('attendance.view') ? $this->attendanceProjects() : [],
             'attendanceEmployee' => Gate::allows('attendance.view') ? $this->attendanceEmployeePayload($employee, $canSeeWages, $wageRates) : null,
             'canManageAttendance' => Gate::allows('attendance.create'),
+            // Privacy-consent evidence (GDPR). Only meaningful for a worker with a
+            // PWA login; the history is the append-only audit trail.
+            'consent' => $this->consentPayload($employee),
             'canSeeWages' => $canSeeWages,
             'designationOptions' => ProjectDesignationRateController::optionsFor(app(CurrentCompany::class)->id()),
             'can' => [
@@ -178,6 +186,70 @@ class EmployeeController extends Controller
                 'deleteDocs' => Gate::allows('documents.delete'),
             ],
         ]);
+    }
+
+    /**
+     * Privacy-consent evidence for the Employee Detail page: the current status
+     * + the full append-only history (each row is legal evidence).
+     *
+     * @return array<string, mixed>
+     */
+    private function consentPayload(Employee $employee): array
+    {
+        $row = fn (WorkerConsent $c): array => [
+            'id' => $c->id,
+            'version' => $c->consent_version,
+            'consented_at' => $c->consented_at->toDateTimeString(),
+            'timezone' => $c->timezone,
+            'ip_address' => $c->ip_address,
+            'user_agent' => $c->user_agent,
+            'attendance' => $c->consent_attendance,
+            'gps' => $c->consent_gps,
+            'photo' => $c->consent_photo,
+            'language' => $c->language,
+            'revoked_at' => $c->revoked_at?->toDateTimeString(),
+            'revoked_reason' => $c->revoked_reason,
+        ];
+
+        $active = $employee->activeConsent();
+
+        return [
+            'has_app_access' => $employee->user_id !== null,
+            'current_version' => WorkerPrivacyNotice::currentVersion(),
+            'accepted' => $active !== null,
+            'active' => $active !== null ? $row($active) : null,
+            'history' => $employee->consents()->get()->map($row)->all(),
+        ];
+    }
+
+    /**
+     * Admin forces a worker to re-accept the notice (e.g. after a policy change
+     * for one person). Revokes the active consent; the worker is re-gated.
+     */
+    public function resetConsent(Request $request, Employee $employee): RedirectResponse
+    {
+        Gate::authorize('employees.edit');
+
+        $user = $request->user();
+        $who = $user !== null ? $user->name : 'admin';
+
+        app(WorkerConsentService::class)->revoke($employee, "Reset by {$who} — worker must re-accept");
+
+        return back()->with('success', __('ui.employees.consent_reset_done'));
+    }
+
+    /** Download one consent record as a PDF (legal evidence), gated + audited. */
+    public function consentPdf(Employee $employee, WorkerConsent $consent, AuditLogger $audit): \Symfony\Component\HttpFoundation\Response
+    {
+        Gate::authorize('employees.view');
+        abort_unless($consent->employee_id === $employee->id, 404);
+
+        $audit->log('exported', $consent, null, null, 'Consent PDF', 'employees');
+
+        return Pdf::loadView('exports.worker-consent', [
+            'employee' => $employee,
+            'consent' => $consent,
+        ])->download("consent-{$employee->employee_code}-{$consent->id}.pdf");
     }
 
     /**

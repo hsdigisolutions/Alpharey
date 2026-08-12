@@ -14,6 +14,7 @@ use App\Services\Settings\MailSettings;
 use App\Services\Settings\SettingsService;
 use App\Services\System\SystemHealth;
 use App\Support\CurrentCompany;
+use App\Support\WorkerPrivacyNotice;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Mail;
@@ -53,6 +54,8 @@ class SettingsController extends Controller
                 ->dayTypeThresholds(app(CurrentCompany::class)->id() ?? 0),
             'maxLocationDistance' => app(AttendanceService::class)
                 ->maxLocationDistance(app(CurrentCompany::class)->id() ?? 0),
+            // Legal → the current worker-consent notice version (brand-wide).
+            'consentVersion' => WorkerPrivacyNotice::currentVersion(),
             // Notification matrix + system health are brand-level → Super Admin only
             'notificationMatrix' => $isSuperAdmin ? $rules->matrix() : null,
             'systemHealth' => $isSuperAdmin ? $health->check() : null,
@@ -98,6 +101,24 @@ class SettingsController extends Controller
         $settings->set("attendance.full_day_threshold.{$companyId}", (float) $validated['full_day_threshold']);
         $settings->set("attendance.half_day_threshold.{$companyId}", (float) $validated['half_day_threshold']);
         $settings->set("attendance.max_location_distance.{$companyId}", (float) $validated['max_location_distance']);
+
+        return back()->with('success', __('ui.settings.saved'));
+    }
+
+    /**
+     * Bump the worker-consent notice version (Settings → Legal). Brand-wide: a
+     * new version forces every worker to re-accept before their next punch.
+     */
+    public function updateLegal(Request $request, SettingsService $settings): RedirectResponse
+    {
+        $user = $request->user();
+        abort_unless($user !== null && ($user->isSuperAdmin() || $user->isCompanyAdmin()), 403);
+
+        $validated = $request->validate([
+            'consent_version' => ['required', 'string', 'max:40'],
+        ]);
+
+        $settings->set('legal.consent_version', $validated['consent_version']);
 
         return back()->with('success', __('ui.settings.saved'));
     }

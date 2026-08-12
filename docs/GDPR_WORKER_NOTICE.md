@@ -41,11 +41,23 @@ relationship (AEPD / EDPB doctrine). The processing rests instead on:
   the employer to inform workers (and their representatives) expressly, clearly
   and unambiguously, in advance**.
 
-**Implication for the app:** the in-app screen is an **information notice with an
-acknowledgement** ("I have read and understand"), **not** a consent checkbox. The
-worker cannot decline the processing and keep working, but they **must be
-informed before it starts** — which is exactly what the gate enforces. Framing it
-as "consent" would be legally wrong and would weaken the employer's position.
+**Implication for the app (updated 2026-08-11 — HYBRID model).** The processing
+is split by purpose, because the three data items do NOT share one lawful basis:
+
+- **Attendance time record (date/time)** — mandatory (art. 6(1)(c) + RD-ley
+  8/2019). The worker cannot decline it and keep working; the app therefore
+  presents it as an **acknowledgement of the information duty**, not a refusable
+  consent. This is the mandatory checkbox.
+- **GPS location** and **selfie photo** — made genuinely **OPTIONAL**: the app
+  works fully without either (the worker punches in without a fix / without a
+  selfie, with no penalty). Because declining carries **no detriment**, consent
+  here **is** freely given and IS a valid basis (art. 6(1)(a) + art. 7). Each is
+  its **own separate checkbox** the worker can grant, withhold, and later revoke.
+
+Framing the *mandatory record* as "consent" would be legally wrong; but the two
+*optional* extras are exactly the case where consent is the correct basis. This
+split is what the two-checkbox screen and the `worker_consents` evidence table
+implement.
 
 > **Lawyer to confirm:** that legitimate-interest / legal-obligation is the basis
 > the client wants recorded in the Registro de Actividades de Tratamiento (RAT),
@@ -142,16 +154,47 @@ workers re-acknowledge.
    covers worker geolocation + images specifically, and that the UK adequacy
    position is documented.
 
+## 5b. Consent evidence record — the two-checkbox model (implemented 2026-08-11)
+
+Every consent decision is stored as an **append-only** row in `worker_consents`
+(legal evidence; the history is never destroyed — a change/revocation writes a new
+row and stamps `revoked_at` on the superseded one). Each row captures:
+
+`employee_id` · `user_id` · `company_id` · `consent_version` (e.g. `v1.0-2026-08`)
+· `ip_address` · `user_agent` (browser + device) · `consented_at` (exact instant)
+· `timezone` (Europe/Madrid) · `consent_attendance` (mandatory ack) · `consent_gps`
+(optional) · `consent_photo` (optional) · `consent_text_shown` (the FULL exact
+text the worker saw, snapshotted server-side so it is self-contained) · `language`
+(es/en) · `revoked_at` · `revoked_reason`.
+
+- **Worker screen:** three separate checkboxes; the Accept button is disabled
+  until the worker has scrolled the whole notice AND ticked the mandatory
+  attendance acknowledgement. GPS and selfie default on but can be unticked.
+- **Check-in flow:** no GPS consent → no fix requested, `location_captured=false`,
+  and no GPS-missing alert; no selfie consent → no camera, no selfie stored.
+- **Revocation:** the worker toggles GPS/selfie off from the PWA ("Privacy &
+  consent" panel) at any time — as easy to withdraw as to give (art. 7(3)).
+- **Version bump:** Settings → Legal holds the current version; bumping it
+  (Company/Super Admin) invalidates every active consent, so all workers must
+  re-accept before their next punch.
+- **Admin (Employee Detail):** consent status, date/time, IP, device, which boxes
+  were ticked, version, the full history, a **PDF export** of any record (gated +
+  audited), and a **Reset** button to force one worker to re-accept.
+
 ## 6. What is already implemented (no further build needed)
 
-- In-app pre-punch notice + acknowledgement gate (UI + server-enforced).
-- Versioned notice with automatic re-acknowledgement on a version bump.
-- Audit-logged acknowledgement as the evidence trail.
+- In-app pre-punch two-checkbox consent screen (scroll-gated) + server-enforced
+  gate; full `worker_consents` evidence record (§5b).
+- Versioned notice with automatic re-acceptance on a version bump (admin-managed
+  in Settings → Legal).
+- Consent records are `Auditable`; the append-only table is the evidence trail.
+- GPS + selfie are optional, freely revocable, and the app works without them.
 - Selfies stored on the **private** disk, served only through an authenticated,
   permission-checked, audited admin route (never a public URL).
 - Location stored as coordinates on the attendance row; shown to admins as a
-  Google Maps link behind the `attendance.view` right.
-- Location refusal recorded, never blocking the punch.
+  Google Maps link behind the `attendance.view` right. A poor-accuracy fix
+  (>1 km) is never used as the check-out mismatch anchor.
+- Location refusal / opt-out recorded, never blocking the punch.
 
 ## 7. What is NOT yet built (depends on the §5 decisions)
 

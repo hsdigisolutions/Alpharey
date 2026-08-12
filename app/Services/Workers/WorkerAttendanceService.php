@@ -55,7 +55,7 @@ class WorkerAttendanceService
      *
      * @param  array{lat: float|null, lng: float|null, accuracy: float|null, denied: bool}  $location
      */
-    public function checkIn(Employee $employee, array $location, ?UploadedFile $photo): Attendance
+    public function checkIn(Employee $employee, array $location, ?UploadedFile $photo, bool $gpsConsent = true): Attendance
     {
         $today = now()->toDateString();
         $existing = $this->todayFor($employee, $today);
@@ -119,8 +119,10 @@ class WorkerAttendanceService
 
         // GPS is evidence, not a gate: the punch stood, but a check-in with no
         // location leaves the admin blind to where the worker was — so notify
-        // the company's admins (delivery governed by the Settings matrix).
-        if ($attendance->location_denied) {
+        // the company's admins (delivery governed by the Settings matrix). NOT
+        // fired when the worker legitimately withheld GPS consent (opting out is
+        // their right; it is not a missing fix to chase).
+        if ($gpsConsent && $attendance->location_denied) {
             $this->notifyGpsMissing($employee);
         }
 

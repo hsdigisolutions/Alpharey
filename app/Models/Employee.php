@@ -6,7 +6,7 @@ use App\Enums\PaymentMethod;
 use App\Enums\WageType;
 use App\Models\Concerns\Auditable;
 use App\Models\Concerns\BelongsToCompany;
-use App\Support\WorkerPrivacyNotice;
+use App\Services\Workers\WorkerConsentService;
 use Database\Factories\EmployeeFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -118,25 +118,41 @@ class Employee extends Model
     }
 
     /**
-     * Has this worker been shown, and acknowledged, the CURRENT version of the
-     * geolocation + selfie privacy notice? Delegates to the single authority so
-     * a version bump re-gates everyone in one place.
+     * All privacy-consent records for this worker (append-only legal evidence),
+     * newest first.
+     *
+     * @return HasMany<WorkerConsent, $this>
      */
-    public function hasAcknowledgedPrivacyNotice(): bool
+    public function consents(): HasMany
     {
-        return WorkerPrivacyNotice::acknowledged($this);
+        return $this->hasMany(WorkerConsent::class)->latest('consented_at');
+    }
+
+    /** The consent currently in force (current version, not revoked). */
+    public function activeConsent(): ?WorkerConsent
+    {
+        return app(WorkerConsentService::class)->activeConsent($this);
     }
 
     /**
-     * Record that the worker acknowledged reading the current notice, now.
-     * These columns are not mass-assignable (like is_current on Document) — the
-     * acknowledgement is a system fact, set here, and the write is audited.
+     * Has this worker accepted the CURRENT version of the notice (the mandatory
+     * attendance acknowledgement)? The single gate the PWA + server both use.
      */
-    public function acknowledgePrivacyNotice(): void
+    public function hasAcknowledgedPrivacyNotice(): bool
     {
-        $this->privacy_notice_ack_at = now();
-        $this->privacy_notice_ack_version = WorkerPrivacyNotice::VERSION;
-        $this->save();
+        return app(WorkerConsentService::class)->hasConsented($this);
+    }
+
+    /** Optional GPS consent — false when withheld or revoked. */
+    public function consentGps(): bool
+    {
+        return $this->activeConsent()?->consent_gps === true;
+    }
+
+    /** Optional selfie consent — false when withheld or revoked. */
+    public function consentPhoto(): bool
+    {
+        return $this->activeConsent()?->consent_photo === true;
     }
 
     /**

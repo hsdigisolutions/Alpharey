@@ -44,8 +44,14 @@ const props = defineProps({
     canManageAttendance: { type: Boolean, default: false },
     appAccess: { type: Object, default: () => ({ email: null, active: false }) },
     canSeeWages: { type: Boolean, default: false },
+    consent: { type: Object, default: () => ({ has_app_access: false, accepted: false, active: null, history: [], current_version: '' }) },
     can: { type: Object, required: true },
 });
+
+function resetConsent() {
+    if (!window.confirm(t('employees.consent_reset_confirm'))) return;
+    router.post(`/employees/${props.employee.id}/consent/reset`, {}, { preserveScroll: true });
+}
 
 const tab = ref('info');
 const showEdit = ref(false);
@@ -350,6 +356,55 @@ function destroy() {
                     <VButton v-else size="sm" icon="plus" @click="showAppAccess = true">
                         <Bilingual k="worker_access.grant" inline />
                     </VButton>
+                </VCard>
+
+                <!-- Privacy consent (GDPR legal evidence). -->
+                <VCard v-if="can.edit" title-key="employees.consent_title" class="lg:col-span-2">
+                    <p v-if="!consent.has_app_access" class="text-sm text-muted">{{ $t('employees.consent_no_app') }}</p>
+                    <template v-else>
+                        <div class="mb-3 flex flex-wrap items-center gap-2">
+                            <span class="text-sm text-ink-soft">{{ $t('employees.consent_status') }}:</span>
+                            <VBadge :status="consent.accepted ? 'ok' : 'warn'">
+                                {{ consent.accepted ? $t('employees.consent_accepted') : $t('employees.consent_not_accepted') }}
+                            </VBadge>
+                            <span class="text-xs text-muted">{{ $t('employees.consent_version') }} {{ consent.current_version }}</span>
+                            <VButton v-if="consent.accepted" variant="danger" size="sm" class="ms-auto" @click="resetConsent">
+                                {{ $t('employees.consent_reset') }}
+                            </VButton>
+                        </div>
+
+                        <div v-if="consent.active" class="overflow-x-auto rounded-lg border border-line">
+                            <table class="w-full text-left text-xs">
+                                <tbody>
+                                    <tr class="border-b border-line"><td class="bg-surface-sunken px-3 py-2 font-medium text-ink-soft">{{ $t('employees.consent_date') }}</td><td class="px-3 py-2">{{ consent.active.consented_at }} ({{ consent.active.timezone }})</td></tr>
+                                    <tr class="border-b border-line"><td class="bg-surface-sunken px-3 py-2 font-medium text-ink-soft">{{ $t('employees.consent_ip') }}</td><td class="px-3 py-2 font-mono">{{ consent.active.ip_address || '—' }}</td></tr>
+                                    <tr class="border-b border-line"><td class="bg-surface-sunken px-3 py-2 font-medium text-ink-soft">{{ $t('employees.consent_device') }}</td><td class="px-3 py-2 text-[11px] text-muted">{{ consent.active.user_agent || '—' }}</td></tr>
+                                    <tr><td class="bg-surface-sunken px-3 py-2 font-medium text-ink-soft">{{ $t('employees.consent_status') }}</td>
+                                        <td class="px-3 py-2">
+                                            <span class="me-2"><VBadge :status="consent.active.attendance ? 'ok' : 'neutral'">{{ $t('employees.consent_attendance') }}</VBadge></span>
+                                            <span class="me-2"><VBadge :status="consent.active.gps ? 'ok' : 'neutral'">{{ $t('employees.consent_gps') }}</VBadge></span>
+                                            <VBadge :status="consent.active.photo ? 'ok' : 'neutral'">{{ $t('employees.consent_photo') }}</VBadge>
+                                        </td></tr>
+                                </tbody>
+                            </table>
+                            <a :href="`/employees/${employee.id}/consent/${consent.active.id}/pdf`" target="_blank" rel="noopener"
+                                class="flex items-center justify-center gap-1.5 border-t border-line bg-surface-sunken py-2 text-xs text-accent hover:underline">
+                                <AppIcon name="download" class="h-3.5 w-3.5" />{{ $t('employees.consent_pdf') }}
+                            </a>
+                        </div>
+
+                        <div v-if="consent.history.length > 1" class="mt-3">
+                            <p class="mb-1.5 text-xs font-medium text-ink-soft">{{ $t('employees.consent_history') }}</p>
+                            <ul class="space-y-1 text-xs text-muted">
+                                <li v-for="h in consent.history" :key="h.id" class="flex items-center gap-2">
+                                    <span class="tabular-nums">{{ h.consented_at }}</span>
+                                    <span>· {{ h.version }} · GPS {{ h.gps ? '✓' : '✕' }} · {{ $t('employees.consent_photo') }} {{ h.photo ? '✓' : '✕' }}</span>
+                                    <span v-if="h.revoked_at" class="text-status-danger">· {{ $t('employees.consent_revoked') }}</span>
+                                    <a :href="`/employees/${employee.id}/consent/${h.id}/pdf`" target="_blank" rel="noopener" class="ms-auto text-accent hover:underline">PDF</a>
+                                </li>
+                            </ul>
+                        </div>
+                    </template>
                 </VCard>
 
                 <!-- Historial de Salario — the effective-dated wage timeline -->

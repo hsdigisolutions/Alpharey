@@ -27,6 +27,7 @@ const props = defineProps({
     overtimeTypes: { type: Array, default: () => [] },
     dayTypeThresholds: { type: Object, default: () => ({ full: 6, half: 3 }) },
     maxLocationDistance: { type: Number, default: 500 },
+    consentVersion: { type: String, default: '' },
     notificationMatrix: { type: Array, default: null },
     systemHealth: { type: Object, default: null },
 });
@@ -84,6 +85,11 @@ const thresholdForm = useForm({
     half_day_threshold: props.dayTypeThresholds.half,
     max_location_distance: props.maxLocationDistance,
 });
+
+const legalForm = useForm({ consent_version: props.consentVersion });
+function saveLegal() {
+    legalForm.put('/admin/settings/legal', { preserveScroll: true });
+}
 
 function saveThresholds() {
     thresholdForm.put('/admin/settings/attendance', { preserveScroll: true });
@@ -278,6 +284,20 @@ function deletePolicy(p) {
                         <span v-if="thresholdForm.errors.max_location_distance" class="text-xs text-status-danger">{{ thresholdForm.errors.max_location_distance }}</span>
                     </label>
                     <VButton type="submit" :loading="thresholdForm.processing"><Bilingual k="common.save" inline /></VButton>
+                </form>
+            </VCard>
+
+            <!-- Legal → worker-consent notice version (brand-wide) -->
+            <VCard title-key="settings.legal_section" class="lg:col-span-2">
+                <p class="mb-4 text-sm text-ink-soft">{{ $t('settings.legal_hint') }}</p>
+                <form class="flex flex-wrap items-end gap-4" @submit.prevent="saveLegal">
+                    <label class="flex flex-col gap-1">
+                        <span class="text-xs font-medium text-ink-soft">{{ $t('settings.consent_version') }}</span>
+                        <input v-model="legalForm.consent_version" type="text" maxlength="40"
+                            class="w-56 rounded-md border border-line-strong bg-surface-sunken px-3 py-1.5 text-sm text-ink focus:border-accent focus:outline-none" />
+                        <span v-if="legalForm.errors.consent_version" class="text-xs text-status-danger">{{ legalForm.errors.consent_version }}</span>
+                    </label>
+                    <VButton type="submit" :loading="legalForm.processing"><Bilingual k="common.save" inline /></VButton>
                 </form>
             </VCard>
 

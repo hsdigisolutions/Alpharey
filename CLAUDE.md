@@ -5,9 +5,48 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Status: Phase 9 in progress — hardening (2026-08-01)
 
 **Every screen 01–26 is built (Phase 8 complete).** Phase 9 is hardening, UAT, and
-launch — no new screens. Current: **772 Pest tests / 4479 assertions passing (1
+launch — no new screens. Current: **781 Pest tests / 4526 assertions passing (1
 skipped) · Pint clean · Larastan level 6 clean · `composer audit` + `npm audit`
 clean · production Vite build working.**
+
+### Worker privacy CONSENT — full legal-evidence system (2026-08-11)
+
+Reworked the worker "privacy notice" from a single acknowledgement (a timestamp +
+version on the employee row) into a proper **consent-as-evidence** system (GDPR
+art. 7 & 13, LOPDGDD 3/2018, RD-ley 8/2019). The legal model is now **hybrid**:
+the attendance time record is a legal obligation (a mandatory *acknowledgement*,
+not refusable) while **GPS and the selfie are OPTIONAL consents** — the app works
+without them, so consent is a valid basis (no detriment) and is freely revocable.
+
+**Evidence table** `worker_consents` (migration `2026_08_11_000002`), **append-only**
+— a change/revocation writes a new row and stamps `revoked_at` on the superseded
+one, never destroying history. Columns: employee/user/company id, `consent_version`
+(e.g. `v1.0-2026-08`), `ip_address`, `user_agent`, `consented_at`, `timezone`,
+`consent_attendance`/`consent_gps`/`consent_photo`, `consent_text_shown` (the FULL
+exact text, snapshotted server-side by `WorkerPrivacyNotice::canonicalText()`),
+`language`, `revoked_at`, `revoked_reason`. `WorkerConsentService` is the single
+writer (`record` / `updatePreferences` / `revoke`); `activeConsent` = latest,
+non-revoked, current-version row. `WorkerConsent` is `Auditable`.
+
+**Worker PWA:** the consent screen (`PrivacyNotice.vue`) now has THREE checkboxes
+(attendance mandatory · GPS optional · selfie optional) and the Accept button is
+disabled until the worker scrolls the whole notice AND ticks the mandatory box.
+Check-in respects consent — no GPS consent → no fix requested, `location_captured
+=false`, no GPS-missing alert; no selfie consent → no camera / no selfie. A
+"Privacy & consent" panel on the home lets the worker revoke GPS/selfie any time
+(`POST /worker/consent`). `hasAcknowledgedPrivacyNotice()` + `consentGps()` /
+`consentPhoto()` on Employee delegate to the service.
+
+**Admin:** Employee Detail shows a consent card (status, date/time, IP, device,
+ticked boxes, version, full history) with a **per-record PDF** (`exports.worker-consent`
+blade, gated + audited) and a **Reset** button (`POST …/consent/reset`) to force
+re-acceptance. **Settings → Legal** holds the current version (`legal.consent_version`,
+`PUT /admin/settings/legal`); bumping it re-gates every worker. The old
+`employees.privacy_notice_ack_*` columns are now legacy (left in place; the consent
+table is authoritative). Tests: `WorkerPrivacyNoticeTest` (rewritten, 10 — full
+record, mandatory-box, GPS/selfie skip, revoke, version re-gate) +
+`WorkerConsentAdminTest` (5 — admin view, reset, PDF, cross-employee 404, version
+bump). `EmployeeFactory::privacyAcknowledged(gps,photo)` now seeds a consent row.
 
 ### GPS check-out mismatch — accuracy guard + configurable distance (2026-08-11)
 

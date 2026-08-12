@@ -126,6 +126,7 @@ Route::middleware('guest')->group(function (): void {
 Route::middleware(['auth', 'active', 'worker'])->prefix('worker')->group(function (): void {
     Route::get('/', [WorkerController::class, 'home'])->name('worker.home');
     Route::post('/privacy-ack', [WorkerController::class, 'acknowledgePrivacy'])->name('worker.privacy-ack');
+    Route::post('/consent', [WorkerController::class, 'updateConsent'])->name('worker.consent.update');
     Route::post('/check-in', [WorkerController::class, 'checkIn'])->name('worker.check-in');
     Route::post('/check-out', [WorkerController::class, 'checkOut'])->name('worker.check-out');
     Route::post('/absence', [WorkerController::class, 'absence'])->name('worker.absence');
@@ -218,6 +219,9 @@ Route::middleware(['auth', 'active', 'two_factor', 'not_worker'])->group(functio
     // Mobile PWA access for this employee (Worker PWA, Phase B)
     Route::post('/employees/{employee}/app-access', [WorkerAccessController::class, 'store'])->name('employees.app-access.store');
     Route::delete('/employees/{employee}/app-access', [WorkerAccessController::class, 'destroy'])->name('employees.app-access.destroy');
+    // Privacy-consent: admin reset (force re-accept) + per-record PDF (evidence).
+    Route::post('/employees/{employee}/consent/reset', [EmployeeController::class, 'resetConsent'])->name('employees.consent.reset');
+    Route::get('/employees/{employee}/consent/{consent}/pdf', [EmployeeController::class, 'consentPdf'])->name('employees.consent.pdf');
 
     // Unified documents (employee + company surfaces in Phase 2)
     Route::post('/documents', [DocumentController::class, 'store'])->name('documents.store');
@@ -468,6 +472,8 @@ Route::middleware(['auth', 'active', 'two_factor', 'not_worker'])->group(functio
         Route::put('/settings/general', [SettingsController::class, 'updateGeneral'])->name('settings.general');
         // Per-company auto day-type thresholds (Screen 26).
         Route::put('/settings/attendance', [SettingsController::class, 'updateAttendance'])->name('settings.attendance');
+        // Legal → worker-consent notice version (brand-wide re-accept trigger).
+        Route::put('/settings/legal', [SettingsController::class, 'updateLegal'])->name('settings.legal');
         Route::put('/settings/mail', [SettingsController::class, 'updateMail'])->name('settings.mail');
         Route::post('/settings/mail/test', [SettingsController::class, 'testMail'])->name('settings.mail.test');
         // Screen 26 — notification rules matrix (Phase 8, Super Admin only)

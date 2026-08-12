@@ -27,6 +27,8 @@ const props = defineProps({
     weekend: { type: Object, default: () => ({ is_weekend: false, rest_day: false, offer: null }) },
     // eslint-disable-next-line vue/prop-name-casing -- Inertia sends snake_case verbatim
     privacy_acknowledged: { type: Boolean, default: true },
+    // Consent state: { gps, photo, version } — gates GPS/selfie capture.
+    consent: { type: Object, default: () => ({ gps: true, photo: true, version: '' }) },
     // Worker-direct notifications (PWA bell): { unread, items[] }
     notifications: { type: Object, default: () => ({ unread: 0, items: [] }) },
 });
@@ -34,6 +36,14 @@ const props = defineProps({
 const page = usePage();
 const flashError = computed(() => page.props.flash?.error);
 const flashWarning = computed(() => page.props.flash?.warning);
+
+// In-app consent management: the worker can turn the optional GPS / selfie
+// permissions on or off at any time (GDPR — revocation must be as easy to give).
+const consentOpen = ref(false);
+const consentForm = useForm({ consent_gps: props.consent.gps, consent_photo: props.consent.photo });
+function saveConsent() {
+    consentForm.post('/worker/consent', { preserveScroll: true, onSuccess: () => { consentOpen.value = false; } });
+}
 
 // ── PWA notification bell ────────────────────────────────────────────────────
 const notifOpen = ref(false);
@@ -134,6 +144,11 @@ const busy = ref(false);
 const statusLine = ref('');
 
 async function beginCheckIn() {
+    // Selfie consent withheld → skip the camera step entirely and punch in.
+    if (!props.consent.photo) {
+        submitCheckIn();
+        return;
+    }
     cameraFailed.value = false;
     photoBlob.value = null;
     cameraOpen.value = true;
@@ -153,17 +168,20 @@ function onCameraError() {
 
 async function submitCheckIn() {
     busy.value = true;
-    statusLine.value = t('worker.getting_location');
 
-    // GPS never rejects — a refusal comes back as denied:true (see composable).
-    const loc = await getLocation();
+    // GPS only when consent is given; otherwise punch with no location.
+    let loc = { lat: null, lng: null, accuracy: null, denied: false };
+    if (props.consent.gps) {
+        statusLine.value = t('worker.getting_location');
+        loc = await getLocation();
+    }
 
     const data = new FormData();
     data.append('lat', loc.lat ?? '');
     data.append('lng', loc.lng ?? '');
     data.append('accuracy', loc.accuracy ?? '');
     data.append('denied', loc.denied ? '1' : '0');
-    if (photoBlob.value) data.append('photo', photoBlob.value, 'selfie.jpg');
+    if (props.consent.photo && photoBlob.value) data.append('photo', photoBlob.value, 'selfie.jpg');
 
     router.post('/worker/check-in', data, {
         forceFormData: true,
@@ -189,10 +207,14 @@ async function submitCheckOut() {
     if (!attachmentFile.value) return;
 
     busy.value = true;
-    statusLine.value = t('worker.getting_location');
     checkOutOpen.value = false;
 
-    const loc = await getLocation();
+    // GPS only when consent is given.
+    let loc = { lat: null, lng: null, accuracy: null, denied: false };
+    if (props.consent.gps) {
+        statusLine.value = t('worker.getting_location');
+        loc = await getLocation();
+    }
 
     // Capture note data now — page reloads on success and the refs
     // may update; local consts survive the closure.
@@ -533,6 +555,33 @@ const noteTextForm = useForm({ attendance_id: null, text_note: '', duration_seco
             <!-- Calendar (its own locale-aware legend lives inside the component) -->
             <div class="rounded-lg border border-line bg-surface-raised p-3 shadow-card">
                 <MonthCalendar :month="month" />
+            </div>
+        </section>
+
+        <!-- Privacy & consent management (GDPR — revoke as easily as granted) -->
+        <section class="mt-4">
+            <div class="rounded-lg border border-line bg-surface-raised shadow-card">
+                <button type="button" class="flex w-full items-center justify-between px-4 py-3" @click="consentOpen = !consentOpen">
+                    <span class="flex items-center gap-2 text-sm font-medium text-ink">
+                        <AppIcon name="lock" class="h-4 w-4 text-ink-soft" />
+                        {{ $t('worker.privacy.manage_title') }}
+                    </span>
+                    <span class="text-xs text-muted">{{ consentOpen ? '▲' : '▼' }}</span>
+                </button>
+                <div v-if="consentOpen" class="border-t border-line px-4 py-3">
+                    <p class="mb-3 text-xs text-ink-soft">{{ $t('worker.privacy.manage_hint') }}</p>
+                    <label class="flex items-center justify-between py-2">
+                        <span class="text-sm text-ink">{{ $t('worker.privacy.manage_gps') }}</span>
+                        <input v-model="consentForm.consent_gps" type="checkbox" class="h-5 w-5 accent-accent" />
+                    </label>
+                    <label class="flex items-center justify-between py-2">
+                        <span class="text-sm text-ink">{{ $t('worker.privacy.manage_photo') }}</span>
+                        <input v-model="consentForm.consent_photo" type="checkbox" class="h-5 w-5 accent-accent" />
+                    </label>
+                    <VButton class="mt-3 w-full" :loading="consentForm.processing" @click="saveConsent">
+                        {{ $t('worker.privacy.manage_save') }}
+                    </VButton>
+                </div>
             </div>
         </section>
 

@@ -11,8 +11,10 @@ use App\Models\Project;
 use App\Models\Scopes\CompanyScope;
 use App\Services\Attendance\AttendanceService;
 use App\Services\Workers\WorkerAttendanceService;
+use App\Services\Workers\WorkerConsentService;
 use App\Services\Workers\WorkerDashboardService;
 use App\Support\NotificationPresenter;
+use App\Support\WorkerPrivacyNotice;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Notifications\DatabaseNotification;
@@ -34,6 +36,7 @@ class WorkerController extends Controller
     public function __construct(
         private readonly WorkerAttendanceService $attendance,
         private readonly WorkerDashboardService $dashboard,
+        private readonly WorkerConsentService $consents,
     ) {}
 
     public function home(Request $request): Response
@@ -55,10 +58,16 @@ class WorkerController extends Controller
             'weekend' => $this->weekendPayload($employee),
             // The current month's calendar + figures for the dashboard below.
             'month' => $this->dashboard->forMonth($employee),
-            // Whether the worker still has to be shown the geolocation + selfie
-            // notice before any punch. When false the app blocks check-in
-            // behind the notice screen (the server refuses too — below).
+            // Consent state (GDPR). `privacy_acknowledged` false → the app shows
+            // the consent screen and blocks check-in (the server refuses too).
+            // consent_gps / consent_photo drive whether the app requests a GPS
+            // fix / a selfie at all, and power the in-app revoke panel.
             'privacy_acknowledged' => $employee->hasAcknowledgedPrivacyNotice(),
+            'consent' => [
+                'gps' => $employee->consentGps(),
+                'photo' => $employee->consentPhoto(),
+                'version' => WorkerPrivacyNotice::currentVersion(),
+            ],
             // Worker-direct notifications (advance/expense/leave decided, weekend
             // offer) — the PWA bell. Unread count + the latest 10, normalised.
             // NOTE: NO financial data (advances, deductions, expense amounts) is
@@ -94,7 +103,13 @@ class WorkerController extends Controller
         $employee = $this->resolveEmployee($request);
         $this->requirePrivacyNotice($employee);
 
-        $attendance = $this->attendance->checkIn($employee, $request->location(), $request->file('photo'));
+        // Consent gates the extras: no GPS consent → no location captured & no
+        // GPS-missing alert; no selfie consent → no photo required or stored.
+        $gpsConsent = $employee->consentGps();
+        $location = $gpsConsent ? $request->location() : self::NO_LOCATION;
+        $photo = $employee->consentPhoto() ? $request->file('photo') : null;
+
+        $attendance = $this->attendance->checkIn($employee, $location, $photo, $gpsConsent);
 
         $redirect = redirect()->route('worker.home')->with('success', __('ui.worker.checked_in'));
 
@@ -113,7 +128,9 @@ class WorkerController extends Controller
         $employee = $this->resolveEmployee($request);
         $this->requirePrivacyNotice($employee);
 
-        $attendance = $this->attendance->checkOut($employee, $request->location(), $request->file('work_attachment'));
+        $location = $employee->consentGps() ? $request->location() : self::NO_LOCATION;
+
+        $attendance = $this->attendance->checkOut($employee, $location, $request->file('work_attachment'));
 
         $redirect = redirect()->route('worker.home')->with('success', __('ui.worker.checked_out'));
 
@@ -124,16 +141,61 @@ class WorkerController extends Controller
         return $redirect;
     }
 
+    /** No-GPS location payload (worker withheld/revoked GPS consent). */
+    private const NO_LOCATION = ['lat' => null, 'lng' => null, 'accuracy' => null, 'denied' => false];
+
     /**
-     * Record that the worker read the geolocation + selfie notice. The screen
-     * blocks check-in until this is done; this is what unblocks it. Idempotent
-     * — a second acknowledgement just refreshes the timestamp/version.
+     * Record the worker's consent (GDPR art. 7 & 13). The attendance time record
+     * is mandatory (a legal obligation, RD-ley 8/2019) so `consent_attendance`
+     * must be accepted; GPS and the selfie are OPTIONAL, each its own checkbox.
+     * The full evidence context (IP, user-agent, timestamp, exact text, version,
+     * language) is captured by WorkerConsentService.
      */
     public function acknowledgePrivacy(Request $request): RedirectResponse
     {
-        $this->resolveEmployee($request)->acknowledgePrivacyNotice();
+        $validated = $request->validate([
+            'consent_attendance' => ['accepted'],
+            'consent_gps' => ['nullable', 'boolean'],
+            'consent_photo' => ['nullable', 'boolean'],
+        ]);
+
+        $employee = $this->resolveEmployee($request);
+        $language = $request->user()?->locale === 'en' ? 'en' : 'es';
+
+        $this->consents->record(
+            $employee,
+            $request,
+            (bool) ($validated['consent_gps'] ?? false),
+            (bool) ($validated['consent_photo'] ?? false),
+            $language,
+        );
 
         return redirect()->route('worker.home');
+    }
+
+    /**
+     * The worker changes / revokes their optional GPS & selfie consent from the
+     * PWA. Attendance consent is untouched (the app keeps working); a new consent
+     * row records the change with fresh evidence.
+     */
+    public function updateConsent(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'consent_gps' => ['required', 'boolean'],
+            'consent_photo' => ['required', 'boolean'],
+        ]);
+
+        $employee = $this->resolveEmployee($request);
+
+        $this->consents->updatePreferences(
+            $employee,
+            $request,
+            (bool) $validated['consent_gps'],
+            (bool) $validated['consent_photo'],
+            'Preferences updated by worker',
+        );
+
+        return redirect()->route('worker.home')->with('success', __('ui.worker.privacy.prefs_saved'));
     }
 
     public function absence(Request $request): RedirectResponse

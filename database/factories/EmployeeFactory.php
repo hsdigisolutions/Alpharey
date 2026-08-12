@@ -6,6 +6,7 @@ use App\Enums\PaymentMethod;
 use App\Enums\WageType;
 use App\Models\Company;
 use App\Models\Employee;
+use App\Models\WorkerConsent;
 use App\Support\WorkerPrivacyNotice;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
@@ -59,11 +60,24 @@ class EmployeeFactory extends Factory
      * geolocation/selfie notice — the state most worker-punch tests want,
      * since a fresh worker is blocked behind the notice until they do.
      */
-    public function privacyAcknowledged(): static
+    public function privacyAcknowledged(bool $gps = true, bool $photo = true): static
     {
-        return $this->state(fn () => [
-            'privacy_notice_ack_at' => now(),
-            'privacy_notice_ack_version' => WorkerPrivacyNotice::VERSION,
-        ]);
+        return $this->afterCreating(function (Employee $employee) use ($gps, $photo): void {
+            WorkerConsent::query()->create([
+                'employee_id' => $employee->id,
+                'user_id' => $employee->user_id,
+                'company_id' => $employee->company_id,
+                'consent_version' => WorkerPrivacyNotice::currentVersion(),
+                'ip_address' => '127.0.0.1',
+                'user_agent' => 'PestTest/1.0',
+                'consented_at' => now(),
+                'timezone' => 'Europe/Madrid',
+                'consent_attendance' => true,
+                'consent_gps' => $gps,
+                'consent_photo' => $photo,
+                'consent_text_shown' => WorkerPrivacyNotice::canonicalText('es'),
+                'language' => 'es',
+            ]);
+        });
     }
 }
