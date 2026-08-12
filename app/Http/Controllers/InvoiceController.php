@@ -101,7 +101,8 @@ class InvoiceController extends Controller
             'filters' => $request->only(['search', 'payment_status', 'project_id', 'from', 'to']),
             'clients' => Client::query()->orderBy('name')->get(['id', 'name']),
             'vendors' => Vendor::query()->orderBy('name')->get(['id', 'name']),
-            'projects' => Project::query()->orderBy('name')->get(['id', 'name']),
+            // client_id lets the form show only the selected client's projects.
+            'projects' => Project::query()->orderBy('name')->get(['id', 'name', 'client_id']),
             'vatOptions' => VatRate::options(),
             'paymentMethods' => array_map(fn ($m) => $m->value, PaymentMethod::cases()),
             'paymentStatuses' => array_map(fn ($s) => $s->value, PaymentStatus::cases()),

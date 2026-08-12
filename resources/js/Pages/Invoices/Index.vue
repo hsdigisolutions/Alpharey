@@ -8,7 +8,7 @@
  * arithmetic so the user sees it before saving — the server remains the
  * authority.
  */
-import { computed, reactive, ref } from 'vue';
+import { computed, reactive, ref, watch } from 'vue';
 import { Head, router, useForm } from '@inertiajs/vue3';
 import { ensureCompanySelected } from '@/composables/useCompanyGate';
 import AppIcon from '@/Components/AppIcon.vue';
@@ -83,6 +83,22 @@ const blank = {
     lines: [{ description: '', quantity: 1, unit_price: 0 }],
 };
 const form = useForm({ ...structuredClone(blank) });
+
+// A sale invoice's project list is filtered to the chosen client's projects;
+// expense invoices (no client) keep the full list.
+const availableProjects = computed(() => {
+    if (form.type === 'sale' && form.client_id) {
+        return props.projects.filter((p) => Number(p.client_id) === Number(form.client_id));
+    }
+    return props.projects;
+});
+
+// Changing the client drops a project that no longer belongs to them.
+watch(() => form.client_id, () => {
+    if (form.project_id && !availableProjects.value.some((p) => Number(p.id) === Number(form.project_id))) {
+        form.project_id = '';
+    }
+});
 
 function openCreate() {
     // An invoice belongs to one company; a Super Admin browsing all companies
@@ -369,7 +385,7 @@ const columns = computed(() => [
                     <FormField k="invoices.project" :error="form.errors.project_id">
                         <VSelect v-model="form.project_id">
                             <option value="">—</option>
-                            <option v-for="p in projects" :key="p.id" :value="p.id">{{ p.name }}</option>
+                            <option v-for="p in availableProjects" :key="p.id" :value="p.id">{{ p.name }}</option>
                         </VSelect>
                     </FormField>
 
@@ -412,11 +428,20 @@ const columns = computed(() => [
                         </VButton>
                     </div>
                     <div class="space-y-2">
+                        <!-- Column labels so it's clear what each field is. -->
+                        <div class="grid grid-cols-12 gap-2 px-0.5 text-[11px] font-medium uppercase tracking-wide text-muted">
+                            <span class="col-span-6">{{ $t('invoices.description') }}</span>
+                            <span class="col-span-2">{{ $t('invoices.quantity') }}</span>
+                            <span class="col-span-3">{{ $t('invoices.unit_price') }}</span>
+                            <span class="col-span-1"></span>
+                        </div>
                         <div v-for="(line, i) in form.lines" :key="i" class="grid grid-cols-12 items-center gap-2">
                             <VInput v-model="line.description" class="col-span-6"
                                 :placeholder="$t('invoices.description')" />
-                            <VInput v-model="line.quantity" type="number" step="0.01" min="0" class="col-span-2" />
-                            <VInput v-model="line.unit_price" type="number" step="0.01" min="0" class="col-span-3" />
+                            <VInput v-model="line.quantity" type="number" step="0.01" min="0" class="col-span-2"
+                                :placeholder="$t('invoices.quantity')" />
+                            <VInput v-model="line.unit_price" type="number" step="0.01" min="0" class="col-span-3"
+                                :placeholder="$t('invoices.unit_price')" />
                             <button type="button" class="col-span-1 rounded-sm p-1.5 text-muted hover:text-status-danger"
                                 :disabled="form.lines.length === 1" @click="removeLine(i)">
                                 <AppIcon name="trash" class="h-3.5 w-3.5" />
