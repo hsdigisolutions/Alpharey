@@ -12,6 +12,7 @@ use App\Http\Controllers\Admin\Concerns\ResolvesCompanyContext;
 use App\Http\Requests\Invoices\StoreInvoiceRequest;
 use App\Http\Requests\Invoices\UpdateInvoiceRequest;
 use App\Models\Client;
+use App\Models\Company;
 use App\Models\Invoice;
 use App\Models\Project;
 use App\Models\Vendor;
@@ -23,6 +24,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response as HttpResponse;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -196,9 +198,45 @@ class InvoiceController extends Controller
         $invoice->load(['lineItems', 'client', 'vendor', 'project', 'company']);
         $audit->log('exported', $invoice, null, null, 'Invoice PDF', 'invoices');
 
-        $pdf = Pdf::loadView('exports.invoice-pdf', ['invoice' => $invoice]);
+        $pdf = Pdf::loadView('exports.invoice-pdf', [
+            'invoice' => $invoice,
+            'logo' => $this->companyLogoData($invoice->company),
+        ]);
 
         return $pdf->download('factura-'.$invoice->number.'.pdf');
+    }
+
+    /**
+     * The issuing company's logo as a base64 data URI for the PDF — DomPDF cannot
+     * fetch remote assets and the CSP forbids external images, so the bytes must
+     * be embedded. Null when no logo is uploaded or the file is missing (the PDF
+     * then simply shows the company name).
+     */
+    private function companyLogoData(?Company $company): ?string
+    {
+        $path = $company?->logo_path;
+
+        if ($path === null || $path === '') {
+            return null;
+        }
+
+        foreach (['public', 'local'] as $disk) {
+            if (! Storage::disk($disk)->exists($path)) {
+                continue;
+            }
+
+            $contents = Storage::disk($disk)->get($path);
+
+            if ($contents === null) {
+                continue;
+            }
+
+            $mime = Storage::disk($disk)->mimeType($path) ?: 'image/png';
+
+            return 'data:'.$mime.';base64,'.base64_encode($contents);
+        }
+
+        return null;
     }
 
     /**

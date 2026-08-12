@@ -15,6 +15,7 @@ use App\Models\Project;
 use App\Models\Vendor;
 use App\Rules\OwnCompanyEmployee;
 use App\Rules\OwnCompanyProject;
+use App\Services\Audit\AuditLogger;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -23,6 +24,7 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
  * Screen 10 Gastos / Screen 09 Tab 6 — supplier and worker costs.
@@ -47,6 +49,9 @@ class ExpenseController extends Controller
             ->when($request->filled('search'), fn ($q) => $q->where('number', 'like', '%'.$request->string('search').'%'))
             ->when($request->filled('project_id'), fn ($q) => $q->where('project_id', $request->integer('project_id')))
             ->when($request->filled('vendor_id'), fn ($q) => $q->where('vendor_id', $request->integer('vendor_id')))
+            ->when($request->filled('type'), fn ($q) => $q->where('type', $request->string('type')))
+            ->when($request->filled('expense_category_id'), fn ($q) => $q->where('expense_category_id', $request->integer('expense_category_id')))
+            ->when($request->filled('payment_status'), fn ($q) => $q->where('payment_status', $request->string('payment_status')))
             // ->string() returns a Stringable — compare on ->value(), or the
             // filter silently never matches.
             ->when($request->filled('approval'), fn ($q) => $q->where('approved', $request->string('approval')->value() === 'approved'))
@@ -59,7 +64,7 @@ class ExpenseController extends Controller
 
         return Inertia::render('Expenses/Index', [
             'expenses' => $expenses,
-            'filters' => $request->only(['search', 'project_id', 'vendor_id', 'approval', 'from', 'to']),
+            'filters' => $request->only(['search', 'project_id', 'vendor_id', 'type', 'expense_category_id', 'payment_status', 'approval', 'from', 'to']),
             'vendors' => Vendor::query()->orderBy('name')->get(['id', 'name']),
             'projects' => Project::query()->orderBy('name')->get(['id', 'name']),
             'employees' => Employee::query()->where('active', true)->orderBy('full_name')->get(['id', 'full_name']),
@@ -68,6 +73,7 @@ class ExpenseController extends Controller
             'types' => array_map(fn (ExpenseType $t): string => $t->value, ExpenseType::userSelectable()),
             'vatOptions' => VatRate::options(),
             'paymentMethods' => array_map(fn ($m) => $m->value, PaymentMethod::cases()),
+            'paymentStatuses' => array_map(fn ($s) => $s->value, PaymentStatus::cases()),
             'can' => [
                 // Permission-only: shown to anyone who may create. The Vue gate
                 // routes a company-less Super Admin to the picker; the store's
@@ -121,6 +127,22 @@ class ExpenseController extends Controller
         $expense->save();
 
         return back()->with('success', __('ui.expenses.'.($validated['approved'] ? 'approved' : 'rejected')));
+    }
+
+    /**
+     * Serve the private receipt file — gated, tenancy-scoped (route-model binding
+     * 404s a cross-company id) and audited, mirroring the worker-expense and
+     * document download routes (Rule 10).
+     */
+    public function downloadReceipt(Expense $expense, AuditLogger $audit): StreamedResponse
+    {
+        Gate::authorize('expenses.view');
+
+        abort_if($expense->file_path === null, 404);
+
+        $audit->log('viewed', $expense, null, null, 'Expense receipt', 'expenses');
+
+        return Storage::disk('local')->download($expense->file_path, $expense->original_name ?? basename($expense->file_path));
     }
 
     public function destroy(Expense $expense): RedirectResponse
@@ -221,6 +243,7 @@ class ExpenseController extends Controller
             'approved' => $e->approved,
             'is_reimbursable' => $e->is_reimbursable,
             'has_file' => $e->file_path !== null,
+            'original_name' => $e->original_name,
         ];
     }
 }

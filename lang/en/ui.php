@@ -1989,6 +1989,12 @@ return [
         'notes' => 'Notes',
         'no_rows' => 'No expenses yet.',
         'worker_project_hint' => 'An expense with both an employee and a project is paid back through their payroll for the month.',
+        'search' => 'Search number',
+        'all_types' => 'All types',
+        'all_statuses' => 'All statuses',
+        'download_receipt' => 'Download receipt',
+        'file_hint' => 'PDF or image, max 10 MB',
+        'current_file' => 'Current file',
     ],
 
     'commissions' => [

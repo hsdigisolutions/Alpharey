@@ -1,6 +1,9 @@
 @php
     $eur = fn ($n) => number_format((float) ($n ?? 0), 2, ',', '.') . ' €';
     $party = $invoice->type->value === 'sale' ? $invoice->client : $invoice->vendor;
+    $logo = $logo ?? null;
+    $co = $invoice->company;
+    $cityLine = trim(collect([$co?->postal_code, $co?->city])->filter()->implode(' '));
 @endphp
 <!DOCTYPE html>
 <html lang="es">
@@ -26,8 +29,22 @@
     <table class="head">
         <tr>
             <td>
-                <h1>{{ $invoice->company?->name }}</h1>
-                <div class="muted">{{ $invoice->company?->cif }}</div>
+                @if ($logo)
+                    <img src="{{ $logo }}" alt="" style="max-height:52px; max-width:180px; margin-bottom:6px;"><br>
+                @endif
+                <h1>{{ $co?->name }}</h1>
+                @if ($co?->cif)
+                    <div class="muted">CIF: {{ $co->cif }}</div>
+                @endif
+                @if ($co?->address)
+                    <div class="muted">{{ $co->address }}</div>
+                @endif
+                @if ($cityLine !== '')
+                    <div class="muted">{{ $cityLine }}</div>
+                @endif
+                @if ($co?->province)
+                    <div class="muted">{{ $co->province }}</div>
+                @endif
             </td>
             <td class="right">
                 <h1>{{ $invoice->number }}</h1>

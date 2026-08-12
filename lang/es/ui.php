@@ -1994,6 +1994,12 @@ return [
         'notes' => 'Notas',
         'no_rows' => 'Sin gastos todavía.',
         'worker_project_hint' => 'Un gasto con empleado y obra se abona en su nómina del mes.',
+        'search' => 'Buscar número',
+        'all_types' => 'Todos los tipos',
+        'all_statuses' => 'Todos los estados',
+        'download_receipt' => 'Descargar justificante',
+        'file_hint' => 'PDF o imagen, máx. 10 MB',
+        'current_file' => 'Archivo actual',
     ],
 
     'commissions' => [

@@ -1,13 +1,17 @@
 <?php
 
+use App\Models\AuditLog;
 use App\Models\Company;
 use App\Models\Employee;
 use App\Models\Expense;
+use App\Models\ExpenseCategory;
 use App\Models\Payroll;
 use App\Models\Project;
 use App\Models\User;
 use App\Models\Vendor;
 use App\Services\Payroll\PayrollService;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 use Inertia\Testing\AssertableInertia as Assert;
 
 beforeEach(function (): void {
@@ -146,4 +150,47 @@ it('denies expenses without view permission', function (): void {
     $user = User::factory()->forCompany($this->company)->create();
 
     $this->actingAs($user)->get('/expenses')->assertForbidden();
+});
+
+it('uploads a receipt and serves it to a viewer, audited', function (): void {
+    Storage::fake('local');
+
+    $this->actingAs($this->admin)->post('/expenses', expensePayload([
+        'file' => UploadedFile::fake()->create('recibo.pdf', 40, 'application/pdf'),
+    ]))->assertRedirect();
+
+    $expense = Expense::withoutGlobalScopes()->firstOrFail();
+    expect($expense->file_path)->not->toBeNull();
+    Storage::disk('local')->assertExists($expense->file_path);
+
+    $this->actingAs($this->admin)->get("/expenses/{$expense->id}/receipt")->assertOk();
+
+    expect(AuditLog::where('action', 'viewed')->where('module', 'expenses')->exists())->toBeTrue();
+});
+
+it('404s a receipt download when the expense has no file', function (): void {
+    $this->actingAs($this->admin)->post('/expenses', expensePayload());
+    $expense = Expense::withoutGlobalScopes()->firstOrFail();
+
+    $this->actingAs($this->admin)->get("/expenses/{$expense->id}/receipt")->assertNotFound();
+});
+
+it('filters by type, category and payment status', function (): void {
+    $category = ExpenseCategory::create(['company_id' => $this->company->id, 'name' => 'Materiales', 'active' => true]);
+
+    $this->actingAs($this->admin)->post('/expenses', expensePayload([
+        'type' => 'factura', 'expense_category_id' => $category->id, 'payment_status' => 'paid',
+    ]));
+    $this->actingAs($this->admin)->post('/expenses', expensePayload([
+        'type' => 'ticket', 'subtotal' => 30, 'payment_status' => 'unpaid',
+    ]));
+
+    $this->actingAs($this->admin)->get('/expenses?type=ticket')
+        ->assertInertia(fn (Assert $p) => $p->has('expenses.data', 1));
+
+    $this->actingAs($this->admin)->get("/expenses?expense_category_id={$category->id}")
+        ->assertInertia(fn (Assert $p) => $p->has('expenses.data', 1));
+
+    $this->actingAs($this->admin)->get('/expenses?payment_status=paid')
+        ->assertInertia(fn (Assert $p) => $p->has('expenses.data', 1));
 });

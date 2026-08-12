@@ -41,12 +41,17 @@ const props = defineProps({
     types: { type: Array, required: true },
     vatOptions: { type: Array, required: true },
     paymentMethods: { type: Array, required: true },
+    paymentStatuses: { type: Array, required: true },
     can: { type: Object, required: true },
 });
 
 const filters = reactive({
+    search: props.filters.search ?? '',
     project_id: props.filters.project_id ?? '',
     vendor_id: props.filters.vendor_id ?? '',
+    type: props.filters.type ?? '',
+    expense_category_id: props.filters.expense_category_id ?? '',
+    payment_status: props.filters.payment_status ?? '',
     approval: props.filters.approval ?? '',
     from: props.filters.from ?? '',
     to: props.filters.to ?? '',
@@ -63,9 +68,14 @@ const blank = {
     number: '', type: 'factura', expense_category_id: '', vendor_id: '', project_id: '',
     employee_id: '', company_card_id: '', date: null, due_date: null,
     subtotal: 0, vat_rate: null, payment_method: '', payment_status: 'unpaid',
-    is_reimbursable: false, notes: '',
+    is_reimbursable: false, notes: '', file: null,
 };
 const form = useForm({ ...blank });
+const currentFile = ref(null);
+
+function onFilePicked(event) {
+    form.file = event.target.files?.[0] ?? null;
+}
 
 function openCreate() {
     // Expenses are company-owned; a company-less Super Admin picks one first.
@@ -73,6 +83,7 @@ function openCreate() {
 
     editingId.value = null;
     Object.keys(blank).forEach((k) => { form[k] = blank[k]; });
+    currentFile.value = null;
     form.clearErrors();
     showModal.value = true;
 }
@@ -141,7 +152,23 @@ const columns = [
             </VButton>
         </VPageHeader>
 
-        <div class="grid grid-cols-2 gap-2 pb-3 lg:grid-cols-5">
+        <div class="grid grid-cols-2 gap-2 pb-3 lg:grid-cols-4">
+            <VInput v-model="filters.search" :placeholder="$t('expenses.search')"
+                @keyup.enter="apply()" @blur="apply()" />
+            <VSelect v-model="filters.type" @update:model-value="apply()">
+                <option value="">{{ $t('expenses.all_types') }}</option>
+                <option v-for="t in types" :key="t" :value="t">{{ $t(`expenses.type_${t}`) }}</option>
+            </VSelect>
+            <VSelect v-model="filters.expense_category_id" @update:model-value="apply()">
+                <option value="">{{ $t('expenses.category') }}</option>
+                <option v-for="c in categories" :key="c.id" :value="c.id">{{ c.name }}</option>
+            </VSelect>
+            <VSelect v-model="filters.payment_status" @update:model-value="apply()">
+                <option value="">{{ $t('expenses.payment_status') }}</option>
+                <option v-for="s in paymentStatuses" :key="s" :value="s">
+                    {{ $t(`invoices.payment_${s}`) }}
+                </option>
+            </VSelect>
             <VSelect v-model="filters.project_id" @update:model-value="apply()">
                 <option value="">{{ $t('expenses.project') }}</option>
                 <option v-for="p in projects" :key="p.id" :value="p.id">{{ p.name }}</option>
@@ -186,6 +213,10 @@ const columns = [
                 </td>
                 <td class="px-3 py-2.5 text-end">
                     <span class="flex items-center justify-end gap-1.5">
+                        <a v-if="r.has_file" :href="`/expenses/${r.id}/receipt`" target="_blank" rel="noopener"
+                            class="text-ink-soft hover:text-accent" :title="$t('expenses.download_receipt')">
+                            <AppIcon name="file" class="h-4 w-4" />
+                        </a>
                         <VButton v-if="can.approve && !r.approved" variant="ghost" size="sm" @click="approve(r, true)">
                             <Bilingual k="expenses.approve" inline />
                         </VButton>
@@ -295,6 +326,16 @@ const columns = [
                         <dd>{{ eur(preview.total) }}</dd>
                     </div>
                 </dl>
+
+                <FormField k="expenses.file" :error="form.errors.file" class="sm:col-span-2">
+                    <input type="file" accept=".pdf,.jpg,.jpeg,.png,.webp" class="block w-full text-sm text-ink-soft
+                        file:me-3 file:rounded-md file:border-0 file:bg-surface-sunken file:px-3 file:py-1.5
+                        file:text-sm file:text-ink hover:file:bg-surface-hover" @change="onFilePicked" />
+                    <p class="mt-1 text-xs text-muted">{{ $t('expenses.file_hint') }}</p>
+                    <p v-if="currentFile" class="mt-1 text-xs text-ink-soft">
+                        {{ $t('expenses.current_file') }}: {{ currentFile }}
+                    </p>
+                </FormField>
 
                 <FormField k="expenses.notes" class="sm:col-span-2">
                     <VTextarea v-model="form.notes" :rows="2" />

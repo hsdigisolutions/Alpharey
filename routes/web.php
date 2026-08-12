@@ -304,6 +304,7 @@ Route::middleware(['auth', 'active', 'two_factor', 'not_worker'])->group(functio
     // Screen 10 Gastos / Screen 09 Tab 6 — expenses
     Route::get('/expenses', [ExpenseController::class, 'index'])->name('expenses.index');
     Route::post('/expenses', [ExpenseController::class, 'store'])->name('expenses.store');
+    Route::get('/expenses/{expense}/receipt', [ExpenseController::class, 'downloadReceipt'])->name('expenses.receipt');
     Route::post('/expenses/{expense}', [ExpenseController::class, 'update'])->name('expenses.update');
     Route::post('/expenses/{expense}/approve', [ExpenseController::class, 'approve'])->name('expenses.approve');
     Route::delete('/expenses/{expense}', [ExpenseController::class, 'destroy'])->name('expenses.destroy');
