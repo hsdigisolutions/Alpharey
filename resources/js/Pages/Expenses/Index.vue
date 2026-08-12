@@ -115,6 +115,24 @@ function destroy(row) {
         () => router.delete(`/expenses/${row.id}`, { preserveScroll: true }));
 }
 
+/* ---------- category management ---------- */
+const showCategories = ref(false);
+const activeCategories = computed(() => props.categories.filter((c) => c.active));
+const categoryForm = useForm({ name: '' });
+
+function addCategory() {
+    categoryForm.post('/expense-categories', {
+        preserveScroll: true,
+        onSuccess: () => categoryForm.reset('name'),
+    });
+}
+function toggleCategory(c) {
+    router.put(`/expense-categories/${c.id}`, { name: c.name, active: !c.active }, { preserveScroll: true });
+}
+function deleteCategory(c) {
+    router.delete(`/expense-categories/${c.id}`, { preserveScroll: true });
+}
+
 /* A worker project expense is paid back through payroll — say so in the form. */
 const isWorkerProjectExpense = computed(() => Boolean(form.employee_id && form.project_id));
 
@@ -147,6 +165,9 @@ const columns = [
     <Head :title="$t('expenses.title')" />
     <AppLayout>
         <VPageHeader k="expenses.title">
+            <VButton v-if="can.edit" variant="secondary" icon="settings" @click="showCategories = true">
+                <Bilingual k="expenses.manage_categories" inline />
+            </VButton>
             <VButton v-if="can.create" icon="plus" @click="openCreate">
                 <Bilingual k="expenses.new" inline />
             </VButton>
@@ -161,7 +182,7 @@ const columns = [
             </VSelect>
             <VSelect v-model="filters.expense_category_id" @update:model-value="apply()">
                 <option value="">{{ $t('expenses.category') }}</option>
-                <option v-for="c in categories" :key="c.id" :value="c.id">{{ c.name }}</option>
+                <option v-for="c in activeCategories" :key="c.id" :value="c.id">{{ c.name }}</option>
             </VSelect>
             <VSelect v-model="filters.payment_status" @update:model-value="apply()">
                 <option value="">{{ $t('expenses.payment_status') }}</option>
@@ -257,7 +278,7 @@ const columns = [
                 <FormField k="expenses.category" :error="form.errors.expense_category_id">
                     <VSelect v-model="form.expense_category_id">
                         <option value="">—</option>
-                        <option v-for="c in categories" :key="c.id" :value="c.id">{{ c.name }}</option>
+                        <option v-for="c in activeCategories" :key="c.id" :value="c.id">{{ c.name }}</option>
                     </VSelect>
                 </FormField>
 
@@ -348,6 +369,39 @@ const columns = [
                 </VButton>
             </template>
         </VModal>
+        <VModal :open="showCategories" title-key="expenses.categories_title" @close="showCategories = false">
+            <div class="space-y-4">
+                <form class="flex items-end gap-2" @submit.prevent="addCategory">
+                    <FormField k="expenses.category_name" :error="categoryForm.errors.name" class="flex-1">
+                        <VInput v-model="categoryForm.name" />
+                    </FormField>
+                    <VButton type="submit" :loading="categoryForm.processing">
+                        <Bilingual k="expenses.category_add" inline />
+                    </VButton>
+                </form>
+                <ul class="divide-y divide-line rounded-lg border border-line">
+                    <li v-for="c in categories" :key="c.id" class="flex items-center justify-between gap-2 px-3 py-2">
+                        <span class="text-sm" :class="c.active ? 'text-ink' : 'text-muted line-through'">
+                            {{ c.name }}
+                            <VBadge v-if="c.company_id === null" status="neutral" class="ms-1">
+                                <Bilingual k="expenses.category_default" inline />
+                            </VBadge>
+                        </span>
+                        <!-- Group defaults (company_id null) are read-only for a company. -->
+                        <span v-if="c.company_id !== null" class="flex items-center gap-1.5">
+                            <VButton variant="ghost" size="sm" @click="toggleCategory(c)">
+                                {{ c.active ? $t('expenses.category_inactive') : $t('expenses.category_active') }}
+                            </VButton>
+                            <VButton variant="ghost" size="sm" icon="trash" @click="deleteCategory(c)" />
+                        </span>
+                    </li>
+                </ul>
+            </div>
+            <template #footer>
+                <VButton variant="ghost" @click="showCategories = false"><Bilingual k="common.close" inline /></VButton>
+            </template>
+        </VModal>
+
         <VConfirmDialog :open="confirm.open" :message="confirm.message" @confirm="runDelete" @cancel="confirm.open = false" />
     </AppLayout>
 </template>

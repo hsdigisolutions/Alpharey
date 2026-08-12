@@ -1995,6 +1995,16 @@ return [
         'download_receipt' => 'Download receipt',
         'file_hint' => 'PDF or image, max 10 MB',
         'current_file' => 'Current file',
+        'manage_categories' => 'Categories',
+        'categories_title' => 'Expense categories',
+        'category_name' => 'Category name',
+        'category_add' => 'Add category',
+        'category_saved' => 'Categoría guardada / Category saved',
+        'category_deactivated' => 'Categoría desactivada (tiene gastos) / Category deactivated (has expenses)',
+        'category_deleted' => 'Categoría eliminada / Category removed',
+        'category_default' => 'Group default',
+        'category_active' => 'Active',
+        'category_inactive' => 'Inactive',
     ],
 
     'commissions' => [

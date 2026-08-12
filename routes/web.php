@@ -31,6 +31,7 @@ use App\Http\Controllers\EmployeeCallLogController;
 use App\Http\Controllers\EmployeeController;
 use App\Http\Controllers\EmployeeImportExportController;
 use App\Http\Controllers\EmployeeNoteController;
+use App\Http\Controllers\ExpenseCategoryController;
 use App\Http\Controllers\ExpenseController;
 use App\Http\Controllers\InventoryController;
 use App\Http\Controllers\InvoiceController;
@@ -308,6 +309,11 @@ Route::middleware(['auth', 'active', 'two_factor', 'not_worker'])->group(functio
     Route::post('/expenses/{expense}', [ExpenseController::class, 'update'])->name('expenses.update');
     Route::post('/expenses/{expense}/approve', [ExpenseController::class, 'approve'])->name('expenses.approve');
     Route::delete('/expenses/{expense}', [ExpenseController::class, 'destroy'])->name('expenses.destroy');
+
+    // Custom expense categories (managed inline on the Gastos screen)
+    Route::post('/expense-categories', [ExpenseCategoryController::class, 'store'])->name('expense-categories.store');
+    Route::put('/expense-categories/{expenseCategory}', [ExpenseCategoryController::class, 'update'])->name('expense-categories.update');
+    Route::delete('/expense-categories/{expenseCategory}', [ExpenseCategoryController::class, 'destroy'])->name('expense-categories.destroy');
 
     // Feature 2 — Worker PWA expense review (admin)
     Route::get('/worker-expenses', [WorkerExpenseAdminController::class, 'index'])->name('worker-expenses.index');

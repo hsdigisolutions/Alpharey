@@ -175,6 +175,30 @@ it('404s a receipt download when the expense has no file', function (): void {
     $this->actingAs($this->admin)->get("/expenses/{$expense->id}/receipt")->assertNotFound();
 });
 
+it('creates, deactivates and deletes a custom expense category', function (): void {
+    $this->actingAs($this->admin)->post('/expense-categories', ['name' => 'Materiales'])->assertRedirect();
+    $category = ExpenseCategory::where('name', 'Materiales')->firstOrFail();
+    expect($category->company_id)->toBe($this->company->id)->and($category->active)->toBeTrue();
+
+    // An unused category is hard-deleted.
+    $this->actingAs($this->admin)->delete("/expense-categories/{$category->id}")->assertRedirect();
+    expect(ExpenseCategory::find($category->id))->toBeNull();
+
+    // A referenced category is deactivated instead of deleted (keeps history).
+    $used = ExpenseCategory::create(['company_id' => $this->company->id, 'name' => 'Herramientas', 'active' => true]);
+    Expense::factory()->create(['company_id' => $this->company->id, 'expense_category_id' => $used->id]);
+    $this->actingAs($this->admin)->delete("/expense-categories/{$used->id}")->assertRedirect();
+    expect($used->fresh()->active)->toBeFalse();
+});
+
+it('cannot manage another company expense category', function (): void {
+    $other = Company::factory()->create();
+    $foreign = ExpenseCategory::create(['company_id' => $other->id, 'name' => 'Otros', 'active' => true]);
+
+    $this->actingAs($this->admin)->delete("/expense-categories/{$foreign->id}")->assertNotFound();
+    expect($foreign->fresh()->active)->toBeTrue();
+});
+
 it('filters by type, category and payment status', function (): void {
     $category = ExpenseCategory::create(['company_id' => $this->company->id, 'name' => 'Materiales', 'active' => true]);
 

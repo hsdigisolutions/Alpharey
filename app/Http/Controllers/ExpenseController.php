@@ -16,6 +16,7 @@ use App\Models\Vendor;
 use App\Rules\OwnCompanyEmployee;
 use App\Rules\OwnCompanyProject;
 use App\Services\Audit\AuditLogger;
+use App\Support\CurrentCompany;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -68,7 +69,11 @@ class ExpenseController extends Controller
             'vendors' => Vendor::query()->orderBy('name')->get(['id', 'name']),
             'projects' => Project::query()->orderBy('name')->get(['id', 'name']),
             'employees' => Employee::query()->where('active', true)->orderBy('full_name')->get(['id', 'full_name']),
-            'categories' => ExpenseCategory::query()->where('active', true)->orderBy('name')->get(['id', 'name']),
+            // All own-company + group-wide categories (active and inactive) so the
+            // management modal can show them; the form/filter show only active ones.
+            'categories' => ExpenseCategory::query()
+                ->forCompany(app(CurrentCompany::class)->id())
+                ->orderBy('name')->get(['id', 'name', 'active', 'company_id']),
             'cards' => CompanyCard::query()->where('active', true)->orderBy('label')->get(['id', 'label', 'last_four']),
             'types' => array_map(fn (ExpenseType $t): string => $t->value, ExpenseType::userSelectable()),
             'vatOptions' => VatRate::options(),

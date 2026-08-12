@@ -2000,6 +2000,16 @@ return [
         'download_receipt' => 'Descargar justificante',
         'file_hint' => 'PDF o imagen, máx. 10 MB',
         'current_file' => 'Archivo actual',
+        'manage_categories' => 'Categorías',
+        'categories_title' => 'Categorías de gasto',
+        'category_name' => 'Nombre de categoría',
+        'category_add' => 'Añadir categoría',
+        'category_saved' => 'Categoría guardada / Category saved',
+        'category_deactivated' => 'Categoría desactivada (tiene gastos) / Category deactivated (has expenses)',
+        'category_deleted' => 'Categoría eliminada / Category removed',
+        'category_default' => 'Predeterminada del grupo',
+        'category_active' => 'Activa',
+        'category_inactive' => 'Inactiva',
     ],
 
     'commissions' => [
