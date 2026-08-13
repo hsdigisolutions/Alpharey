@@ -135,6 +135,53 @@ it('deducts approved advances earmarked for the month', function (): void {
         ->and((float) $payroll->getAttribute('net_amount'))->toBe(270.0); // 320 - 50
 });
 
+/** A zero-priced presence row for a monthly worker (their salary is the pay). */
+function monthlyPresence(Employee $employee, string $date, string $status = 'present'): void
+{
+    Attendance::factory()->create([
+        'company_id' => test()->company->id, 'employee_id' => $employee->id,
+        'date' => $date, 'status' => $status, 'hours_worked' => '0',
+        'wage_type_snapshot' => 'monthly', 'wage_rate_snapshot' => null,
+        'hourly_rate_snapshot' => null, 'total_amount' => '0',
+    ]);
+}
+
+it('pro-rates a monthly salary by weekday presence — spec acceptance test 4', function (): void {
+    // June 2026 has exactly 22 Mon–Fri working days. 18 present:
+    // 1.500 ÷ 22 × 18 = 1.227,27 €.
+    $employee = Employee::factory()->forCompany($this->company)->create([
+        'wage_type' => 'monthly', 'base_salary' => '1500',
+    ]);
+
+    $weekdays = ['01', '02', '03', '04', '05', '08', '09', '10', '11', '12', '15', '16', '17', '18', '19', '22', '23', '24'];
+    foreach ($weekdays as $d) {
+        monthlyPresence($employee, "2026-06-{$d}");
+    }
+
+    app(PayrollService::class)->calculateMonth($this->company->id, '2026-06');
+
+    $payroll = Payroll::withoutGlobalScopes()->where('employee_id', $employee->id)->firstOrFail();
+    expect((float) $payroll->getAttribute('base_salary'))->toBe(1227.27)
+        ->and((float) $payroll->getAttribute('gross_pay'))->toBe(1227.27);
+});
+
+it('counts approved leave days as present in the monthly pro-rata', function (): void {
+    $employee = Employee::factory()->forCompany($this->company)->create([
+        'wage_type' => 'monthly', 'base_salary' => '2200',
+    ]);
+
+    // 10 worked weekdays + 1 leave day = 11 present of June's 22 → half salary.
+    foreach (['01', '02', '03', '04', '05', '08', '09', '10', '11', '12'] as $d) {
+        monthlyPresence($employee, "2026-06-{$d}");
+    }
+    monthlyPresence($employee, '2026-06-15', 'leave');
+
+    app(PayrollService::class)->calculateMonth($this->company->id, '2026-06');
+
+    $payroll = Payroll::withoutGlobalScopes()->where('employee_id', $employee->id)->firstOrFail();
+    expect((float) $payroll->getAttribute('base_salary'))->toBe(1100.0); // 2200 ÷ 22 × 11
+});
+
 it('blocks attendance writes in a month whose payroll is PAID, even before locking', function (): void {
     // Spec acceptance test 10: paid records are never touched. The lock is a
     // separate manual step — the Paid status alone must already protect the month.

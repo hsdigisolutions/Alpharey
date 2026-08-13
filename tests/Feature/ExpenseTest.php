@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\Attendance;
 use App\Models\AuditLog;
 use App\Models\Company;
 use App\Models\Employee;
@@ -11,6 +12,7 @@ use App\Models\User;
 use App\Models\Vendor;
 use App\Services\Payroll\PayrollService;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Testing\AssertableInertia as Assert;
 
@@ -131,6 +133,21 @@ it('flags an employee cost for salary deduction and it comes off payroll', funct
     $employee = Employee::factory()->forCompany($this->company)->create([
         'wage_type' => 'monthly', 'base_salary' => '1000',
     ]);
+
+    // Monthly pay is pro-rated by presence (spec C4) — present every weekday
+    // of June 2026 so the full 1.000 € base is drawn.
+    $cursor = Carbon::parse('2026-06-01');
+    while ($cursor->lte(Carbon::parse('2026-06-30'))) {
+        if ($cursor->isWeekday()) {
+            Attendance::factory()->create([
+                'company_id' => $this->company->id, 'employee_id' => $employee->id,
+                'date' => $cursor->toDateString(), 'status' => 'present', 'hours_worked' => '0',
+                'wage_type_snapshot' => 'monthly', 'wage_rate_snapshot' => null,
+                'hourly_rate_snapshot' => null, 'total_amount' => '0',
+            ]);
+        }
+        $cursor->addDay();
+    }
 
     $this->actingAs($this->admin)->post('/expenses', expensePayload([
         'employee_id' => $employee->id,

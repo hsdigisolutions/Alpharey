@@ -73,6 +73,20 @@ project-level P&L doesn't recognise (hourly → designation/client rates;
 per-meter → measurements, from Fix 2). ProfitabilityDailyTest pins
 billing_type=hourly explicitly (the factory randomises it).
 
+**Fix 7 (done):** monthly pro-rata — `PayrollService::monthlyProRata()`:
+`base_salary ÷ (Mon–Fri working days of the FULL month) × (distinct weekday
+dates with a worked-status OR leave row, from joining_date onward)`. Approved
+leave counts as present; a mid-month joiner pro-rates naturally against the
+full-month divisor; weekend work rides on top through the normal attendance
+buckets. This RESOLVES the long-open "unpaid leave doesn't reduce a monthly
+salary" item — absence now reduces the salary, presence + leave preserves it.
+⚠️ Operational note: a monthly office worker with NO attendance rows now draws
+€0 — office staff presence must be recorded (clerk entry or auto-absent sweep
+covers the absent side). Tests: acceptance test 4 (1500÷22×18 = 1.227,27),
+leave-counts-present (2200÷22×11 = 1.100); LeaveTest's monthly-leave test
+re-pinned to the new rule (fully-present month incl. leave = full salary);
+ExpenseTest's deduction test now seeds full presence.
+
 **Every screen 01–26 is built (Phase 8 complete).** Phase 9 is hardening, UAT, and
 launch — no new screens. Current: **781 Pest tests / 4526 assertions passing (1
 skipped) · Pint clean · Larastan level 6 clean · `composer audit` + `npm audit`

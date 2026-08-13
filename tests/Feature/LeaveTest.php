@@ -16,6 +16,7 @@ use App\Models\User;
 use App\Services\Leave\LeaveService;
 use App\Services\Payroll\PayrollService;
 use App\Support\PeriodLock;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
 
@@ -299,7 +300,11 @@ it('carries a paid leave day through to the payroll run', function (): void {
         ->and((float) $payroll->getAttribute('attendance_days'))->toBe(0.0);
 });
 
-it('leaves a monthly salary untouched when paid leave is booked', function (): void {
+it('pays a fully-present monthly worker the whole salary, leave days included', function (): void {
+    // Salary-structure spec C4: monthly pay is pro-rated by presence, and
+    // APPROVED LEAVE COUNTS AS PRESENT — so a worker present every other
+    // weekday who takes 3 days' leave still draws the full salary. Nothing is
+    // added on top (the salary covers the leave) and nothing is lost.
     $employee = Employee::factory()->create([
         'company_id' => $this->company->id,
         'wage_type' => WageType::Monthly,
@@ -309,13 +314,30 @@ it('leaves a monthly salary untouched when paid leave is booked', function (): v
 
     app(LeaveService::class)->approve(leaveFor(['employee_id' => $employee->id]));
 
+    // Present on every weekday of the month that isn't already a leave row.
+    $taken = Attendance::query()->withoutGlobalScopes()
+        ->where('employee_id', $employee->id)->pluck('date')
+        ->map(fn ($d) => Carbon::parse($d)->toDateString())->all();
+    $cursor = now()->copy()->startOfMonth();
+    $end = now()->copy()->endOfMonth();
+    while ($cursor->lte($end)) {
+        if ($cursor->isWeekday() && ! in_array($cursor->toDateString(), $taken, true)) {
+            Attendance::factory()->create([
+                'company_id' => $this->company->id, 'employee_id' => $employee->id,
+                'date' => $cursor->toDateString(), 'status' => 'present', 'hours_worked' => '0',
+                'wage_type_snapshot' => 'monthly', 'wage_rate_snapshot' => null,
+                'hourly_rate_snapshot' => null, 'total_amount' => '0',
+            ]);
+        }
+        $cursor->addDay();
+    }
+
     app(PayrollService::class)
         ->calculateMonth($this->company->id, now()->format('Y-m'));
 
     $payroll = Payroll::query()->withoutGlobalScopes()
         ->where('employee_id', $employee->id)->first();
 
-    // The salary covers the leave; nothing is added and nothing is lost.
     expect((float) $payroll->getAttribute('base_salary'))->toBe(2000.0)
         ->and((float) $payroll->getAttribute('gross_pay'))->toBe(2000.0)
         ->and((float) $payroll->getAttribute('overtime_pay'))->toBe(0.0);

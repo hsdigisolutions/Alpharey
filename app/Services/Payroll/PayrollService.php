@@ -150,11 +150,12 @@ class PayrollService
 
         $wageType = $employee->wage_type;
 
-        // "Base Salary / Wage" line: a monthly salary, or per-meter earnings from
-        // approved measurements. Per-meter DAYS (attendance) are shown on their
-        // own "Por metros" summary line, so they stay OUT of this bucket.
+        // "Base Salary / Wage" line: a monthly salary pro-rated by presence
+        // (spec C4), or per-meter earnings from approved measurements. Per-meter
+        // DAYS (attendance) are shown on their own "Por metros" summary line, so
+        // they stay OUT of this bucket.
         $baseSalary = match ($wageType) {
-            WageType::Monthly => (float) ($employee->getAttribute('base_salary') ?? 0),
+            WageType::Monthly => $this->monthlyProRata($employee, $month, $records),
             WageType::PerMeter => $this->perMeterEarnings($employee, $month),
             default => 0.0,
         };
@@ -246,6 +247,62 @@ class PayrollService
             ->where('employee_id', $employeeId)
             ->whereBetween('date', [$start, $end])
             ->get();
+    }
+
+    /**
+     * Monthly salary pro-rated by presence (spec C4):
+     *
+     *   working_days     = Mon–Fri count of the FULL payroll month (divisor)
+     *   days_present     = distinct WEEKDAYS with a worked-status or leave row
+     *                      (approved leave counts as present), from the
+     *                      joining date onward
+     *   base             = base_salary ÷ working_days × days_present
+     *
+     * A mid-month joiner can only be present from their joining date, so their
+     * salary pro-rates naturally against the full-month divisor. Weekend work
+     * is NOT part of this line — a weekend row's own total (offer premium)
+     * flows through the normal attendance buckets on top.
+     *
+     * @param  Collection<int, Attendance>  $records  the month's attendance rows
+     */
+    private function monthlyProRata(Employee $employee, string $month, Collection $records): float
+    {
+        $base = (float) ($employee->getAttribute('base_salary') ?? 0);
+
+        if ($base <= 0) {
+            return 0.0;
+        }
+
+        [$start, $end] = $this->bounds($month);
+        $cursor = Carbon::parse($start);
+        $last = Carbon::parse($end);
+
+        $workingDays = 0;
+        while ($cursor->lte($last)) {
+            if ($cursor->isWeekday()) {
+                $workingDays++;
+            }
+            $cursor->addDay();
+        }
+
+        if ($workingDays === 0) {
+            return round($base, 2);
+        }
+
+        $joining = $employee->joining_date !== null
+            ? Carbon::parse((string) $employee->joining_date)->startOfDay()
+            : null;
+
+        $present = $records
+            ->filter(fn (Attendance $r) => in_array($r->status->value, self::WORKED, true)
+                || $r->status === AttendanceStatus::Leave)
+            ->filter(fn (Attendance $r) => $r->date->isWeekday())
+            ->filter(fn (Attendance $r) => $joining === null || ! $r->date->lt($joining))
+            ->map(fn (Attendance $r) => $r->date->toDateString())
+            ->unique()
+            ->count();
+
+        return round($base / $workingDays * min($present, $workingDays), 2);
     }
 
     /**
