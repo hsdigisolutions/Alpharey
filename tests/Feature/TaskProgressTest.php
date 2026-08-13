@@ -116,6 +116,44 @@ it('deletes a whole batch, removes its photo and recomputes the total', function
     Storage::disk('local')->assertMissing($photoPath);
 });
 
+it('purges progress photos from disk when the whole task is deleted', function (): void {
+    Storage::fake('local');
+    $a = present($this->companyA->id, $this->project->id, $this->date);
+
+    $this->actingAs($this->admin)->post("/projects/{$this->project->id}/tasks/{$this->task->id}/progress", [
+        'date' => $this->date, 'quantity' => 30, 'employee_ids' => [$a->id],
+        'photo' => UploadedFile::fake()->image('site.jpg'),
+    ])->assertRedirect();
+
+    $photoPath = TaskProgress::withoutGlobalScopes()->first()->photo_path;
+    Storage::disk('local')->assertExists($photoPath);
+
+    // Deleting the task cascade-removes the progress rows; the photo file must
+    // not orphan.
+    $this->actingAs($this->admin)->delete("/projects/{$this->project->id}/tasks/{$this->task->id}")->assertRedirect();
+
+    expect(ProductionTask::withoutGlobalScopes()->whereKey($this->task->id)->exists())->toBeFalse()
+        ->and(TaskProgress::withoutGlobalScopes()->count())->toBe(0);
+    Storage::disk('local')->assertMissing($photoPath);
+});
+
+it('audits the photo download with a description, not stray old-values', function (): void {
+    Storage::fake('local');
+    $a = present($this->companyA->id, $this->project->id, $this->date);
+    $this->actingAs($this->admin)->post("/projects/{$this->project->id}/tasks/{$this->task->id}/progress", [
+        'date' => $this->date, 'quantity' => 10, 'employee_ids' => [$a->id],
+        'photo' => UploadedFile::fake()->image('x.jpg'),
+    ])->assertRedirect();
+    $row = TaskProgress::withoutGlobalScopes()->first();
+
+    $this->actingAs($this->admin)->get("/task-progress/{$row->id}/photo")->assertOk();
+
+    $this->assertDatabaseHas('audit_logs', [
+        'action' => 'viewed', 'model_type' => $row->getMorphClass(), 'model_id' => (string) $row->id,
+        'description' => 'Task progress photo', 'old_values' => null,
+    ]);
+});
+
 it('lists the workers present on the project for a date', function (): void {
     $a = present($this->companyA->id, $this->project->id, $this->date);
     present($this->companyA->id, $this->project->id, now()->subDays(5)->toDateString()); // other day
@@ -148,6 +186,20 @@ it('404s when logging against a task of another project', function (): void {
     $this->actingAs($this->admin)->post("/projects/{$otherProject->id}/tasks/{$this->task->id}/progress", [
         'date' => $this->date, 'quantity' => 10, 'employee_ids' => [$a->id],
     ])->assertNotFound();
+});
+
+it('404s a cross-company task-progress photo download', function (): void {
+    Storage::fake('local');
+    $a = present($this->companyA->id, $this->project->id, $this->date);
+    $this->actingAs($this->admin)->post("/projects/{$this->project->id}/tasks/{$this->task->id}/progress", [
+        'date' => $this->date, 'quantity' => 10, 'employee_ids' => [$a->id],
+        'photo' => UploadedFile::fake()->image('x.jpg'),
+    ])->assertRedirect();
+    $row = TaskProgress::withoutGlobalScopes()->first();
+
+    // A company B admin cannot reach company A's progress photo (scope → 404).
+    $foreignAdmin = User::factory()->companyAdmin()->forCompany($this->companyB)->create();
+    $this->actingAs($foreignAdmin)->get("/task-progress/{$row->id}/photo")->assertNotFound();
 });
 
 it('requires the edit permission to log work', function (): void {

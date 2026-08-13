@@ -10,6 +10,7 @@ use App\Http\Requests\ProductionTasks\UpdateProductionTaskRequest;
 use App\Models\ProductionTask;
 use App\Models\Project;
 use App\Services\Audit\AuditLogger;
+use App\Services\ProductionTasks\TaskProgressService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Builder;
@@ -56,7 +57,7 @@ class ProductionTaskController extends Controller
     public function export(Request $request): BinaryFileResponse
     {
         Gate::authorize('production_tasks.view');
-        app(AuditLogger::class)->log('exported', new ProductionTask, ['context' => 'production_tasks_excel']);
+        app(AuditLogger::class)->log('exported', new ProductionTask, null, null, 'Production tasks Excel', 'production_tasks');
 
         return Excel::download(new ProductionTasksExport($this->filteredQuery($request)), 'production-tasks.xlsx');
     }
@@ -64,7 +65,7 @@ class ProductionTaskController extends Controller
     public function exportPdf(Request $request): \Illuminate\Http\Response
     {
         Gate::authorize('production_tasks.view');
-        app(AuditLogger::class)->log('exported', new ProductionTask, ['context' => 'production_tasks_pdf']);
+        app(AuditLogger::class)->log('exported', new ProductionTask, null, null, 'Production tasks PDF', 'production_tasks');
 
         $rows = $this->filteredQuery($request)->get()->map(fn (ProductionTask $t): array => $this->row($t))->all();
 
@@ -92,11 +93,14 @@ class ProductionTaskController extends Controller
         return back()->with('success', __('ui.production_tasks.saved'));
     }
 
-    public function destroy(Project $project, ProductionTask $task): RedirectResponse
+    public function destroy(Project $project, ProductionTask $task, TaskProgressService $progress): RedirectResponse
     {
         Gate::authorize('production_tasks.delete');
         abort_unless($task->project_id === $project->id, 404);
 
+        // Clean proof photos before the DB cascade removes the progress rows
+        // (cascade fires no model events, so files would otherwise orphan).
+        $progress->purgePhotosForTask($task);
         $task->delete();
 
         return back()->with('success', __('ui.production_tasks.deleted'));

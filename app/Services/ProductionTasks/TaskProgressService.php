@@ -101,6 +101,26 @@ class TaskProgressService
     }
 
     /**
+     * Delete every proof photo of a task's progress rows from disk. Called
+     * BEFORE the task is deleted — the DB cascade removes the task_progress
+     * rows but fires no model events, so the files would otherwise orphan.
+     */
+    public function purgePhotosForTask(ProductionTask $task): void
+    {
+        $paths = TaskProgress::query()
+            ->where('production_task_id', $task->id)
+            ->whereNotNull('photo_path')
+            ->pluck('photo_path')
+            ->unique();
+
+        foreach ($paths as $path) {
+            if ($path !== null && Storage::disk('local')->exists($path)) {
+                Storage::disk('local')->delete($path);
+            }
+        }
+    }
+
+    /**
      * Recompute the task's completed_quantity from its progress rows. Direct
      * assignment — completed_quantity is intentionally NOT mass-assignable.
      */

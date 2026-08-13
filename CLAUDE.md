@@ -27,6 +27,35 @@ project expense IS a legitimate project cost (counted once as an expense) — it
 is not excluded from P&L just because payroll also reimburses the worker for
 it; the two figures are the project view and the person view of the same euro.
 
+### Measurements + Production Tasks — full deep review (2026-08-13, COMPLETE)
+
+A line-by-line re-review of the whole Measurements/Production subsystem (Phases
+A–E) + every cross-module connection, security boundary and data-integrity
+rule. **Two real defects found and fixed:** (1) **orphaned proof photos** — a
+`task_progress` row's photo lives on the private disk, but deleting a whole
+`ProductionTask` cascade-deletes its progress rows at the DB level (no model
+events), so the photo files orphaned; `TaskProgressService::purgePhotosForTask`
+now deletes them in `ProductionTaskController::destroy` before the cascade.
+(2) **misfiled audit context** — the task-progress photo download and the
+production-tasks Excel/PDF exports passed `['context' => …]` as the AuditLogger
+`$old` argument instead of the `description` slot (a copy of the legacy
+voice-note pattern); now passed as a proper description + module. Everything
+else verified correct end to end: status↔approved sync (saving hook), the
+three-state workflow (approve stamps approved_by=Auth::id / reject requires a
+reason / reset clears all), approved-only P&L income (rejected AND pending earn
+nothing — daily==project-total parity), approved-only meter invoicing,
+summary-card transitions, weighted progress, the equal-split-with-remainder
+math, the attendance constraint (server-side), completed_quantity roll-up +
+injection-proofing, photo private-disk + gated+audited download, template
+one-shot prefill (no cascade), and **measurements/tasks have ZERO effect on
+payroll** (payroll reads only frozen attendance snapshots). Note: there is
+deliberately NO unique (task,employee,date) key — a worker can be logged in
+several batches a day. New tests: `MeasurementsConnectionsTest` (3 — rejected
+earns no income, summary-card approve/reject transitions, per-meter worker paid
+daily rate despite a 999-qty task + 150 m² measurement) + `TaskProgressTest`
+(+3 — task-delete purges photos, photo-download audit description, cross-company
+photo 404). **879 Pest tests / 5103 assertions.**
+
 ### Measurements + Production Tasks build (2026-08-13, Phase A done)
 
 Confirmed client plan: keep Measurements (per-meter billing income source) and

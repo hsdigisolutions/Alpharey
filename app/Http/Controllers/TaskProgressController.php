@@ -78,7 +78,7 @@ class TaskProgressController extends Controller
 
         abort_unless($taskProgress->photo_path !== null && Storage::disk('local')->exists($taskProgress->photo_path), 404);
 
-        app(AuditLogger::class)->log('viewed', $taskProgress, ['context' => 'task_progress_photo']);
+        app(AuditLogger::class)->log('viewed', $taskProgress, null, null, 'Task progress photo', 'production_tasks');
 
         return response()->file(Storage::disk('local')->path($taskProgress->photo_path));
     }
