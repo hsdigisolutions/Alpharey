@@ -80,7 +80,8 @@ const allColumns = computed(() => [
     { key: 'mobile', labelKey: 'employees.mobile' },
     { key: 'wage_type', labelKey: 'employees.wage_type' },
     ...(props.canSeeWages ? [
-        { key: 'wage_rate', labelKey: 'employees.wage_rate', align: 'end' },
+        // The rate matching the worker's own wage type (not just hourly).
+        { key: 'wage_rate', labelKey: 'employees.rate', align: 'end' },
         { key: 'base_salary', labelKey: 'employees.base_salary', align: 'end' },
         { key: 'commission_percent', labelKey: 'employees.commission', align: 'end' },
     ] : []),

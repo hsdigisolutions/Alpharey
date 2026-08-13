@@ -199,6 +199,50 @@ it('never counts outsource_cost AND subcontractor payments together', function (
     expect($r['cost'])->toBe(800.0); // payments only — not 3000, not 1000, not both
 });
 
+it('agrees between the daily view and the project total on a per-meter project', function (): void {
+    // Review Fix 2E: the Rentabilidad daily breakdown and the project-level
+    // card must show the SAME income for the same data.
+    $project = Project::factory()->create([
+        'company_id' => $this->company->id, 'billing_type' => 'per_meter', 'client_meter_rate' => '10',
+    ]);
+    punch($this->company, $this->employee, $project, '2026-06-05', 8, 50, 'full');
+    Measurement::factory()->create([
+        'company_id' => $this->company->id, 'project_id' => $project->id,
+        'employee_id' => $this->employee->id, 'date' => '2026-06-05',
+        'quantity' => '150', 'approved' => true,
+    ]);
+
+    $total = $this->service->forProject($project->fresh());
+    $daily = $this->service->dailyPnl($project->fresh());
+
+    expect((float) $daily['totals']['income'])->toBe((float) $total['revenue']) // 1.500 both
+        ->and((float) $daily['totals']['income'])->toBe(1500.0);
+});
+
+it('agrees between the daily view and the project total on a subcontracted project', function (): void {
+    // Review Fix 3E: on a subcontracted project the daily view costs the
+    // PAYMENTS (on their payment date), never our crew's wages — and its
+    // totals reconcile with the project-level cost.
+    $project = Project::factory()->create([
+        'company_id' => $this->company->id, 'billing_type' => 'hourly', 'client_hour_rate' => '20',
+    ]);
+    punch($this->company, $this->employee, $project, '2026-06-01', 8, 1000);
+
+    $sub = new Subcontractor(['project_id' => $project->id, 'name' => 'Thaekedar SL', 'status' => 'active']);
+    $sub->company_id = $this->company->id;
+    $sub->save();
+    $paid = new SubcontractorPayment(['payment_number' => 1, 'payment_date' => '2026-06-03', 'amount' => '800', 'status' => 'paid']);
+    $paid->subcontractor_id = $sub->id;
+    $paid->save();
+
+    $total = $this->service->forProject($project->fresh());
+    $daily = $this->service->dailyPnl($project->fresh());
+
+    expect((float) $daily['totals']['cost'])->toBe((float) $total['cost']) // 800 both
+        ->and((float) $daily['totals']['cost'])->toBe(800.0)
+        ->and((float) $daily['totals']['labour'])->toBe(800.0); // payments, not the 1.000 crew
+});
+
 it('classifies the margin into the traffic light', function (): void {
     $green = Project::factory()->create(['company_id' => $this->company->id, 'billing_type' => 'hourly', 'client_hour_rate' => '20']);
     punch($this->company, $this->employee, $green, '2026-06-01', 100, 1450); // margin 27,5 → ok

@@ -137,6 +137,7 @@ const columns = [
     { key: 'days', labelKey: 'payroll.days', align: 'end' },
     { key: 'hours', labelKey: 'payroll.hours', align: 'end' },
     { key: 'wage_type', labelKey: 'payroll.wage_type' },
+    { key: 'wage_rate', labelKey: 'payroll.wage_rate', align: 'end' },
     { key: 'gross', labelKey: 'payroll.gross', align: 'end' },
     { key: 'deductions', labelKey: 'payroll.advance_deductions', align: 'end' },
     { key: 'net', labelKey: 'payroll.net', align: 'end' },
@@ -218,6 +219,8 @@ const columns = [
                     <Bilingual v-if="r.wage_type" :k="`employees.wage_${r.wage_type}`" inline />
                     <span v-else>—</span>
                 </td>
+                <!-- Tarifa: the rate matching the worker's own wage type (server-side match). -->
+                <td class="tabular-nums px-3 py-2.5 text-end text-sm">{{ eur(r.wage_rate) }}</td>
                 <td class="tabular-nums px-3 py-2.5 text-end text-sm">{{ eur(r.gross_pay) }}</td>
                 <td class="tabular-nums px-3 py-2.5 text-end text-sm text-status-danger">
                     {{ r.advance_deductions ? `− ${eur(r.advance_deductions)}` : '—' }}

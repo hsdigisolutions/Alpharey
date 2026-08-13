@@ -5,10 +5,12 @@ use App\Models\Attendance;
 use App\Models\Company;
 use App\Models\Designation;
 use App\Models\Employee;
+use App\Models\Payroll;
 use App\Models\Project;
 use App\Models\ProjectDesignationRate;
 use App\Models\User;
 use App\Services\Attendance\AttendanceService;
+use App\Services\Payroll\PayrollService;
 
 beforeEach(function (): void {
     $this->company = Company::factory()->create();
@@ -97,6 +99,13 @@ it('never pays from a per-day designation rate — spec acceptance test 6', func
 
     expect((float) $row->total_amount)->toBe(50.0)
         ->and((float) $row->wage_rate_snapshot)->toBe(50.0);
+
+    // …and PAYROLL pays the same 50 (review Fix 1A: the whole chain, not just
+    // the snapshot).
+    app(PayrollService::class)->calculateMonth($this->company->id, '2026-07');
+    $payroll = Payroll::withoutGlobalScopes()->where('employee_id', $this->employee->id)->firstOrFail();
+    expect((float) $payroll->getAttribute('days_amount'))->toBe(50.0)
+        ->and((float) $payroll->getAttribute('gross_pay'))->toBe(50.0);
 });
 
 it('never pays from a per-meter designation rate — the profile per-meter rate wins', function (): void {

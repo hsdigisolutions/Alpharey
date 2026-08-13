@@ -55,6 +55,18 @@ it('pays a per-meter day at quantity × per-meter rate', function (): void {
     expect((float) $row->total_amount)->toBe(150.0); // 30 × 5
 });
 
+it('prices a partial day from the hourly rate when the worker HAS one', function (): void {
+    // Review Fix 4B: an explicit hourly rate wins over the daily ÷ 8 fallback.
+    $both = Employee::factory()->forCompany($this->company)->create([
+        'wage_type' => 'daily', 'daily_wage' => '80', 'wage_rate' => '12',
+    ]);
+
+    $row = logDay($both->id, '2026-07-07', 'hourly', ['hours_worked' => 2]);
+
+    expect((float) $row->hourly_rate_snapshot)->toBe(12.0)
+        ->and((float) $row->total_amount)->toBe(24.0); // 12 × 2, not 80÷8×2
+});
+
 it('prices a partial day at daily ÷ 8 × hours when the worker has no hourly rate', function (): void {
     // A pure dehadi worker: daily 80, NO hourly rate. A 3-hour partial day must
     // price at 80 ÷ 8 × 3 = 30 €, never 0 € (spec C3/C4 fallback).

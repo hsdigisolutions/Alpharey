@@ -6,6 +6,25 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### Salary structure build (2026-08-12, COMPLETE — all 8 steps, all 12 acceptance tests green)
 
+**Deep-review pass 2 (2026-08-12, post-build).** Full scenario re-test of all 8
+fixes caught two real gaps, both fixed: (1) **dailyPnl cost parity** — a
+subcontracted project's Rentabilidad daily view was still costing our crew's
+wages; now external-labour projects (subcontractor OR outsourced) cost €0 crew
+labour, and paid subcontractor payments land as cost on their payment date, so
+the daily totals reconcile with forProject() (pinned by two new parity tests:
+per-meter income equal in both views; subcontracted cost equal in both views).
+(2) **the payroll table had NO Tarifa column** — the Fix-5 data was correct but
+invisible; added the wage-gated Tarifa column to Screen 12 (`payroll.wage_rate`
+key existed). Also: employees-list rate column relabelled from "Tarifa por
+hora" to neutral "Tarifa / Rate" (new key `employees.rate`) since it now shows
+the wage-type-matched rate. Review tests added: designation chain through to
+payroll (Fix 1A), hourly-rate-wins partial (4B), monthly no-presence→0 (7C),
+mid-month joiner 1500÷22×12=818,18 (7D), monthly/per-meter Tarifa storage (5),
+draft-month edits still allowed (6B), employees-list rate payload. Audit
+confirmed: EmployeeWageRate + SubcontractorPayment are Auditable; attendance
+repricing logs to attendance_logs; no new routes were added by the build (all
+behavior sits behind existing gates). **825 Pest tests / 4707 assertions.**
+
 The confirmed salary-structure spec, built in 8 ordered increments (one commit
 each). Final state: **817 Pest tests / 4682 assertions (1 skipped)** · all five
 gates green · the spec's 12 acceptance tests pinned (`SalaryStructureAcceptanceTest`

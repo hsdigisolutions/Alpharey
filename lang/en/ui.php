@@ -443,6 +443,7 @@ return [
         'address' => 'Address',
         'wage_type' => 'Wage type',
         'wage_rate' => 'Hourly rate (€/hour)',
+        'rate' => 'Rate',
         'base_salary' => 'Base salary (€/month)',
         'daily_wage' => 'Daily rate (€/day)',
         'per_meter_rate' => 'Per-meter rate (€/m²)',

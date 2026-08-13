@@ -445,6 +445,7 @@ return [
         'address' => 'Dirección',
         'wage_type' => 'Tipo de salario',
         'wage_rate' => 'Tarifa por hora (€/hora)',
+        'rate' => 'Tarifa',
         'base_salary' => 'Salario base (€/mes)',
         'daily_wage' => 'Tarifa diaria (€/día)',
         'per_meter_rate' => 'Tarifa por metro (€/m²)',

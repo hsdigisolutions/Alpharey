@@ -52,6 +52,19 @@ it('creates an employee with a generated code and records wage history', functio
         ->and($employee->getAttribute('wage_rate'))->toBe('14.5');
 });
 
+it('shows the wage-type-matched rate on the employees list — review Fix 5', function (): void {
+    // A daily worker's hourly column is null — the list's rate column must
+    // show the DAILY wage, not blank/0.
+    Employee::factory()->forCompany($this->company)->create([
+        'full_name' => 'Dehadi Worker', 'wage_type' => 'daily',
+        'daily_wage' => '50', 'wage_rate' => null,
+    ]);
+
+    $this->actingAs($this->admin)->get('/employees')
+        ->assertInertia(fn ($page) => $page
+            ->where('employees.data.0.wage_rate', fn ($v) => (float) $v === 50.0));
+});
+
 it('rejects a zero rate on every wage field — spec acceptance test 11', function (): void {
     foreach (['wage_rate', 'daily_wage', 'base_salary', 'per_meter_rate'] as $field) {
         $this->actingAs($this->admin)->post('/employees', [

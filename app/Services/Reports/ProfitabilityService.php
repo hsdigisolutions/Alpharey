@@ -242,6 +242,34 @@ class ProfitabilityService
         // must not fabricate hours × rate income the project-level P&L doesn't
         // recognise. Income shows 0 and health stays neutral.
         $isInvoiceBilled = ! $isPerMeter && $project->billing_type !== BillingType::Hourly;
+
+        // COST parity with forProject() (spec C9): when the project's labour is
+        // EXTERNAL — a subcontractor record, or the outsourced flag — our own
+        // crew's attendance is NOT our cost. Subcontracted projects cost their
+        // paid payments on the payment date; an outsourced flat fee cannot be
+        // attributed to a single day (only expenses show per-day there).
+        $hasSubcontractor = Subcontractor::query()
+            ->withoutGlobalScope(CompanyScope::class)
+            ->where('company_id', $companyId)
+            ->where('project_id', $project->id)
+            ->exists();
+        $externalLabour = $hasSubcontractor || (bool) $project->outsourced;
+
+        /** @var Collection<string, float> $paymentsByDate */
+        $paymentsByDate = $hasSubcontractor
+            ? SubcontractorPayment::query()
+                ->join('subcontractors', 'subcontractors.id', '=', 'subcontractor_payments.subcontractor_id')
+                ->where('subcontractors.company_id', $companyId)
+                ->where('subcontractors.project_id', $project->id)
+                ->where('subcontractor_payments.status', 'paid')
+                ->when($from !== null, fn ($q) => $q->whereDate('subcontractor_payments.payment_date', '>=', $from))
+                ->when($to !== null, fn ($q) => $q->whereDate('subcontractor_payments.payment_date', '<=', $to))
+                ->selectRaw('subcontractor_payments.payment_date as pdate')
+                ->selectRaw('COALESCE(SUM(subcontractor_payments.amount),0) as total')
+                ->groupBy('pdate')
+                ->pluck('total', 'pdate')
+                ->map(fn ($v): float => (float) $v)
+            : collect();
         $measuredRows = $isPerMeter
             ? Measurement::query()
                 ->withoutGlobalScope(CompanyScope::class)
@@ -271,7 +299,9 @@ class ProfitabilityService
                 $isInvoiceBilled => 0.0,
                 default => $this->rowIncome($r, $rates, $clientHour, $clientMeter),
             };
-            $cost = (float) $r->total_amount;
+            // External labour (subcontracted / outsourced): the crew's wages
+            // are the thaekedar's cost, not ours.
+            $cost = $externalLabour ? 0.0 : (float) $r->total_amount;
             // Consumed — leftovers (measured but no attendance row) are added below.
             if ($isPerMeter) {
                 unset($measuredByDate[$date][$r->employee_id]);
@@ -303,6 +333,17 @@ class ProfitabilityService
                     $byDate[$date]['income'] += round($left * $clientMeter, 2);
                 }
             }
+            ksort($byDate);
+        }
+
+        // Subcontractor payments land as labour cost on their payment date —
+        // the daily totals then reconcile with forProject()'s cost basis.
+        foreach ($paymentsByDate as $pdate => $amount) {
+            $pdate = substr((string) $pdate, 0, 10);
+            $byDate[$pdate] ??= ['hours' => 0.0, 'income' => 0.0, 'labour' => 0.0, 'workers' => []];
+            $byDate[$pdate]['labour'] += $amount;
+        }
+        if ($paymentsByDate->isNotEmpty()) {
             ksort($byDate);
         }
 

@@ -165,6 +165,52 @@ it('pro-rates a monthly salary by weekday presence — spec acceptance test 4', 
         ->and((float) $payroll->getAttribute('gross_pay'))->toBe(1227.27);
 });
 
+it('pays a monthly worker with NO recorded presence nothing — review Fix 7C', function (): void {
+    // Pro-rata by presence: no attendance rows → 0 €, not the full salary.
+    // Office staff presence must be recorded (clerk entry / auto-absent sweep).
+    $employee = Employee::factory()->forCompany($this->company)->create([
+        'wage_type' => 'monthly', 'base_salary' => '1500',
+    ]);
+
+    app(PayrollService::class)->calculateMonth($this->company->id, '2026-06');
+
+    $payroll = Payroll::withoutGlobalScopes()->where('employee_id', $employee->id)->firstOrFail();
+    expect((float) $payroll->getAttribute('base_salary'))->toBe(0.0)
+        ->and((float) $payroll->getAttribute('gross_pay'))->toBe(0.0);
+});
+
+it('pro-rates a mid-month joiner from their joining date — review Fix 7D', function (): void {
+    // Joined Mon 15 June 2026; present every remaining working day (12 of the
+    // month's 22) → 1.500 ÷ 22 × 12 = 818,18 €. Days before joining can never
+    // count — the full-month divisor is what makes the pro-rata honest.
+    $employee = Employee::factory()->forCompany($this->company)->create([
+        'wage_type' => 'monthly', 'base_salary' => '1500', 'joining_date' => '2026-06-15',
+    ]);
+
+    foreach (['15', '16', '17', '18', '19', '22', '23', '24', '25', '26', '29', '30'] as $d) {
+        monthlyPresence($employee, "2026-06-{$d}");
+    }
+
+    app(PayrollService::class)->calculateMonth($this->company->id, '2026-06');
+
+    $payroll = Payroll::withoutGlobalScopes()->where('employee_id', $employee->id)->firstOrFail();
+    expect((float) $payroll->getAttribute('base_salary'))->toBe(818.18);
+});
+
+it('stores the Tarifa from base_salary and per_meter_rate for those wage types — review Fix 5', function (): void {
+    $monthly = Employee::factory()->forCompany($this->company)->create([
+        'wage_type' => 'monthly', 'base_salary' => '1500', 'wage_rate' => null,
+    ]);
+    $meter = Employee::factory()->forCompany($this->company)->create([
+        'wage_type' => 'per_meter', 'per_meter_rate' => '5', 'wage_rate' => null,
+    ]);
+
+    app(PayrollService::class)->calculateMonth($this->company->id, '2026-06');
+
+    expect((float) Payroll::withoutGlobalScopes()->where('employee_id', $monthly->id)->firstOrFail()->getAttribute('wage_rate'))->toBe(1500.0)
+        ->and((float) Payroll::withoutGlobalScopes()->where('employee_id', $meter->id)->firstOrFail()->getAttribute('wage_rate'))->toBe(5.0);
+});
+
 it('counts approved leave days as present in the monthly pro-rata', function (): void {
     $employee = Employee::factory()->forCompany($this->company)->create([
         'wage_type' => 'monthly', 'base_salary' => '2200',
@@ -208,6 +254,25 @@ it('blocks attendance writes in a month whose payroll is PAID, even before locki
     // Deleting a row from the paid month → refused.
     $this->actingAs($this->admin)->delete("/attendance/{$existing->id}")->assertSessionHasErrors('date');
     expect(Attendance::withoutGlobalScopes()->whereKey($existing->id)->exists())->toBeTrue();
+});
+
+it('still allows attendance edits while the payroll is only calculated (not paid)', function (): void {
+    // Review Fix 6B: only the PAID status protects the month — a pending
+    // (draft/calculated) payroll must not freeze attendance.
+    $employee = hourlyEmployee(rate: 20, days: 1, hours: 8);
+    app(PayrollService::class)->calculateMonth($this->company->id, $this->month);
+
+    $row = Attendance::withoutGlobalScopes()->where('employee_id', $employee->id)->firstOrFail();
+
+    // Hourly mode derives hours from the clock times — shorten the day by an
+    // hour (16:00 − 09:00 − 1h break = 6h) and the edit must go through.
+    $this->actingAs($this->admin)->put("/attendance/{$row->id}", [
+        'employee_id' => $employee->id, 'date' => $row->date->toDateString(),
+        'mode' => 'hourly', 'day_type' => 'hourly', 'status' => 'present',
+        'check_in' => '09:00', 'check_out' => '16:00', 'break_hours' => 1, 'deduct_break' => true,
+    ])->assertRedirect()->assertSessionHasNoErrors();
+
+    expect((float) $row->fresh()->hours_worked)->toBe(6.0);
 });
 
 it('ignores a client-sent is_paid flag on attendance', function (): void {
