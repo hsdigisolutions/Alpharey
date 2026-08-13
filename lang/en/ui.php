@@ -1000,6 +1000,25 @@ return [
         'st_done' => 'Done',
     ],
 
+    'task_templates' => [
+        'saved' => 'Plantilla guardada / Template saved',
+        'deleted' => 'Plantilla eliminada / Template removed',
+        'manage' => 'Templates',
+        'new' => 'New template',
+        'edit' => 'Edit template',
+        'add' => 'Add template',
+        'name' => 'Name',
+        'category' => 'Category',
+        'unit' => 'Unit',
+        'unit_price' => 'Unit price (internal cost)',
+        'planned' => 'Default planned qty',
+        'weightage' => 'Weightage (%)',
+        'description' => 'Description',
+        'empty' => 'No templates yet.',
+        'prefill' => 'Prefill from template:',
+        'pick' => 'Choose a template…',
+    ],
+
     'calls' => [
         'title' => 'Call Panel',
         'saved' => 'Llamada registrada / Call logged',

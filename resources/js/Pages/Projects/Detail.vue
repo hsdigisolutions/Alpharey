@@ -61,6 +61,7 @@ const props = defineProps({
     projectTasks: { type: Object, default: null },
     taskCategories: { type: Array, default: () => [] },
     taskStatuses: { type: Array, default: () => [] },
+    taskTemplates: { type: Array, default: () => [] },
     canManageTasks: { type: Object, default: () => ({}) },
     can: { type: Object, required: true },
 });
@@ -255,6 +256,45 @@ function submitTaskEdit() {
 }
 function deleteTask(t) {
     askDelete(t.name, () => router.delete(`/projects/${props.project.id}/tasks/${t.id}`, { preserveScroll: true }));
+}
+
+// Prefill a bulk-add row from a template (one-shot copy — no lasting link).
+function applyTemplate(row, templateId) {
+    const tpl = props.taskTemplates.find((t) => t.id === Number(templateId));
+    if (!tpl) return;
+    row.name = tpl.name;
+    row.category = tpl.category;
+    row.unit = tpl.unit ?? row.unit;
+    row.unit_price = tpl.unit_price ?? 0;
+    if (tpl.planned_quantity != null) row.planned_quantity = tpl.planned_quantity;
+    if (tpl.weightage != null) row.weightage = tpl.weightage;
+    row._tpl = ''; // reset the picker
+}
+
+// Templates catalogue (company-scoped) — managed inline.
+const templatesOpen = ref(false);
+const templateForm = useForm({ name: '', category: 'other', unit: 'm²', unit_price: 0, planned_quantity: null, weightage: 0, description: '', active: true });
+const editingTemplateId = ref(null);
+function newTemplate() {
+    editingTemplateId.value = null;
+    Object.assign(templateForm, { name: '', category: 'other', unit: 'm²', unit_price: 0, planned_quantity: null, weightage: 0, description: '', active: true });
+    templateForm.clearErrors();
+}
+function openTemplateEdit(t) {
+    editingTemplateId.value = t.id;
+    Object.assign(templateForm, { name: t.name, category: t.category, unit: t.unit ?? 'm²', unit_price: t.unit_price ?? 0, planned_quantity: t.planned_quantity, weightage: t.weightage ?? 0, description: t.description ?? '', active: true });
+    templateForm.clearErrors();
+}
+function saveTemplate() {
+    const done = () => newTemplate();
+    if (editingTemplateId.value) {
+        templateForm.put(`/task-templates/${editingTemplateId.value}`, { preserveScroll: true, onSuccess: done });
+    } else {
+        templateForm.post('/task-templates', { preserveScroll: true, onSuccess: done });
+    }
+}
+function deleteTemplate(t) {
+    askDelete(t.name, () => router.delete(`/task-templates/${t.id}`, { preserveScroll: true }));
 }
 
 // immutable notes
@@ -815,7 +855,10 @@ function destroy() {
                         </p>
                     </VCard>
 
-                    <div class="flex justify-end">
+                    <div class="flex justify-end gap-2">
+                        <VButton v-if="canManageTasks.create" variant="secondary" icon="copy" @click="() => { newTemplate(); templatesOpen = true; }">
+                            <Bilingual k="task_templates.manage" inline />
+                        </VButton>
                         <VButton v-if="canManageTasks.create" icon="plus" @click="openBulk">
                             <Bilingual k="production_tasks.add" inline />
                         </VButton>
@@ -929,6 +972,13 @@ function destroy() {
         <!-- Bulk add production tasks -->
         <VModal :open="bulkOpen" title-key="production_tasks.add" size="xl" @close="bulkOpen = false">
             <div class="space-y-2">
+                <div v-if="taskTemplates.length" class="flex items-center gap-2 rounded-md bg-surface-sunken px-3 py-2">
+                    <span class="text-xs text-muted whitespace-nowrap">{{ $t('task_templates.prefill') }}</span>
+                    <VSelect :model-value="''" class="max-w-xs" @update:model-value="(v) => { if (v) { bulkForm.tasks.push(blankTaskRow()); applyTemplate(bulkForm.tasks[bulkForm.tasks.length - 1], v); } }">
+                        <option value="">{{ $t('task_templates.pick') }}</option>
+                        <option v-for="tpl in taskTemplates" :key="tpl.id" :value="tpl.id">{{ tpl.name }}</option>
+                    </VSelect>
+                </div>
                 <div v-for="(row, i) in bulkForm.tasks" :key="i" class="grid grid-cols-12 items-start gap-2">
                     <VInput v-model="row.name" class="col-span-3" :placeholder="$t('production_tasks.name')" />
                     <VSelect v-model="row.category" class="col-span-2">
@@ -974,6 +1024,49 @@ function destroy() {
             <template #footer>
                 <VButton variant="ghost" @click="taskEditOpen = false"><Bilingual k="common.cancel" inline /></VButton>
                 <VButton type="submit" form="task-edit-form" :loading="taskForm.processing"><Bilingual k="common.save" inline /></VButton>
+            </template>
+        </VModal>
+
+        <!-- Task templates catalogue -->
+        <VModal :open="templatesOpen" title-key="task_templates.manage" size="lg" @close="templatesOpen = false">
+            <div class="space-y-4">
+                <form class="grid gap-3 rounded-lg border border-line p-3 sm:grid-cols-2" @submit.prevent="saveTemplate">
+                    <p class="sm:col-span-2 text-xs font-medium text-ink-soft">
+                        {{ editingTemplateId ? $t('task_templates.edit') : $t('task_templates.new') }}
+                    </p>
+                    <FormField k="task_templates.name" :error="templateForm.errors.name" required><VInput v-model="templateForm.name" /></FormField>
+                    <FormField k="task_templates.category" :error="templateForm.errors.category" required>
+                        <VSelect v-model="templateForm.category"><option v-for="c in taskCategories" :key="c" :value="c">{{ $t(`production_tasks.cat_${c}`) }}</option></VSelect>
+                    </FormField>
+                    <FormField k="task_templates.unit" :error="templateForm.errors.unit"><VInput v-model="templateForm.unit" /></FormField>
+                    <FormField k="task_templates.unit_price" :error="templateForm.errors.unit_price"><VInput v-model="templateForm.unit_price" type="number" step="0.01" min="0" /></FormField>
+                    <FormField k="task_templates.planned" :error="templateForm.errors.planned_quantity"><VInput v-model="templateForm.planned_quantity" type="number" step="0.01" min="0" /></FormField>
+                    <FormField k="task_templates.weightage" :error="templateForm.errors.weightage"><VInput v-model="templateForm.weightage" type="number" step="0.01" min="0" max="100" /></FormField>
+                    <FormField k="task_templates.description" class="sm:col-span-2" :error="templateForm.errors.description"><VInput v-model="templateForm.description" /></FormField>
+                    <div class="sm:col-span-2 flex justify-end gap-2">
+                        <VButton v-if="editingTemplateId" variant="ghost" size="sm" type="button" @click="newTemplate"><Bilingual k="common.cancel" inline /></VButton>
+                        <VButton size="sm" type="submit" :loading="templateForm.processing">
+                            <Bilingual :k="editingTemplateId ? 'common.save' : 'task_templates.add'" inline />
+                        </VButton>
+                    </div>
+                </form>
+
+                <div v-if="taskTemplates.length" class="divide-y divide-line rounded-lg border border-line">
+                    <div v-for="tpl in taskTemplates" :key="tpl.id" class="flex items-center justify-between px-3 py-2 text-sm">
+                        <div>
+                            <span class="font-medium">{{ tpl.name }}</span>
+                            <span class="ml-2 text-xs text-muted">{{ $t(`production_tasks.cat_${tpl.category}`) }}<template v-if="tpl.unit"> · {{ tpl.unit }}</template></span>
+                        </div>
+                        <div class="flex items-center gap-1">
+                            <VButton variant="ghost" size="sm" icon="edit" @click="openTemplateEdit(tpl)" />
+                            <VButton v-if="canManageTasks.delete" variant="ghost" size="sm" icon="trash" @click="deleteTemplate(tpl)" />
+                        </div>
+                    </div>
+                </div>
+                <p v-else class="text-center text-sm text-muted">{{ $t('task_templates.empty') }}</p>
+            </div>
+            <template #footer>
+                <VButton variant="ghost" @click="templatesOpen = false"><Bilingual k="common.close" inline /></VButton>
             </template>
         </VModal>
 

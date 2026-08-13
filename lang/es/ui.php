@@ -1001,6 +1001,25 @@ return [
         'st_done' => 'Completada',
     ],
 
+    'task_templates' => [
+        'saved' => 'Plantilla guardada / Template saved',
+        'deleted' => 'Plantilla eliminada / Template removed',
+        'manage' => 'Plantillas',
+        'new' => 'Nueva plantilla',
+        'edit' => 'Editar plantilla',
+        'add' => 'Añadir plantilla',
+        'name' => 'Nombre',
+        'category' => 'Categoría',
+        'unit' => 'Unidad',
+        'unit_price' => 'Precio unitario (coste interno)',
+        'planned' => 'Cantidad prevista por defecto',
+        'weightage' => 'Ponderación (%)',
+        'description' => 'Descripción',
+        'empty' => 'Sin plantillas todavía.',
+        'prefill' => 'Rellenar desde plantilla:',
+        'pick' => 'Elige una plantilla…',
+    ],
+
     'calls' => [
         'title' => 'Panel de Llamadas',
         'saved' => 'Llamada registrada / Call logged',

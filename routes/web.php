@@ -49,6 +49,7 @@ use App\Http\Controllers\ProposalController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\SearchController;
 use App\Http\Controllers\SubcontractorController;
+use App\Http\Controllers\TaskTemplateController;
 use App\Http\Controllers\TodayController;
 use App\Http\Controllers\VehicleController;
 use App\Http\Controllers\VendorController;
@@ -270,6 +271,12 @@ Route::middleware(['auth', 'active', 'two_factor', 'not_worker'])->group(functio
     Route::post('/projects/{project}/tasks', [ProductionTaskController::class, 'store'])->name('projects.tasks.store');
     Route::put('/projects/{project}/tasks/{task}', [ProductionTaskController::class, 'update'])->name('projects.tasks.update');
     Route::delete('/projects/{project}/tasks/{task}', [ProductionTaskController::class, 'destroy'])->name('projects.tasks.destroy');
+
+    // Task templates — a company's reusable production-task catalogue.
+    Route::post('/task-templates', [TaskTemplateController::class, 'store'])->name('task-templates.store');
+    Route::put('/task-templates/{taskTemplate}', [TaskTemplateController::class, 'update'])->name('task-templates.update');
+    Route::delete('/task-templates/{taskTemplate}', [TaskTemplateController::class, 'destroy'])->name('task-templates.destroy');
+
     Route::post('/projects/{project}/remarks', [ProjectWorkerController::class, 'storeRemark'])->name('projects.remarks.store');
     Route::post('/projects/{project}/alerts', [ProjectWorkerController::class, 'storeAlert'])->name('projects.alerts.store');
 

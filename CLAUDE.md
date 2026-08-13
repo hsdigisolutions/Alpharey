@@ -71,6 +71,22 @@ relation (Phase D fills its flow). Tests: `ProductionTaskTest` (7 — bulk add,
 traffic light, weighted payload, completed_quantity injection-proof, tenancy
 404, permission gate). **853 Pest tests.**
 
+**Phase C (done) — Task Templates** (a company's reusable production-task
+catalogue). Migration `2026_08_13_000004` extends the dormant `task_templates`
+table (name/unit/description/active existed) with category, unit_price,
+planned_quantity, weightage. `TaskTemplate` model — `BelongsToCompany` (company
+catalogue, NOT group defaults) + Auditable (`auditModule='production_tasks'`,
+so it reuses the same gates) + `scopeActive`. `TaskTemplateController`
+(store/update/destroy, gated production_tasks.create/edit/delete, tenant-scoped
+route binding → 404). **A template is a one-shot prefill** — nothing links a
+task back to it, so editing a template never rewrites live tasks.
+`ProjectController::show` ships `taskTemplates` (active, company-scoped) to the
+project page. Project **Tareas** tab: a "Plantillas" button opens a
+manage-templates modal (inline CRUD + list), and the bulk-add modal gained a
+"Prefill from template" picker that appends a prefilled row. Tests:
+`TaskTemplateTest` (6 — create/update/delete, active+tenant payload, cross-
+company 404, permission). **858 Pest tests.**
+
 ### Subcontractor deal model (2026-08-13, COMPLETE — all 5 steps, 835 tests)
 
 **Step 5 (done):** tenancy on the deal fields (cross-company read/edit → 404,

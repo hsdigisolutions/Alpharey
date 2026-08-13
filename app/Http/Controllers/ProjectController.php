@@ -21,6 +21,7 @@ use App\Models\Measurement;
 use App\Models\ProductionTask;
 use App\Models\Project;
 use App\Models\ProjectDesignationRate;
+use App\Models\TaskTemplate;
 use App\Services\Documents\DocumentStatus;
 use App\Services\Reports\ProfitabilityService;
 use App\Support\CurrentCompany;
@@ -240,6 +241,7 @@ class ProjectController extends Controller
             'projectTasks' => Gate::allows('production_tasks.view') ? $this->projectTasks($project) : null,
             'taskCategories' => array_map(fn (ProductionTaskCategory $c) => $c->value, ProductionTaskCategory::cases()),
             'taskStatuses' => array_map(fn (ProductionTaskStatus $s) => $s->value, ProductionTaskStatus::cases()),
+            'taskTemplates' => Gate::allows('production_tasks.view') ? $this->taskTemplates() : [],
             'canManageTasks' => [
                 'view' => Gate::allows('production_tasks.view'),
                 'create' => Gate::allows('production_tasks.create'),
@@ -466,6 +468,29 @@ class ProjectController extends Controller
             // Advisory: warn (do not block) when the weightage does not sum to 100.
             'weightage_sum' => round($weightSum, 2),
         ];
+    }
+
+    /**
+     * The company's active task templates — prefill the bulk-add grid.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function taskTemplates(): array
+    {
+        return TaskTemplate::query()
+            ->active()
+            ->orderBy('category')->orderBy('name')
+            ->get()
+            ->map(fn (TaskTemplate $t): array => [
+                'id' => $t->id,
+                'name' => $t->name,
+                'category' => $t->category->value,
+                'unit' => $t->unit,
+                'unit_price' => $t->unit_price !== null ? (float) $t->unit_price : null,
+                'planned_quantity' => $t->planned_quantity !== null ? (float) $t->planned_quantity : null,
+                'weightage' => $t->weightage !== null ? (float) $t->weightage : null,
+                'description' => $t->description,
+            ])->values()->all();
     }
 
     public function store(StoreProjectRequest $request): RedirectResponse
