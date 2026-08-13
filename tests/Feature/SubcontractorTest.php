@@ -135,6 +135,28 @@ it('creates a linked expense on the subcontractor company when a payment is paid
         ->and((float) $expense->total)->toBe(500.0);
 });
 
+it('ships the settlement and expenses payload on the detail page', function (): void {
+    $this->actingAs($this->admin);
+    $project = Project::factory()->forCompany($this->companyA)->create();
+    $s = makeSubcontractor($this->companyA, $project->id, [
+        'client_amount' => '100', 'agreed_budget' => '80', 'expense_responsibility' => 'thaekedar',
+    ]);
+    Expense::factory()->create([
+        'company_id' => $this->companyA->id, 'project_id' => $project->id,
+        'approved' => true, 'total' => '20', 'date' => '2026-06-03',
+    ]);
+
+    $this->get("/subcontractors/{$s->id}")
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('subcontractor.client_amount', 100)
+            ->where('subcontractor.agreed_budget', 80)
+            ->where('subcontractor.our_profit', 20)
+            ->where('settlement.thaekedar_profit', 60) // 80 − 0 − 0 − 20
+            ->where('settlement.still_to_pay', 60)
+            ->has('expenses', 1));
+});
+
 // ── The live settlement (confirmed model 2026-08-13) ────────────────────────
 
 it('computes the Scenario A settlement — thaekedar bears all expenses', function (): void {

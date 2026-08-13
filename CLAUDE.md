@@ -46,6 +46,17 @@ same convention as the outsource flat fee. Tests: budget-A (cost 80, not 5
 paid / 1000 labour / +20 expenses), budget-B (95), cancelled-deal (labour),
 legacy fallback (existing tests unchanged).
 
+**Step 4 (done):** Detail page rebuilt into the 4 tabs (VTabs): **Trabajadores**
+(Section A our employees — LIVE read-only lines from the settlement engine
+with an unlink button; Section B external workers — manual add/edit/delete),
+**Gastos** (project expenses table + responsibility banner), **Liquidación**
+(the live waterfall: budget − salarios − externos − gastos[A] = beneficio
+thaekedar; − pagos = pendiente de pago · payment history + add/mark-paid moved
+here), **Nuestro P&L** (client − thaekedar − our-expenses[B] = net, plus
+paid-of/still-to-pay). A no-budget warning banner shows on legacy records.
+~25 new `subcontractors.*` keys, both dictionaries. Detail-payload test pins
+settlement + expenses props (thaekedar_profit 60 on 80−20 fixtures).
+
 ### Salary structure build (2026-08-12, COMPLETE — all 8 steps, all 12 acceptance tests green)
 
 **Deep-review pass 2 (2026-08-12, post-build).** Full scenario re-test of all 8
