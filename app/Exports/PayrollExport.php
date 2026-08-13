@@ -69,6 +69,9 @@ class PayrollExport implements FromCollection, WithHeadings, WithMapping
      */
     public function map($payroll): array
     {
+        // Legacy rows can hold undecryptable payloads — export them as 0.
+        $payroll->healUndecryptable();
+
         $money = fn (string $field): float => (float) ($payroll->getAttribute($field) ?? 0);
 
         return [

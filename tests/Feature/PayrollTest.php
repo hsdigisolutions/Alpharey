@@ -266,15 +266,24 @@ it('renders the payroll screen even when a row holds an undecryptable breakdown 
     app(PayrollService::class)->calculateMonth($this->company->id, $this->month);
     $payroll = Payroll::withoutGlobalScopes()->where('employee_id', $employee->id)->firstOrFail();
 
-    // Corrupt the encrypted columns behind the model's back (raw write).
-    DB::table('payrolls')->where('id', $payroll->id)
-        ->update(['rate_periods' => 'not-encrypted-garbage', 'day_type_summary' => 'also-garbage']);
+    // Corrupt the encrypted columns behind the model's back (raw write) — the
+    // staging reality: recently-added money columns carry a PLAINTEXT '0'
+    // default on old rows, which the encrypted cast cannot decrypt.
+    DB::table('payrolls')->where('id', $payroll->id)->update([
+        'rate_periods' => 'not-encrypted-garbage', 'day_type_summary' => 'also-garbage',
+        'expense_deductions' => '0', 'fine_deductions' => '0', 'gross_pay' => 'plaintext',
+    ]);
 
     $this->actingAs($this->admin)->get('/payroll?month='.$this->month)
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
             ->where('rows.0.rate_periods', null)
-            ->where('rows.0.day_type_summary', null));
+            ->where('rows.0.day_type_summary', null)
+            ->where('rows.0.expense_deductions', 0)
+            ->where('rows.0.gross_pay', 0));
+
+    // The per-row payslip PDF renders too (same healed reads).
+    $this->actingAs($this->admin)->get("/payroll/{$payroll->id}/payslip")->assertOk();
 });
 
 it('still allows attendance edits while the payroll is only calculated (not paid)', function (): void {

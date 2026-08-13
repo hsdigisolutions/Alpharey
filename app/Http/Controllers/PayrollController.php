@@ -233,6 +233,7 @@ class PayrollController extends Controller
             ->where('month', $month)
             ->with(['employee:id,full_name,designation', 'company:id,name'])
             ->get()
+            ->each(fn (Payroll $p) => $p->healUndecryptable())
             ->sortBy(fn (Payroll $p) => $p->employee?->full_name)
             ->values();
 
@@ -254,6 +255,7 @@ class PayrollController extends Controller
         Gate::authorize('payroll.view');
 
         $payroll->load('employee', 'company');
+        $payroll->healUndecryptable();
         $audit->log('exported', $payroll, null, null, 'Payslip PDF', 'payroll');
 
         $pdf = Pdf::loadView('exports.payslip-pdf', ['payroll' => $payroll]);
@@ -268,6 +270,10 @@ class PayrollController extends Controller
      */
     private function row(Payroll $p): array
     {
+        // Legacy rows can hold undecryptable payloads in the encrypted columns
+        // (plaintext defaults from later migrations) — read them as 0, never 500.
+        $p->healUndecryptable();
+
         $money = fn (string $field): ?float => Gate::allows('payroll.view')
             ? (float) ($p->getAttribute($field) ?? 0)
             : null;

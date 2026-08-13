@@ -133,6 +133,45 @@ class Payroll extends Model
     }
 
     /**
+     * Every encrypted money column. Legacy rows hold PLAINTEXT values in some
+     * of these (columns added by later migrations with a '0' default, or rows
+     * written before a cast landed) — decrypt() rejects them.
+     *
+     * @var list<string>
+     */
+    private const ENCRYPTED_MONEY = [
+        'wage_rate', 'base_salary', 'days_amount', 'hours_amount', 'overtime_pay',
+        'reimbursements', 'project_expenses', 'gross_pay', 'advance_deductions',
+        'fine_deductions', 'expense_deductions', 'other_deductions',
+        'manual_additions', 'net_amount',
+    ];
+
+    /**
+     * In-memory heal: any encrypted column whose stored payload cannot be
+     * decrypted reads as 0 / null instead of throwing. Display-safety only —
+     * nothing is persisted; recalculating the month rewrites the row properly.
+     */
+    public function healUndecryptable(): static
+    {
+        foreach (self::ENCRYPTED_MONEY as $column) {
+            try {
+                $this->getAttribute($column);
+            } catch (DecryptException) {
+                $this->setAttribute($column, '0');
+            }
+        }
+
+        if ($this->ratePeriodsSafe() === null) {
+            $this->setAttribute('rate_periods', null);
+        }
+        if ($this->dayTypeSummarySafe() === null) {
+            $this->setAttribute('day_type_summary', null);
+        }
+
+        return $this;
+    }
+
+    /**
      * The rate-period breakdown, tolerating an undecryptable payload. Rows
      * written before the encrypted cast (or under a rotated APP_KEY) hold
      * values decrypt() rejects — display data must degrade to null, never 500
