@@ -7,6 +7,7 @@ use App\Enums\PayrollStatus;
 use App\Enums\WageType;
 use App\Models\Concerns\Auditable;
 use App\Models\Concerns\BelongsToCompany;
+use Illuminate\Contracts\Encryption\DecryptException;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Carbon;
@@ -129,5 +130,36 @@ class Payroll extends Model
     public function approver(): BelongsTo
     {
         return $this->belongsTo(User::class, 'approved_by');
+    }
+
+    /**
+     * The rate-period breakdown, tolerating an undecryptable payload. Rows
+     * written before the encrypted cast (or under a rotated APP_KEY) hold
+     * values decrypt() rejects — display data must degrade to null, never 500
+     * the payroll screen. A recalculation rewrites the value correctly.
+     *
+     * @return array<int, array<string, mixed>>|null
+     */
+    public function ratePeriodsSafe(): ?array
+    {
+        try {
+            return $this->rate_periods;
+        } catch (DecryptException) { // @phpstan-ignore catch.neverThrown (the encrypted cast throws at runtime on a bad payload — proven on staging)
+            return null;
+        }
+    }
+
+    /**
+     * The day-type breakdown, with the same bad-payload tolerance.
+     *
+     * @return array<int, array<string, mixed>>|null
+     */
+    public function dayTypeSummarySafe(): ?array
+    {
+        try {
+            return $this->day_type_summary;
+        } catch (DecryptException) { // @phpstan-ignore catch.neverThrown (same runtime reality as ratePeriodsSafe)
+            return null;
+        }
     }
 }

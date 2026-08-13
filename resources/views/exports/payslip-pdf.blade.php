@@ -1,17 +1,17 @@
-@php
+﻿@php
     /**
      * Internal management payslip (DECISIONS.md): hours, rates, deductions and
-     * net pay for management visibility. This is NOT an official nómina — IRPF
-     * and Seguridad Social contributions stay with the gestoría and are never
+     * net pay for management visibility. This is NOT an official nÃ³mina â€” IRPF
+     * and Seguridad Social contributions stay with the gestorÃ­a and are never
      * calculated here.
      */
-    $eur = fn ($n) => number_format((float) ($n ?? 0), 2, ',', '.') . ' €';
+    $eur = fn ($n) => number_format((float) ($n ?? 0), 2, ',', '.') . ' â‚¬';
 @endphp
 <!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="utf-8">
-    <title>Nómina {{ $payroll->month }} — {{ $payroll->employee?->full_name }}</title>
+    <title>NÃ³mina {{ $payroll->month }} â€” {{ $payroll->employee?->full_name }}</title>
     <style>
         body { font-family: DejaVu Sans, sans-serif; font-size: 11px; color: #1A1A17; }
         h1 { font-size: 16px; margin: 0 0 2px; }
@@ -29,7 +29,7 @@
 <body>
     <h1>{{ $payroll->company?->name }}</h1>
     <div class="muted">
-        Nómina interna / Internal payslip — <strong>{{ $payroll->month }}</strong>
+        NÃ³mina interna / Internal payslip â€” <strong>{{ $payroll->month }}</strong>
     </div>
 
     <table>
@@ -43,22 +43,22 @@
         <div class="note">{{ $note }}</div>
     @endforeach
 
-    @php $periods = $payroll->rate_periods ?? []; @endphp
+    @php $periods = $payroll->ratePeriodsSafe() ?? []; @endphp
     @if (count($periods) > 1)
         @php
-            $unit = fn ($t) => $t === 'daily' ? '/día' : ($t === 'hourly' ? '/hora' : '');
+            $unit = fn ($t) => $t === 'daily' ? '/dÃ­a' : ($t === 'hourly' ? '/hora' : '');
             $fmtDate = fn ($d) => \Illuminate\Support\Carbon::parse($d)->format('d/m/Y');
         @endphp
         <table>
-            <tr><td colspan="2"><strong>Períodos de tarifa</strong></td></tr>
+            <tr><td colspan="2"><strong>PerÃ­odos de tarifa</strong></td></tr>
             @foreach ($periods as $i => $p)
                 <tr>
                     <td>
-                        Período {{ $i + 1 }}:
-                        {{ $fmtDate($p['from']) }} → {{ $fmtDate($p['to']) }}
+                        PerÃ­odo {{ $i + 1 }}:
+                        {{ $fmtDate($p['from']) }} â†’ {{ $fmtDate($p['to']) }}
                         <span class="muted">
-                            ({{ $eur($p['rate']) }}{{ $unit($p['wage_type']) }} ·
-                            {{ $p['wage_type'] === 'hourly' ? ((float) $p['hours']).' h' : ((int) $p['days']).' días' }})
+                            ({{ $eur($p['rate']) }}{{ $unit($p['wage_type']) }} Â·
+                            {{ $p['wage_type'] === 'hourly' ? ((float) $p['hours']).' h' : ((int) $p['days']).' dÃ­as' }})
                         </span>
                     </td>
                     <td class="amount">{{ $eur($p['amount']) }}</td>
@@ -68,13 +68,13 @@
     @endif
 
     @php
-        $daySummary = $payroll->day_type_summary ?? [];
+        $daySummary = $payroll->dayTypeSummarySafe() ?? [];
         $dtLabel = ['full' => 'Jornadas completas', 'half' => 'Medias jornadas', 'hourly' => 'Por horas', 'per_meter' => 'Por metros'];
-        $dtUnit = ['full' => 'días', 'half' => 'días', 'hourly' => 'h', 'per_meter' => 'm'];
+        $dtUnit = ['full' => 'dÃ­as', 'half' => 'dÃ­as', 'hourly' => 'h', 'per_meter' => 'm'];
         $num = fn ($n) => ((float) $n == (int) $n) ? (string) (int) $n : number_format((float) $n, 2, ',', '.');
         $labelFor = function ($s) use ($dtLabel) {
             if (! empty($s['weekend'])) {
-                return in_array($s['type'], ['full', 'half']) ? 'Días fin de semana' : ($dtLabel[$s['type']] ?? $s['type']).' (FS)';
+                return in_array($s['type'], ['full', 'half']) ? 'DÃ­as fin de semana' : ($dtLabel[$s['type']] ?? $s['type']).' (FS)';
             }
             return $dtLabel[$s['type']] ?? $s['type'];
         };
@@ -89,14 +89,14 @@
                 <tr>
                     <td>
                         {{ $labelFor($s) }}
-                        <span class="muted">({{ $num($s['units']) }} {{ $dtUnit[$s['type']] ?? '' }} × {{ $eur($s['rate']) }})</span>
+                        <span class="muted">({{ $num($s['units']) }} {{ $dtUnit[$s['type']] ?? '' }} Ã— {{ $eur($s['rate']) }})</span>
                     </td>
                     <td class="amount">{{ $eur($s['amount']) }}</td>
                 </tr>
             @endforeach
         @else
             <tr>
-                <td>Días trabajados <span class="muted">({{ (float) $payroll->attendance_days }})</span></td>
+                <td>DÃ­as trabajados <span class="muted">({{ (float) $payroll->attendance_days }})</span></td>
                 <td class="amount">{{ $eur($payroll->days_amount) }}</td>
             </tr>
             <tr>
@@ -122,26 +122,26 @@
         </tr>
         <tr>
             <td>Anticipos</td>
-            <td class="amount">− {{ $eur($payroll->advance_deductions) }}</td>
+            <td class="amount">âˆ’ {{ $eur($payroll->advance_deductions) }}</td>
         </tr>
         @if((float)($payroll->fine_deductions ?? 0) > 0)
         <tr>
-            <td>Multas de vehículo</td>
-            <td class="amount">− {{ $eur($payroll->fine_deductions) }}</td>
+            <td>Multas de vehÃ­culo</td>
+            <td class="amount">âˆ’ {{ $eur($payroll->fine_deductions) }}</td>
         </tr>
         @endif
         @if((float)($payroll->expense_deductions ?? 0) > 0)
         <tr>
             <td>Gastos a cargo del trabajador</td>
-            <td class="amount">− {{ $eur($payroll->expense_deductions) }}</td>
+            <td class="amount">âˆ’ {{ $eur($payroll->expense_deductions) }}</td>
         </tr>
         @endif
         <tr>
             <td>Otras deducciones</td>
-            <td class="amount">− {{ $eur($payroll->other_deductions) }}</td>
+            <td class="amount">âˆ’ {{ $eur($payroll->other_deductions) }}</td>
         </tr>
         <tr>
-            <td>Añadidos manuales</td>
+            <td>AÃ±adidos manuales</td>
             <td class="amount">+ {{ $eur($payroll->manual_additions) }}</td>
         </tr>
         <tr class="total">
@@ -155,9 +155,9 @@
     @endif
 
     <p class="foot">
-        Documento interno de gestión. No sustituye a la nómina oficial; el IRPF y las
-        cotizaciones a la Seguridad Social los calcula la gestoría. /
-        Internal management document — not an official payslip.
+        Documento interno de gestiÃ³n. No sustituye a la nÃ³mina oficial; el IRPF y las
+        cotizaciones a la Seguridad Social los calcula la gestorÃ­a. /
+        Internal management document â€” not an official payslip.
     </p>
 </body>
 </html>

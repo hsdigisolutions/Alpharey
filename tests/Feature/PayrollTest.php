@@ -19,6 +19,7 @@ use App\Models\VehicleFine;
 use App\Models\VehicleFuelRecord;
 use App\Services\Payroll\PayrollService;
 use App\Support\PeriodLock;
+use Illuminate\Support\Facades\DB;
 use Inertia\Testing\AssertableInertia as Assert;
 
 beforeEach(function (): void {
@@ -254,6 +255,26 @@ it('blocks attendance writes in a month whose payroll is PAID, even before locki
     // Deleting a row from the paid month → refused.
     $this->actingAs($this->admin)->delete("/attendance/{$existing->id}")->assertSessionHasErrors('date');
     expect(Attendance::withoutGlobalScopes()->whereKey($existing->id)->exists())->toBeTrue();
+});
+
+it('renders the payroll screen even when a row holds an undecryptable breakdown payload', function (): void {
+    // Staging regression (2026-08-13): legacy rows carried values in the
+    // encrypted rate_periods/day_type_summary columns that decrypt() rejects
+    // (pre-cast writes / rotated APP_KEY) — reading them 500'd /payroll. A bad
+    // payload must degrade to null, never take down the screen.
+    $employee = hourlyEmployee(rate: 20, days: 1, hours: 8);
+    app(PayrollService::class)->calculateMonth($this->company->id, $this->month);
+    $payroll = Payroll::withoutGlobalScopes()->where('employee_id', $employee->id)->firstOrFail();
+
+    // Corrupt the encrypted columns behind the model's back (raw write).
+    DB::table('payrolls')->where('id', $payroll->id)
+        ->update(['rate_periods' => 'not-encrypted-garbage', 'day_type_summary' => 'also-garbage']);
+
+    $this->actingAs($this->admin)->get('/payroll?month='.$this->month)
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('rows.0.rate_periods', null)
+            ->where('rows.0.day_type_summary', null));
 });
 
 it('still allows attendance edits while the payroll is only calculated (not paid)', function (): void {

@@ -288,10 +288,12 @@ class PayrollController extends Controller
             'days_amount' => $money('days_amount'),
             'hours_amount' => $money('hours_amount'),
             // Per-day-type breakdown (jornadas completas/medias/horas/metros).
-            'day_type_summary' => Gate::allows('payroll.view') ? $p->day_type_summary : null,
+            // The *Safe readers tolerate an undecryptable legacy payload — a
+            // bad row must degrade to null, never 500 the whole screen.
+            'day_type_summary' => Gate::allows('payroll.view') ? $p->dayTypeSummarySafe() : null,
             // Mid-month rate changes (null unless ≥2 periods) — spec C10: the
             // breakdown modal shows the same per-period lines as the payslip.
-            'rate_periods' => Gate::allows('payroll.view') ? $p->rate_periods : null,
+            'rate_periods' => Gate::allows('payroll.view') ? $p->ratePeriodsSafe() : null,
             'overtime_pay' => $money('overtime_pay'),
             'reimbursements' => $money('reimbursements'),
             'project_expenses' => $money('project_expenses'),
