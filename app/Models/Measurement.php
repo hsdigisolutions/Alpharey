@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\MeasurementStatus;
 use App\Enums\MeasurementType;
 use App\Models\Concerns\Auditable;
 use App\Models\Concerns\BelongsToCompany;
@@ -19,6 +20,8 @@ use Illuminate\Support\Carbon;
  * @property Carbon $date
  * @property MeasurementType $measurement_type
  * @property bool $approved
+ * @property MeasurementStatus $status
+ * @property string|null $rejection_reason
  * @property Carbon|null $approved_at
  */
 class Measurement extends Model
@@ -30,6 +33,25 @@ class Measurement extends Model
     use HasFactory;
 
     public string $auditModule = 'measurements';
+
+    /**
+     * Keep the legacy `approved` boolean and the `status` authority in sync on
+     * every save. If only the boolean was set (old fixtures / imports), lift it
+     * into status; then always mirror status → approved so no reader diverges.
+     */
+    protected static function booted(): void
+    {
+        static::saving(function (self $measurement): void {
+            if ($measurement->isDirty('approved') && ! $measurement->isDirty('status')) {
+                $measurement->status = $measurement->approved
+                    ? MeasurementStatus::Approved
+                    : MeasurementStatus::Pending;
+            }
+
+            $measurement->status ??= MeasurementStatus::Pending;
+            $measurement->approved = $measurement->status === MeasurementStatus::Approved;
+        });
+    }
 
     /** @var list<string> */
     protected $fillable = [
@@ -44,6 +66,7 @@ class Measurement extends Model
             'quantity' => 'decimal:2',
             'measurement_type' => MeasurementType::class,
             'approved' => 'boolean',
+            'status' => MeasurementStatus::class,
             'approved_at' => 'datetime',
         ];
     }

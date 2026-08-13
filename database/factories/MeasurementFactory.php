@@ -25,7 +25,17 @@ class MeasurementFactory extends Factory
             'quantity' => fake()->randomFloat(2, 1, 200),
             'unit' => fake()->randomElement(['m', 'm2', 'm3', 'kg']),
             'measurement_type' => fake()->randomElement(MeasurementType::cases()),
+            // status is derived from `approved` by the model's saving hook, so a
+            // fixture that sets only `approved` stays consistent.
             'approved' => false,
         ];
+    }
+
+    /**
+     * An approved measurement.
+     */
+    public function approved(): static
+    {
+        return $this->state(fn (): array => ['approved' => true, 'status' => 'approved']);
     }
 }

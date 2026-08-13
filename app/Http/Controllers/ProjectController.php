@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\MeasurementStatus;
 use App\Enums\MeasurementType;
 use App\Enums\ProjectPriority;
 use App\Enums\ProjectRateType;
@@ -25,6 +26,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
@@ -369,6 +371,22 @@ class ProjectController extends Controller
             ->orderByDesc('date')
             ->get();
 
+        $qty = fn (Collection $c): float => round((float) $c->sum(fn (Measurement $m) => (float) $m->quantity), 2);
+
+        // A4 — per-worker breakdown of approved / pending / rejected metres.
+        $perWorker = $rows->groupBy('employee_id')->map(function (Collection $g) use ($qty): array {
+            $first = $g->first();
+
+            return [
+                'employee_id' => $first->employee_id,
+                'employee' => $first->employee_id !== null ? ($first->employee->full_name ?? '—') : '—',
+                'approved' => $qty($g->where('status', MeasurementStatus::Approved)),
+                'pending' => $qty($g->where('status', MeasurementStatus::Pending)),
+                'rejected' => $qty($g->where('status', MeasurementStatus::Rejected)),
+                'total' => $qty($g),
+            ];
+        })->sortByDesc('total')->values()->all();
+
         return [
             'records' => $rows->map(fn (Measurement $m): array => [
                 'id' => $m->id,
@@ -379,14 +397,18 @@ class ProjectController extends Controller
                 'quantity' => (float) $m->quantity,
                 'unit' => $m->unit,
                 'type' => $m->measurement_type->value,
+                'status' => $m->status->value,
                 'approved' => $m->approved,
+                'rejection_reason' => $m->rejection_reason,
                 'notes' => $m->notes,
             ])->values()->all(),
             'summary' => [
-                'approved_qty' => round((float) $rows->where('approved', true)->sum(fn (Measurement $m) => (float) $m->quantity), 2),
-                'pending_qty' => round((float) $rows->where('approved', false)->sum(fn (Measurement $m) => (float) $m->quantity), 2),
+                'approved_qty' => $qty($rows->where('status', MeasurementStatus::Approved)),
+                'pending_qty' => $qty($rows->where('status', MeasurementStatus::Pending)),
+                'rejected_qty' => $qty($rows->where('status', MeasurementStatus::Rejected)),
                 'billing_linked' => $project->billing_type?->value === 'per_meter',
             ],
+            'per_worker' => $perWorker,
         ];
     }
 

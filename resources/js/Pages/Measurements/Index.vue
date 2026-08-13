@@ -7,6 +7,7 @@ import { reactive, ref } from 'vue';
 import { Head, router, useForm } from '@inertiajs/vue3';
 import { ensureCompanySelected } from '@/composables/useCompanyGate';
 import AppLayout from '@/Layouts/AppLayout.vue';
+import AppIcon from '@/Components/AppIcon.vue';
 import FormField from '@/Components/ui/FormField.vue';
 import VBadge from '@/Components/ui/VBadge.vue';
 import VButton from '@/Components/ui/VButton.vue';
@@ -25,16 +26,20 @@ const props = defineProps({
     measurements: { type: Object, required: true },
     filters: { type: Object, required: true },
     projects: { type: Array, required: true },
+    employees: { type: Array, default: () => [] },
     types: { type: Array, required: true },
     can: { type: Object, required: true },
 });
 
 const filters = reactive({
     project_id: props.filters.project_id ?? '',
-    approval: props.filters.approval ?? '',
+    status: props.filters.status ?? '',
     per_page: Number(props.filters.per_page ?? 25),
 });
 function apply(extra = {}) { router.get('/measurements', { ...filters, ...extra }, { preserveScroll: true, preserveState: true }); }
+const exportUrl = (fmt) => `/measurements/${fmt}?` + new URLSearchParams(Object.fromEntries(Object.entries(filters).filter(([, v]) => v !== '' && v != null))).toString();
+
+const statusVariant = { pending: 'warn', approved: 'ok', rejected: 'danger' };
 
 const showModal = ref(false);
 const editing = ref(null);
@@ -59,10 +64,18 @@ const confirm = ref({ open: false, message: '', fn: null });
 function askDelete(message, fn) { confirm.value = { open: true, message, fn }; }
 function runDelete() { confirm.value.fn?.(); confirm.value.open = false; }
 
-function approve(m, value) { router.post(`/measurements/${m.id}/approve`, { approved: value }, { preserveScroll: true }); }
+function approve(m) { router.post(`/measurements/${m.id}/approve`, {}, { preserveScroll: true }); }
+function reset(m) { router.post(`/measurements/${m.id}/reset`, {}, { preserveScroll: true }); }
 function destroy(m) {
-    askDelete(m.date ?? '',
-        () => router.delete(`/measurements/${m.id}`, { preserveScroll: true }));
+    askDelete(m.date ?? '', () => router.delete(`/measurements/${m.id}`, { preserveScroll: true }));
+}
+
+// Reject-with-reason modal.
+const rejectForm = useForm({ rejection_reason: '' });
+const rejecting = ref(null);
+function openReject(m) { rejecting.value = m; rejectForm.reset(); rejectForm.clearErrors(); }
+function submitReject() {
+    rejectForm.post(`/measurements/${rejecting.value.id}/reject`, { preserveScroll: true, onSuccess: () => (rejecting.value = null) });
 }
 
 const columns = [
@@ -71,7 +84,7 @@ const columns = [
     { key: 'employee', labelKey: 'measurements.employee' },
     { key: 'quantity', labelKey: 'measurements.quantity', align: 'end' },
     { key: 'type', labelKey: 'measurements.type' },
-    { key: 'approved', labelKey: 'measurements.approval' },
+    { key: 'status', labelKey: 'measurements.status' },
     { key: 'actions', labelKey: 'common.actions', align: 'end' },
 ];
 </script>
@@ -80,6 +93,12 @@ const columns = [
     <Head :title="$t('measurements.title')" />
     <AppLayout>
         <VPageHeader k="measurements.title">
+            <a v-if="can.export" :href="exportUrl('export')" class="inline-flex items-center gap-1.5 rounded-md border border-line-strong bg-surface-raised px-3 py-2 text-sm text-ink hover:bg-surface-hover">
+                <AppIcon name="download" class="h-4 w-4" /> Excel
+            </a>
+            <a v-if="can.export" :href="exportUrl('export-pdf')" class="inline-flex items-center gap-1.5 rounded-md border border-line-strong bg-surface-raised px-3 py-2 text-sm text-ink hover:bg-surface-hover">
+                <AppIcon name="download" class="h-4 w-4" /> PDF
+            </a>
             <VButton v-if="can.create" icon="plus" @click="open()"><Bilingual k="measurements.new" inline /></VButton>
         </VPageHeader>
 
@@ -88,10 +107,11 @@ const columns = [
                 <option value="">{{ $t('measurements.project') }}</option>
                 <option v-for="p in projects" :key="p.id" :value="p.id">{{ p.name }}</option>
             </VSelect>
-            <VSelect v-model="filters.approval" class="w-full sm:w-52" @update:model-value="apply()">
-                <option value="">{{ $t('measurements.approval') }}</option>
-                <option value="approved">{{ $t('measurements.is_approved') }}</option>
+            <VSelect v-model="filters.status" class="w-full sm:w-52" @update:model-value="apply()">
+                <option value="">{{ $t('measurements.status') }}</option>
                 <option value="pending">{{ $t('measurements.pending') }}</option>
+                <option value="approved">{{ $t('measurements.is_approved') }}</option>
+                <option value="rejected">{{ $t('measurements.rejected_label') }}</option>
             </VSelect>
         </div>
 
@@ -103,20 +123,26 @@ const columns = [
                 <td class="tabular-nums px-3 py-2.5 text-end text-sm">{{ m.quantity }} {{ m.unit }}</td>
                 <td class="px-3 py-2.5 text-sm text-ink-soft"><Bilingual :k="`measurements.type_${m.measurement_type}`" inline /></td>
                 <td class="px-3 py-2.5">
-                    <VBadge :status="m.approved ? 'ok' : 'warn'">
-                        <Bilingual :k="m.approved ? 'measurements.is_approved' : 'measurements.pending'" inline />
+                    <VBadge :status="statusVariant[m.status]">
+                        <Bilingual :k="`measurements.status_${m.status}`" inline />
                     </VBadge>
+                    <span v-if="m.status === 'rejected' && m.rejection_reason" class="mt-0.5 block text-xs text-status-danger" :title="m.rejection_reason">
+                        {{ m.rejection_reason.length > 40 ? m.rejection_reason.slice(0, 40) + '…' : m.rejection_reason }}
+                    </span>
                 </td>
                 <td class="px-3 py-2.5 text-end">
                     <span class="flex items-center justify-end gap-1.5">
-                        <VButton v-if="can.approve && !m.approved" variant="ghost" size="sm" @click="approve(m, true)">
+                        <VButton v-if="can.approve && m.status !== 'approved'" variant="ghost" size="sm" @click="approve(m)">
                             <Bilingual k="measurements.approve" inline />
                         </VButton>
-                        <VButton v-if="can.approve && m.approved" variant="ghost" size="sm" @click="approve(m, false)">
+                        <VButton v-if="can.approve && m.status === 'pending'" variant="ghost" size="sm" @click="openReject(m)">
                             <Bilingual k="measurements.reject" inline />
                         </VButton>
-                        <VButton v-if="can.edit && !m.approved" variant="ghost" size="sm" icon="edit" @click="open(m)" />
-                        <VButton v-if="can.delete && !m.approved" variant="ghost" size="sm" icon="trash" @click="destroy(m)" />
+                        <VButton v-if="can.approve && m.status !== 'pending'" variant="ghost" size="sm" @click="reset(m)">
+                            <Bilingual k="measurements.reopen" inline />
+                        </VButton>
+                        <VButton v-if="can.edit && m.status !== 'approved'" variant="ghost" size="sm" icon="edit" @click="open(m)" />
+                        <VButton v-if="can.delete && m.status !== 'approved'" variant="ghost" size="sm" icon="trash" @click="destroy(m)" />
                     </span>
                 </td>
             </tr>
@@ -134,6 +160,12 @@ const columns = [
                         <option v-for="p in projects" :key="p.id" :value="p.id">{{ p.name }}</option>
                     </VSelect>
                 </FormField>
+                <FormField k="measurements.employee" :error="form.errors.employee_id">
+                    <VSelect v-model="form.employee_id">
+                        <option value="">—</option>
+                        <option v-for="e in employees" :key="e.id" :value="e.id">{{ e.name }}</option>
+                    </VSelect>
+                </FormField>
                 <FormField k="measurements.date" :error="form.errors.date" required><VDateInput v-model="form.date" /></FormField>
                 <FormField k="measurements.quantity" :error="form.errors.quantity" required><VInput v-model="form.quantity" type="number" step="0.01" /></FormField>
                 <FormField k="measurements.unit"><VInput v-model="form.unit" placeholder="m, m2, m3, kg" /></FormField>
@@ -149,6 +181,19 @@ const columns = [
                 <VButton type="submit" form="meas-form" :loading="form.processing"><Bilingual k="common.save" inline /></VButton>
             </template>
         </VModal>
+        <!-- Reject with a reason. -->
+        <VModal :open="rejecting !== null" title-key="measurements.reject" @close="rejecting = null">
+            <form id="reject-form" @submit.prevent="submitReject">
+                <FormField k="measurements.rejection_reason" :error="rejectForm.errors.rejection_reason" required>
+                    <VTextarea v-model="rejectForm.rejection_reason" :rows="3" :placeholder="$t('measurements.rejection_hint')" />
+                </FormField>
+            </form>
+            <template #footer>
+                <VButton variant="ghost" @click="rejecting = null"><Bilingual k="common.cancel" inline /></VButton>
+                <VButton variant="danger" type="submit" form="reject-form" :loading="rejectForm.processing"><Bilingual k="measurements.reject" inline /></VButton>
+            </template>
+        </VModal>
+
         <VConfirmDialog :open="confirm.open" :message="confirm.message" @confirm="runDelete" @cancel="confirm.open = false" />
     </AppLayout>
 </template>

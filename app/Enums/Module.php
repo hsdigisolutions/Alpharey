@@ -64,9 +64,10 @@ enum Module: string
             self::Reports => [$a::View, $a::Export],
             self::CallPanel => [$a::View, $a::Create, $a::Edit, $a::Delete],
             self::CommissionReports => [$a::View, $a::Edit, $a::Export, $a::Approve],
-            // Leave + Measurements: CRUD + approval, no export feature.
-            self::LeaveManagement,
-            self::Measurements => [$a::View, $a::Create, $a::Edit, $a::Delete, $a::Approve],
+            // Measurements: CRUD + approval + export (Excel/PDF).
+            self::Measurements => [$a::View, $a::Create, $a::Edit, $a::Delete, $a::Export, $a::Approve],
+            // Leave: CRUD + approval, no export feature.
+            self::LeaveManagement => [$a::View, $a::Create, $a::Edit, $a::Delete, $a::Approve],
         };
     }
 }

@@ -286,10 +286,15 @@ Route::middleware(['auth', 'active', 'two_factor', 'not_worker'])->group(functio
 
     // Screen 24 — Measurements (company-owned)
     Route::get('/measurements', [MeasurementController::class, 'index'])->name('measurements.index');
+    // Export routes BEFORE the {measurement} routes so they are not swallowed.
+    Route::get('/measurements/export', [MeasurementController::class, 'export'])->name('measurements.export');
+    Route::get('/measurements/export-pdf', [MeasurementController::class, 'exportPdf'])->name('measurements.export-pdf');
     Route::post('/measurements', [MeasurementController::class, 'store'])->name('measurements.store');
     Route::put('/measurements/{measurement}', [MeasurementController::class, 'update'])->name('measurements.update');
     Route::delete('/measurements/{measurement}', [MeasurementController::class, 'destroy'])->name('measurements.destroy');
     Route::post('/measurements/{measurement}/approve', [MeasurementController::class, 'approve'])->name('measurements.approve');
+    Route::post('/measurements/{measurement}/reject', [MeasurementController::class, 'reject'])->name('measurements.reject');
+    Route::post('/measurements/{measurement}/reset', [MeasurementController::class, 'reset'])->name('measurements.reset');
 
     // Screen 10 — Invoices (Ventas / Gastos tabs) + payments
     Route::get('/invoices', [InvoiceController::class, 'index'])->name('invoices.index');

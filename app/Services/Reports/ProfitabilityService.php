@@ -4,6 +4,7 @@ namespace App\Services\Reports;
 
 use App\Enums\BillingType;
 use App\Enums\ExpenseResponsibility;
+use App\Enums\MeasurementStatus;
 use App\Enums\ProjectRateType;
 use App\Models\Attendance;
 use App\Models\Expense;
@@ -300,7 +301,7 @@ class ProfitabilityService
             ? Measurement::query()
                 ->withoutGlobalScope(CompanyScope::class)
                 ->where('project_id', $project->id)
-                ->where('approved', true)
+                ->where('status', MeasurementStatus::Approved->value)
                 ->when($from !== null, fn ($q) => $q->whereDate('date', '>=', $from))
                 ->when($to !== null, fn ($q) => $q->whereDate('date', '<=', $to))
                 ->selectRaw('date, employee_id, COALESCE(SUM(quantity),0) as qty')
@@ -632,7 +633,7 @@ class ProfitabilityService
         return (float) Measurement::query()
             ->withoutGlobalScope(CompanyScope::class)
             ->where('project_id', $projectId)
-            ->where('approved', true)
+            ->where('status', MeasurementStatus::Approved->value)
             ->when($from !== null, fn ($q) => $q->whereDate('date', '>=', $from))
             ->when($to !== null, fn ($q) => $q->whereDate('date', '<=', $to))
             ->sum('quantity');
@@ -649,7 +650,7 @@ class ProfitabilityService
         return Measurement::query()
             ->withoutGlobalScope(CompanyScope::class)
             ->where('project_id', $projectId)
-            ->where('approved', true)
+            ->where('status', MeasurementStatus::Approved->value)
             ->when($from !== null, fn ($q) => $q->whereDate('date', '>=', $from))
             ->when($to !== null, fn ($q) => $q->whereDate('date', '<=', $to))
             ->selectRaw("{$groupExpr} as slice")

@@ -171,11 +171,11 @@ function reloadAfterEntry() {
 // ── Measurements tab ────────────────────────────────────────────────────────
 const measSearch = ref('');
 const measApproval = ref('all');
+const measStatusVariant = { pending: 'warn', approved: 'ok', rejected: 'danger' };
 const measRecords = computed(() => {
     let rows = props.projectMeasurements?.records ?? [];
     if (measSearch.value) rows = rows.filter((r) => (r.employee ?? '').toLowerCase().includes(measSearch.value.toLowerCase()));
-    if (measApproval.value === 'approved') rows = rows.filter((r) => r.approved);
-    else if (measApproval.value === 'pending') rows = rows.filter((r) => !r.approved);
+    if (measApproval.value !== 'all') rows = rows.filter((r) => r.status === measApproval.value);
     return rows;
 });
 const measUnits = ['m²', 'm', 'm³', 'kg', 'units'];
@@ -205,11 +205,18 @@ function submitMeas() {
     if (measEditing.value) measForm.put(`/measurements/${measEditing.value.id}`, opts);
     else measForm.post('/measurements', opts);
 }
-function approveMeas(m, approved) {
-    router.post(`/measurements/${m.id}/approve`, { approved }, { preserveScroll: true });
-}
+function approveMeas(m) { router.post(`/measurements/${m.id}/approve`, {}, { preserveScroll: true }); }
+function resetMeas(m) { router.post(`/measurements/${m.id}/reset`, {}, { preserveScroll: true }); }
 function deleteMeas(m) {
     askDelete(m.employee ?? '', () => router.delete(`/measurements/${m.id}`, { preserveScroll: true }));
+}
+
+// Reject a measurement with a reason.
+const measRejectForm = useForm({ rejection_reason: '' });
+const measRejecting = ref(null);
+function openRejectMeas(m) { measRejecting.value = m; measRejectForm.reset(); measRejectForm.clearErrors(); }
+function submitRejectMeas() {
+    measRejectForm.post(`/measurements/${measRejecting.value.id}/reject`, { preserveScroll: true, onSuccess: () => (measRejecting.value = null) });
 }
 
 // immutable notes
@@ -661,8 +668,9 @@ function destroy() {
                         <VInput v-model="measSearch" :placeholder="$t('projects.filter_employee')" class="w-48" />
                         <VSelect v-model="measApproval" class="w-40">
                             <option value="all">{{ $t('measurements.all') }}</option>
-                            <option value="approved">{{ $t('measurements.approved_f') }}</option>
                             <option value="pending">{{ $t('measurements.pending_f') }}</option>
+                            <option value="approved">{{ $t('measurements.approved_f') }}</option>
+                            <option value="rejected">{{ $t('measurements.rejected_label') }}</option>
                         </VSelect>
                         <VButton v-if="canManageMeasurements.create" class="ms-auto" icon="plus" @click="openMeas()">
                             <Bilingual k="measurements.add" inline />
@@ -693,14 +701,18 @@ function destroy() {
                                         <td class="tabular-nums px-3 py-2 text-end">{{ m.quantity }}</td>
                                         <td class="px-3 py-2">{{ m.unit ?? '—' }}</td>
                                         <td class="px-3 py-2">{{ $t(`measurements.type_${m.type}`) }}</td>
-                                        <td class="px-3 py-2"><VBadge :status="m.approved ? 'ok' : 'warn'">{{ m.approved ? $t('measurements.approved_f') : $t('measurements.pending_f') }}</VBadge></td>
+                                        <td class="px-3 py-2">
+                                            <VBadge :status="measStatusVariant[m.status]">{{ $t(`measurements.status_${m.status}`) }}</VBadge>
+                                            <span v-if="m.status === 'rejected' && m.rejection_reason" class="mt-0.5 block text-xs text-status-danger">{{ m.rejection_reason }}</span>
+                                        </td>
                                         <td class="px-3 py-2 text-ink-soft">{{ m.notes ?? '—' }}</td>
                                         <td class="px-3 py-2">
                                             <div class="flex items-center justify-end gap-1">
-                                                <VButton v-if="!m.approved && canManageMeasurements.approve" variant="ghost" size="sm" @click="approveMeas(m, true)"><Bilingual k="measurements.approve" inline /></VButton>
-                                                <VButton v-if="m.approved && canManageMeasurements.approve" variant="ghost" size="sm" @click="approveMeas(m, false)"><Bilingual k="measurements.reject" inline /></VButton>
-                                                <VButton v-if="!m.approved && canManageMeasurements.edit" variant="ghost" size="sm" icon="edit" @click="openMeas(m)" />
-                                                <VButton v-if="!m.approved && canManageMeasurements.delete" variant="ghost" size="sm" icon="trash" @click="deleteMeas(m)" />
+                                                <VButton v-if="m.status !== 'approved' && canManageMeasurements.approve" variant="ghost" size="sm" @click="approveMeas(m)"><Bilingual k="measurements.approve" inline /></VButton>
+                                                <VButton v-if="m.status === 'pending' && canManageMeasurements.approve" variant="ghost" size="sm" @click="openRejectMeas(m)"><Bilingual k="measurements.reject" inline /></VButton>
+                                                <VButton v-if="m.status !== 'pending' && canManageMeasurements.approve" variant="ghost" size="sm" @click="resetMeas(m)"><Bilingual k="measurements.reopen" inline /></VButton>
+                                                <VButton v-if="m.status !== 'approved' && canManageMeasurements.edit" variant="ghost" size="sm" icon="edit" @click="openMeas(m)" />
+                                                <VButton v-if="m.status !== 'approved' && canManageMeasurements.delete" variant="ghost" size="sm" icon="trash" @click="deleteMeas(m)" />
                                             </div>
                                         </td>
                                     </tr>
@@ -710,11 +722,39 @@ function destroy() {
                         </div>
                     </VCard>
 
-                    <div v-if="projectMeasurements" class="grid gap-3 sm:grid-cols-3">
+                    <div v-if="projectMeasurements" class="grid gap-3 sm:grid-cols-4">
                         <VCard><p class="text-xs text-muted">{{ $t('measurements.total_approved') }}</p><p class="tabular-nums mt-1 text-lg font-semibold text-status-ok">{{ projectMeasurements.summary.approved_qty }}</p></VCard>
                         <VCard><p class="text-xs text-muted">{{ $t('measurements.total_pending') }}</p><p class="tabular-nums mt-1 text-lg font-semibold text-status-warn">{{ projectMeasurements.summary.pending_qty }}</p></VCard>
+                        <VCard><p class="text-xs text-muted">{{ $t('measurements.rejected_label') }}</p><p class="tabular-nums mt-1 text-lg font-semibold text-status-danger">{{ projectMeasurements.summary.rejected_qty }}</p></VCard>
                         <VCard><p class="text-xs text-muted">{{ $t('measurements.billing_linked') }}</p><p class="mt-1 text-lg font-semibold">{{ projectMeasurements.summary.billing_linked ? $t('common.yes') : $t('common.no') }}</p></VCard>
                     </div>
+
+                    <!-- A4 — per-worker breakdown of approved / pending / rejected -->
+                    <VCard v-if="projectMeasurements && projectMeasurements.per_worker.length" :padded="false">
+                        <p class="border-b border-line px-3 py-2 text-[13px] font-semibold"><Bilingual k="measurements.per_worker" inline /></p>
+                        <div class="overflow-x-auto">
+                            <table class="tabular-nums w-full text-sm">
+                                <thead class="bg-surface-sunken text-[11px] uppercase tracking-wide text-muted">
+                                    <tr>
+                                        <th class="px-3 py-2 text-start"><Bilingual k="measurements.employee" inline /></th>
+                                        <th class="px-3 py-2 text-end text-status-ok"><Bilingual k="measurements.w_approved" inline /></th>
+                                        <th class="px-3 py-2 text-end text-status-warn"><Bilingual k="measurements.w_pending" inline /></th>
+                                        <th class="px-3 py-2 text-end text-status-danger"><Bilingual k="measurements.w_rejected" inline /></th>
+                                        <th class="px-3 py-2 text-end"><Bilingual k="measurements.w_total" inline /></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr v-for="w in projectMeasurements.per_worker" :key="w.employee_id ?? 'none'" class="border-b border-line last:border-0">
+                                        <td class="px-3 py-2">{{ w.employee }}</td>
+                                        <td class="px-3 py-2 text-end">{{ w.approved }}</td>
+                                        <td class="px-3 py-2 text-end">{{ w.pending }}</td>
+                                        <td class="px-3 py-2 text-end">{{ w.rejected }}</td>
+                                        <td class="px-3 py-2 text-end font-medium">{{ w.total }}</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </VCard>
                 </template>
             </div>
 
@@ -762,6 +802,19 @@ function destroy() {
             <template #footer>
                 <VButton variant="ghost" @click="measModalOpen = false"><Bilingual k="common.cancel" inline /></VButton>
                 <VButton type="submit" form="meas-form" :loading="measForm.processing"><Bilingual k="common.save" inline /></VButton>
+            </template>
+        </VModal>
+
+        <!-- Reject a measurement with a reason -->
+        <VModal :open="measRejecting !== null" title-key="measurements.reject" @close="measRejecting = null">
+            <form id="meas-reject-form" @submit.prevent="submitRejectMeas">
+                <FormField k="measurements.rejection_reason" :error="measRejectForm.errors.rejection_reason" required>
+                    <VTextarea v-model="measRejectForm.rejection_reason" :rows="3" :placeholder="$t('measurements.rejection_hint')" />
+                </FormField>
+            </form>
+            <template #footer>
+                <VButton variant="ghost" @click="measRejecting = null"><Bilingual k="common.cancel" inline /></VButton>
+                <VButton variant="danger" type="submit" form="meas-reject-form" :loading="measRejectForm.processing"><Bilingual k="measurements.reject" inline /></VButton>
             </template>
         </VModal>
 

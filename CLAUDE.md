@@ -27,6 +27,29 @@ project expense IS a legitimate project cost (counted once as an expense) — it
 is not excluded from P&L just because payroll also reimburses the worker for
 it; the two figures are the project view and the person view of the same euro.
 
+### Measurements + Production Tasks build (2026-08-13, Phase A done)
+
+Confirmed client plan: keep Measurements (per-meter billing income source) and
+build Production Tasks as a SEPARATE internal planned-vs-actual tracker (task
+completed×unit_price = internal cost only, never client billing; only approved
+measurements feed P&L income — no double count). Templates company-scoped;
+weightage advisory (warn if ≠100, not blocked); measurements get full reject.
+
+**Phase A (done) — Measurements polish.** (A1) three-state workflow: new
+`MeasurementStatus` enum (pending/approved/rejected) + `status` +
+`rejection_reason` columns (migration `2026_08_13_000002`, back-filled from the
+legacy `approved` boolean). The boolean stays, kept in sync = status===approved
+by a model `saving` hook (so every existing reader + fixture stays consistent).
+Controller: `approve` / `reject` (reason required) / `reset` (reopen);
+approved rows locked, a rejected row edited resubmits to pending. The P&L +
+invoice-meter readers now filter `status='approved'`. (A2) employee dropdown on
+the standalone modal. (A3) Excel + PDF export (`MeasurementsExport` +
+`measurements-pdf` blade), gated `measurements.export` (re-added to
+`Module::actions`) + audited, shared filtered query, routes before `{param}`.
+(A4) per-worker approved/pending/rejected/total summary on the project tab.
+Tests: reject-reason, resubmit-to-pending, approved-locked, export+audit
+(MeasurementsTest, 10). **847 Pest tests.**
+
 ### Subcontractor deal model (2026-08-13, COMPLETE — all 5 steps, 835 tests)
 
 **Step 5 (done):** tenancy on the deal fields (cross-company read/edit → 404,

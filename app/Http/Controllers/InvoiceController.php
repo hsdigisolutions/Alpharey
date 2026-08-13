@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Enums\BearableBy;
 use App\Enums\InvoiceStatus;
 use App\Enums\InvoiceType;
+use App\Enums\MeasurementStatus;
 use App\Enums\PaymentMethod;
 use App\Enums\PaymentStatus;
 use App\Enums\VatRate;
@@ -264,7 +265,7 @@ class InvoiceController extends Controller
         if ($data['method'] === 'meter') {
             $metres = (float) $inRange(Measurement::query()
                 ->where('project_id', $projectId)
-                ->where('approved', true))->sum('quantity');
+                ->where('status', MeasurementStatus::Approved->value))->sum('quantity');
             $rate = (float) ($project->getAttribute('client_meter_rate') ?? 0);
             $lines[] = [
                 'description' => __('ui.invoices.calc_meter_line'),
