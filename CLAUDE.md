@@ -19,6 +19,20 @@ our-profit (server never accepts a posted profit), responsibility radio;
 detail header shows the four deal cards; keys `subcontractors.client_amount /
 agreed_budget / our_profit / expense_responsibility / resp_*`.
 
+**Step 2 (done):** `SubcontractorService::settlement()` — the LIVE engine:
+thaekedar_profit = budget − our-employees (live Σ frozen attendance totals on
+the project, worked statuses, date-bounded by start/end when set — the typed
+figures on an our-employee link row are IGNORED) − external workers (manual
+Σ total_agreed) − approved project expenses (Scenario A only);
+still_to_pay = thaekedar_profit − paid payments; our_profit = client − budget
+(− expenses in Scenario B). Per-employee lines (name/designation/days/derived
+rate/total) ship for Tab 1 Section A. `show()` now sends `settlement` + the
+project `expenses` list (auto-posted payment Gastos excluded — they ARE the
+payments). Guard caught + fixed in review: the employee lookup drops ONLY
+CompanyScope, never SoftDeletes (ScopeDisciplineTest). Tests: Scenario A
+(80−30−20−20=10, still-to-pay 5, our profit 20), Scenario B (profit 15,
+still-to-pay 10, our profit 5), live-pull-not-typed (+window bound).
+
 ### Salary structure build (2026-08-12, COMPLETE — all 8 steps, all 12 acceptance tests green)
 
 **Deep-review pass 2 (2026-08-12, post-build).** Full scenario re-test of all 8

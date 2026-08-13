@@ -8,6 +8,7 @@ use App\Http\Requests\Subcontractors\StoreSubcontractorPaymentRequest;
 use App\Http\Requests\Subcontractors\StoreSubcontractorRequest;
 use App\Http\Requests\Subcontractors\StoreSubcontractorWorkerRequest;
 use App\Models\Employee;
+use App\Models\Expense;
 use App\Models\Project;
 use App\Models\Subcontractor;
 use App\Models\SubcontractorPayment;
@@ -65,11 +66,14 @@ class SubcontractorController extends Controller
             ->with('success', __('ui.subcontractors.saved'));
     }
 
-    public function show(Subcontractor $subcontractor): Response
+    public function show(Subcontractor $subcontractor, SubcontractorService $service): Response
     {
         Gate::authorize('subcontractors.view');
 
         $subcontractor->load(['project:id,name', 'workers.employee:id,full_name', 'payments' => fn ($q) => $q->orderBy('payment_number')]);
+
+        // The LIVE settlement (budget − our salaries − external − expenses[A]).
+        $settlement = $service->settlement($subcontractor);
 
         $workersTotal = round((float) $subcontractor->workers->sum(fn (SubcontractorWorker $w) => (float) $w->total_agreed), 2);
         $paymentsTotal = round((float) $subcontractor->payments->sum(fn (SubcontractorPayment $p) => (float) $p->amount), 2);
@@ -126,6 +130,10 @@ class SubcontractorController extends Controller
                 'paid_total' => $paidTotal,
                 'pending' => round($paymentsTotal - $paidTotal, 2),
             ],
+            'settlement' => $settlement,
+            // Tab 2 — the project's expenses (who bears them is the deal's
+            // responsibility setting; the list is the same either way).
+            'expenses' => $this->projectExpenses($subcontractor),
             'projects' => $this->projects(),
             'employees' => $this->employees(),
             'statuses' => array_map(fn (SubcontractorStatus $s) => $s->value, SubcontractorStatus::cases()),
@@ -211,6 +219,43 @@ class SubcontractorController extends Controller
         $service->deletePayment($payment);
 
         return back()->with('success', __('ui.subcontractors.payment_deleted'));
+    }
+
+    /**
+     * The project's expenses for Tab 2, newest first. Company-scoped through
+     * the subcontractor's own company; the auto-posted payment Gastos are
+     * excluded (they ARE the payments — showing them here would double-list).
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function projectExpenses(Subcontractor $subcontractor): array
+    {
+        if ($subcontractor->project_id === null) {
+            return [];
+        }
+
+        $paymentExpenseIds = SubcontractorPayment::query()
+            ->where('subcontractor_id', $subcontractor->id)
+            ->whereNotNull('expense_id')
+            ->pluck('expense_id');
+
+        return Expense::query()
+            ->where('project_id', $subcontractor->project_id)
+            ->whereNotIn('id', $paymentExpenseIds)
+            ->with('category:id,name')
+            ->orderByDesc('date')
+            ->limit(200)
+            ->get()
+            ->map(fn ($e): array => [
+                'id' => $e->id,
+                'date' => $e->date->toDateString(),
+                'number' => $e->number,
+                'category' => $e->category?->name,
+                'total' => (float) $e->total,
+                'approved' => (bool) $e->approved,
+                'bearable_by' => $e->bearable_by->value,
+                'notes' => $e->notes,
+            ])->values()->all();
     }
 
     /**
