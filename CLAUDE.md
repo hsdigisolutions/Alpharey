@@ -43,6 +43,22 @@ StoreAttendanceRequest; the legacy importer sets it directly). Key
 `attendance.month_paid`. Tests: paid-but-unlocked month blocks edit/create/
 delete (acceptance test 10) + is_paid injection ignored.
 
+**Fix 2 (done):** per-meter P&L income now comes from **APPROVED measurements ×
+client_meter_rate** (spec C8), never from attendance quantity — a per-meter
+project whose workers are paid daily no longer shows €0/red. `approvedMeters()`
+/ `approvedMetersBy()` feed `forProject` (+ the `meters` figure), `revenueFor`,
+the day/month breakdowns (measurement-only days appear as income rows) and
+`dailyPnl` (per-worker income = their approved measured qty × meter rate;
+unmatched production folds into the day income). Unapproved measurements earn
+nothing. Cache signature now also tracks `measurements` + `invoices`
+MAX(updated_at) — approving production / marking an invoice paid busts the P&L
+cache (dashboard query bound 40→42). Status filters aligned: `attendanceAggregate`
++ day/month breakdowns now count only worked statuses (present/late/early_leave),
+same as dailyPnl — the Resumen card and Rentabilidad tab agree by construction.
+ProfitabilityTest's per-meter test now pins the spec worked example (150 m² ×
+10 € = 1.500 income · 4×50 labour + 100 expenses = 300 cost · 1.200 profit;
+unapproved 999 m² ignored — acceptance test 8).
+
 **Every screen 01–26 is built (Phase 8 complete).** Phase 9 is hardening, UAT, and
 launch — no new screens. Current: **781 Pest tests / 4526 assertions passing (1
 skipped) · Pint clean · Larastan level 6 clean · `composer audit` + `npm audit`

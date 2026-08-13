@@ -5,6 +5,7 @@ use App\Models\Company;
 use App\Models\Employee;
 use App\Models\Expense;
 use App\Models\Invoice;
+use App\Models\Measurement;
 use App\Models\Project;
 use App\Models\Subcontractor;
 use App\Models\SubcontractorPayment;
@@ -63,18 +64,44 @@ it('computes an hourly project P&L (revenue = client rate × hours)', function (
         ->and($r['health'])->toBe('ok');
 });
 
-it('computes a per-meter project P&L (revenue = client rate × metres)', function (): void {
+it('earns per-meter revenue from APPROVED measurements while workers are paid daily', function (): void {
+    // Spec C8 / acceptance test 8 — the exact worked example: 150 m² approved
+    // × 10 €/m² = 1.500 € income; 4 daily workers × 50 € + 100 € expenses =
+    // 300 € cost; profit 1.200 €. Unapproved measurements earn NOTHING.
     $project = Project::factory()->create([
-        'company_id' => $this->company->id, 'billing_type' => 'per_meter', 'client_meter_rate' => '30',
+        'company_id' => $this->company->id, 'billing_type' => 'per_meter', 'client_meter_rate' => '10',
     ]);
-    punch($this->company, $this->employee, $project, '2026-06-01', 0, 2000, 'per_meter', 100);
+
+    // 4 workers on their DAILY rate — no per-meter quantity on attendance.
+    foreach (range(1, 4) as $i) {
+        $worker = Employee::factory()->forCompany($this->company)->create();
+        punch($this->company, $worker, $project, '2026-06-05', 8, 50, 'full');
+    }
+    Expense::factory()->create([
+        'company_id' => $this->company->id, 'project_id' => $project->id,
+        'approved' => true, 'total' => '100', 'date' => '2026-06-05',
+    ]);
+
+    // The day's production, entered in Measurements and APPROVED.
+    Measurement::factory()->create([
+        'company_id' => $this->company->id, 'project_id' => $project->id,
+        'employee_id' => $this->employee->id, 'date' => '2026-06-05',
+        'quantity' => '150', 'approved' => true,
+    ]);
+    // An unapproved measurement is not yet money — excluded.
+    Measurement::factory()->create([
+        'company_id' => $this->company->id, 'project_id' => $project->id,
+        'date' => '2026-06-05', 'quantity' => '999', 'approved' => false,
+    ]);
 
     $r = $this->service->forProject($project->fresh());
 
-    expect($r['revenue'])->toBe(3000.0)   // 30 × 100 m
-        ->and($r['meters'])->toBe(100.0)
-        ->and($r['cost'])->toBe(2000.0)
-        ->and($r['profit'])->toBe(1000.0);
+    expect($r['revenue'])->toBe(1500.0)   // 150 m² × 10 — approved only
+        ->and($r['meters'])->toBe(150.0)
+        ->and($r['labour_cost'])->toBe(200.0)
+        ->and($r['expenses'])->toBe(100.0)
+        ->and($r['cost'])->toBe(300.0)
+        ->and($r['profit'])->toBe(1200.0);
 });
 
 it('bills a fixed project from its paid sale invoices', function (): void {

@@ -7,6 +7,7 @@ use App\Enums\ProjectRateType;
 use App\Models\Attendance;
 use App\Models\Expense;
 use App\Models\Invoice;
+use App\Models\Measurement;
 use App\Models\Project;
 use App\Models\ProjectDesignationRate;
 use App\Models\Scopes\CompanyScope;
@@ -39,6 +40,9 @@ use Illuminate\Support\Facades\DB;
 class ProfitabilityService
 {
     private const CACHE_TTL_SECONDS = 600;
+
+    /** The attendance statuses that count as a worked (billable) day. */
+    private const WORKED_STATUSES = ['present', 'late', 'early_leave'];
 
     /** Margin thresholds (percent): > green ≥ amber, below = red. */
     private const MARGIN_GREEN = 15.0;
@@ -103,8 +107,15 @@ class ProfitabilityService
     {
         $agg = $this->attendanceAggregate($project->company_id, $from, $to, $project->id);
         $hours = $agg['hours'];
-        $meters = $agg['meters'];
         $labourFromAttendance = $agg['labour'];
+
+        // Per-meter billing earns from APPROVED measurements (spec C8) — the
+        // workers themselves are usually paid a daily rate, so attendance rows
+        // carry no metre quantity. Other billing types keep the attendance
+        // quantity (a per-meter-PAID worker on a non-metre project).
+        $meters = $project->billing_type === BillingType::PerMeter
+            ? $this->approvedMeters($project->id, $from, $to)
+            : $agg['meters'];
 
         $expenses = $this->expenseTotal($project->company_id, $from, $to, $project->id);
         $subcontract = $this->subcontractorTotal($project->company_id, $from, $to, $project->id);
@@ -184,7 +195,7 @@ class ProfitabilityService
             ->withoutGlobalScope(CompanyScope::class)
             ->where('company_id', $companyId)
             ->where('project_id', $project->id)
-            ->whereIn('status', ['present', 'late', 'early_leave'])
+            ->whereIn('status', self::WORKED_STATUSES)
             ->when($from !== null, fn ($q) => $q->whereDate('date', '>=', $from))
             ->when($to !== null, fn ($q) => $q->whereDate('date', '<=', $to))
             ->with(['employee' => fn ($q) => $q->withoutGlobalScope(CompanyScope::class)
@@ -201,13 +212,42 @@ class ProfitabilityService
             ->selectRaw('date, COALESCE(SUM(total),0) as total')
             ->groupBy('date')->pluck('total', 'date');
 
+        // Per-meter billing earns from APPROVED measurements (spec C8): income
+        // per worker/day = their approved measured quantity × the client meter
+        // rate, while their COST stays the daily/hourly rate they are paid.
+        $isPerMeter = $project->billing_type === BillingType::PerMeter;
+        $measuredRows = $isPerMeter
+            ? Measurement::query()
+                ->withoutGlobalScope(CompanyScope::class)
+                ->where('project_id', $project->id)
+                ->where('approved', true)
+                ->when($from !== null, fn ($q) => $q->whereDate('date', '>=', $from))
+                ->when($to !== null, fn ($q) => $q->whereDate('date', '<=', $to))
+                ->selectRaw('date, employee_id, COALESCE(SUM(quantity),0) as qty')
+                ->groupBy('date', 'employee_id')
+                ->get()
+            : collect();
+        // date => [employee_id => qty]; employee_id may be null (unassigned production).
+        $measuredByDate = [];
+        foreach ($measuredRows as $m) {
+            $mDate = substr((string) $m->getAttribute('date'), 0, 10);
+            $measuredByDate[$mDate][$m->getAttribute('employee_id') ?? 0] =
+                ($measuredByDate[$mDate][$m->getAttribute('employee_id') ?? 0] ?? 0.0) + (float) $m->getAttribute('qty');
+        }
+
         // Group rows by date, building the per-worker lines as we go.
         $byDate = [];
         foreach ($rows as $r) {
             $date = $r->date->toDateString();
             $hours = (float) $r->hours_worked;
-            $income = $this->rowIncome($r, $rates, $clientHour, $clientMeter);
+            $income = $isPerMeter
+                ? round((float) ($measuredByDate[$date][$r->employee_id] ?? 0) * $clientMeter, 2)
+                : $this->rowIncome($r, $rates, $clientHour, $clientMeter);
             $cost = (float) $r->total_amount;
+            // Consumed — leftovers (measured but no attendance row) are added below.
+            if ($isPerMeter) {
+                unset($measuredByDate[$date][$r->employee_id]);
+            }
 
             $byDate[$date] ??= ['hours' => 0.0, 'income' => 0.0, 'labour' => 0.0, 'workers' => []];
             $byDate[$date]['hours'] += $hours;
@@ -223,6 +263,19 @@ class ProfitabilityService
                 'cost' => round($cost, 2),
                 'profit' => round($income - $cost, 2),
             ];
+        }
+
+        // Approved production with no matching attendance row (a worker measured
+        // but not punched, or unassigned production) still earns its income.
+        if ($isPerMeter) {
+            foreach ($measuredByDate as $date => $byWorker) {
+                $left = array_sum($byWorker);
+                if ($left > 0) {
+                    $byDate[$date] ??= ['hours' => 0.0, 'income' => 0.0, 'labour' => 0.0, 'workers' => []];
+                    $byDate[$date]['income'] += round($left * $clientMeter, 2);
+                }
+            }
+            ksort($byDate);
         }
 
         // Assemble day rows (newest first) + accumulate month + total figures.
@@ -451,6 +504,9 @@ class ProfitabilityService
             ->withoutGlobalScope(CompanyScope::class)
             ->where('company_id', $companyId)
             ->where('project_id', $projectId)
+            // Worked days only — the same statuses the daily P&L counts, so the
+            // Resumen card and the Rentabilidad tab agree by construction.
+            ->whereIn('status', self::WORKED_STATUSES)
             ->when($from !== null, fn ($q) => $q->whereDate('date', '>=', $from))
             ->when($to !== null, fn ($q) => $q->whereDate('date', '<=', $to))
             ->selectRaw('COALESCE(SUM(hours_worked),0) as hours')
@@ -463,6 +519,46 @@ class ProfitabilityService
             'labour' => (float) ($row?->getAttribute('labour') ?? 0),
             'meters' => (float) ($row?->getAttribute('meters') ?? 0),
         ];
+    }
+
+    /**
+     * Billable metres for a project: APPROVED measurements only (spec C8).
+     * Per-meter income comes from the Measurements module — daily production
+     * entered and approved there — never from attendance rows: the workers on a
+     * per-meter project are usually paid their DAILY rate, so attendance carries
+     * no metre quantity and the two sides of the transaction live in different
+     * tables. An unapproved measurement is not yet money.
+     */
+    private function approvedMeters(int $projectId, ?string $from, ?string $to): float
+    {
+        return (float) Measurement::query()
+            ->withoutGlobalScope(CompanyScope::class)
+            ->where('project_id', $projectId)
+            ->where('approved', true)
+            ->when($from !== null, fn ($q) => $q->whereDate('date', '>=', $from))
+            ->when($to !== null, fn ($q) => $q->whereDate('date', '<=', $to))
+            ->sum('quantity');
+    }
+
+    /**
+     * Approved measured metres grouped by a raw SQL expression (date or month),
+     * for the per-meter day/month breakdowns.
+     *
+     * @return Collection<string, float>
+     */
+    private function approvedMetersBy(string $groupExpr, int $projectId, ?string $from, ?string $to): Collection
+    {
+        return Measurement::query()
+            ->withoutGlobalScope(CompanyScope::class)
+            ->where('project_id', $projectId)
+            ->where('approved', true)
+            ->when($from !== null, fn ($q) => $q->whereDate('date', '>=', $from))
+            ->when($to !== null, fn ($q) => $q->whereDate('date', '<=', $to))
+            ->selectRaw("{$groupExpr} as slice")
+            ->selectRaw('COALESCE(SUM(quantity),0) as qty')
+            ->groupByRaw($groupExpr)
+            ->pluck('qty', 'slice')
+            ->map(fn ($qty): float => (float) $qty);
     }
 
     private function expenseTotal(int $companyId, ?string $from, ?string $to, int $projectId): float
@@ -529,6 +625,7 @@ class ProfitabilityService
             ->withoutGlobalScope(CompanyScope::class)
             ->where('company_id', $project->company_id)
             ->where('project_id', $project->id)
+            ->whereIn('status', self::WORKED_STATUSES)
             ->when($from !== null, fn ($q) => $q->whereDate('date', '>=', $from))
             ->when($to !== null, fn ($q) => $q->whereDate('date', '<=', $to))
             ->selectRaw('date')
@@ -539,20 +636,40 @@ class ProfitabilityService
             ->orderBy('date')
             ->get();
 
-        return $rows->map(function (Attendance $r) use ($project): array {
+        // Per-meter billing: the day's metres come from APPROVED measurements.
+        $isPerMeter = $project->billing_type === BillingType::PerMeter;
+        $measured = $isPerMeter ? $this->approvedMetersBy('date', $project->id, $from, $to) : collect();
+
+        // Both maps key on plain Y-m-d (the raw SQL key has no time part; the
+        // hydrated attendance date is a Carbon — normalise to compare).
+        $days = $rows->map(function (Attendance $r) use ($project, $isPerMeter, $measured): array {
+            $date = substr((string) $r->getAttribute('date'), 0, 10);
             $hours = (float) $r->getAttribute('hours');
-            $meters = (float) $r->getAttribute('meters');
+            $meters = $isPerMeter ? (float) ($measured[$date] ?? 0) : (float) $r->getAttribute('meters');
             $cost = round((float) $r->getAttribute('labour'), 2);
             $revenue = $this->unitRevenue($project, $hours, $meters);
 
             return [
-                'date' => (string) $r->getAttribute('date'),
+                'date' => $date,
                 'hours' => round($hours, 2),
                 'revenue' => $revenue,
                 'cost' => $cost,
                 'profit' => $revenue !== null ? round($revenue - $cost, 2) : null,
             ];
         })->all();
+
+        // A day with approved production but no attendance still earned money.
+        $attDates = array_column($days, 'date');
+        foreach ($measured as $date => $qty) {
+            $date = substr((string) $date, 0, 10);
+            if (! in_array($date, $attDates, true)) {
+                $revenue = round((float) ($project->client_meter_rate ?? 0) * (float) $qty, 2);
+                $days[] = ['date' => $date, 'hours' => 0.0, 'revenue' => $revenue, 'cost' => 0.0, 'profit' => $revenue];
+            }
+        }
+        usort($days, fn (array $a, array $b): int => strcmp($a['date'], $b['date']));
+
+        return $days;
     }
 
     /**
@@ -568,6 +685,7 @@ class ProfitabilityService
             ->withoutGlobalScope(CompanyScope::class)
             ->where('company_id', $project->company_id)
             ->where('project_id', $project->id)
+            ->whereIn('status', self::WORKED_STATUSES)
             ->when($from !== null, fn ($q) => $q->whereDate('date', '>=', $from))
             ->when($to !== null, fn ($q) => $q->whereDate('date', '<=', $to))
             ->selectRaw("{$monthExpr} as ym")
@@ -578,15 +696,22 @@ class ProfitabilityService
             ->orderByRaw($monthExpr)
             ->get();
 
-        return $rows->map(function (Attendance $r) use ($project): array {
+        // Per-meter billing: the month's metres come from APPROVED measurements.
+        $isPerMeter = $project->billing_type === BillingType::PerMeter;
+        $measured = $isPerMeter
+            ? $this->approvedMetersBy($this->monthExpression(), $project->id, $from, $to)
+            : collect();
+
+        $monthsOut = $rows->map(function (Attendance $r) use ($project, $isPerMeter, $measured): array {
+            $ym = (string) $r->getAttribute('ym');
             $hours = (float) $r->getAttribute('hours');
-            $meters = (float) $r->getAttribute('meters');
+            $meters = $isPerMeter ? (float) ($measured[$ym] ?? 0) : (float) $r->getAttribute('meters');
             $cost = round((float) $r->getAttribute('labour'), 2);
             $revenue = $this->unitRevenue($project, $hours, $meters);
             $profit = $revenue !== null ? round($revenue - $cost, 2) : null;
 
             return [
-                'month' => (string) $r->getAttribute('ym'),
+                'month' => $ym,
                 'hours' => round($hours, 2),
                 'revenue' => $revenue,
                 'cost' => $cost,
@@ -594,6 +719,18 @@ class ProfitabilityService
                 'margin' => ($revenue !== null && $revenue > 0.0) ? round(($profit / $revenue) * 100, 1) : null,
             ];
         })->all();
+
+        // A month with approved production but no attendance still earned money.
+        $attMonths = array_column($monthsOut, 'month');
+        foreach ($measured as $ym => $qty) {
+            if (! in_array((string) $ym, $attMonths, true)) {
+                $revenue = round((float) ($project->client_meter_rate ?? 0) * (float) $qty, 2);
+                $monthsOut[] = ['month' => (string) $ym, 'hours' => 0.0, 'revenue' => $revenue, 'cost' => 0.0, 'profit' => $revenue, 'margin' => $revenue > 0.0 ? 100.0 : null];
+            }
+        }
+        usort($monthsOut, fn (array $a, array $b): int => strcmp($a['month'], $b['month']));
+
+        return $monthsOut;
     }
 
     /**
@@ -684,8 +821,11 @@ class ProfitabilityService
     }
 
     /**
-     * A cheap change-signature: any new/edited attendance, expense, project or
-     * subcontractor payment moves a MAX(updated_at) and busts every cached key.
+     * A cheap change-signature: any new/edited attendance, expense, project,
+     * subcontractor payment, MEASUREMENT (per-meter income basis) or INVOICE
+     * (fixed/milestone income basis) moves a MAX(updated_at) and busts every
+     * cached key — approving a measurement or marking an invoice paid must
+     * refresh the P&L, not wait out the TTL.
      */
     private function signature(int $companyId): string
     {
@@ -699,8 +839,12 @@ class ProfitabilityService
             ->join('subcontractors', 'subcontractors.id', '=', 'subcontractor_payments.subcontractor_id')
             ->where('subcontractors.company_id', $companyId)
             ->max('subcontractor_payments.updated_at');
+        $mea = Measurement::query()->withoutGlobalScope(CompanyScope::class)
+            ->where('company_id', $companyId)->max('updated_at');
+        $inv = Invoice::query()->withoutGlobalScope(CompanyScope::class)
+            ->where('company_id', $companyId)->max('updated_at');
 
-        return implode('|', [(string) $att, (string) $exp, (string) $prj, (string) $sub]);
+        return implode('|', [(string) $att, (string) $exp, (string) $prj, (string) $sub, (string) $mea, (string) $inv]);
     }
 
     /** Portable "year-month" grouping — SQLite in tests, MySQL in production. */
