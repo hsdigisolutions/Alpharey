@@ -3,11 +3,12 @@
  * Create / edit a subcontractor (thaekedar). Create posts to /subcontractors
  * (redirects to the detail page); edit puts to /subcontractors/{id}.
  */
-import { watch } from 'vue';
+import { computed, watch } from 'vue';
 import { useForm } from '@inertiajs/vue3';
 import { t } from '@/translate';
 import FormField from '@/Components/ui/FormField.vue';
 import VButton from '@/Components/ui/VButton.vue';
+import VCurrencyInput from '@/Components/ui/VCurrencyInput.vue';
 import VDateInput from '@/Components/ui/VDateInput.vue';
 import VInput from '@/Components/ui/VInput.vue';
 import VModal from '@/Components/ui/VModal.vue';
@@ -24,9 +25,19 @@ const emit = defineEmits(['close']);
 
 const blank = {
     name: '', project_id: '', nif: '', phone: '', email: '',
+    client_amount: null, agreed_budget: null, expense_responsibility: 'thaekedar',
     start_date: null, end_date: null, status: 'active', notes: '',
 };
 const form = useForm({ ...blank });
+
+// The deal margin, live: client − budget. Derived display only — the server
+// never accepts a posted profit.
+const ourProfit = computed(() => {
+    const client = Number(form.client_amount);
+    const budget = Number(form.agreed_budget);
+    if (!client || !budget) return null;
+    return Math.round((client - budget) * 100) / 100;
+});
 
 watch(() => props.open, (open) => {
     if (!open) return;
@@ -52,6 +63,31 @@ function submit() {
                     <option value="">—</option>
                     <option v-for="p in projects" :key="p.id" :value="p.id">{{ p.name }}</option>
                 </VSelect>
+            </FormField>
+            <!-- The deal: client amount · thaekedar budget · derived margin. -->
+            <FormField k="subcontractors.client_amount" :error="form.errors.client_amount">
+                <VCurrencyInput v-model="form.client_amount" />
+            </FormField>
+            <FormField k="subcontractors.agreed_budget" :error="form.errors.agreed_budget">
+                <VCurrencyInput v-model="form.agreed_budget" />
+            </FormField>
+            <div v-if="ourProfit !== null" class="sm:col-span-2 -mt-1 rounded-md bg-surface-sunken px-3 py-2 text-sm">
+                <span class="text-muted">{{ t('subcontractors.our_profit') }}:</span>
+                <span class="tabular-nums ms-2 font-semibold" :class="ourProfit >= 0 ? 'text-status-ok' : 'text-status-danger'">
+                    {{ ourProfit.toLocaleString('es-ES', { minimumFractionDigits: 2 }) }} €
+                </span>
+            </div>
+            <FormField k="subcontractors.expense_responsibility" class="sm:col-span-2" :error="form.errors.expense_responsibility" required>
+                <div class="space-y-1.5">
+                    <label class="flex cursor-pointer items-start gap-2 text-sm">
+                        <input v-model="form.expense_responsibility" type="radio" value="thaekedar" class="mt-0.5 accent-accent" />
+                        <span>{{ t('subcontractors.resp_thaekedar') }}</span>
+                    </label>
+                    <label class="flex cursor-pointer items-start gap-2 text-sm">
+                        <input v-model="form.expense_responsibility" type="radio" value="ours" class="mt-0.5 accent-accent" />
+                        <span>{{ t('subcontractors.resp_ours') }}</span>
+                    </label>
+                </div>
             </FormField>
             <FormField k="subcontractors.nif" :error="form.errors.nif"><VInput v-model="form.nif" /></FormField>
             <FormField k="subcontractors.phone" :error="form.errors.phone"><VInput v-model="form.phone" /></FormField>

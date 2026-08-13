@@ -90,6 +90,31 @@ function destroy() {
             </div>
         </div>
 
+        <!-- The DEAL: client amount · thaekedar budget · our margin · who bears expenses -->
+        <div class="mb-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <VCard :padded="false" class="px-4 py-3">
+                <p class="text-xs text-muted"><Bilingual k="subcontractors.client_amount" inline /></p>
+                <p class="tabular-nums mt-1 text-lg font-semibold">{{ subcontractor.client_amount !== null ? eur(subcontractor.client_amount) : '—' }}</p>
+            </VCard>
+            <VCard :padded="false" class="px-4 py-3">
+                <p class="text-xs text-muted"><Bilingual k="subcontractors.agreed_budget" inline /></p>
+                <p class="tabular-nums mt-1 text-lg font-semibold">{{ subcontractor.agreed_budget !== null ? eur(subcontractor.agreed_budget) : '—' }}</p>
+            </VCard>
+            <VCard :padded="false" class="px-4 py-3">
+                <p class="text-xs text-muted"><Bilingual k="subcontractors.our_profit" inline /></p>
+                <p class="tabular-nums mt-1 text-lg font-semibold"
+                    :class="subcontractor.our_profit === null ? '' : (subcontractor.our_profit >= 0 ? 'text-status-ok' : 'text-status-danger')">
+                    {{ subcontractor.our_profit !== null ? eur(subcontractor.our_profit) : '—' }}
+                </p>
+            </VCard>
+            <VCard :padded="false" class="px-4 py-3">
+                <p class="text-xs text-muted"><Bilingual k="subcontractors.expense_responsibility" inline /></p>
+                <VBadge :status="subcontractor.expense_responsibility === 'thaekedar' ? 'info' : 'warn'" class="mt-1.5">
+                    {{ t(`subcontractors.resp_badge_${subcontractor.expense_responsibility}`) }}
+                </VBadge>
+            </VCard>
+        </div>
+
         <div class="grid gap-5 lg:grid-cols-3">
             <!-- Record info -->
             <VCard>

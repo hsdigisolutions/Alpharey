@@ -1321,6 +1321,14 @@ return [
         'total_paid' => 'Total pagado',
         'pending' => 'Pendiente',
         'auto_expense_hint' => 'Al marcar un pago como pagado se crea un gasto en la empresa del subcontratista.',
+        'client_amount' => 'Importe cliente',
+        'agreed_budget' => 'Presupuesto thaekedar',
+        'our_profit' => 'Nuestro beneficio',
+        'expense_responsibility' => 'Responsabilidad de gastos',
+        'resp_thaekedar' => 'El thaekedar asume todos los gastos (salen de su presupuesto)',
+        'resp_ours' => 'Nosotros asumimos los gastos por separado (reducen nuestro beneficio)',
+        'resp_badge_thaekedar' => 'Gastos: thaekedar',
+        'resp_badge_ours' => 'Gastos: nuestros',
     ],
 
     'wage_rates' => [

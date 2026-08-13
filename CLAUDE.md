@@ -4,6 +4,21 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Status: Phase 9 in progress — hardening (2026-08-01)
 
+### Subcontractor deal model (2026-08-13, in progress — two-scenario spec confirmed)
+
+Rebuilding the thaekedar module around the confirmed DEAL model: client_amount
+/ agreed_budget / expense_responsibility (Scenario A thaekedar-bears /
+Scenario B we-bear). Confirmed decisions: P&L costs the FULL budget once the
+record is active; our-employees window is date-bounded when start/end set,
+else all project attendance; client_amount is deal-display only (project
+revenue keeps its billing_type source); NULL-budget legacy records fall back
+to payments-as-cost. **Step 1 (done):** migration `2026_08_13_000001` adds the
+three columns; `ExpenseResponsibility` enum; form request (`gt:0`, enum
+required); create/edit modal gains client amount, budget, live derived
+our-profit (server never accepts a posted profit), responsibility radio;
+detail header shows the four deal cards; keys `subcontractors.client_amount /
+agreed_budget / our_profit / expense_responsibility / resp_*`.
+
 ### Salary structure build (2026-08-12, COMPLETE — all 8 steps, all 12 acceptance tests green)
 
 **Deep-review pass 2 (2026-08-12, post-build).** Full scenario re-test of all 8

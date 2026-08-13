@@ -30,10 +30,15 @@ function makeSubcontractor(Company $company, ?int $projectId = null): Subcontrac
 it('creates a subcontractor scoped to the acting company', function (): void {
     $this->actingAs($this->admin)->post('/subcontractors', [
         'name' => 'Obras García', 'status' => 'active',
+        'expense_responsibility' => 'thaekedar',
+        'client_amount' => 100, 'agreed_budget' => 80,
     ])->assertRedirect();
 
     $s = Subcontractor::query()->firstOrFail();
-    expect($s->name)->toBe('Obras García')->and($s->company_id)->toBe($this->companyA->id);
+    expect($s->name)->toBe('Obras García')->and($s->company_id)->toBe($this->companyA->id)
+        ->and((float) $s->client_amount)->toBe(100.0)
+        ->and((float) $s->agreed_budget)->toBe(80.0)
+        ->and($s->expense_responsibility->value)->toBe('thaekedar');
 });
 
 it('cannot open another company subcontractor', function (): void {

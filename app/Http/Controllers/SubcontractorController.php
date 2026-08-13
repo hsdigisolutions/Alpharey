@@ -86,6 +86,14 @@ class SubcontractorController extends Controller
                 'email' => $subcontractor->email,
                 'project_id' => $subcontractor->project_id,
                 'project' => $subcontractor->project?->name,
+                // The deal. our_profit is DERIVED — client − budget (Scenario B
+                // subtracts our expenses in the settlement payload, Step 2).
+                'client_amount' => $subcontractor->client_amount !== null ? (float) $subcontractor->client_amount : null,
+                'agreed_budget' => $subcontractor->agreed_budget !== null ? (float) $subcontractor->agreed_budget : null,
+                'expense_responsibility' => $subcontractor->expense_responsibility->value,
+                'our_profit' => ($subcontractor->client_amount !== null && $subcontractor->agreed_budget !== null)
+                    ? round((float) $subcontractor->client_amount - (float) $subcontractor->agreed_budget, 2)
+                    : null,
                 'start_date' => $subcontractor->start_date?->toDateString(),
                 'end_date' => $subcontractor->end_date?->toDateString(),
                 'status' => $subcontractor->status->value,

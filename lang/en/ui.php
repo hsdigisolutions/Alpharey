@@ -1316,6 +1316,14 @@ return [
         'total_paid' => 'Total paid',
         'pending' => 'Pending',
         'auto_expense_hint' => 'Marking a payment as paid creates an expense on the subcontractor\'s company.',
+        'client_amount' => 'Client amount',
+        'agreed_budget' => 'Thaekedar budget',
+        'our_profit' => 'Our profit',
+        'expense_responsibility' => 'Expense responsibility',
+        'resp_thaekedar' => 'Thaekedar bears all expenses (they come out of his budget)',
+        'resp_ours' => 'We bear expenses separately (they reduce our profit)',
+        'resp_badge_thaekedar' => 'Expenses: thaekedar',
+        'resp_badge_ours' => 'Expenses: ours',
     ],
 
     'wage_rates' => [
