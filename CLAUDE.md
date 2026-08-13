@@ -4,6 +4,29 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Status: Phase 9 in progress — hardening (2026-08-01)
 
+### Salary × Subcontractor integration review (2026-08-13, COMPLETE — 0 bugs)
+
+Full cross-module review of the two finished modules together
+(`SalarySubcontractorIntegrationTest`, 8 tests). Every connection verified end
+to end with NO bug found — the modules were correctly wired: (C1) profile rate
+freezes on attendance, settlement pulls it live, payroll pays it, project P&L
+costs the budget — the designation worker_rate 80 never reaches pay; (C2)
+no-subcontractor cost is the frozen snapshots and designation rates never touch
+it; (C3) per-meter income from approved measurements + cost = budget (no
+double count with attendance labour); (C4) August history rate (70) frozen
+through attendance → payroll → settlement; (C5) monthly pro-rata in payroll +
+budget cost on the subcontracted project; (C6) a worker-reimbursable project
+expense is counted ONCE — reimbursed via payroll AND booked as a project cost
+(different reports, same money — not a double count); (C7) a PAID month freezes
+attendance but the deal budget can still be renegotiated and the P&L follows;
+(SEC) every subcontractor sub-action (read/worker CRUD/payment) is 404 across
+companies. Audit trail confirmed complete (Subcontractor/Worker/Payment +
+EmployeeWageRate Auditable; `recalculateRow` logs repricing). **843 Pest tests
+/ 4814 assertions.** One design note surfaced, not a bug: a worker-reimbursable
+project expense IS a legitimate project cost (counted once as an expense) — it
+is not excluded from P&L just because payroll also reimburses the worker for
+it; the two figures are the project view and the person view of the same euro.
+
 ### Subcontractor deal model (2026-08-13, COMPLETE — all 5 steps, 835 tests)
 
 **Step 5 (done):** tenancy on the deal fields (cross-company read/edit → 404,
