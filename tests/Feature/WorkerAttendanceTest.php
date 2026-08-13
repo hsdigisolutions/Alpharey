@@ -48,6 +48,16 @@ beforeEach(function (): void {
 
 afterEach(fn () => $this->travelBack());
 
+it('records the punch even with a very coarse fix — accuracy is evidence, not a gate', function (): void {
+    // A network/IP fix can report accuracy in the hundreds of thousands of
+    // metres. That must NEVER 422 the punch (it used to be capped at 100000).
+    $this->actingAs($this->worker)->post('/worker/check-in', [
+        'lat' => 40.4168, 'lng' => -3.7038, 'accuracy' => 250000, 'denied' => false,
+    ])->assertRedirect()->assertSessionHasNoErrors();
+
+    expect(Attendance::withoutGlobalScopes()->where('employee_id', $this->employee->id)->exists())->toBeTrue();
+});
+
 it('records a check-in with GPS and a selfie', function (): void {
     Storage::fake('local');
 

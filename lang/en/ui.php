@@ -1541,6 +1541,7 @@ return [
         'done_for_today' => 'See you tomorrow',
         // Location + camera
         'getting_location' => 'Getting location…',
+        'checkin_failed' => 'No se pudo fichar. Inténtalo de nuevo. / Check-in failed. Please try again.',
         'location_off' => 'No location (permission denied). Your check-in will still be recorded.',
         'camera_prompt' => 'Take a photo to check in',
         'take_photo' => 'Take photo',

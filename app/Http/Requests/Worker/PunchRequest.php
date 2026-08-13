@@ -31,7 +31,11 @@ class PunchRequest extends FormRequest
         return [
             'lat' => ['nullable', 'numeric', 'between:-90,90'],
             'lng' => ['nullable', 'numeric', 'between:-180,180'],
-            'accuracy' => ['nullable', 'numeric', 'min:0', 'max:100000'],
+            // No upper cap: a coarse IP/network fix can report accuracy in the
+            // tens/hundreds of thousands of metres. GPS is EVIDENCE, not a gate —
+            // an imprecise reading must never 422 the punch (it just reads red on
+            // the admin accuracy badge). Only a negative value is nonsense.
+            'accuracy' => ['nullable', 'numeric', 'min:0'],
             'denied' => ['nullable', 'boolean'],
             // Check-in only; the selfie. Same cap and mimes as other uploads.
             'photo' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:8192'],

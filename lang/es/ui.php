@@ -1546,6 +1546,7 @@ return [
         'done_for_today' => 'Hasta mañana',
         // Location + camera
         'getting_location' => 'Obteniendo ubicación…',
+        'checkin_failed' => 'No se pudo fichar. Inténtalo de nuevo. / Check-in failed. Please try again.',
         'location_off' => 'Sin ubicación (permiso denegado). Se registrará el fichaje igualmente.',
         'camera_prompt' => 'Hágase una foto para fichar la entrada',
         'take_photo' => 'Hacer foto',

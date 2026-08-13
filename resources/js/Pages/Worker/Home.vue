@@ -143,8 +143,12 @@ const cameraFailed = ref(false);
 const photoBlob = ref(null);
 const busy = ref(false);
 const statusLine = ref('');
+// A check-in failure must never be silent — the worker sees why (before this,
+// a rejected punch just reset the screen with no feedback).
+const checkInError = ref('');
 
 async function beginCheckIn() {
+    checkInError.value = '';
     // Selfie consent withheld → skip the camera step entirely and punch in.
     if (!props.consent.photo) {
         submitCheckIn();
@@ -186,6 +190,10 @@ async function submitCheckIn() {
 
     router.post('/worker/check-in', data, {
         forceFormData: true,
+        onError: (errors) => {
+            // Show the first server error instead of silently resetting.
+            checkInError.value = Object.values(errors)[0] ?? t('worker.checkin_failed');
+        },
         onFinish: () => {
             busy.value = false;
             statusLine.value = '';
@@ -403,6 +411,11 @@ const noteTextForm = useForm({ attendance_id: null, text_note: '', duration_seco
             </div>
 
             <template v-else>
+                <!-- A failed punch is shown here rather than silently swallowed -->
+                <div v-if="checkInError" class="mb-3 rounded-lg bg-status-danger-soft px-4 py-3 text-center text-sm text-status-danger">
+                    {{ checkInError }}
+                </div>
+
                 <!-- Weekend work offer for this worker (check-in unlocked) -->
                 <div v-if="weekend.offer" class="mb-3 rounded-lg border border-accent/40 bg-accent-soft p-4 text-center shadow-card">
                     <p class="text-sm font-semibold text-accent">{{ $t('worker.weekend_offer_title') }}</p>
