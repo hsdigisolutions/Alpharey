@@ -5,11 +5,13 @@ use App\Models\Attendance;
 use App\Models\Company;
 use App\Models\Employee;
 use App\Models\Expense;
+use App\Models\Invoice;
 use App\Models\Project;
 use App\Models\Subcontractor;
 use App\Models\SubcontractorWorker;
 use App\Models\User;
 use App\Models\UserModulePermission;
+use App\Services\Reports\ProfitabilityService;
 use App\Services\Subcontractors\SubcontractorService;
 
 beforeEach(function (): void {
@@ -133,6 +135,38 @@ it('creates a linked expense on the subcontractor company when a payment is paid
     expect($expense->company_id)->toBe($this->companyA->id)      // the subcontractor's company
         ->and($expense->project_id)->toBe($project->id)
         ->and((float) $expense->total)->toBe(500.0);
+});
+
+it('cannot read or edit another company deal (404)', function (): void {
+    $foreign = makeSubcontractor($this->companyB, null, ['client_amount' => '100', 'agreed_budget' => '80']);
+
+    $this->actingAs($this->admin)->get("/subcontractors/{$foreign->id}")->assertNotFound();
+    $this->actingAs($this->admin)->put("/subcontractors/{$foreign->id}", [
+        'name' => 'Hacked', 'status' => 'active', 'expense_responsibility' => 'thaekedar',
+        'agreed_budget' => 1,
+    ])->assertNotFound();
+
+    expect((float) $foreign->fresh()->agreed_budget)->toBe(80.0);
+});
+
+it('keeps client_amount display-only — project revenue is untouched', function (): void {
+    // Confirmed decision 3: the deal's client_amount tracks OUR margin on the
+    // subcontractor page; the project P&L keeps earning from its billing_type.
+    $this->actingAs($this->admin);
+    $project = Project::factory()->forCompany($this->companyA)->create(['billing_type' => 'fixed']);
+    $invoice = Invoice::factory()->create([
+        'company_id' => $this->companyA->id, 'project_id' => $project->id, 'type' => 'sale',
+        'payment_status' => 'paid', 'total' => '5000', 'invoice_date' => '2026-06-10',
+    ]);
+
+    makeSubcontractor($this->companyA, $project->id, [
+        'client_amount' => '100', 'agreed_budget' => '80', 'expense_responsibility' => 'thaekedar',
+    ]);
+
+    $r = app(ProfitabilityService::class)->forProject($project->fresh());
+
+    expect($r['revenue'])->toBe(5000.0)  // the paid invoice — NOT the deal's 100
+        ->and($r['cost'])->toBe(80.0);   // the budget
 });
 
 it('ships the settlement and expenses payload on the detail page', function (): void {

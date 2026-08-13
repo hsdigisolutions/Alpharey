@@ -4,7 +4,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Status: Phase 9 in progress — hardening (2026-08-01)
 
-### Subcontractor deal model (2026-08-13, in progress — two-scenario spec confirmed)
+### Subcontractor deal model (2026-08-13, COMPLETE — all 5 steps, 835 tests)
+
+**Step 5 (done):** tenancy on the deal fields (cross-company read/edit → 404,
+budget untouched) + client_amount display-only pinned (a fixed project with a
+5.000 € paid invoice keeps that revenue; the deal's 100 € never leaks into
+project revenue — confirmed decision 3). Full suite **835 Pest tests / 4765
+assertions (1 skipped)**, five gates green, deployed to staging.
 
 Rebuilding the thaekedar module around the confirmed DEAL model: client_amount
 / agreed_budget / expense_responsibility (Scenario A thaekedar-bears /
