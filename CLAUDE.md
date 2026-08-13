@@ -4,9 +4,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Status: Phase 9 in progress — hardening (2026-08-01)
 
-### Salary structure build (2026-08-12, in progress — spec confirmed by client)
+### Salary structure build (2026-08-12, COMPLETE — all 8 steps, all 12 acceptance tests green)
 
-Building the confirmed salary-structure spec in 8 ordered increments. **Fix 1
+The confirmed salary-structure spec, built in 8 ordered increments (one commit
+each). Final state: **817 Pest tests / 4682 assertions (1 skipped)** · all five
+gates green · the spec's 12 acceptance tests pinned (`SalaryStructureAcceptanceTest`
+carries the exact-figure cases 1/2/3/5/12; 4, 6–11 live in PayrollTest,
+DesignationRateTest, ProfitabilityDailyTest, ProfitabilityTest, EmployeesTest).
+
+**Fix 1
 (done):** `project_designation_rates.worker_rate` is OUT of the pay path — the
 old `AttendanceService::applyProjectDesignationRate()` (which froze the project
 worker_rate over the profile rate and rewrote day_type) is deleted; every day is
