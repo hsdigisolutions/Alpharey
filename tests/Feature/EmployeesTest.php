@@ -52,6 +52,19 @@ it('creates an employee with a generated code and records wage history', functio
         ->and($employee->getAttribute('wage_rate'))->toBe('14.5');
 });
 
+it('rejects a zero rate on every wage field — spec acceptance test 11', function (): void {
+    foreach (['wage_rate', 'daily_wage', 'base_salary', 'per_meter_rate'] as $field) {
+        $this->actingAs($this->admin)->post('/employees', [
+            'full_name' => 'Zero Rate', 'wage_type' => 'daily', $field => 0, 'active' => true,
+        ])->assertSessionHasErrors($field);
+    }
+
+    // Leaving the field empty is still fine — 0 is the only rejected value.
+    $this->actingAs($this->admin)->post('/employees', [
+        'full_name' => 'No Rate Yet', 'wage_type' => 'daily', 'active' => true,
+    ])->assertRedirect()->assertSessionHasNoErrors();
+});
+
 it('grants and revokes the PWA vehicle-access flag through the employee form', function (): void {
     // Grant on create — the flag is what unlocks the worker vehicle module.
     $this->actingAs($this->admin)->post('/employees', [

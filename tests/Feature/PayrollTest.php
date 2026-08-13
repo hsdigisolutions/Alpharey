@@ -135,6 +135,25 @@ it('deducts approved advances earmarked for the month', function (): void {
         ->and((float) $payroll->getAttribute('net_amount'))->toBe(270.0); // 320 - 50
 });
 
+it('stores the Tarifa figure from the field matching the wage type', function (): void {
+    // A daily worker whose hourly column is null (wage-history sync nulls the
+    // non-matching columns): the payroll rate must show the DAILY wage, not 0.
+    $employee = Employee::factory()->forCompany($this->company)->create([
+        'wage_type' => 'daily', 'daily_wage' => '50', 'wage_rate' => null,
+    ]);
+    Attendance::factory()->create([
+        'company_id' => $this->company->id, 'employee_id' => $employee->id,
+        'date' => $this->month.'-04', 'status' => 'present', 'day_type' => 'full',
+        'wage_type_snapshot' => 'daily', 'wage_rate_snapshot' => '50',
+        'hourly_rate_snapshot' => '6.25', 'hours_worked' => '8', 'total_amount' => '50',
+    ]);
+
+    app(PayrollService::class)->calculateMonth($this->company->id, $this->month);
+
+    $payroll = Payroll::withoutGlobalScopes()->where('employee_id', $employee->id)->firstOrFail();
+    expect((float) $payroll->getAttribute('wage_rate'))->toBe(50.0); // daily_wage, not the null hourly column
+});
+
 it('pulls worker project expenses into the month', function (): void {
     $employee = hourlyEmployee(rate: 20, days: 1, hours: 8); // 160 gross
     $project = Project::factory()->forCompany($this->company)->create();

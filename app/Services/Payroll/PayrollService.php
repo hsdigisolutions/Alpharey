@@ -196,7 +196,16 @@ class PayrollService
         $payroll->attendance_hours = (string) $hours;
         $payroll->overtime_hours = (string) $otHours;
         $payroll->wage_type = $wageType;
-        $payroll->wage_rate = (string) ($employee->getAttribute('wage_rate') ?? 0);
+        // The Tarifa figure: the rate matching the worker's OWN wage type.
+        // Reading the hourly `wage_rate` column for every type left daily /
+        // monthly / per-meter workers showing 0,00 € (their hourly column is
+        // null once wage history syncs the profile).
+        $payroll->wage_rate = (string) (match ($wageType) {
+            WageType::Daily => $employee->getAttribute('daily_wage'),
+            WageType::Monthly => $employee->getAttribute('base_salary'),
+            WageType::PerMeter => $employee->getAttribute('per_meter_rate'),
+            default => $employee->getAttribute('wage_rate'),
+        } ?? 0);
 
         $payroll->base_salary = (string) round($baseSalary, 2);
         $payroll->days_amount = (string) round($daysAmount, 2);

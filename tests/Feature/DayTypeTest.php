@@ -55,6 +55,19 @@ it('pays a per-meter day at quantity × per-meter rate', function (): void {
     expect((float) $row->total_amount)->toBe(150.0); // 30 × 5
 });
 
+it('prices a partial day at daily ÷ 8 × hours when the worker has no hourly rate', function (): void {
+    // A pure dehadi worker: daily 80, NO hourly rate. A 3-hour partial day must
+    // price at 80 ÷ 8 × 3 = 30 €, never 0 € (spec C3/C4 fallback).
+    $daily = Employee::factory()->forCompany($this->company)->create([
+        'wage_type' => 'daily', 'daily_wage' => '80', 'wage_rate' => null,
+    ]);
+
+    $row = logDay($daily->id, '2026-07-06', 'hourly', ['hours_worked' => 3]);
+
+    expect((float) $row->hourly_rate_snapshot)->toBe(10.0) // 80 ÷ 8
+        ->and((float) $row->total_amount)->toBe(30.0);
+});
+
 // ── Never trust a client-sent total ─────────────────────────────────────────
 
 it('always computes the total server-side, ignoring a posted total', function (): void {

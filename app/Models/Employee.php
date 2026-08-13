@@ -220,4 +220,23 @@ class Employee extends Model
 
         return sprintf('E%d-%04d', $companyId, $last + 1);
     }
+
+    /**
+     * The rate to DISPLAY for this worker: the field matching their own wage
+     * type. Reading the hourly `wage_rate` column for every type shows 0/blank
+     * for daily, monthly and per-meter workers (wage-history sync nulls the
+     * non-matching columns). Display only — pricing always goes through
+     * WageRateService.
+     */
+    public function displayRate(): ?string
+    {
+        $value = match ($this->wage_type) {
+            WageType::Daily => $this->getAttribute('daily_wage'),
+            WageType::Monthly => $this->getAttribute('base_salary'),
+            WageType::PerMeter => $this->getAttribute('per_meter_rate'),
+            default => $this->getAttribute('wage_rate'),
+        };
+
+        return $value !== null ? (string) $value : null;
+    }
 }

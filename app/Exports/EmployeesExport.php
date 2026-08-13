@@ -75,7 +75,9 @@ class EmployeesExport implements FromCollection, WithHeadings, WithMapping
         ];
 
         if ($this->withWages) {
-            $row[] = $employee->getAttribute('wage_rate');
+            // The rate matching the worker's own wage type — the raw hourly
+            // column is blank for daily/monthly/per-meter workers.
+            $row[] = $employee->displayRate();
             $row[] = $employee->getAttribute('base_salary');
             $row[] = $employee->commission_percent;
         }

@@ -73,8 +73,11 @@ class EmployeeController extends Controller
                 'city' => $employee->city,
                 'mobile' => $employee->mobile,
                 'wage_type' => $employee->wage_type?->value,
-                // Salary figures only for roles that manage wages (server-side filter)
-                'wage_rate' => $canSeeWages ? $employee->getAttribute('wage_rate') : null,
+                // Salary figures only for roles that manage wages (server-side filter).
+                // The Tarifa column shows the rate matching the worker's OWN wage
+                // type — reading the hourly column for every type showed 0/blank
+                // for daily, monthly and per-meter workers.
+                'wage_rate' => $canSeeWages ? $employee->displayRate() : null,
                 'base_salary' => $canSeeWages ? $employee->getAttribute('base_salary') : null,
                 'commission_percent' => $canSeeWages ? $employee->commission_percent : null,
                 'active' => $employee->active,

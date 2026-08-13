@@ -44,10 +44,13 @@ class StoreEmployeeRequest extends FormRequest
             'default_check_in' => ['nullable', 'date_format:H:i'],
             'default_check_out' => ['nullable', 'date_format:H:i'],
             'wage_type' => ['nullable', Rule::enum(WageType::class)],
-            'wage_rate' => ['nullable', 'numeric', 'min:0', 'max:99999'],
-            'base_salary' => ['nullable', 'numeric', 'min:0', 'max:999999'],
-            'daily_wage' => ['nullable', 'numeric', 'min:0', 'max:99999'],
-            'per_meter_rate' => ['nullable', 'numeric', 'min:0', 'max:99999'],
+            // A filled rate must be a REAL rate — 0 is rejected (spec acceptance
+            // test 11): a 0 silently skips wage-history seeding and prices every
+            // day at nothing. Leave the field empty instead.
+            'wage_rate' => ['nullable', 'numeric', 'gt:0', 'max:99999'],
+            'base_salary' => ['nullable', 'numeric', 'gt:0', 'max:999999'],
+            'daily_wage' => ['nullable', 'numeric', 'gt:0', 'max:99999'],
+            'per_meter_rate' => ['nullable', 'numeric', 'gt:0', 'max:99999'],
             'commission_percent' => ['nullable', 'numeric', 'min:0', 'max:100'],
             'payment_method' => ['nullable', Rule::enum(PaymentMethod::class)],
             'overtime_policy_id' => ['nullable', 'integer', Rule::exists('overtime_policies', 'id')],

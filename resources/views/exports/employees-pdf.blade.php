@@ -42,7 +42,9 @@
                     <td>{{ $employee->city }}</td>
                     <td>{{ $employee->wage_type?->value }}</td>
                     @if ($withWages)
-                        <td class="num">{{ $employee->getAttribute('wage_rate') }}</td>
+                        {{-- The rate matching the worker's own wage type — the raw
+                             hourly column is blank for daily/monthly/per-meter. --}}
+                        <td class="num">{{ $employee->displayRate() }}</td>
                         <td class="num">{{ $employee->getAttribute('base_salary') }}</td>
                     @endif
                     <td>{{ $employee->active ? 'Sí / Yes' : 'No' }}</td>

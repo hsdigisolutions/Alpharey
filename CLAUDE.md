@@ -21,6 +21,18 @@ DesignationRateTest inverted (acceptance test 6: profile 50 beats worker_rate
 80); ProfitabilityDailyTest now pins acceptance test 7 (income 600 from client
 rates, cost 160 from profile rates).
 
+**Fixes 4+5+8 (done):** (4) partial-day fallback — a daily worker with no
+hourly rate on a partial (hourly-graded) day prices at `daily ÷ 8 × hours`,
+never 0 € (`applySnapshots` derives `$partialHourly`). (5) Tarifa — the payroll
+row's `wage_rate` now stores the rate matching the worker's OWN wage type
+(daily→daily_wage, monthly→base_salary, per-meter→per_meter_rate) instead of
+the hourly column (null for those types after wage-history sync → showed 0);
+same fix on the Employees list payload, Excel export and PDF via a new
+`Employee::displayRate()` (display-only — pricing still goes through
+WageRateService). (8) zero-rate validation — the four employee-form rate fields
+are `gt:0` when filled (acceptance test 11); empty stays allowed; wage-history
+already rejected 0.
+
 **Every screen 01–26 is built (Phase 8 complete).** Phase 9 is hardening, UAT, and
 launch — no new screens. Current: **781 Pest tests / 4526 assertions passing (1
 skipped) · Pint clean · Larastan level 6 clean · `composer audit` + `npm audit`

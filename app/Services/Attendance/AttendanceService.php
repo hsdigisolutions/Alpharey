@@ -296,8 +296,13 @@ class AttendanceService
 
         $rates = $this->wageRates->ratesForDate($employee, $attendance->date);
 
+        // Partial-day fallback (spec C3/C4): a daily worker with no hourly rate
+        // on a partial day is priced at daily_wage ÷ 8 × hours — never 0 €.
+        $partialHourly = $rates['hourly']
+            ?? ($rates['daily'] !== null ? round($rates['daily'] / 8, 2) : null);
+
         [$wageType, $rate, $hourly] = match ($dayType) {
-            DayType::Hourly => [WageType::Hourly, $rates['hourly'], $rates['hourly']],
+            DayType::Hourly => [WageType::Hourly, $partialHourly, $partialHourly],
             DayType::PerMeter => [WageType::PerMeter, $rates['per_meter'], null],
             // full / half are both daily-rate jornadas
             default => [
