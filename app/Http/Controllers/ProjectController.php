@@ -4,6 +4,8 @@ namespace App\Http\Controllers;
 
 use App\Enums\MeasurementStatus;
 use App\Enums\MeasurementType;
+use App\Enums\ProductionTaskCategory;
+use App\Enums\ProductionTaskStatus;
 use App\Enums\ProjectPriority;
 use App\Enums\ProjectRateType;
 use App\Enums\ProjectStatus;
@@ -16,6 +18,7 @@ use App\Models\Employee;
 use App\Models\Expense;
 use App\Models\Invoice;
 use App\Models\Measurement;
+use App\Models\ProductionTask;
 use App\Models\Project;
 use App\Models\ProjectDesignationRate;
 use App\Services\Documents\DocumentStatus;
@@ -233,6 +236,16 @@ class ProjectController extends Controller
                 'delete' => Gate::allows('measurements.delete'),
                 'approve' => Gate::allows('measurements.approve'),
             ],
+            // Tareas tab — production tasks (internal planned-vs-actual tracker).
+            'projectTasks' => Gate::allows('production_tasks.view') ? $this->projectTasks($project) : null,
+            'taskCategories' => array_map(fn (ProductionTaskCategory $c) => $c->value, ProductionTaskCategory::cases()),
+            'taskStatuses' => array_map(fn (ProductionTaskStatus $s) => $s->value, ProductionTaskStatus::cases()),
+            'canManageTasks' => [
+                'view' => Gate::allows('production_tasks.view'),
+                'create' => Gate::allows('production_tasks.create'),
+                'edit' => Gate::allows('production_tasks.edit'),
+                'delete' => Gate::allows('production_tasks.delete'),
+            ],
             'can' => [
                 'edit' => Gate::allows('projects.edit'),
                 'delete' => Gate::allows('projects.delete'),
@@ -409,6 +422,49 @@ class ProjectController extends Controller
                 'billing_linked' => $project->billing_type?->value === 'per_meter',
             ],
             'per_worker' => $perWorker,
+        ];
+    }
+
+    /**
+     * This project's production tasks + the advisory weighted overall progress.
+     *
+     * @return array<string, mixed>
+     */
+    private function projectTasks(Project $project): array
+    {
+        $tasks = ProductionTask::query()
+            ->where('project_id', $project->id)
+            ->orderBy('category')->orderBy('name')
+            ->get();
+
+        // Weighted overall progress (advisory): Σ(pct × weightage) / Σ(weightage);
+        // if no weightage is set, fall back to the simple mean of the percentages.
+        $weightSum = (float) $tasks->sum(fn (ProductionTask $t) => (float) $t->weightage);
+        if ($weightSum > 0) {
+            $overall = round((float) $tasks->sum(fn (ProductionTask $t) => $t->progressPercent() * (float) $t->weightage) / $weightSum, 1);
+        } else {
+            $overall = $tasks->isNotEmpty() ? round((float) $tasks->avg(fn (ProductionTask $t) => $t->progressPercent()), 1) : 0.0;
+        }
+
+        return [
+            'tasks' => $tasks->map(fn (ProductionTask $t): array => [
+                'id' => $t->id,
+                'name' => $t->name,
+                'category' => $t->category->value,
+                'house_number' => $t->house_number,
+                'unit' => $t->unit,
+                'unit_price' => (float) $t->unit_price,
+                'planned_quantity' => (float) $t->planned_quantity,
+                'completed_quantity' => (float) $t->completed_quantity,
+                'weightage' => (float) $t->weightage,
+                'status' => $t->status->value,
+                'progress' => $t->progressPercent(),
+                'health' => $t->health(),
+                'notes' => $t->notes,
+            ])->values()->all(),
+            'overall_progress' => min(100.0, $overall),
+            // Advisory: warn (do not block) when the weightage does not sum to 100.
+            'weightage_sum' => round($weightSum, 2),
         ];
     }
 

@@ -58,6 +58,10 @@ const props = defineProps({
     measurementTypes: { type: Array, default: () => [] },
     measurementEmployees: { type: Array, default: () => [] },
     canManageMeasurements: { type: Object, default: () => ({}) },
+    projectTasks: { type: Object, default: null },
+    taskCategories: { type: Array, default: () => [] },
+    taskStatuses: { type: Array, default: () => [] },
+    canManageTasks: { type: Object, default: () => ({}) },
     can: { type: Object, required: true },
 });
 
@@ -70,6 +74,7 @@ const tabs = [
     { key: 'workers', labelKey: 'projects.tab_workers', count: props.workers.length },
     { key: 'attendance', labelKey: 'projects.tab_attendance' },
     { key: 'measurements', labelKey: 'projects.tab_measurements' },
+    ...(props.canManageTasks?.view ? [{ key: 'tasks', labelKey: 'projects.tab_tasks', count: props.projectTasks?.tasks.length }] : []),
     { key: 'invoices', labelKey: 'projects.tab_invoices' },
     { key: 'expenses', labelKey: 'projects.tab_expenses' },
     { key: 'documents', labelKey: 'projects.tab_documents', count: props.documents.filter((d) => d.has_file).length },
@@ -217,6 +222,39 @@ const measRejecting = ref(null);
 function openRejectMeas(m) { measRejecting.value = m; measRejectForm.reset(); measRejectForm.clearErrors(); }
 function submitRejectMeas() {
     measRejectForm.post(`/measurements/${measRejecting.value.id}/reject`, { preserveScroll: true, onSuccess: () => (measRejecting.value = null) });
+}
+
+// ── Production tasks (Tareas tab) ───────────────────────────────────────────
+const taskHealth = { ok: 'bg-status-ok', warn: 'bg-status-warn', danger: 'bg-status-danger' };
+const taskStatusVariant = { open: 'neutral', in_progress: 'info', done: 'ok' };
+
+const blankTaskRow = () => ({ name: '', category: 'other', house_number: '', unit: 'm²', unit_price: 0, planned_quantity: null, weightage: 0, status: 'open', notes: '' });
+
+// Bulk add — a grid of rows.
+const bulkOpen = ref(false);
+const bulkForm = useForm({ tasks: [blankTaskRow()] });
+function openBulk() { bulkForm.tasks = [blankTaskRow()]; bulkForm.clearErrors(); bulkOpen.value = true; }
+function addBulkRow() { bulkForm.tasks.push(blankTaskRow()); }
+function removeBulkRow(i) { if (bulkForm.tasks.length > 1) bulkForm.tasks.splice(i, 1); }
+function submitBulk() {
+    bulkForm.post(`/projects/${props.project.id}/tasks`, { preserveScroll: true, onSuccess: () => (bulkOpen.value = false) });
+}
+
+// Edit a single task.
+const taskEditOpen = ref(false);
+const taskForm = useForm(blankTaskRow());
+const editingTaskId = ref(null);
+function openTaskEdit(t) {
+    editingTaskId.value = t.id;
+    Object.assign(taskForm, { name: t.name, category: t.category, house_number: t.house_number ?? '', unit: t.unit ?? 'm²', unit_price: t.unit_price, planned_quantity: t.planned_quantity, weightage: t.weightage, status: t.status, notes: t.notes ?? '' });
+    taskForm.clearErrors();
+    taskEditOpen.value = true;
+}
+function submitTaskEdit() {
+    taskForm.put(`/projects/${props.project.id}/tasks/${editingTaskId.value}`, { preserveScroll: true, onSuccess: () => (taskEditOpen.value = false) });
+}
+function deleteTask(t) {
+    askDelete(t.name, () => router.delete(`/projects/${props.project.id}/tasks/${t.id}`, { preserveScroll: true }));
 }
 
 // immutable notes
@@ -758,6 +796,76 @@ function destroy() {
                 </template>
             </div>
 
+            <!-- Tareas — production tasks (internal planned-vs-actual) -->
+            <div v-else-if="tab === 'tasks'" class="space-y-4">
+                <div v-if="!canManageTasks.view" class="py-8 text-center text-sm text-muted">{{ $t('common.no_permission') }}</div>
+                <template v-else-if="projectTasks">
+                    <!-- Overall weighted progress -->
+                    <VCard>
+                        <div class="mb-1 flex items-center justify-between text-sm">
+                            <span class="font-medium"><Bilingual k="production_tasks.overall" inline /></span>
+                            <span class="tabular-nums font-semibold">{{ projectTasks.overall_progress }}%</span>
+                        </div>
+                        <div class="h-2.5 overflow-hidden rounded-full bg-surface-sunken">
+                            <div class="h-full rounded-full bg-accent transition-all" :style="{ width: Math.min(100, projectTasks.overall_progress) + '%' }" />
+                        </div>
+                        <p v-if="projectTasks.tasks.length && Math.round(projectTasks.weightage_sum) !== 100"
+                            class="mt-2 text-xs text-status-warn">
+                            {{ $t('production_tasks.weightage_warn', { sum: projectTasks.weightage_sum }) }}
+                        </p>
+                    </VCard>
+
+                    <div class="flex justify-end">
+                        <VButton v-if="canManageTasks.create" icon="plus" @click="openBulk">
+                            <Bilingual k="production_tasks.add" inline />
+                        </VButton>
+                    </div>
+
+                    <VCard :padded="false">
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-sm">
+                                <thead class="bg-surface-sunken text-[11px] uppercase tracking-wide text-muted">
+                                    <tr>
+                                        <th class="px-3 py-2 text-start"><Bilingual k="production_tasks.name" inline /></th>
+                                        <th class="px-3 py-2 text-start"><Bilingual k="production_tasks.category" inline /></th>
+                                        <th class="px-3 py-2 text-start"><Bilingual k="production_tasks.house" inline /></th>
+                                        <th class="px-3 py-2 text-end"><Bilingual k="production_tasks.planned" inline /></th>
+                                        <th class="px-3 py-2 text-end"><Bilingual k="production_tasks.done" inline /></th>
+                                        <th class="px-3 py-2 text-start"><Bilingual k="production_tasks.progress" inline /></th>
+                                        <th class="px-3 py-2 text-start"><Bilingual k="production_tasks.status" inline /></th>
+                                        <th class="px-3 py-2 text-end"><Bilingual k="common.actions" inline /></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr v-for="t in projectTasks.tasks" :key="t.id" class="border-b border-line last:border-0 hover:bg-surface-hover">
+                                        <td class="px-3 py-2 font-medium">{{ t.name }}</td>
+                                        <td class="px-3 py-2 text-ink-soft">{{ $t(`production_tasks.cat_${t.category}`) }}</td>
+                                        <td class="px-3 py-2 text-ink-soft">{{ t.house_number ?? '—' }}</td>
+                                        <td class="tabular-nums px-3 py-2 text-end">{{ t.planned_quantity }} {{ t.unit }}</td>
+                                        <td class="tabular-nums px-3 py-2 text-end">{{ t.completed_quantity }}</td>
+                                        <td class="px-3 py-2">
+                                            <div class="flex items-center gap-2">
+                                                <div class="h-2 w-24 overflow-hidden rounded-full bg-surface-sunken">
+                                                    <div class="h-full rounded-full" :class="taskHealth[t.health]" :style="{ width: t.progress + '%' }" />
+                                                </div>
+                                                <span class="tabular-nums text-xs">{{ t.progress }}%</span>
+                                            </div>
+                                        </td>
+                                        <td class="px-3 py-2"><VBadge :status="taskStatusVariant[t.status]">{{ $t(`production_tasks.st_${t.status}`) }}</VBadge></td>
+                                        <td class="px-3 py-2 text-end">
+                                            <VButton v-if="canManageTasks.edit" variant="ghost" size="sm" icon="edit" @click="openTaskEdit(t)" />
+                                            <VButton v-if="canManageTasks.delete" variant="ghost" size="sm" icon="trash" @click="deleteTask(t)" />
+                                        </td>
+                                    </tr>
+                                    <tr v-if="projectTasks.tasks.length === 0"><td colspan="8" class="px-3 py-6 text-center text-muted">{{ $t('production_tasks.empty') }}</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </VCard>
+                    <p class="text-xs text-muted">{{ $t('production_tasks.internal_hint') }}</p>
+                </template>
+            </div>
+
             <!-- Fallback for any other tab -->
             <VCard v-else>
                 <p class="py-8 text-center text-sm text-muted"><Bilingual k="common.coming_soon" class="items-center" /></p>
@@ -815,6 +923,57 @@ function destroy() {
             <template #footer>
                 <VButton variant="ghost" @click="measRejecting = null"><Bilingual k="common.cancel" inline /></VButton>
                 <VButton variant="danger" type="submit" form="meas-reject-form" :loading="measRejectForm.processing"><Bilingual k="measurements.reject" inline /></VButton>
+            </template>
+        </VModal>
+
+        <!-- Bulk add production tasks -->
+        <VModal :open="bulkOpen" title-key="production_tasks.add" size="xl" @close="bulkOpen = false">
+            <div class="space-y-2">
+                <div v-for="(row, i) in bulkForm.tasks" :key="i" class="grid grid-cols-12 items-start gap-2">
+                    <VInput v-model="row.name" class="col-span-3" :placeholder="$t('production_tasks.name')" />
+                    <VSelect v-model="row.category" class="col-span-2">
+                        <option v-for="c in taskCategories" :key="c" :value="c">{{ $t(`production_tasks.cat_${c}`) }}</option>
+                    </VSelect>
+                    <VInput v-model="row.house_number" class="col-span-1" :placeholder="$t('production_tasks.house')" />
+                    <VInput v-model="row.unit" class="col-span-1" placeholder="m²" />
+                    <VInput v-model="row.planned_quantity" type="number" step="0.01" min="0" class="col-span-2" :placeholder="$t('production_tasks.planned')" />
+                    <VInput v-model="row.weightage" type="number" step="0.01" min="0" max="100" class="col-span-1" placeholder="%" />
+                    <VSelect v-model="row.status" class="col-span-1">
+                        <option v-for="s in taskStatuses" :key="s" :value="s">{{ $t(`production_tasks.st_${s}`) }}</option>
+                    </VSelect>
+                    <button type="button" class="col-span-1 rounded-sm p-1.5 text-muted hover:text-status-danger" :disabled="bulkForm.tasks.length === 1" @click="removeBulkRow(i)">
+                        <AppIcon name="trash" class="h-3.5 w-3.5" />
+                    </button>
+                </div>
+                <VButton variant="ghost" size="sm" icon="plus" @click="addBulkRow"><Bilingual k="production_tasks.add_row" inline /></VButton>
+                <p class="text-xs text-muted">{{ $t('production_tasks.unit_price_hint') }}</p>
+            </div>
+            <template #footer>
+                <VButton variant="ghost" @click="bulkOpen = false"><Bilingual k="common.cancel" inline /></VButton>
+                <VButton type="button" :loading="bulkForm.processing" @click="submitBulk"><Bilingual k="common.save" inline /></VButton>
+            </template>
+        </VModal>
+
+        <!-- Edit a single production task -->
+        <VModal :open="taskEditOpen" title-key="production_tasks.edit" @close="taskEditOpen = false">
+            <form id="task-edit-form" class="grid gap-4 sm:grid-cols-2" @submit.prevent="submitTaskEdit">
+                <FormField k="production_tasks.name" :error="taskForm.errors.name" required><VInput v-model="taskForm.name" /></FormField>
+                <FormField k="production_tasks.category" :error="taskForm.errors.category" required>
+                    <VSelect v-model="taskForm.category"><option v-for="c in taskCategories" :key="c" :value="c">{{ $t(`production_tasks.cat_${c}`) }}</option></VSelect>
+                </FormField>
+                <FormField k="production_tasks.house" :error="taskForm.errors.house_number"><VInput v-model="taskForm.house_number" /></FormField>
+                <FormField k="production_tasks.unit" :error="taskForm.errors.unit"><VInput v-model="taskForm.unit" /></FormField>
+                <FormField k="production_tasks.planned" :error="taskForm.errors.planned_quantity" required><VInput v-model="taskForm.planned_quantity" type="number" step="0.01" min="0" /></FormField>
+                <FormField k="production_tasks.unit_price" :error="taskForm.errors.unit_price"><VInput v-model="taskForm.unit_price" type="number" step="0.01" min="0" /></FormField>
+                <FormField k="production_tasks.weightage" :error="taskForm.errors.weightage"><VInput v-model="taskForm.weightage" type="number" step="0.01" min="0" max="100" /></FormField>
+                <FormField k="production_tasks.status" :error="taskForm.errors.status" required>
+                    <VSelect v-model="taskForm.status"><option v-for="s in taskStatuses" :key="s" :value="s">{{ $t(`production_tasks.st_${s}`) }}</option></VSelect>
+                </FormField>
+                <FormField k="production_tasks.notes" class="sm:col-span-2" :error="taskForm.errors.notes"><VTextarea v-model="taskForm.notes" :rows="2" /></FormField>
+            </form>
+            <template #footer>
+                <VButton variant="ghost" @click="taskEditOpen = false"><Bilingual k="common.cancel" inline /></VButton>
+                <VButton type="submit" form="task-edit-form" :loading="taskForm.processing"><Bilingual k="common.save" inline /></VButton>
             </template>
         </VModal>
 

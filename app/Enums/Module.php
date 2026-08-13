@@ -26,6 +26,7 @@ enum Module: string
     case Inventory = 'inventory';
     case Deployments = 'deployments';
     case Subcontractors = 'subcontractors';
+    case ProductionTasks = 'production_tasks';
 
     /**
      * The actions that apply to this module — the "—" cells of the
@@ -68,6 +69,8 @@ enum Module: string
             self::Measurements => [$a::View, $a::Create, $a::Edit, $a::Delete, $a::Export, $a::Approve],
             // Leave: CRUD + approval, no export feature.
             self::LeaveManagement => [$a::View, $a::Create, $a::Edit, $a::Delete, $a::Approve],
+            // Production tasks: internal CRUD (no export/approval yet).
+            self::ProductionTasks => [$a::View, $a::Create, $a::Edit, $a::Delete],
         };
     }
 }

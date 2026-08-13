@@ -41,6 +41,7 @@ use App\Http\Controllers\MeasurementController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\PayrollController;
+use App\Http\Controllers\ProductionTaskController;
 use App\Http\Controllers\ProjectController;
 use App\Http\Controllers\ProjectDesignationRateController;
 use App\Http\Controllers\ProjectWorkerController;
@@ -264,6 +265,11 @@ Route::middleware(['auth', 'active', 'two_factor', 'not_worker'])->group(functio
     // Feature 2 — per-designation rates (client + worker) on a project.
     Route::post('/projects/{project}/designation-rates', [ProjectDesignationRateController::class, 'store'])->name('projects.designation-rates.store');
     Route::delete('/projects/{project}/designation-rates/{designationRate}', [ProjectDesignationRateController::class, 'destroy'])->name('projects.designation-rates.destroy');
+
+    // Production tasks — internal planned-vs-actual tracker, nested under project.
+    Route::post('/projects/{project}/tasks', [ProductionTaskController::class, 'store'])->name('projects.tasks.store');
+    Route::put('/projects/{project}/tasks/{task}', [ProductionTaskController::class, 'update'])->name('projects.tasks.update');
+    Route::delete('/projects/{project}/tasks/{task}', [ProductionTaskController::class, 'destroy'])->name('projects.tasks.destroy');
     Route::post('/projects/{project}/remarks', [ProjectWorkerController::class, 'storeRemark'])->name('projects.remarks.store');
     Route::post('/projects/{project}/alerts', [ProjectWorkerController::class, 'storeAlert'])->name('projects.alerts.store');
 

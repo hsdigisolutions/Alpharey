@@ -50,6 +50,27 @@ the standalone modal. (A3) Excel + PDF export (`MeasurementsExport` +
 Tests: reject-reason, resubmit-to-pending, approved-locked, export+audit
 (MeasurementsTest, 10). **847 Pest tests.**
 
+**Phase B (done) — Production Tasks** (a SEPARATE internal tracker; never client
+billing). New `Module::ProductionTasks` (view/create/edit/delete — auto-extends
+the gate matrix + fuzz; **PermissionFuzz gate count 152→160, PermissionMatrix
+rows 19→20**). Extended the Phase-4 `production_tasks` table (migration
+`2026_08_13_000003`): category (`ProductionTaskCategory`: civil/electrical/
+plumbing/finishing/other), house_number, unit, `unit_price` (INTERNAL cost,
+never client billing), planned_quantity, completed_quantity (recomputed from
+progress in Phase D — NOT mass-assignable), weightage (advisory), status
+(`ProductionTaskStatus`: open/in_progress/done), notes. `ProductionTask` model
+with `progressPercent()` (0-planned safe) + `health()` traffic light (green ≥90
+· amber ≥50 · red below). `ProductionTaskController` nested under project
+(bulk-add via `tasks[]`, edit, delete; each re-checks task→project ownership →
+404). `ProjectController::projectTasks()` ships the list + advisory **weighted
+overall progress** (Σ pct×weightage / Σ weightage, else simple mean) +
+weightage_sum. Project **Tareas** tab: overall progress bar, ≠100 weightage
+warning (advisory, not blocked), per-task table with progress bar + traffic
+light + status, bulk-add grid, edit modal. `TaskProgress` model stubbed for the
+relation (Phase D fills its flow). Tests: `ProductionTaskTest` (7 — bulk add,
+traffic light, weighted payload, completed_quantity injection-proof, tenancy
+404, permission gate). **853 Pest tests.**
+
 ### Subcontractor deal model (2026-08-13, COMPLETE — all 5 steps, 835 tests)
 
 **Step 5 (done):** tenancy on the deal fields (cross-company read/edit → 404,
