@@ -479,6 +479,7 @@ return [
         'tab_docs' => 'Documentos',
         'tab_attendance' => 'Asistencia',
         'tab_payroll' => 'Nómina',
+        'tab_equipment' => 'Equipamiento',
         'tab_notes' => 'Notas',
         'tab_calls' => 'Llamadas',
         'no_payroll' => 'Aún no hay nóminas',
@@ -1186,6 +1187,11 @@ return [
         'edit_category' => 'Editar categoría',
         'serial_number' => 'Nº de serie',
         'serial_hint' => 'Número de serie (para una unidad concreta)',
+        'equip_current' => 'Equipamiento actual',
+        'equip_history' => 'Historial',
+        'equip_none' => 'Sin equipamiento en su poder actualmente.',
+        'equip_current_count' => ':n artículo(s) en su poder',
+        'equip_overdue_count' => ':n vencido(s)',
         'date_from' => 'Desde',
         'date_to' => 'Hasta',
         'category_deleted' => 'Categoría eliminada / Category removed',
@@ -1685,6 +1691,12 @@ return [
     ],
 
     // Feature 4 — sección de vehículos del trabajador (PWA)
+    'worker_equipment' => [
+        'title' => 'Mi equipamiento',
+        'issued' => 'Entregado',
+        'overdue' => 'Devolución pendiente',
+    ],
+
     'worker_vehicles' => [
         'title' => 'Vehículos',
         'available' => 'Disponible',

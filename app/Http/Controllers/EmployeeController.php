@@ -2,11 +2,13 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\EquipmentIssueStatus;
 use App\Enums\WageType;
 use App\Http\Requests\Employees\StoreEmployeeRequest;
 use App\Http\Requests\Employees\UpdateEmployeeRequest;
 use App\Models\Attendance;
 use App\Models\Employee;
+use App\Models\EmployeeEquipmentIssue;
 use App\Models\EmployeeWageRate;
 use App\Models\Payroll;
 use App\Models\Project;
@@ -175,6 +177,9 @@ class EmployeeController extends Controller
             'attendanceProjects' => Gate::allows('attendance.view') ? $this->attendanceProjects() : [],
             'attendanceEmployee' => Gate::allows('attendance.view') ? $this->attendanceEmployeePayload($employee, $canSeeWages, $wageRates) : null,
             'canManageAttendance' => Gate::allows('attendance.create'),
+            // Equipamiento tab — kit issued to this worker (inventory.view gated).
+            // Items only, never any cost figure — a worker's equipment is not pay.
+            'equipmentTab' => Gate::allows('inventory.view') ? $this->equipmentTab($employee) : null,
             // Privacy-consent evidence (GDPR). Only meaningful for a worker with a
             // PWA login; the history is the append-only audit trail.
             'consent' => $this->consentPayload($employee),
@@ -189,6 +194,48 @@ class EmployeeController extends Controller
                 'deleteDocs' => Gate::allows('documents.delete'),
             ],
         ]);
+    }
+
+    /**
+     * Equipamiento tab — kit issued to this worker. Current (still out) vs
+     * history (fully returned), with the overdue flag and total count. Items
+     * only — a worker's equipment carries no cost figure.
+     *
+     * @return array<string, mixed>
+     */
+    private function equipmentTab(Employee $employee): array
+    {
+        $issues = EmployeeEquipmentIssue::query()
+            ->where('employee_id', $employee->id)
+            ->with('item:id,name,sku,serial_number,unit')
+            ->orderByDesc('issue_date')
+            ->get();
+
+        $row = fn (EmployeeEquipmentIssue $i): array => [
+            'id' => $i->id,
+            'item' => $i->item?->name,
+            'serial' => $i->item?->serial_number,
+            'unit' => $i->item?->unit,
+            'issued_quantity' => (float) $i->issued_quantity,
+            'returned_quantity' => (float) $i->returned_quantity,
+            'outstanding' => $i->outstanding(),
+            'issue_date' => $i->issue_date->toDateString(),
+            'expected_return_date' => $i->expected_return_date?->toDateString(),
+            'return_date' => $i->return_date?->toDateString(),
+            'status' => $i->status->value,
+            'overdue' => $i->isOverdue(),
+            'notes' => $i->notes,
+        ];
+
+        $current = $issues->filter(fn (EmployeeEquipmentIssue $i) => $i->status !== EquipmentIssueStatus::Returned);
+        $history = $issues->filter(fn (EmployeeEquipmentIssue $i) => $i->status === EquipmentIssueStatus::Returned);
+
+        return [
+            'current' => $current->map($row)->values()->all(),
+            'history' => $history->map($row)->values()->all(),
+            'count' => $current->count(),
+            'overdue_count' => $current->filter(fn (EmployeeEquipmentIssue $i) => $i->isOverdue())->count(),
+        ];
     }
 
     /**

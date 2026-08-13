@@ -477,6 +477,7 @@ return [
         'tab_docs' => 'Documents',
         'tab_attendance' => 'Attendance',
         'tab_payroll' => 'Payroll',
+        'tab_equipment' => 'Equipment',
         'tab_notes' => 'Notes',
         'tab_calls' => 'Calls',
         'no_payroll' => 'No payroll runs yet',
@@ -1185,6 +1186,11 @@ return [
         'edit_category' => 'Edit category',
         'serial_number' => 'Serial no.',
         'serial_hint' => 'Serial number (for a specific unit)',
+        'equip_current' => 'Current equipment',
+        'equip_history' => 'History',
+        'equip_none' => 'No equipment currently held.',
+        'equip_current_count' => ':n item(s) currently held',
+        'equip_overdue_count' => ':n overdue',
         'date_from' => 'From',
         'date_to' => 'To',
         'category_deleted' => 'Categoría eliminada / Category removed',
@@ -1680,6 +1686,12 @@ return [
     ],
 
     // Feature 4 — worker vehicle section (PWA)
+    'worker_equipment' => [
+        'title' => 'My equipment',
+        'issued' => 'Issued',
+        'overdue' => 'Return due',
+    ],
+
     'worker_vehicles' => [
         'title' => 'Vehicles',
         'available' => 'Available',

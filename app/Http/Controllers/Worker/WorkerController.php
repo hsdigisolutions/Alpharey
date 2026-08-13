@@ -2,11 +2,13 @@
 
 namespace App\Http\Controllers\Worker;
 
+use App\Enums\EquipmentIssueStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Worker\CheckOutRequest;
 use App\Http\Requests\Worker\PunchRequest;
 use App\Models\Attendance;
 use App\Models\Employee;
+use App\Models\EmployeeEquipmentIssue;
 use App\Models\Project;
 use App\Models\Scopes\CompanyScope;
 use App\Services\Attendance\AttendanceService;
@@ -74,7 +76,37 @@ class WorkerController extends Controller
             // ever put on the worker payload — workers see attendance only
             // (client rule 2026-08-08, reinforced here). Not merely UI-hidden.
             'notifications' => $this->notificationsPayload($request),
+            // Mi Equipamiento — the kit this worker currently holds (read-only,
+            // items + serials only; NO cost figure ever reaches a worker).
+            'equipment' => $this->equipmentPayload($employee),
         ]);
+    }
+
+    /**
+     * The worker's current equipment for the PWA (items still out). The worker
+     * has no company session, so the scope is dropped and the query is pinned to
+     * the employee id (same pattern as the dashboard). Items only — no money.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function equipmentPayload(Employee $employee): array
+    {
+        return EmployeeEquipmentIssue::query()
+            ->withoutGlobalScopes()
+            ->where('employee_id', $employee->id)
+            ->where('status', '!=', EquipmentIssueStatus::Returned->value)
+            ->with(['item' => fn ($q) => $q->withoutGlobalScopes()->select('id', 'name', 'serial_number')])
+            ->orderByDesc('issue_date')
+            ->get()
+            ->map(fn (EmployeeEquipmentIssue $i): array => [
+                'id' => $i->id,
+                'item' => $i->item?->name,
+                'serial' => $i->item?->serial_number,
+                'issue_date' => $i->issue_date->toDateString(),
+                'overdue' => $i->isOverdue(),
+            ])
+            ->values()
+            ->all();
     }
 
     /**

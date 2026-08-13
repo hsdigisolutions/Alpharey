@@ -68,6 +68,22 @@ the serial. Tests: `InventoryTest` (+3 — serial saved+shipped, duplicate-seria
 rejected in-company / allowed cross-company, serial on the issue row). **892 Pest
 tests / 5169 assertions.**
 
+**Phase C — worker profile integration (done, read-only, no money).** **C1**
+`EmployeeController::show` ships an `equipmentTab` payload (gated
+`inventory.view`, null otherwise) — the worker's kit split into **current**
+(still out) vs **history** (fully returned), with the overdue flag + a
+held-count + overdue-count; a new "Equipamiento" tab on Employees/Detail.vue
+(current + history tables, overdue badges). **C2** `WorkerController::home`
+ships an `equipment` payload — the worker's current issues (item · serial ·
+issue date · overdue), scope dropped + pinned to employee_id (a worker has no
+company session, same pattern as the dashboard); a "Mi Equipamiento" panel on
+Worker/Home.vue with a *Devolución pendiente* badge on overdue kit. **Neither
+surface carries any cost figure** — a worker never sees money, enforced at the
+payload (the PWA test asserts amount/total/cost are `missing`). Tests:
+`InventoryProfileTest` (3 — employee current+history tab, tab withheld without
+inventory.view, PWA equipment money-free). **895 Pest tests / 5218
+assertions.**
+
 ### Measurements + Production Tasks — full deep review (2026-08-13, COMPLETE)
 
 A line-by-line re-review of the whole Measurements/Production subsystem (Phases

@@ -42,6 +42,7 @@ const props = defineProps({
     attendanceProjects: { type: Array, default: () => [] },
     attendanceEmployee: { type: Object, default: null },
     canManageAttendance: { type: Boolean, default: false },
+    equipmentTab: { type: Object, default: null },
     appAccess: { type: Object, default: () => ({ email: null, active: false }) },
     canSeeWages: { type: Boolean, default: false },
     consent: { type: Object, default: () => ({ has_app_access: false, accepted: false, active: null, history: [], current_version: '' }) },
@@ -250,6 +251,7 @@ const tabs = [
     { key: 'docs', labelKey: 'employees.tab_docs', count: props.documents.filter((d) => d.has_file || d.has_flag).length },
     { key: 'attendance', labelKey: 'employees.tab_attendance' },
     { key: 'payroll', labelKey: 'employees.tab_payroll' },
+    ...(props.equipmentTab ? [{ key: 'equipment', labelKey: 'employees.tab_equipment', count: props.equipmentTab.count }] : []),
     { key: 'notes', labelKey: 'employees.tab_notes', count: props.notes.length },
     { key: 'calls', labelKey: 'employees.tab_calls', count: props.calls.length },
 ];
@@ -572,6 +574,86 @@ function destroy() {
                     </table>
                 </div>
             </VCard>
+
+            <!-- Equipamiento — kit issued to this worker (items only, no money) -->
+            <div v-else-if="tab === 'equipment' && equipmentTab" class="space-y-5">
+                <div class="flex flex-wrap items-center gap-3">
+                    <span class="text-sm text-ink-soft">
+                        {{ $t('inventory.equip_current_count', { n: equipmentTab.count }) }}
+                    </span>
+                    <VBadge v-if="equipmentTab.overdue_count > 0" status="danger">
+                        {{ $t('inventory.equip_overdue_count', { n: equipmentTab.overdue_count }) }}
+                    </VBadge>
+                </div>
+
+                <VCard :padded="false">
+                    <div class="border-b border-line px-4 py-3">
+                        <h3 class="text-sm font-semibold"><Bilingual k="inventory.equip_current" inline /></h3>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm">
+                            <thead class="bg-surface-sunken text-[11px] uppercase tracking-wide text-muted">
+                                <tr>
+                                    <th class="px-3 py-2 text-start"><Bilingual k="inventory.name" inline /></th>
+                                    <th class="px-3 py-2 text-start"><Bilingual k="inventory.serial_number" inline /></th>
+                                    <th class="px-3 py-2 text-end"><Bilingual k="inventory.outstanding" inline /></th>
+                                    <th class="px-3 py-2 text-start"><Bilingual k="inventory.issue_date" inline /></th>
+                                    <th class="px-3 py-2 text-start"><Bilingual k="inventory.expected_return_date" inline /></th>
+                                    <th class="px-3 py-2 text-start"><Bilingual k="inventory.status" inline /></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr v-for="i in equipmentTab.current" :key="i.id" class="border-b border-line last:border-0">
+                                    <td class="px-3 py-2 font-medium">{{ i.item ?? '—' }}</td>
+                                    <td class="tabular-nums px-3 py-2 text-ink-soft">{{ i.serial ?? '—' }}</td>
+                                    <td class="tabular-nums px-3 py-2 text-end">{{ i.outstanding }} {{ i.unit }}</td>
+                                    <td class="tabular-nums px-3 py-2">{{ i.issue_date }}</td>
+                                    <td class="tabular-nums px-3 py-2">
+                                        {{ i.expected_return_date ?? '—' }}
+                                        <VBadge v-if="i.overdue" status="danger" class="ms-1.5"><Bilingual k="inventory.overdue" inline /></VBadge>
+                                    </td>
+                                    <td class="px-3 py-2">
+                                        <VBadge :status="i.status === 'partially_returned' ? 'info' : 'warn'">
+                                            <Bilingual :k="`inventory.status_${i.status}`" inline />
+                                        </VBadge>
+                                    </td>
+                                </tr>
+                                <tr v-if="equipmentTab.current.length === 0">
+                                    <td colspan="6" class="px-3 py-6 text-center text-muted">{{ $t('inventory.equip_none') }}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </VCard>
+
+                <VCard v-if="equipmentTab.history.length" :padded="false">
+                    <div class="border-b border-line px-4 py-3">
+                        <h3 class="text-sm font-semibold"><Bilingual k="inventory.equip_history" inline /></h3>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm">
+                            <thead class="bg-surface-sunken text-[11px] uppercase tracking-wide text-muted">
+                                <tr>
+                                    <th class="px-3 py-2 text-start"><Bilingual k="inventory.name" inline /></th>
+                                    <th class="px-3 py-2 text-start"><Bilingual k="inventory.serial_number" inline /></th>
+                                    <th class="px-3 py-2 text-end"><Bilingual k="inventory.issued_quantity" inline /></th>
+                                    <th class="px-3 py-2 text-start"><Bilingual k="inventory.issue_date" inline /></th>
+                                    <th class="px-3 py-2 text-start"><Bilingual k="inventory.return_date" inline /></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr v-for="i in equipmentTab.history" :key="i.id" class="border-b border-line last:border-0">
+                                    <td class="px-3 py-2 font-medium">{{ i.item ?? '—' }}</td>
+                                    <td class="tabular-nums px-3 py-2 text-ink-soft">{{ i.serial ?? '—' }}</td>
+                                    <td class="tabular-nums px-3 py-2 text-end">{{ i.issued_quantity }} {{ i.unit }}</td>
+                                    <td class="tabular-nums px-3 py-2">{{ i.issue_date }}</td>
+                                    <td class="tabular-nums px-3 py-2">{{ i.return_date ?? '—' }}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </VCard>
+            </div>
 
             <!-- Notas -->
             <div v-else-if="tab === 'notes'" class="grid gap-5 lg:grid-cols-[1fr_320px]">

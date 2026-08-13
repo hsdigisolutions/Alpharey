@@ -31,6 +31,7 @@ const props = defineProps({
     consent: { type: Object, default: () => ({ gps: true, photo: true, version: '' }) },
     // Worker-direct notifications (PWA bell): { unread, items[] }
     notifications: { type: Object, default: () => ({ unread: 0, items: [] }) },
+    equipment: { type: Array, default: () => [] },
 });
 
 const page = usePage();
@@ -530,6 +531,27 @@ const noteTextForm = useForm({ attendance_id: null, text_note: '', duration_seco
                 <span class="text-xs text-ink-soft">›</span>
             </a>
         </div>
+
+        <!-- Mi Equipamiento — kit currently held (read-only, no money) -->
+        <section v-if="equipment.length" class="mt-6">
+            <h2 class="mb-3 text-sm font-semibold text-ink">{{ $t('worker_equipment.title') }}</h2>
+            <div class="space-y-2">
+                <div v-for="e in equipment" :key="e.id"
+                    class="rounded-lg border border-line bg-surface-raised px-4 py-3 shadow-card">
+                    <div class="flex items-center justify-between gap-2">
+                        <span class="text-sm font-medium text-ink">
+                            {{ e.item }}
+                            <span v-if="e.serial" class="tabular-nums text-xs text-muted">· {{ e.serial }}</span>
+                        </span>
+                        <span v-if="e.overdue"
+                            class="rounded-sm bg-status-danger-soft px-2 py-0.5 text-xs font-medium text-status-danger">
+                            {{ $t('worker_equipment.overdue') }}
+                        </span>
+                    </div>
+                    <p class="mt-0.5 text-xs text-ink-soft">{{ $t('worker_equipment.issued') }} {{ e.issue_date }}</p>
+                </div>
+            </div>
+        </section>
 
         <!-- ── Dashboard: this month ── -->
         <section class="mt-6">
