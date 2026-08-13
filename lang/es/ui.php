@@ -2106,6 +2106,8 @@ return [
         'mark_paid' => 'Marcar pagada',
         'breakdown' => 'Desglose',
         'payslip' => 'Nómina PDF',
+        'rate_periods' => 'Períodos de tarifa',
+        'period' => 'Período',
         // Breakdown modal (REQUIREMENTS.md Screen 12)
         'base_salary' => 'Salario base / Sueldo',
         'attendance_days' => 'Días trabajados',

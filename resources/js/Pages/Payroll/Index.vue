@@ -125,6 +125,13 @@ function eur(n) {
     return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(Number(n));
 }
 
+/* Y-m-d → dd/mm (the rate-period lines; the month is obvious from context). */
+function shortDate(d) {
+    if (!d) return '';
+    const [, m, day] = String(d).split('-');
+    return `${day}/${m}`;
+}
+
 const columns = [
     { key: 'employee', labelKey: 'payroll.employee' },
     { key: 'days', labelKey: 'payroll.days', align: 'end' },
@@ -252,6 +259,22 @@ const columns = [
                 <div v-if="breakdown.deployment_notes?.length" class="space-y-1">
                     <p v-for="(note, i) in breakdown.deployment_notes" :key="i"
                         class="rounded-md bg-status-info-soft px-3 py-2 text-xs text-status-info">{{ note }}</p>
+                </div>
+
+                <!-- Mid-month rate changes: the same per-period lines the payslip
+                     PDF prints (only present when the rate actually changed). -->
+                <div v-if="breakdown.rate_periods?.length" class="rounded-md border border-line bg-surface-sunken/50 px-3 py-2">
+                    <p class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-muted">
+                        {{ $t('payroll.rate_periods') }}
+                    </p>
+                    <div v-for="(p, i) in breakdown.rate_periods" :key="i"
+                        class="tabular-nums flex justify-between gap-4 text-sm">
+                        <span class="text-ink-soft">
+                            {{ $t('payroll.period') }} {{ i + 1 }}: {{ shortDate(p.from) }} → {{ shortDate(p.to) }}
+                            <span class="text-muted">({{ eur(p.rate) }}{{ p.wage_type === 'daily' ? '/día' : '/h' }} · {{ p.days }} {{ $t('attendance.unit_days') }})</span>
+                        </span>
+                        <span>{{ eur(p.amount) }}</span>
+                    </div>
                 </div>
 
                 <dl class="tabular-nums space-y-1.5 text-sm">

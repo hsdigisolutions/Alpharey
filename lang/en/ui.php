@@ -2101,6 +2101,8 @@ return [
         'mark_paid' => 'Mark paid',
         'breakdown' => 'Breakdown',
         'payslip' => 'Payslip PDF',
+        'rate_periods' => 'Rate periods',
+        'period' => 'Period',
         // Breakdown modal (REQUIREMENTS.md Screen 12)
         'base_salary' => 'Base Salary / Wage',
         'attendance_days' => 'Attendance Days',

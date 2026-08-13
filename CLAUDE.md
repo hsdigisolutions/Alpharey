@@ -87,6 +87,12 @@ leave-counts-present (2200÷22×11 = 1.100); LeaveTest's monthly-leave test
 re-pinned to the new rule (fully-present month incl. leave = full salary);
 ExpenseTest's deduction test now seeds full presence.
 
+**Fix 10 + labels (done):** the payroll breakdown modal now shows the
+"Períodos de tarifa" lines (Período 1: 01/07 → 10/07 (50 €/día · 2 días) =
+100 €) — `rate_periods` added to the controller row payload (payroll.view-gated;
+it was payslip-PDF-only before). Keys `payroll.rate_periods` / `payroll.period`.
+The worker_rate reference-only label shipped with Fix 1.
+
 **Every screen 01–26 is built (Phase 8 complete).** Phase 9 is hardening, UAT, and
 launch — no new screens. Current: **781 Pest tests / 4526 assertions passing (1
 skipped) · Pint clean · Larastan level 6 clean · `composer audit` + `npm audit`

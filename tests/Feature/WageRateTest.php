@@ -152,6 +152,11 @@ it('breaks a two-rate month into periods that reconcile to gross', function (): 
         ->and((float) $periods[1]['rate'])->toBe(70.0)
         ->and((int) $periods[1]['days'])->toBe(3)
         ->and((float) $periods[1]['amount'])->toBe(210.0);
+
+    // The breakdown modal shows the same periods (spec C10) — the payload
+    // carries them for a payroll viewer, not just the payslip PDF.
+    $this->get('/payroll?month=2026-07')
+        ->assertInertia(fn ($page) => $page->has('rows.0.rate_periods', 2));
 });
 
 it('handles three rate changes in one month', function (): void {
