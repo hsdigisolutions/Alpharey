@@ -48,7 +48,8 @@ class StoreAttendanceRequest extends FormRequest
             'total_amount' => ['nullable', 'numeric', 'min:0'],
             'manual_wage_override' => ['boolean'],
             'override_reason' => ['nullable', 'string', 'max:255', 'required_if:manual_wage_override,true'],
-            'is_paid' => ['boolean'],
+            // is_paid is deliberately ABSENT — a client can never flip a row's
+            // paid flag (spec C5: paid records are server-owned).
             'is_exception' => ['boolean'],
             'exception_reason' => ['nullable', 'string', 'max:255', 'required_if:is_exception,true'],
             'work_mode' => ['nullable', 'string', 'max:50'],

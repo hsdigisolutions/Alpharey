@@ -135,6 +135,49 @@ it('deducts approved advances earmarked for the month', function (): void {
         ->and((float) $payroll->getAttribute('net_amount'))->toBe(270.0); // 320 - 50
 });
 
+it('blocks attendance writes in a month whose payroll is PAID, even before locking', function (): void {
+    // Spec acceptance test 10: paid records are never touched. The lock is a
+    // separate manual step — the Paid status alone must already protect the month.
+    $employee = hourlyEmployee(rate: 20, days: 1, hours: 8);
+    app(PayrollService::class)->calculateMonth($this->company->id, $this->month);
+    $payroll = Payroll::withoutGlobalScopes()->where('employee_id', $employee->id)->firstOrFail();
+    $payroll->status = PayrollStatus::Paid;
+    $payroll->save();
+
+    $existing = Attendance::withoutGlobalScopes()->where('employee_id', $employee->id)->firstOrFail();
+
+    // Editing an existing row in the paid month → refused.
+    $this->actingAs($this->admin)->put("/attendance/{$existing->id}", [
+        'employee_id' => $employee->id, 'date' => $existing->date->toDateString(),
+        'mode' => 'hourly', 'day_type' => 'hourly', 'status' => 'present', 'hours_worked' => 9,
+    ])->assertSessionHasErrors('date');
+
+    // Creating a NEW row inside the paid month → refused.
+    $this->actingAs($this->admin)->post('/attendance', [
+        'employee_id' => $employee->id, 'date' => $this->month.'-20',
+        'mode' => 'hourly', 'day_type' => 'hourly', 'status' => 'present', 'hours_worked' => 8,
+    ])->assertSessionHasErrors('date');
+
+    // Deleting a row from the paid month → refused.
+    $this->actingAs($this->admin)->delete("/attendance/{$existing->id}")->assertSessionHasErrors('date');
+    expect(Attendance::withoutGlobalScopes()->whereKey($existing->id)->exists())->toBeTrue();
+});
+
+it('ignores a client-sent is_paid flag on attendance', function (): void {
+    $employee = Employee::factory()->forCompany($this->company)->create([
+        'wage_type' => 'hourly', 'wage_rate' => '20',
+    ]);
+
+    $this->actingAs($this->admin)->post('/attendance', [
+        'employee_id' => $employee->id, 'date' => $this->month.'-03',
+        'mode' => 'hourly', 'day_type' => 'hourly', 'status' => 'present',
+        'hours_worked' => 8, 'is_paid' => true, // injection attempt
+    ])->assertRedirect();
+
+    $row = Attendance::withoutGlobalScopes()->where('employee_id', $employee->id)->firstOrFail();
+    expect($row->is_paid)->toBeFalse();
+});
+
 it('stores the Tarifa figure from the field matching the wage type', function (): void {
     // A daily worker whose hourly column is null (wage-history sync nulls the
     // non-matching columns): the payroll rate must show the DAILY wage, not 0.

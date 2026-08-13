@@ -826,6 +826,7 @@ return [
         'half_day_threshold' => 'Half-day threshold (hours)',
         'max_location_distance' => 'Maximum allowed distance (m)',
         'deleted' => 'Asistencia eliminada / Attendance removed',
+        'month_paid' => 'La nómina de este mes ya está pagada — el registro no se puede modificar / This month\'s payroll is already paid — the record cannot be changed',
         'month' => 'Month',
         'employee' => 'Employee',
         'project' => 'Project',

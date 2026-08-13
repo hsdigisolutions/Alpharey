@@ -72,7 +72,9 @@ class Attendance extends Model
         'break_hours', 'deduct_break', 'hours_worked', 'quantity', 'overtime_hours', 'status',
         'weekend_rate_type', 'weekend_rate_amount',
         'wage_type_snapshot', 'wage_rate_snapshot', 'hourly_rate_snapshot',
-        'total_amount', 'manual_wage_override', 'override_reason', 'is_paid', 'is_exception',
+        // is_paid is server-owned (set by the importer / payroll flows only) —
+        // a client must never be able to flip a row's paid flag.
+        'total_amount', 'manual_wage_override', 'override_reason', 'is_exception',
         'exception_reason', 'work_mode', 'notes',
     ];
 

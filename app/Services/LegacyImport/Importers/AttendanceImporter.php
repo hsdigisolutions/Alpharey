@@ -66,10 +66,12 @@ class AttendanceImporter extends AbstractImporter
                     'overtime_hours' => $row->overtime_hours ?? 0,
                     'status' => $this->normalizeStatus($row->status ?? null),
                     'total_amount' => $row->total_amount ?? 0,
-                    'is_paid' => (bool) ($row->is_paid ?? false),
                     'notes' => $row->notes ?? null,
                 ]);
                 $attendance->company_id = $defaultCompanyId;
+                // is_paid is no longer mass-assignable (server-owned flag) —
+                // the importer carries the historical fact over directly.
+                $attendance->is_paid = (bool) ($row->is_paid ?? false);
                 // Historical snapshots carried over verbatim (not recomputed).
                 // wage_type is the one exception: the legacy dump spells it
                 // `day`/`hour`, this schema `daily`/`hourly` — the same fact in

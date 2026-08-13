@@ -6,6 +6,7 @@ use App\Enums\AttendanceMode;
 use App\Enums\DayType;
 use App\Enums\DeploymentStatus;
 use App\Enums\OvertimePolicyType;
+use App\Enums\PayrollStatus;
 use App\Enums\WageType;
 use App\Enums\WeekendRateType;
 use App\Models\Attendance;
@@ -13,13 +14,16 @@ use App\Models\AttendanceLog;
 use App\Models\Employee;
 use App\Models\EmployeeDeployment;
 use App\Models\OvertimePolicy;
+use App\Models\Payroll;
 use App\Models\Scopes\CompanyScope;
 use App\Services\Employees\WageRateService;
 use App\Services\Settings\SettingsService;
 use App\Support\CurrentCompany;
 use App\Support\PeriodLock;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 /**
  * Attendance create/update pipeline. Two responsibilities that must stay
@@ -63,6 +67,7 @@ class AttendanceService
             if ($attendance->company_id !== null) {
                 $this->lock->assertOpen($attendance->company_id, $attendance->date);
             }
+            $this->assertMonthNotPaid((int) $attendance->employee_id, $attendance->date);
 
             $this->applySnapshots($attendance, $employee);
             $this->recompute($attendance);
@@ -88,6 +93,7 @@ class AttendanceService
             $attendance->company_id = $employee->company_id;
 
             $this->lock->assertOpen($employee->company_id, $attendance->date);
+            $this->assertMonthNotPaid($employee->id, $attendance->date);
 
             $this->applySnapshots($attendance, $employee);
             $this->recompute($attendance);
@@ -107,6 +113,7 @@ class AttendanceService
         return DB::transaction(function () use ($attendance, $data): Attendance {
             // Guard both the month it is in now and the month it would move to.
             $this->lock->assertOpen($attendance->company_id, $attendance->date);
+            $this->assertMonthNotPaid((int) $attendance->employee_id, $attendance->date);
 
             $attendance->fill($data);
 
@@ -121,7 +128,9 @@ class AttendanceService
                 $attendance->is_auto_detected = false;
             }
 
+            // …and the month/employee the row would MOVE to.
             $this->lock->assertOpen($attendance->company_id, $attendance->date);
+            $this->assertMonthNotPaid((int) $attendance->employee_id, $attendance->date);
 
             // Re-freeze the snapshot if the employee, the date, or the DAY TYPE
             // changed — each picks a different rate. An otherwise-unchanged row
@@ -138,6 +147,34 @@ class AttendanceService
 
             return $attendance;
         });
+    }
+
+    /**
+     * Paid records are NEVER touched (spec C5/C10). A month whose payroll for
+     * this employee is already PAID rejects every attendance write — creating,
+     * editing, or moving a row into it — even before the period is formally
+     * locked. Without this, a Paid-but-unlocked month could silently diverge
+     * from the payslip that was already paid out.
+     */
+    public function assertMonthNotPaid(int $employeeId, Carbon|string|null $date): void
+    {
+        if ($date === null) {
+            return;
+        }
+
+        $month = Carbon::parse($date)->format('Y-m');
+
+        $paid = Payroll::query()->withoutGlobalScopes()
+            ->where('employee_id', $employeeId)
+            ->where('month', $month)
+            ->where('status', PayrollStatus::Paid)
+            ->exists();
+
+        if ($paid) {
+            throw ValidationException::withMessages([
+                'date' => __('ui.attendance.month_paid'),
+            ]);
+        }
     }
 
     /**

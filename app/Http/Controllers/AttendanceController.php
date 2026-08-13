@@ -313,8 +313,10 @@ class AttendanceController extends Controller
     {
         Gate::authorize('attendance.delete');
 
-        // A closed month is closed for deletes too, not just edits.
+        // A closed month is closed for deletes too, not just edits — and a month
+        // already PAID for this worker is closed even before it is locked.
         $lock->assertOpen($attendance->company_id, $attendance->date);
+        app(AttendanceService::class)->assertMonthNotPaid((int) $attendance->employee_id, $attendance->date);
 
         $attendance->delete();
 

@@ -33,6 +33,16 @@ WageRateService). (8) zero-rate validation — the four employee-form rate field
 are `gt:0` when filled (acceptance test 11); empty stays allowed; wage-history
 already rejected 0.
 
+**Fix 6 (done):** paid records are now protected BEFORE the period lock —
+`AttendanceService::assertMonthNotPaid()` rejects any attendance create /
+update / move / delete in a month whose payroll for that employee is PAID (the
+lock is a separate manual step; Paid alone now protects). Applied in create,
+createForWorker, update (old + new month) and the controller destroy.
+`attendance.is_paid` is no longer client-fillable (removed from `$fillable` +
+StoreAttendanceRequest; the legacy importer sets it directly). Key
+`attendance.month_paid`. Tests: paid-but-unlocked month blocks edit/create/
+delete (acceptance test 10) + is_paid injection ignored.
+
 **Every screen 01–26 is built (Phase 8 complete).** Phase 9 is hardening, UAT, and
 launch — no new screens. Current: **781 Pest tests / 4526 assertions passing (1
 skipped) · Pint clean · Larastan level 6 clean · `composer audit` + `npm audit`
