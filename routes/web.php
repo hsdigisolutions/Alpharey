@@ -268,6 +268,11 @@ Route::middleware(['auth', 'active', 'two_factor', 'not_worker'])->group(functio
     Route::post('/projects/{project}/designation-rates', [ProjectDesignationRateController::class, 'store'])->name('projects.designation-rates.store');
     Route::delete('/projects/{project}/designation-rates/{designationRate}', [ProjectDesignationRateController::class, 'destroy'])->name('projects.designation-rates.destroy');
 
+    // Production tasks — standalone screen (all tasks across projects) + exports.
+    Route::get('/tasks/export', [ProductionTaskController::class, 'export'])->name('tasks.export');
+    Route::get('/tasks/export-pdf', [ProductionTaskController::class, 'exportPdf'])->name('tasks.export-pdf');
+    Route::get('/tasks', [ProductionTaskController::class, 'index'])->name('tasks.index');
+
     // Production tasks — internal planned-vs-actual tracker, nested under project.
     Route::post('/projects/{project}/tasks', [ProductionTaskController::class, 'store'])->name('projects.tasks.store');
     Route::put('/projects/{project}/tasks/{task}', [ProductionTaskController::class, 'update'])->name('projects.tasks.update');

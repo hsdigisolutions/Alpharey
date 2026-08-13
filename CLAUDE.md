@@ -116,6 +116,23 @@ photo store+gated+audited download, batch delete + photo cleanup + recompute,
 present-workers feed, history payload, cross-project 404, edit gate). **867
 Pest tests.**
 
+**Standalone Tasks screen + polish (done, 2026-08-13).** After a staging UAT
+pass, added a standalone **Tareas / Tasks** screen (sidebar "Más módulos",
+`GET /tasks`) listing every production task across all of the company's
+projects: filters (search · project · category · status), Excel + PDF export
+(`ProductionTasksExport` + `production-tasks-pdf` blade, gated
+`production_tasks.view` + audited, shared `filteredQuery`), coloured progress
+bar + traffic light per row, and the same Log-work / edit / delete actions as
+the project tab (reusing the nested `/projects/{project}/tasks*` endpoints and
+the present-workers feed). `ProductionTaskController::index/export/exportPdf`;
+`nav.tasks` key. Three UAT bugs fixed: (1) `$t()` gained Laravel-style `:param`
+interpolation (the Log-work split preview + weightage warning rendered raw
+`:qty`/`:sum`); (2) the Log-work modal's `openLog` now resets every field
+explicitly (form.reset() left the previous quantity); (3) the project-detail
+tab bar is now a `computed` so the Tareas count updates live after a partial
+reload. Tests: `ProductionTaskTest` (+2 — standalone list filter/tenancy,
+export gated+audited). **869 Pest tests.**
+
 ### Subcontractor deal model (2026-08-13, COMPLETE — all 5 steps, 835 tests)
 
 **Step 5 (done):** tenancy on the deal fields (cross-company read/edit → 404,

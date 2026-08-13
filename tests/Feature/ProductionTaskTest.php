@@ -87,6 +87,33 @@ it('cannot manage tasks on another company project (404)', function (): void {
     $this->delete("/projects/{$this->project->id}/tasks/{$foreignTask->id}")->assertNotFound();
 });
 
+it('lists all company tasks on the standalone screen, filtered and tenant-scoped', function (): void {
+    ProductionTask::factory()->create(['company_id' => $this->companyA->id, 'project_id' => $this->project->id, 'name' => 'Mine civil', 'category' => 'civil']);
+    ProductionTask::factory()->create(['company_id' => $this->companyA->id, 'project_id' => $this->project->id, 'name' => 'Mine plumbing', 'category' => 'plumbing']);
+    $foreignProject = Project::factory()->forCompany($this->companyB)->create();
+    ProductionTask::factory()->create(['company_id' => $this->companyB->id, 'project_id' => $foreignProject->id, 'name' => 'Foreign']);
+
+    // All own-company tasks, never company B.
+    $this->actingAs($this->admin)->get('/tasks')
+        ->assertInertia(fn (Assert $page) => $page->component('ProductionTasks/Index')->has('tasks', 2));
+
+    // Category filter.
+    $this->actingAs($this->admin)->get('/tasks?category=civil')
+        ->assertInertia(fn (Assert $page) => $page->has('tasks', 1)->where('tasks.0.name', 'Mine civil'));
+});
+
+it('exports the filtered task view (Excel + PDF), gated and audited', function (): void {
+    ProductionTask::factory()->create(['company_id' => $this->companyA->id, 'project_id' => $this->project->id]);
+
+    $this->actingAs($this->admin)->get('/tasks/export')->assertOk();
+    $this->actingAs($this->admin)->get('/tasks/export-pdf')->assertOk();
+    $this->assertDatabaseHas('audit_logs', ['action' => 'exported', 'model_type' => (new ProductionTask)->getMorphClass()]);
+
+    // Without view permission → forbidden.
+    $user = User::factory()->forCompany($this->companyA)->create();
+    $this->actingAs($user)->get('/tasks/export')->assertForbidden();
+});
+
 it('requires the create permission', function (): void {
     $user = User::factory()->forCompany($this->companyA)->create();
     UserModulePermission::query()->create([

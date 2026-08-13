@@ -61,6 +61,7 @@ const secondaryNav = computed(() => [
     { key: 'leave', labelKey: 'nav.leave', icon: 'leave', href: '/leave' },
     { key: 'inventory', labelKey: 'nav.inventory', icon: 'inventory', href: '/inventory' },
     { key: 'measurements', labelKey: 'nav.measurements', icon: 'edit', href: '/measurements' },
+    { key: 'tasks', labelKey: 'nav.tasks', icon: 'columns', href: '/tasks' },
     { key: 'deployments', labelKey: 'nav.deployments', icon: 'deployments', href: '/deployments' },
     { key: 'subcontractors', labelKey: 'nav.subcontractors', icon: 'employees', href: '/subcontractors' },
     { key: 'compliance', labelKey: 'nav.compliance', icon: 'check', href: '/compliance' },

@@ -43,6 +43,7 @@ return [
         'leave' => 'Ausencias',
         'inventory' => 'Inventario',
         'measurements' => 'Mediciones',
+        'tasks' => 'Tareas',
         'compliance' => 'Cumplimiento',
         'documents' => 'Documentos',
         'audit_logs' => 'Registro de Actividad',
@@ -971,6 +972,13 @@ return [
     ],
 
     'production_tasks' => [
+        'title' => 'Tareas de producción',
+        'project' => 'Obra',
+        'view_project' => 'Ver obra',
+        'search' => 'Buscar tareas',
+        'all_projects' => 'Todas las obras',
+        'all_categories' => 'Todas las categorías',
+        'all_statuses' => 'Todos los estados',
         'saved' => 'Tarea guardada / Task saved',
         'deleted' => 'Tarea eliminada / Task removed',
         'add' => 'Añadir tareas',

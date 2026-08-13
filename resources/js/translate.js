@@ -17,12 +17,23 @@ function lookup(dict, key) {
 /**
  * Resolve a ui.* key in the user's primary language.
  * Falls back to the key itself so a missing string is obvious, never blank.
+ *
+ * Optional `params` interpolate Laravel-style `:name` placeholders, e.g.
+ * `t('x.split', { qty: 25, unit: 'm²', n: 2 })`.
  */
-export function t(key) {
+export function t(key, params) {
     const page = usePage();
     const primary = page.props.locale?.primary ?? 'es';
 
-    return lookup(page.props.lang?.[primary], key) ?? key;
+    let str = lookup(page.props.lang?.[primary], key) ?? key;
+
+    if (params && typeof str === 'string') {
+        for (const [name, value] of Object.entries(params)) {
+            str = str.replaceAll(`:${name}`, String(value));
+        }
+    }
+
+    return str;
 }
 
 /**

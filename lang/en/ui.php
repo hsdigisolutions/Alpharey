@@ -42,6 +42,7 @@ return [
         'leave' => 'Leave',
         'inventory' => 'Inventory',
         'measurements' => 'Measurements',
+        'tasks' => 'Tasks',
         'compliance' => 'Compliance',
         'documents' => 'Documents',
         'audit_logs' => 'Audit Logs',
@@ -970,6 +971,13 @@ return [
     ],
 
     'production_tasks' => [
+        'title' => 'Production tasks',
+        'project' => 'Project',
+        'view_project' => 'View project',
+        'search' => 'Search tasks',
+        'all_projects' => 'All projects',
+        'all_categories' => 'All categories',
+        'all_statuses' => 'All statuses',
         'saved' => 'Tarea guardada / Task saved',
         'deleted' => 'Tarea eliminada / Task removed',
         'add' => 'Add tasks',

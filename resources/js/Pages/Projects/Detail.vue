@@ -69,7 +69,8 @@ const props = defineProps({
 const tab = ref('summary');
 const showEdit = ref(false);
 
-const tabs = [
+// Computed so counts (tasks especially, updated via partial reload) stay live.
+const tabs = computed(() => [
     { key: 'summary', labelKey: 'projects.tab_summary' },
     ...(props.canSeeWages ? [{ key: 'profitability', labelKey: 'projects.tab_profitability' }] : []),
     { key: 'workers', labelKey: 'projects.tab_workers', count: props.workers.length },
@@ -80,7 +81,7 @@ const tabs = [
     { key: 'expenses', labelKey: 'projects.tab_expenses' },
     { key: 'documents', labelKey: 'projects.tab_documents', count: props.documents.filter((d) => d.has_file).length },
     { key: 'notes', labelKey: 'projects.tab_notes', count: props.remarks.length },
-];
+]);
 
 const statusBadge = { active: 'ok', in_progress: 'info', completed: 'ok', cancelled: 'danger', on_hold: 'warn' };
 const priorityBadge = { low: 'neutral', medium: 'info', high: 'warn', urgent: 'danger' };
@@ -282,8 +283,12 @@ async function fetchPresentWorkers() {
 
 function openLog(t) {
     logTask.value = t;
-    logForm.reset();
+    // Explicit reset — form.reset() left the previous quantity in place.
     logForm.date = new Date().toISOString().slice(0, 10);
+    logForm.quantity = null;
+    logForm.employee_ids = [];
+    logForm.notes = '';
+    logForm.photo = null;
     logForm.clearErrors();
     presentWorkers.value = [];
     logOpen.value = true;
