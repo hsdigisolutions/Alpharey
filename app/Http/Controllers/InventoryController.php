@@ -286,6 +286,7 @@ class InventoryController extends Controller
             'id' => $i->id,
             'name' => $i->name,
             'sku' => $i->sku,
+            'serial_number' => $i->serial_number,
             'category' => $i->category?->name,
             'equipment_category_id' => $i->equipment_category_id,
             'item_type' => $i->item_type->value,
@@ -309,7 +310,7 @@ class InventoryController extends Controller
     private function movements(Request $request): array
     {
         return EquipmentStockMovement::query()
-            ->with(['item:id,name,sku,unit', 'employee:id,full_name', 'project:id,name'])
+            ->with(['item:id,name,sku,serial_number,unit', 'employee:id,full_name', 'project:id,name'])
             ->when($request->filled('mv_item'), fn (Builder $q) => $q->where('equipment_item_id', $request->integer('mv_item')))
             ->when($request->filled('mv_from'), fn (Builder $q) => $q->whereDate('created_at', '>=', $request->string('mv_from')))
             ->when($request->filled('mv_to'), fn (Builder $q) => $q->whereDate('created_at', '<=', $request->string('mv_to')))
@@ -319,6 +320,7 @@ class InventoryController extends Controller
             ->map(fn (EquipmentStockMovement $m): array => [
                 'id' => $m->id,
                 'item' => $m->item?->name,
+                'serial' => $m->item?->serial_number,
                 'movement_type' => $m->movement_type->value,
                 'quantity' => (float) $m->quantity,
                 'balance_after' => $m->balance_after !== null ? (float) $m->balance_after : null,
@@ -337,7 +339,7 @@ class InventoryController extends Controller
     private function issues(Request $request): array
     {
         return EmployeeEquipmentIssue::query()
-            ->with(['item:id,name,sku,unit', 'employee:id,full_name'])
+            ->with(['item:id,name,sku,serial_number,unit', 'employee:id,full_name'])
             ->when($request->filled('issue_status'), fn (Builder $q) => $q->where('status', $request->string('issue_status')->value()))
             ->orderByDesc('issue_date')
             ->limit(100)
@@ -346,6 +348,7 @@ class InventoryController extends Controller
                 'id' => $i->id,
                 'employee' => $i->employee?->full_name,
                 'item' => $i->item?->name,
+                'serial' => $i->item?->serial_number,
                 'issued_quantity' => (float) $i->issued_quantity,
                 'returned_quantity' => (float) $i->returned_quantity,
                 'outstanding' => $i->outstanding(),
@@ -365,13 +368,14 @@ class InventoryController extends Controller
     private function assignments(): array
     {
         return EquipmentProjectAssignment::query()
-            ->with(['item:id,name,sku', 'project:id,name'])
+            ->with(['item:id,name,sku,serial_number', 'project:id,name'])
             ->orderByDesc('start_date')
             ->limit(100)
             ->get()
             ->map(fn (EquipmentProjectAssignment $a): array => [
                 'id' => $a->id,
                 'item' => $a->item?->name,
+                'serial' => $a->item?->serial_number,
                 'project' => $a->project?->name,
                 'quantity' => (float) $a->quantity,
                 'returned_quantity' => (float) $a->returned_quantity,

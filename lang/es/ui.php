@@ -1184,6 +1184,8 @@ return [
         'assign_to_project' => 'Asignar a proyecto',
         'new_category' => 'Nueva Categoría',
         'edit_category' => 'Editar categoría',
+        'serial_number' => 'Nº de serie',
+        'serial_hint' => 'Número de serie (para una unidad concreta)',
         'date_from' => 'Desde',
         'date_to' => 'Hasta',
         'category_deleted' => 'Categoría eliminada / Category removed',

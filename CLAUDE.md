@@ -56,6 +56,18 @@ movement item filter). **889 Pest tests / 5148 assertions.** Phases B–H (seria
 worker-profile + PWA, PPE/compliance, damage/loss, notifications, consumables,
 export) follow.
 
+**Phase B — serial numbers (done).** Migration `2026_08_13_000008` adds
+`serial_number` (nullable) to equipment_items. Confirmed model: **one item
+record IS one serialized unit** (DR-001 = that specific drill, qty 1) — no
+schema fork, no serial picker; the serial is just a field copied into displays.
+Form validation makes it unique per company when filled (mirrors SKU; two
+companies may share a serial). Shown as a Serial column on the Items tab, in the
+item form, and appended to the item name (· DR-001) on the issues, movements and
+assignments tabs + the issue modal's context line. All four row payloads carry
+the serial. Tests: `InventoryTest` (+3 — serial saved+shipped, duplicate-serial
+rejected in-company / allowed cross-company, serial on the issue row). **892 Pest
+tests / 5169 assertions.**
+
 ### Measurements + Production Tasks — full deep review (2026-08-13, COMPLETE)
 
 A line-by-line re-review of the whole Measurements/Production subsystem (Phases

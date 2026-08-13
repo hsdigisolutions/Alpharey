@@ -438,6 +438,44 @@ it('cannot edit a shared default or another company category (404)', function ()
 /**
  * Phase A5 — movements-tab filter.
  */
+/**
+ * Phase B — serial numbers (one item record = one serialized unit).
+ */
+it('saves a serial number and ships it in the item row', function (): void {
+    $this->post('/inventory/items', [
+        'name' => 'Power Drill', 'sku' => 'SKU-DR1', 'serial_number' => 'DR-001',
+        'item_type' => EquipmentItemType::Tool->value, 'unit' => 'pcs',
+    ])->assertRedirect()->assertSessionHasNoErrors();
+
+    $item = EquipmentItem::query()->where('sku', 'SKU-DR1')->firstOrFail();
+    expect($item->serial_number)->toBe('DR-001');
+
+    $this->get('/inventory')->assertInertia(fn (Assert $page) => $page
+        ->where('items.data', fn ($rows) => collect($rows)->firstWhere('serial_number', 'DR-001') !== null));
+});
+
+it('rejects a duplicate serial in the same company but allows it across companies', function (): void {
+    EquipmentItem::factory()->create(['company_id' => $this->company->id, 'sku' => 'S-A', 'serial_number' => 'DR-001']);
+    $other = Company::factory()->create();
+    EquipmentItem::factory()->create(['company_id' => $other->id, 'sku' => 'S-B', 'serial_number' => 'DR-001']); // fine, other company
+
+    // Same company, same serial → rejected.
+    $this->post('/inventory/items', [
+        'name' => 'Dup', 'sku' => 'S-C', 'serial_number' => 'DR-001',
+        'item_type' => EquipmentItemType::Tool->value, 'unit' => 'pcs',
+    ])->assertSessionHasErrors('serial_number');
+});
+
+it('carries the serial onto the worker issue row', function (): void {
+    $serialItem = EquipmentItem::factory()->create(['company_id' => $this->company->id, 'serial_number' => 'DR-007']);
+    $employee = Employee::factory()->create(['company_id' => $this->company->id]);
+    $this->stock->record($serialItem, StockMovementType::StockIn, 1);
+    $this->stock->issueTo($serialItem->fresh(), ['employee_id' => $employee->id, 'issued_quantity' => 1]);
+
+    $this->get('/inventory')->assertInertia(fn (Assert $page) => $page
+        ->where('issues', fn ($rows) => collect($rows)->firstWhere('serial', 'DR-007') !== null));
+});
+
 it('filters the stock-movements ledger by item', function (): void {
     $other = EquipmentItem::factory()->create(['company_id' => $this->company->id, 'name' => 'Taladro']);
     $this->stock->record($this->item, StockMovementType::StockIn, 5);

@@ -1183,6 +1183,8 @@ return [
         'assign_to_project' => 'Assign to project',
         'new_category' => 'New Category',
         'edit_category' => 'Edit category',
+        'serial_number' => 'Serial no.',
+        'serial_hint' => 'Serial number (for a specific unit)',
         'date_from' => 'From',
         'date_to' => 'To',
         'category_deleted' => 'Categoría eliminada / Category removed',

@@ -38,6 +38,13 @@ class StoreEquipmentItemRequest extends FormRequest
                     ->where('company_id', app(CurrentCompany::class)->id())
                     ->ignore($item?->id),
             ],
+            // One item record IS one serialized unit — a serial can't be shared.
+            'serial_number' => [
+                'nullable', 'string', 'max:60',
+                Rule::unique('equipment_items', 'serial_number')
+                    ->where('company_id', app(CurrentCompany::class)->id())
+                    ->ignore($item?->id),
+            ],
             'equipment_category_id' => ['nullable', 'integer'],
             'item_type' => ['required', Rule::enum(EquipmentItemType::class)],
             'unit' => ['required', 'string', 'max:20'],

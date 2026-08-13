@@ -72,7 +72,7 @@ const movementFilters = reactive({
 const showItem = ref(false);
 const editingItem = ref(null);
 const itemBlank = {
-    name: '', sku: '', equipment_category_id: '', item_type: 'tool', unit: 'pcs',
+    name: '', sku: '', serial_number: '', equipment_category_id: '', item_type: 'tool', unit: 'pcs',
     minimum_stock: 0, active: true, notes: '', opening_stock: null,
 };
 const itemForm = useForm({ ...itemBlank });
@@ -211,6 +211,7 @@ const issueTone = { open: 'warn', partially_returned: 'info', returned: 'ok' };
 const itemColumns = [
     { key: 'name', labelKey: 'inventory.name' },
     { key: 'sku', labelKey: 'inventory.sku' },
+    { key: 'serial', labelKey: 'inventory.serial_number' },
     { key: 'category', labelKey: 'inventory.category' },
     { key: 'type', labelKey: 'inventory.item_type' },
     { key: 'total', labelKey: 'inventory.total_stock', align: 'end' },
@@ -296,6 +297,7 @@ const categoryColumns = [
                         </VBadge>
                     </td>
                     <td class="tabular-nums px-3 py-2.5 text-sm text-ink-soft">{{ i.sku }}</td>
+                    <td class="tabular-nums px-3 py-2.5 text-sm text-ink-soft">{{ i.serial_number ?? '—' }}</td>
                     <td class="px-3 py-2.5 text-sm text-ink-soft">{{ i.category ?? '—' }}</td>
                     <td class="px-3 py-2.5 text-sm text-ink-soft">
                         <Bilingual :k="`inventory.type_${i.item_type}`" inline />
@@ -340,7 +342,10 @@ const categoryColumns = [
             <VTable :columns="movementColumns">
                 <tr v-for="m in movements" :key="m.id" class="hover:bg-surface-hover">
                     <td class="tabular-nums px-3 py-2.5 text-sm">{{ m.created_at }}</td>
-                    <td class="px-3 py-2.5 text-sm">{{ m.item ?? '—' }}</td>
+                    <td class="px-3 py-2.5 text-sm">
+                        {{ m.item ?? '—' }}
+                        <span v-if="m.serial" class="ms-1 tabular-nums text-xs text-muted">· {{ m.serial }}</span>
+                    </td>
                     <td class="px-3 py-2.5 text-sm text-ink-soft">
                         <Bilingual :k="`inventory.type_${m.movement_type}`" inline />
                     </td>
@@ -358,7 +363,10 @@ const categoryColumns = [
             <VTable :columns="issueColumns">
                 <tr v-for="i in issues" :key="i.id" class="hover:bg-surface-hover">
                     <td class="px-3 py-2.5 text-sm">{{ i.employee ?? '—' }}</td>
-                    <td class="px-3 py-2.5 text-sm text-ink-soft">{{ i.item ?? '—' }}</td>
+                    <td class="px-3 py-2.5 text-sm text-ink-soft">
+                        {{ i.item ?? '—' }}
+                        <span v-if="i.serial" class="ms-1 tabular-nums text-xs text-muted">· {{ i.serial }}</span>
+                    </td>
                     <td class="tabular-nums px-3 py-2.5 text-end text-sm">{{ i.issued_quantity }}</td>
                     <td class="tabular-nums px-3 py-2.5 text-end text-sm">{{ i.returned_quantity }}</td>
                     <td class="tabular-nums px-3 py-2.5 text-end text-sm font-medium">{{ i.outstanding }}</td>
@@ -389,7 +397,10 @@ const categoryColumns = [
         <template v-else-if="view === 'assignments'">
             <VTable :columns="assignmentColumns">
                 <tr v-for="a in assignments" :key="a.id" class="hover:bg-surface-hover">
-                    <td class="px-3 py-2.5 text-sm">{{ a.item ?? '—' }}</td>
+                    <td class="px-3 py-2.5 text-sm">
+                        {{ a.item ?? '—' }}
+                        <span v-if="a.serial" class="ms-1 tabular-nums text-xs text-muted">· {{ a.serial }}</span>
+                    </td>
                     <td class="px-3 py-2.5 text-sm">{{ a.project ?? '—' }}</td>
                     <td class="tabular-nums px-3 py-2.5 text-end text-sm">{{ a.quantity }}</td>
                     <td class="tabular-nums px-3 py-2.5 text-end text-sm font-medium">{{ a.outstanding }}</td>
@@ -440,6 +451,9 @@ const categoryColumns = [
                 </FormField>
                 <FormField k="inventory.sku" :error="itemForm.errors.sku" required>
                     <VInput v-model="itemForm.sku" />
+                </FormField>
+                <FormField k="inventory.serial_number" :error="itemForm.errors.serial_number">
+                    <VInput v-model="itemForm.serial_number" :placeholder="$t('inventory.serial_hint')" />
                 </FormField>
                 <FormField k="inventory.category" :error="itemForm.errors.equipment_category_id">
                     <VSelect v-model="itemForm.equipment_category_id">
@@ -514,6 +528,10 @@ const categoryColumns = [
         <!-- Issue -->
         <VModal :open="issuingItem !== null" title-key="inventory.issue" @close="issuingItem = null">
             <form id="issue-form" class="grid gap-4 sm:grid-cols-2" @submit.prevent="submitIssue">
+                <p v-if="issuingItem" class="sm:col-span-2 text-sm text-ink-soft">
+                    {{ issuingItem.name }}
+                    <span v-if="issuingItem.serial_number" class="tabular-nums text-xs text-muted">· {{ issuingItem.serial_number }}</span>
+                </p>
                 <FormField k="inventory.employee" :error="issueForm.errors.employee_id" required>
                     <VSelect v-model="issueForm.employee_id">
                         <option value="">—</option>

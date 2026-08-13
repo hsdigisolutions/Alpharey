@@ -23,6 +23,8 @@ use Illuminate\Database\Eloquent\SoftDeletes;
  *
  * @property int $id
  * @property int $company_id
+ * @property string $sku
+ * @property string|null $serial_number
  * @property EquipmentItemType $item_type
  * @property bool $active
  * @property numeric-string $total_stock
@@ -43,8 +45,8 @@ class EquipmentItem extends Model
 
     /** @var list<string> */
     protected $fillable = [
-        'equipment_category_id', 'name', 'sku', 'item_type', 'unit',
-        'minimum_stock', 'active', 'notes',
+        'equipment_category_id', 'name', 'sku', 'serial_number', 'item_type',
+        'unit', 'minimum_stock', 'active', 'notes',
     ];
 
     protected function casts(): array
