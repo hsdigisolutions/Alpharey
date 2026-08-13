@@ -14,6 +14,7 @@ use App\Models\Employee;
 use App\Models\Expense;
 use App\Models\ExpenseCategory;
 use App\Models\Project;
+use App\Models\SubcontractorPayment;
 use App\Models\Vendor;
 use App\Rules\OwnCompanyEmployee;
 use App\Rules\OwnCompanyProject;
@@ -28,6 +29,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 use Maatwebsite\Excel\Facades\Excel;
@@ -145,6 +147,17 @@ class ExpenseController extends Controller
         Gate::authorize('expenses.approve');
 
         $validated = $request->validate(['approved' => ['required', 'boolean']]);
+
+        // A subcontractor payment's auto-posted Gasto must never be APPROVED:
+        // the P&L already counts the payment itself, and the approved-expense
+        // sum would count the same money twice (spec C9). Its non-approval is
+        // load-bearing, not an oversight.
+        if ($validated['approved'] && SubcontractorPayment::query()
+            ->withoutGlobalScopes()->where('expense_id', $expense->id)->exists()) {
+            throw ValidationException::withMessages([
+                'approved' => __('ui.expenses.subcontractor_expense_locked'),
+            ]);
+        }
 
         // Not mass-assignable — set directly (Measurement/Document convention).
         $expense->approved = $validated['approved'];

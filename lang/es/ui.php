@@ -2035,6 +2035,7 @@ return [
         'bearable_hint' => 'Solo los costes a cargo del cliente entran en la facturación de la obra.',
         'deduct_from_salary' => 'Descontar de la nómina del trabajador',
         'approved_locked' => 'Gasto aprobado — bloqueado (retira la aprobación para editar).',
+        'subcontractor_expense_locked' => 'Gasto automático de subcontrata — no se aprueba: el pago ya cuenta en la rentabilidad / Automatic subcontractor expense — cannot be approved: the payment already counts in the P&L',
     ],
 
     'commissions' => [

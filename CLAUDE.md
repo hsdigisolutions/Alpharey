@@ -59,6 +59,20 @@ ProfitabilityTest's per-meter test now pins the spec worked example (150 m² ×
 10 € = 1.500 income · 4×50 labour + 100 expenses = 300 cost · 1.200 profit;
 unapproved 999 m² ignored — acceptance test 8).
 
+**Fixes 3+9 (done):** subcontractor (thaekedar) cost rules — exactly ONE labour
+basis per project: a subcontractor record exists → cost = paid subcontractor
+payments (+ own approved expenses), own attendance labour AND outsource_cost
+are NOT added (no double count — acceptance test 9); else outsourced flag →
+flat outsource_cost replaces crew wages; else normal attendance labour.
+`ExpenseController::approve` now REFUSES the auto-posted subcontractor Gasto
+(key `expenses.subcontractor_expense_locked`) — its non-approval is what keeps
+the payment from double-counting through the approved-expense sum. dailyPnl now
+respects billing_type: invoice-billed (fixed/milestone/unset) projects show 0
+per-day income with NEUTRAL health instead of fabricating hours×rate income the
+project-level P&L doesn't recognise (hourly → designation/client rates;
+per-meter → measurements, from Fix 2). ProfitabilityDailyTest pins
+billing_type=hourly explicitly (the factory randomises it).
+
 **Every screen 01–26 is built (Phase 8 complete).** Phase 9 is hardening, UAT, and
 launch — no new screens. Current: **781 Pest tests / 4526 assertions passing (1
 skipped) · Pint clean · Larastan level 6 clean · `composer audit` + `npm audit`

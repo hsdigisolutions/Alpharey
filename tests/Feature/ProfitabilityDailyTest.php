@@ -19,7 +19,9 @@ beforeEach(function (): void {
     $this->peon = Designation::factory()->create(['name' => 'Peón']);
     $this->elec = Designation::factory()->create(['name' => 'Electricista']);
 
-    $this->project = Project::factory()->forCompany($this->company)->create(['client_hour_rate' => '20']);
+    $this->project = Project::factory()->forCompany($this->company)->create([
+        'billing_type' => 'hourly', 'client_hour_rate' => '20',
+    ]);
 
     // Project rates per designation: [client, worker] €/h.
     foreach ([[$this->maestro, 20, 15], [$this->peon, 15, 10], [$this->elec, 25, 18]] as [$d, $c, $w]) {

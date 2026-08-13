@@ -11,6 +11,7 @@ use App\Models\Measurement;
 use App\Models\Project;
 use App\Models\ProjectDesignationRate;
 use App\Models\Scopes\CompanyScope;
+use App\Models\Subcontractor;
 use App\Models\SubcontractorPayment;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
@@ -122,12 +123,31 @@ class ProfitabilityService
 
         $revenue = $this->revenueFor($project, $hours, $meters, $from, $to);
 
-        // Outsourced projects cost their flat outsource fee instead of our own
-        // crew's wages; a non-outsourced project's labour is the attendance sum.
+        // COST rules (spec C9, thaekedar model) — exactly one labour basis:
+        //   subcontractor record exists → cost = paid subcontractor payments
+        //     (+ our own approved expenses). The thaekedar's budget covers the
+        //     crews — own attendance labour AND outsource_cost are NOT added,
+        //     so external labour is never counted twice.
+        //   outsourced flag (no subcontractor) → the flat outsource_cost
+        //     replaces our crew's wages.
+        //   neither → our own attendance labour (the normal case).
         $outsourced = (bool) $project->outsourced;
-        $labourCost = $outsourced ? (float) ($project->outsource_cost ?? 0.0) : $labourFromAttendance;
+        $hasSubcontractor = Subcontractor::query()
+            ->withoutGlobalScope(CompanyScope::class)
+            ->where('company_id', $project->company_id)
+            ->where('project_id', $project->id)
+            ->exists();
 
-        $cost = round($labourCost + $expenses + $subcontract, 2);
+        if ($hasSubcontractor) {
+            $labourCost = 0.0;
+            $cost = round($subcontract + $expenses, 2);
+        } elseif ($outsourced) {
+            $labourCost = (float) ($project->outsource_cost ?? 0.0);
+            $cost = round($labourCost + $expenses, 2);
+        } else {
+            $labourCost = $labourFromAttendance;
+            $cost = round($labourCost + $expenses, 2);
+        }
         $revenue = round($revenue, 2);
         $profit = round($revenue - $cost, 2);
 
@@ -216,6 +236,12 @@ class ProfitabilityService
         // per worker/day = their approved measured quantity × the client meter
         // rate, while their COST stays the daily/hourly rate they are paid.
         $isPerMeter = $project->billing_type === BillingType::PerMeter;
+
+        // Invoice-billed (fixed / milestone / unset) projects earn from PAID
+        // invoices, which cannot be attributed to a single day — the daily view
+        // must not fabricate hours × rate income the project-level P&L doesn't
+        // recognise. Income shows 0 and health stays neutral.
+        $isInvoiceBilled = ! $isPerMeter && $project->billing_type !== BillingType::Hourly;
         $measuredRows = $isPerMeter
             ? Measurement::query()
                 ->withoutGlobalScope(CompanyScope::class)
@@ -240,9 +266,11 @@ class ProfitabilityService
         foreach ($rows as $r) {
             $date = $r->date->toDateString();
             $hours = (float) $r->hours_worked;
-            $income = $isPerMeter
-                ? round((float) ($measuredByDate[$date][$r->employee_id] ?? 0) * $clientMeter, 2)
-                : $this->rowIncome($r, $rates, $clientHour, $clientMeter);
+            $income = match (true) {
+                $isPerMeter => round((float) ($measuredByDate[$date][$r->employee_id] ?? 0) * $clientMeter, 2),
+                $isInvoiceBilled => 0.0,
+                default => $this->rowIncome($r, $rates, $clientHour, $clientMeter),
+            };
             $cost = (float) $r->total_amount;
             // Consumed — leftovers (measured but no attendance row) are added below.
             if ($isPerMeter) {
@@ -288,7 +316,10 @@ class ProfitabilityService
             $cost = round($d['labour'] + $expenses, 2);
             $income = round($d['income'], 2);
             $profit = round($income - $cost, 2);
-            [$margin, $health] = $this->classify($income, $cost, $profit);
+            // Invoice-billed: no per-day revenue to grade against — stay neutral.
+            [$margin, $health] = $isInvoiceBilled
+                ? [null, 'neutral']
+                : $this->classify($income, $cost, $profit);
             $margin ??= 0.0;
 
             $days[] = [
@@ -325,7 +356,7 @@ class ProfitabilityService
             $income = round($m['income'], 2);
             $cost = round($m['labour'] + $m['expenses'], 2);
             $profit = round($income - $cost, 2);
-            [$margin] = $this->classify($income, $cost, $profit);
+            [$margin] = $isInvoiceBilled ? [null] : $this->classify($income, $cost, $profit);
             $margin ??= 0.0;
             $monthRows[] = [
                 'month' => $month,
@@ -343,7 +374,7 @@ class ProfitabilityService
 
         $totalCost = round($tLabour + $tExpenses, 2);
         $totalProfit = round($tIncome - $totalCost, 2);
-        [$totalMargin] = $this->classify(round($tIncome, 2), $totalCost, $totalProfit);
+        [$totalMargin] = $isInvoiceBilled ? [null] : $this->classify(round($tIncome, 2), $totalCost, $totalProfit);
         $totalMargin ??= 0.0;
 
         return [

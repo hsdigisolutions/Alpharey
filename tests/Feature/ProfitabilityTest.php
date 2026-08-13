@@ -150,7 +150,10 @@ it('costs an outsourced project by its flat fee, not our attendance', function (
         ->and($r['profit'])->toBe(1500.0);
 });
 
-it('includes paid subcontractor payments in the cost', function (): void {
+it('costs a subcontracted project by its payments ONLY — no double count', function (): void {
+    // Spec C9 / acceptance test 9: the thaekedar's budget covers the crews, so
+    // when a subcontractor record exists, our own attendance labour is NOT
+    // added on top of the payments.
     $project = Project::factory()->create([
         'company_id' => $this->company->id, 'billing_type' => 'hourly', 'client_hour_rate' => '20',
     ]);
@@ -169,9 +172,31 @@ it('includes paid subcontractor payments in the cost', function (): void {
     $r = $this->service->forProject($project->fresh());
 
     expect($r['subcontractor_cost'])->toBe(800.0)   // pending is excluded
-        ->and($r['cost'])->toBe(1800.0)             // 1000 labour + 800 sub
+        ->and($r['labour_cost'])->toBe(0.0)         // crews are the thaekedar's cost
+        ->and($r['cost'])->toBe(800.0)              // payments only — NOT 1000 + 800
         ->and($r['revenue'])->toBe(2000.0)
-        ->and($r['profit'])->toBe(200.0);
+        ->and($r['profit'])->toBe(1200.0);
+});
+
+it('never counts outsource_cost AND subcontractor payments together', function (): void {
+    // Both mechanisms describe the same external labour — the subcontractor
+    // record (with its real payment schedule) wins; the flat fee is ignored.
+    $project = Project::factory()->create([
+        'company_id' => $this->company->id, 'billing_type' => 'hourly', 'client_hour_rate' => '20',
+        'outsourced' => true, 'outsource_cost' => '3000',
+    ]);
+    punch($this->company, $this->employee, $project, '2026-06-01', 100, 1000);
+
+    $sub = new Subcontractor(['project_id' => $project->id, 'name' => 'Thaekedar SL', 'status' => 'active']);
+    $sub->company_id = $this->company->id;
+    $sub->save();
+    $paid = new SubcontractorPayment(['payment_number' => 1, 'payment_date' => '2026-06-03', 'amount' => '800', 'status' => 'paid']);
+    $paid->subcontractor_id = $sub->id;
+    $paid->save();
+
+    $r = $this->service->forProject($project->fresh());
+
+    expect($r['cost'])->toBe(800.0); // payments only — not 3000, not 1000, not both
 });
 
 it('classifies the margin into the traffic light', function (): void {

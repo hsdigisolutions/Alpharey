@@ -102,6 +102,22 @@ it('creates a linked expense on the subcontractor company when a payment is paid
         ->and((float) $expense->total)->toBe(500.0);
 });
 
+it('refuses to APPROVE the auto-posted subcontractor expense (would double-count)', function (): void {
+    $this->actingAs($this->admin);
+    $s = makeSubcontractor($this->companyA);
+    $svc = app(SubcontractorService::class);
+    $payment = $svc->addPayment($s, ['amount' => 500]);
+    $svc->markPaid($payment->fresh());
+
+    $expense = Expense::query()->withoutGlobalScopes()->findOrFail($payment->fresh()->expense_id);
+
+    // The P&L already counts the payment — approving the linked Gasto would
+    // count the same money twice through the approved-expense sum.
+    $this->post("/expenses/{$expense->id}/approve", ['approved' => true])
+        ->assertSessionHasErrors('approved');
+    expect($expense->fresh()->approved)->toBeFalse();
+});
+
 it('does not double-charge when a paid payment is marked paid again', function (): void {
     $this->actingAs($this->admin);
     $s = makeSubcontractor($this->companyA);

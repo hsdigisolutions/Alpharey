@@ -2030,6 +2030,7 @@ return [
         'bearable_hint' => 'Only client-borne costs feed project invoicing.',
         'deduct_from_salary' => 'Deduct from worker salary',
         'approved_locked' => 'Approved expense — locked (un-approve to edit).',
+        'subcontractor_expense_locked' => 'Gasto automático de subcontrata — no se aprueba: el pago ya cuenta en la rentabilidad / Automatic subcontractor expense — cannot be approved: the payment already counts in the P&L',
     ],
 
     'commissions' => [
