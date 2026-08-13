@@ -87,6 +87,35 @@ manage-templates modal (inline CRUD + list), and the bulk-add modal gained a
 `TaskTemplateTest` (6 — create/update/delete, active+tenant payload, cross-
 company 404, permission). **858 Pest tests.**
 
+**Phase D (done) — Daily Production Entry** (the flow that finally moves the
+Phase-B progress bars). Migration `2026_08_13_000005` extends `task_progress`
+with `batch_id` (uuid — groups a multi-worker entry), `logged_by`, and
+`photo_path`/`photo_name` (proof photo on the PRIVATE disk; all four server-set,
+NOT fillable). **`TaskProgressService` is the single writer** — a "Log work"
+entry splits a total quantity EQUALLY across the workers present on the project
+that day (the rounding remainder goes to the LAST worker so Σrows == the entered
+total to the cent — no quantity created or lost), writing one row per worker
+under one `batch_id`, then recomputes `ProductionTask::completed_quantity` = Σ
+quantity (direct assignment — the column stays non-mass-assignable, and this
+service is its only writer, keeping the traffic lights honest).
+**Attendance-constrained:** every logged worker MUST have a worked attendance
+row (present/late/early_leave) on that project on that date — production is
+credited only to people who were on site (`assertPresentOnProject`, drops the
+tenant scope so a deployed worker logged under the host counts; a per-date
+`GET /projects/{project}/present-workers` JSON feed drives the modal's worker
+list). `TaskProgressController` (nested store/destroy re-check task→project →
+404; `deleteBatch` removes the whole batch + its photo + recomputes; a gated +
+audited `GET /task-progress/{taskProgress}/photo` download). Project **Tareas**
+tab: each task row expands to its daily-production history (date · qty · workers
+· photo link · delete), and a "Registrar trabajo" button opens the log modal
+(date-driven present-worker checklist, equal-split preview, camera-capable photo
+field). `StoreTaskProgressRequest` gated `production_tasks.edit` (logging edits
+completion) with `OwnCompanyEmployee` on each worker. Tests: `TaskProgressTest`
+(9 — equal split + roll-up, remainder-to-last exact sum, absent-worker refusal,
+photo store+gated+audited download, batch delete + photo cleanup + recompute,
+present-workers feed, history payload, cross-project 404, edit gate). **867
+Pest tests.**
+
 ### Subcontractor deal model (2026-08-13, COMPLETE — all 5 steps, 835 tests)
 
 **Step 5 (done):** tenancy on the deal fields (cross-company read/edit → 404,

@@ -21,6 +21,7 @@ use App\Models\Measurement;
 use App\Models\ProductionTask;
 use App\Models\Project;
 use App\Models\ProjectDesignationRate;
+use App\Models\TaskProgress;
 use App\Models\TaskTemplate;
 use App\Services\Documents\DocumentStatus;
 use App\Services\Reports\ProfitabilityService;
@@ -436,6 +437,7 @@ class ProjectController extends Controller
     {
         $tasks = ProductionTask::query()
             ->where('project_id', $project->id)
+            ->with(['progress' => fn ($q) => $q->with('employee:id,full_name')->orderByDesc('date')->orderByDesc('id')])
             ->orderBy('category')->orderBy('name')
             ->get();
 
@@ -463,11 +465,43 @@ class ProjectController extends Controller
                 'progress' => $t->progressPercent(),
                 'health' => $t->health(),
                 'notes' => $t->notes,
+                // Daily-production history, grouped into multi-worker batches.
+                'batches' => $this->taskBatches($t),
             ])->values()->all(),
             'overall_progress' => min(100.0, $overall),
             // Advisory: warn (do not block) when the weightage does not sum to 100.
             'weightage_sum' => round($weightSum, 2),
         ];
+    }
+
+    /**
+     * A task's daily-production history, grouped into multi-worker batches
+     * (newest first — the rows arrive pre-ordered by the eager load).
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function taskBatches(ProductionTask $task): array
+    {
+        $batches = [];
+
+        foreach ($task->progress->groupBy('batch_id') as $rows) {
+            /** @var Collection<int, TaskProgress> $rows */
+            $first = $rows->first();
+            if ($first === null) {
+                continue;
+            }
+
+            $batches[] = [
+                'batch_id' => $first->batch_id,
+                'date' => $first->date->toDateString(),
+                'quantity' => round((float) $rows->sum(fn (TaskProgress $r) => (float) $r->quantity), 2),
+                'workers' => $rows->map(fn (TaskProgress $r) => $r->employee?->full_name)->filter()->values()->all(),
+                'notes' => $first->notes,
+                'photo_id' => $rows->firstWhere('photo_path', '!=', null)?->id,
+            ];
+        }
+
+        return $batches;
     }
 
     /**

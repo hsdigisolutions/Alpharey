@@ -9,17 +9,23 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Carbon;
 
 /**
- * A daily production entry against a production task (2026-08-13). The daily
- * multi-worker entry flow + completed_quantity roll-up lands in Phase D; this
- * model exists now so ProductionTask::progress() resolves.
+ * A daily production entry against a production task (2026-08-13). A "Log work"
+ * action splits a total quantity across the workers present that day, writing
+ * one row per worker sharing a `batch_id`. `photo_path`/`photo_name`/`logged_by`
+ * are server-set (NOT fillable). The task's `completed_quantity` is recomputed
+ * = Σ quantity by TaskProgressService — this is the only writer of that column.
  *
  * @property int $id
  * @property int $production_task_id
+ * @property string|null $batch_id
  * @property int $company_id
  * @property int|null $employee_id
+ * @property int|null $logged_by
  * @property Carbon $date
  * @property numeric-string $quantity
  * @property string|null $notes
+ * @property string|null $photo_path
+ * @property string|null $photo_name
  */
 class TaskProgress extends Model
 {
@@ -30,7 +36,12 @@ class TaskProgress extends Model
 
     public string $auditModule = 'production_tasks';
 
-    /** @var list<string> */
+    /**
+     * photo_path/photo_name/batch_id/logged_by are set by the service, never
+     * from client input (same discipline as attendance selfies).
+     *
+     * @var list<string>
+     */
     protected $fillable = [
         'production_task_id', 'employee_id', 'date', 'quantity', 'notes',
     ];
@@ -57,5 +68,13 @@ class TaskProgress extends Model
     public function employee(): BelongsTo
     {
         return $this->belongsTo(Employee::class);
+    }
+
+    /**
+     * @return BelongsTo<User, $this>
+     */
+    public function loggedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'logged_by');
     }
 }

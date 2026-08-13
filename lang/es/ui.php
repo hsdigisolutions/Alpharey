@@ -336,6 +336,7 @@ return [
         'cancel' => 'Cancelar',
         'continue' => 'Continuar',
         'close' => 'Cerrar',
+        'loading' => 'Cargando…',
         'actions' => 'Acciones',
         'notifications' => 'Notificaciones',
         'no_notifications' => 'No hay notificaciones',
@@ -999,6 +1000,25 @@ return [
         'st_open' => 'Abierta',
         'st_in_progress' => 'En curso',
         'st_done' => 'Completada',
+    ],
+
+    'task_progress' => [
+        'saved' => 'Producción registrada / Production logged',
+        'deleted' => 'Registro eliminado / Entry removed',
+        'log' => 'Registrar trabajo',
+        'history' => 'Producción diaria',
+        'empty' => 'Sin producción registrada todavía.',
+        'date' => 'Fecha',
+        'quantity' => 'Cantidad total',
+        'workers' => 'Trabajadores',
+        'workers_hint' => 'Solo los trabajadores presentes en esta obra ese día pueden acreditarse; la cantidad se reparte a partes iguales entre ellos.',
+        'none_present' => 'Ningún trabajador tiene asistencia en esta obra en esa fecha.',
+        'split_preview' => ':qty :unit cada uno, entre :n trabajador(es).',
+        'no_workers' => 'Selecciona al menos un trabajador.',
+        'not_present' => 'Un trabajador seleccionado no estaba presente en esta obra ese día.',
+        'photo' => 'Foto',
+        'notes' => 'Notas',
+        'save_btn' => 'Registrar',
     ],
 
     'task_templates' => [

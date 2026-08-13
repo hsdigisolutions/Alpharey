@@ -258,6 +258,60 @@ function deleteTask(t) {
     askDelete(t.name, () => router.delete(`/projects/${props.project.id}/tasks/${t.id}`, { preserveScroll: true }));
 }
 
+// Expand a task row to show its daily-production history.
+const expandedTaskId = ref(null);
+function toggleExpand(t) { expandedTaskId.value = expandedTaskId.value === t.id ? null : t.id; }
+
+// ── Log work (daily production entry) ───────────────────────────────────────
+const logOpen = ref(false);
+const logTask = ref(null);
+const presentWorkers = ref([]);
+const loadingWorkers = ref(false);
+const logForm = useForm({ date: new Date().toISOString().slice(0, 10), quantity: null, employee_ids: [], notes: '', photo: null });
+
+async function fetchPresentWorkers() {
+    loadingWorkers.value = true;
+    logForm.employee_ids = [];
+    try {
+        const res = await fetch(`/projects/${props.project.id}/present-workers?date=${logForm.date}`, { headers: { Accept: 'application/json' } });
+        const data = await res.json();
+        presentWorkers.value = data.workers ?? [];
+    } catch { presentWorkers.value = []; }
+    loadingWorkers.value = false;
+}
+
+function openLog(t) {
+    logTask.value = t;
+    logForm.reset();
+    logForm.date = new Date().toISOString().slice(0, 10);
+    logForm.clearErrors();
+    presentWorkers.value = [];
+    logOpen.value = true;
+    fetchPresentWorkers();
+}
+
+const splitPreview = computed(() => {
+    const n = logForm.employee_ids.length;
+    const q = Number(logForm.quantity);
+    if (!n || !q) return null;
+    return (q / n).toFixed(2);
+});
+
+function submitLog() {
+    logForm
+        .transform((d) => ({ ...d, quantity: d.quantity ?? '' }))
+        .post(`/projects/${props.project.id}/tasks/${logTask.value.id}/progress`, {
+            preserveScroll: true,
+            forceFormData: true,
+            onSuccess: () => (logOpen.value = false),
+        });
+}
+
+function deleteBatch(t, batch) {
+    askDelete(`${batch.date} · ${batch.quantity}`, () =>
+        router.delete(`/projects/${props.project.id}/tasks/${t.id}/progress/${batch.batch_id}`, { preserveScroll: true }));
+}
+
 // Prefill a bulk-add row from a template (one-shot copy — no lasting link).
 function applyTemplate(row, templateId) {
     const tpl = props.taskTemplates.find((t) => t.id === Number(templateId));
@@ -880,26 +934,60 @@ function destroy() {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    <tr v-for="t in projectTasks.tasks" :key="t.id" class="border-b border-line last:border-0 hover:bg-surface-hover">
-                                        <td class="px-3 py-2 font-medium">{{ t.name }}</td>
-                                        <td class="px-3 py-2 text-ink-soft">{{ $t(`production_tasks.cat_${t.category}`) }}</td>
-                                        <td class="px-3 py-2 text-ink-soft">{{ t.house_number ?? '—' }}</td>
-                                        <td class="tabular-nums px-3 py-2 text-end">{{ t.planned_quantity }} {{ t.unit }}</td>
-                                        <td class="tabular-nums px-3 py-2 text-end">{{ t.completed_quantity }}</td>
-                                        <td class="px-3 py-2">
-                                            <div class="flex items-center gap-2">
-                                                <div class="h-2 w-24 overflow-hidden rounded-full bg-surface-sunken">
-                                                    <div class="h-full rounded-full" :class="taskHealth[t.health]" :style="{ width: t.progress + '%' }" />
+                                    <template v-for="t in projectTasks.tasks" :key="t.id">
+                                        <tr class="border-b border-line hover:bg-surface-hover" :class="{ 'border-b-0': expandedTaskId === t.id }">
+                                            <td class="px-3 py-2 font-medium">
+                                                <button type="button" class="flex items-center gap-1.5 text-start hover:text-accent" @click="toggleExpand(t)">
+                                                    <AppIcon name="dots" v-if="false" />
+                                                    <span class="text-muted transition-transform" :class="{ 'rotate-90': expandedTaskId === t.id }">▸</span>
+                                                    <span>{{ t.name }}</span>
+                                                    <span v-if="t.batches.length" class="rounded-full bg-surface-sunken px-1.5 text-[10px] text-muted">{{ t.batches.length }}</span>
+                                                </button>
+                                            </td>
+                                            <td class="px-3 py-2 text-ink-soft">{{ $t(`production_tasks.cat_${t.category}`) }}</td>
+                                            <td class="px-3 py-2 text-ink-soft">{{ t.house_number ?? '—' }}</td>
+                                            <td class="tabular-nums px-3 py-2 text-end">{{ t.planned_quantity }} {{ t.unit }}</td>
+                                            <td class="tabular-nums px-3 py-2 text-end">{{ t.completed_quantity }}</td>
+                                            <td class="px-3 py-2">
+                                                <div class="flex items-center gap-2">
+                                                    <div class="h-2 w-24 overflow-hidden rounded-full bg-surface-sunken">
+                                                        <div class="h-full rounded-full" :class="taskHealth[t.health]" :style="{ width: t.progress + '%' }" />
+                                                    </div>
+                                                    <span class="tabular-nums text-xs">{{ t.progress }}%</span>
                                                 </div>
-                                                <span class="tabular-nums text-xs">{{ t.progress }}%</span>
-                                            </div>
-                                        </td>
-                                        <td class="px-3 py-2"><VBadge :status="taskStatusVariant[t.status]">{{ $t(`production_tasks.st_${t.status}`) }}</VBadge></td>
-                                        <td class="px-3 py-2 text-end">
-                                            <VButton v-if="canManageTasks.edit" variant="ghost" size="sm" icon="edit" @click="openTaskEdit(t)" />
-                                            <VButton v-if="canManageTasks.delete" variant="ghost" size="sm" icon="trash" @click="deleteTask(t)" />
-                                        </td>
-                                    </tr>
+                                            </td>
+                                            <td class="px-3 py-2"><VBadge :status="taskStatusVariant[t.status]">{{ $t(`production_tasks.st_${t.status}`) }}</VBadge></td>
+                                            <td class="px-3 py-2 text-end whitespace-nowrap">
+                                                <VButton v-if="canManageTasks.edit" variant="ghost" size="sm" icon="attendance" :title="$t('task_progress.log')" @click="openLog(t)" />
+                                                <VButton v-if="canManageTasks.edit" variant="ghost" size="sm" icon="edit" @click="openTaskEdit(t)" />
+                                                <VButton v-if="canManageTasks.delete" variant="ghost" size="sm" icon="trash" @click="deleteTask(t)" />
+                                            </td>
+                                        </tr>
+                                        <tr v-if="expandedTaskId === t.id" class="border-b border-line bg-surface-sunken/40">
+                                            <td colspan="8" class="px-3 py-2">
+                                                <p class="mb-2 text-xs font-medium uppercase tracking-wide text-muted">{{ $t('task_progress.history') }}</p>
+                                                <div v-if="t.batches.length === 0" class="py-2 text-sm text-muted">{{ $t('task_progress.empty') }}</div>
+                                                <table v-else class="w-full text-sm">
+                                                    <tbody>
+                                                        <tr v-for="b in t.batches" :key="b.batch_id" class="border-b border-line/60 last:border-0">
+                                                            <td class="py-1.5 pe-3 tabular-nums text-ink-soft">{{ b.date }}</td>
+                                                            <td class="py-1.5 pe-3 tabular-nums font-medium">{{ b.quantity }} {{ t.unit }}</td>
+                                                            <td class="py-1.5 pe-3 text-ink-soft">{{ b.workers.join(', ') || '—' }}</td>
+                                                            <td class="py-1.5 pe-3 text-muted">{{ b.notes }}</td>
+                                                            <td class="py-1.5 pe-3">
+                                                                <a v-if="b.photo_id" :href="`/task-progress/${b.photo_id}/photo`" target="_blank" class="inline-flex items-center gap-1 text-accent hover:underline">
+                                                                    <AppIcon name="camera" class="h-3.5 w-3.5" />{{ $t('task_progress.photo') }}
+                                                                </a>
+                                                            </td>
+                                                            <td class="py-1.5 text-end">
+                                                                <VButton v-if="canManageTasks.edit" variant="ghost" size="sm" icon="trash" @click="deleteBatch(t, b)" />
+                                                            </td>
+                                                        </tr>
+                                                    </tbody>
+                                                </table>
+                                            </td>
+                                        </tr>
+                                    </template>
                                     <tr v-if="projectTasks.tasks.length === 0"><td colspan="8" class="px-3 py-6 text-center text-muted">{{ $t('production_tasks.empty') }}</td></tr>
                                 </tbody>
                             </table>
@@ -1024,6 +1112,50 @@ function destroy() {
             <template #footer>
                 <VButton variant="ghost" @click="taskEditOpen = false"><Bilingual k="common.cancel" inline /></VButton>
                 <VButton type="submit" form="task-edit-form" :loading="taskForm.processing"><Bilingual k="common.save" inline /></VButton>
+            </template>
+        </VModal>
+
+        <!-- Log daily production (multi-worker split) -->
+        <VModal :open="logOpen" title-key="task_progress.log" @close="logOpen = false">
+            <div v-if="logTask" class="space-y-4">
+                <p class="text-sm text-ink-soft">{{ logTask.name }}</p>
+                <div class="grid gap-4 sm:grid-cols-2">
+                    <FormField k="task_progress.date" :error="logForm.errors.date" required>
+                        <VInput v-model="logForm.date" type="date" @change="fetchPresentWorkers" />
+                    </FormField>
+                    <FormField k="task_progress.quantity" :error="logForm.errors.quantity" required>
+                        <VInput v-model="logForm.quantity" type="number" step="0.01" min="0" :placeholder="logTask.unit" />
+                    </FormField>
+                </div>
+
+                <div>
+                    <p class="mb-1.5 text-sm font-medium"><Bilingual k="task_progress.workers" inline /></p>
+                    <p class="mb-2 text-xs text-muted">{{ $t('task_progress.workers_hint') }}</p>
+                    <div v-if="loadingWorkers" class="py-3 text-sm text-muted">{{ $t('common.loading') }}</div>
+                    <div v-else-if="presentWorkers.length === 0" class="rounded-md bg-status-warn-soft px-3 py-2 text-sm text-status-warn">{{ $t('task_progress.none_present') }}</div>
+                    <div v-else class="grid gap-1.5 sm:grid-cols-2">
+                        <label v-for="w in presentWorkers" :key="w.id" class="flex items-center gap-2 rounded-md border border-line px-2.5 py-1.5 text-sm hover:bg-surface-hover">
+                            <input type="checkbox" :value="w.id" v-model="logForm.employee_ids" class="accent-accent" />
+                            <span>{{ w.name }}</span>
+                            <span v-if="w.designation" class="text-xs text-muted">· {{ w.designation }}</span>
+                        </label>
+                    </div>
+                    <p v-if="logForm.errors.employee_ids" class="mt-1 text-xs text-status-danger">{{ logForm.errors.employee_ids }}</p>
+                    <p v-if="splitPreview" class="mt-2 text-xs text-ink-soft">
+                        {{ $t('task_progress.split_preview', { qty: splitPreview, unit: logTask.unit ?? '', n: logForm.employee_ids.length }) }}
+                    </p>
+                </div>
+
+                <FormField k="task_progress.photo" :error="logForm.errors.photo">
+                    <input type="file" accept="image/*,.pdf" capture="environment" class="block w-full text-sm text-ink-soft file:mr-3 file:rounded-md file:border-0 file:bg-surface-sunken file:px-3 file:py-1.5 file:text-sm" @change="(e) => (logForm.photo = e.target.files[0] ?? null)" />
+                </FormField>
+                <FormField k="task_progress.notes" :error="logForm.errors.notes">
+                    <VTextarea v-model="logForm.notes" :rows="2" />
+                </FormField>
+            </div>
+            <template #footer>
+                <VButton variant="ghost" @click="logOpen = false"><Bilingual k="common.cancel" inline /></VButton>
+                <VButton type="button" :loading="logForm.processing" :disabled="!logForm.employee_ids.length" @click="submitLog"><Bilingual k="task_progress.save_btn" inline /></VButton>
             </template>
         </VModal>
 

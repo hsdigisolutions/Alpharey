@@ -334,6 +334,7 @@ return [
         'cancel' => 'Cancel',
         'continue' => 'Continue',
         'close' => 'Close',
+        'loading' => 'Loading…',
         'actions' => 'Actions',
         'notifications' => 'Notifications',
         'no_notifications' => 'No notifications',
@@ -998,6 +999,25 @@ return [
         'st_open' => 'Open',
         'st_in_progress' => 'In progress',
         'st_done' => 'Done',
+    ],
+
+    'task_progress' => [
+        'saved' => 'Producción registrada / Production logged',
+        'deleted' => 'Registro eliminado / Entry removed',
+        'log' => 'Log work',
+        'history' => 'Daily production',
+        'empty' => 'No production logged yet.',
+        'date' => 'Date',
+        'quantity' => 'Total quantity',
+        'workers' => 'Workers',
+        'workers_hint' => 'Only workers present on this project that day can be credited; the quantity is split equally between them.',
+        'none_present' => 'No workers have attendance on this project for that date.',
+        'split_preview' => ':qty :unit each, across :n worker(s).',
+        'no_workers' => 'Select at least one worker.',
+        'not_present' => 'A selected worker was not present on this project that day.',
+        'photo' => 'Photo',
+        'notes' => 'Notes',
+        'save_btn' => 'Log',
     ],
 
     'task_templates' => [

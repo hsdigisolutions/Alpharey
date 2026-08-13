@@ -49,6 +49,7 @@ use App\Http\Controllers\ProposalController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\SearchController;
 use App\Http\Controllers\SubcontractorController;
+use App\Http\Controllers\TaskProgressController;
 use App\Http\Controllers\TaskTemplateController;
 use App\Http\Controllers\TodayController;
 use App\Http\Controllers\VehicleController;
@@ -271,6 +272,12 @@ Route::middleware(['auth', 'active', 'two_factor', 'not_worker'])->group(functio
     Route::post('/projects/{project}/tasks', [ProductionTaskController::class, 'store'])->name('projects.tasks.store');
     Route::put('/projects/{project}/tasks/{task}', [ProductionTaskController::class, 'update'])->name('projects.tasks.update');
     Route::delete('/projects/{project}/tasks/{task}', [ProductionTaskController::class, 'destroy'])->name('projects.tasks.destroy');
+
+    // Daily production entry — log work against a task (multi-worker split).
+    Route::get('/projects/{project}/present-workers', [TaskProgressController::class, 'presentWorkers'])->name('projects.present-workers');
+    Route::post('/projects/{project}/tasks/{task}/progress', [TaskProgressController::class, 'store'])->name('projects.tasks.progress.store');
+    Route::delete('/projects/{project}/tasks/{task}/progress/{batch}', [TaskProgressController::class, 'destroy'])->name('projects.tasks.progress.destroy');
+    Route::get('/task-progress/{taskProgress}/photo', [TaskProgressController::class, 'photo'])->name('task-progress.photo');
 
     // Task templates — a company's reusable production-task catalogue.
     Route::post('/task-templates', [TaskTemplateController::class, 'store'])->name('task-templates.store');
