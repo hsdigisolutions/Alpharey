@@ -27,6 +27,35 @@ project expense IS a legitimate project cost (counted once as an expense) — it
 is not excluded from P&L just because payroll also reimburses the worker for
 it; the two figures are the project view and the person view of the same euro.
 
+### Inventory rebuild — Phase A: bug fixes (2026-08-13, done)
+
+First slice of the confirmed inventory rebuild (client decisions Q1–Q7). Fixes the
+four known bugs; everything still routes through StockMovementService (the single
+stock writer). **A1** migration `2026_08_13_000006` adds SoftDeletes to
+equipment_items. **A2 (the real bug)** — project assignment now moves stock: a new
+`StockMovementService::assignToProject()` records an Issue movement (available −q,
+total unchanged — kit is out on site but still owned; refuses if the store is
+short) + the assignment; `returnFromProject()` records a Return (partial
+supported, migration `..._000007` adds `returned_quantity` to
+equipment_project_assignments, server-set; assignment Completes with an end_date
+when fully back). New `POST /inventory/assignments/{assignment}/return` + a Return
+action/modal on the Assignments tab (outstanding column). Before this, assigning
+to a project never touched available_stock. **A3** item soft-delete: a Delete
+button on the Items tab, guarded — an item with a non-returned worker issue OR an
+active project assignment is refused (flash error, `inventory.delete_blocked`);
+soft-deleted items drop out of every list while the full ledger + issue history is
+kept. **A4** category edit + delete (`PUT/DELETE /inventory/categories/{category}`,
+own-company only → 404 on shared NULL defaults / other companies; delete blocked
+when items use it → deactivate instead); inline edit/delete on the Categories tab
+(`editable` flag). **A5** Stock-movements tab gains item + date-range filters
+(`mv_item`/`mv_from`/`mv_to`; `itemOptions` shipped). Tests: `InventoryTest` (+10 —
+assign-through-ledger, partial+full project return, cross-company return 404,
+soft-delete keeps history, delete blocked by worker-issue / by active assignment,
+category update+delete, delete-in-use blocked, shared/foreign category 404,
+movement item filter). **889 Pest tests / 5148 assertions.** Phases B–H (serials,
+worker-profile + PWA, PPE/compliance, damage/loss, notifications, consumables,
+export) follow.
+
 ### Measurements + Production Tasks — full deep review (2026-08-13, COMPLETE)
 
 A line-by-line re-review of the whole Measurements/Production subsystem (Phases

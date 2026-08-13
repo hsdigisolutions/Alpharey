@@ -13,6 +13,7 @@ import AppLayout from '@/Layouts/AppLayout.vue';
 import FormField from '@/Components/ui/FormField.vue';
 import VBadge from '@/Components/ui/VBadge.vue';
 import VButton from '@/Components/ui/VButton.vue';
+import VConfirmDialog from '@/Components/ui/VConfirmDialog.vue';
 import VDateInput from '@/Components/ui/VDateInput.vue';
 import VEmptyState from '@/Components/ui/VEmptyState.vue';
 import VInput from '@/Components/ui/VInput.vue';
@@ -34,6 +35,7 @@ const props = defineProps({
     movementTypes: { type: Array, required: true },
     employees: { type: Array, required: true },
     projects: { type: Array, required: true },
+    itemOptions: { type: Array, default: () => [] },
     movements: { type: Array, required: true },
     issues: { type: Array, required: true },
     assignments: { type: Array, required: true },
@@ -56,8 +58,15 @@ const filters = reactive({
     per_page: Number(props.filters.per_page ?? 25),
 });
 function apply(extra = {}) {
-    router.get('/inventory', { ...filters, ...extra }, { preserveScroll: true, preserveState: true });
+    router.get('/inventory', { ...filters, ...movementFilters, ...extra }, { preserveScroll: true, preserveState: true });
 }
+
+/* Stock-movements tab filters (item + date range) */
+const movementFilters = reactive({
+    mv_item: props.filters.mv_item ?? '',
+    mv_from: props.filters.mv_from ?? '',
+    mv_to: props.filters.mv_to ?? '',
+});
 
 /* Item */
 const showItem = ref(false);
@@ -86,6 +95,14 @@ function submitItem() {
     editingItem.value
         ? payload.put(`/inventory/items/${editingItem.value.id}`, opts)
         : payload.post('/inventory/items', opts);
+}
+
+/* Delete item (soft-delete; server blocks when kit is still out) */
+const confirm = ref({ open: false, message: '', fn: null });
+function askDelete(message, fn) { confirm.value = { open: true, message, fn }; }
+function runDelete() { confirm.value.fn?.(); confirm.value.open = false; }
+function deleteItem(item) {
+    askDelete(item.name, () => router.delete(`/inventory/items/${item.id}`, { preserveScroll: true }));
 }
 
 /* Movement */
@@ -152,14 +169,41 @@ function submitAssign() {
     });
 }
 
+/* Return a project assignment (partial supported) */
+const returningAssignment = ref(null);
+const assignReturnForm = useForm({ returned_quantity: null });
+function openAssignReturn(assignment) {
+    returningAssignment.value = assignment;
+    assignReturnForm.returned_quantity = assignment.outstanding;
+    assignReturnForm.clearErrors();
+}
+function submitAssignReturn() {
+    assignReturnForm.post(`/inventory/assignments/${returningAssignment.value.id}/return`, {
+        preserveScroll: true,
+        onSuccess: () => (returningAssignment.value = null),
+    });
+}
+
 /* Category */
 const showCategory = ref(false);
+const editingCategory = ref(null);
 const categoryForm = useForm({ name: '', description: '', active: true });
+function openCategory(category = null) {
+    editingCategory.value = category;
+    categoryForm.name = category?.name ?? '';
+    categoryForm.description = category?.description ?? '';
+    categoryForm.active = category?.active ?? true;
+    categoryForm.clearErrors();
+    showCategory.value = true;
+}
 function submitCategory() {
-    categoryForm.post('/inventory/categories', {
-        preserveScroll: true,
-        onSuccess: () => { showCategory.value = false; categoryForm.reset(); },
-    });
+    const opts = { preserveScroll: true, onSuccess: () => { showCategory.value = false; categoryForm.reset(); } };
+    editingCategory.value
+        ? categoryForm.put(`/inventory/categories/${editingCategory.value.id}`, opts)
+        : categoryForm.post('/inventory/categories', opts);
+}
+function deleteCategory(category) {
+    askDelete(category.name, () => router.delete(`/inventory/categories/${category.id}`, { preserveScroll: true }));
 }
 
 const issueTone = { open: 'warn', partially_returned: 'info', returned: 'ok' };
@@ -198,15 +242,18 @@ const assignmentColumns = [
     { key: 'item', labelKey: 'inventory.name' },
     { key: 'project', labelKey: 'inventory.project' },
     { key: 'quantity', labelKey: 'inventory.quantity', align: 'end' },
+    { key: 'outstanding', labelKey: 'inventory.outstanding', align: 'end' },
     { key: 'start', labelKey: 'inventory.start_date' },
     { key: 'end', labelKey: 'inventory.end_date' },
     { key: 'status', labelKey: 'inventory.status' },
+    { key: 'actions', labelKey: 'common.actions', align: 'end' },
 ];
 const categoryColumns = [
     { key: 'name', labelKey: 'inventory.name' },
     { key: 'description', labelKey: 'inventory.description' },
     { key: 'count', labelKey: 'inventory.item_count', align: 'end' },
     { key: 'active', labelKey: 'inventory.active' },
+    { key: 'actions', labelKey: 'common.actions', align: 'end' },
 ];
 </script>
 
@@ -215,7 +262,7 @@ const categoryColumns = [
     <AppLayout>
         <VPageHeader k="inventory.title">
             <VButton v-if="can.create && view === 'categories'" variant="secondary" icon="plus"
-                @click="showCategory = true">
+                @click="openCategory()">
                 <Bilingual k="inventory.new_category" inline />
             </VButton>
             <VButton v-if="can.create" icon="plus" @click="openItem()">
@@ -268,6 +315,7 @@ const categoryColumns = [
                                 <Bilingual k="inventory.assign_to_project" inline />
                             </VButton>
                             <VButton v-if="can.edit" variant="ghost" size="sm" icon="edit" @click="openItem(i)" />
+                            <VButton v-if="can.delete" variant="ghost" size="sm" icon="trash" @click="deleteItem(i)" />
                         </span>
                     </td>
                 </tr>
@@ -281,6 +329,14 @@ const categoryColumns = [
 
         <!-- Stock ledger -->
         <template v-else-if="view === 'movements'">
+            <div class="flex flex-wrap items-end gap-2 pb-3">
+                <VSelect v-model="movementFilters.mv_item" class="w-full sm:w-56" @update:model-value="apply()">
+                    <option value="">{{ $t('inventory.name') }}</option>
+                    <option v-for="o in itemOptions" :key="o.id" :value="o.id">{{ o.name }}</option>
+                </VSelect>
+                <VDateInput v-model="movementFilters.mv_from" class="w-full sm:w-40" :placeholder="$t('inventory.date_from')" @update:model-value="apply()" />
+                <VDateInput v-model="movementFilters.mv_to" class="w-full sm:w-40" :placeholder="$t('inventory.date_to')" @update:model-value="apply()" />
+            </div>
             <VTable :columns="movementColumns">
                 <tr v-for="m in movements" :key="m.id" class="hover:bg-surface-hover">
                     <td class="tabular-nums px-3 py-2.5 text-sm">{{ m.created_at }}</td>
@@ -336,12 +392,19 @@ const categoryColumns = [
                     <td class="px-3 py-2.5 text-sm">{{ a.item ?? '—' }}</td>
                     <td class="px-3 py-2.5 text-sm">{{ a.project ?? '—' }}</td>
                     <td class="tabular-nums px-3 py-2.5 text-end text-sm">{{ a.quantity }}</td>
+                    <td class="tabular-nums px-3 py-2.5 text-end text-sm font-medium">{{ a.outstanding }}</td>
                     <td class="tabular-nums px-3 py-2.5 text-sm">{{ a.start_date }}</td>
                     <td class="tabular-nums px-3 py-2.5 text-sm text-ink-soft">{{ a.end_date ?? '—' }}</td>
                     <td class="px-3 py-2.5">
                         <VBadge :status="a.status === 'active' ? 'info' : 'ok'">
                             <Bilingual :k="`inventory.status_${a.status}`" inline />
                         </VBadge>
+                    </td>
+                    <td class="px-3 py-2.5 text-end">
+                        <VButton v-if="can.edit && a.status === 'active'" variant="ghost" size="sm"
+                            @click="openAssignReturn(a)">
+                            <Bilingual k="inventory.return" inline />
+                        </VButton>
                     </td>
                 </tr>
                 <template v-if="assignments.length === 0" #empty><VEmptyState icon="inventory" /></template>
@@ -356,6 +419,13 @@ const categoryColumns = [
                     <td class="px-3 py-2.5 text-sm text-ink-soft">{{ c.description ?? '—' }}</td>
                     <td class="tabular-nums px-3 py-2.5 text-end text-sm">{{ c.item_count }}</td>
                     <td class="px-3 py-2.5 text-sm text-ink-soft">{{ c.active ? '✓' : '—' }}</td>
+                    <td class="px-3 py-2.5 text-end">
+                        <span v-if="c.editable" class="flex items-center justify-end gap-1.5">
+                            <VButton v-if="can.edit" variant="ghost" size="sm" icon="edit" @click="openCategory(c)" />
+                            <VButton v-if="can.delete" variant="ghost" size="sm" icon="trash" @click="deleteCategory(c)" />
+                        </span>
+                        <span v-else class="text-xs text-muted">—</span>
+                    </td>
                 </tr>
                 <template v-if="categories.length === 0" #empty><VEmptyState icon="inventory" /></template>
             </VTable>
@@ -489,6 +559,21 @@ const categoryColumns = [
             </template>
         </VModal>
 
+        <!-- Return from project (partial supported) -->
+        <VModal :open="returningAssignment !== null" title-key="inventory.return" size="sm" @close="returningAssignment = null">
+            <form id="assign-return-form" class="grid gap-4" @submit.prevent="submitAssignReturn">
+                <FormField k="inventory.returned_quantity" :error="assignReturnForm.errors.returned_quantity" required>
+                    <VInput v-model="assignReturnForm.returned_quantity" type="number" step="0.01" min="0.01" />
+                </FormField>
+            </form>
+            <template #footer>
+                <VButton variant="ghost" @click="returningAssignment = null"><Bilingual k="common.cancel" inline /></VButton>
+                <VButton type="submit" form="assign-return-form" :loading="assignReturnForm.processing">
+                    <Bilingual k="common.save" inline />
+                </VButton>
+            </template>
+        </VModal>
+
         <!-- Project assignment -->
         <VModal :open="assigningItem !== null" title-key="inventory.assign_to_project" @close="assigningItem = null">
             <form id="assign-item-form" class="grid gap-4 sm:grid-cols-2" @submit.prevent="submitAssign">
@@ -519,8 +604,10 @@ const categoryColumns = [
             </template>
         </VModal>
 
+        <VConfirmDialog :open="confirm.open" :message="confirm.message" @confirm="runDelete" @cancel="confirm.open = false" />
+
         <!-- Category -->
-        <VModal :open="showCategory" title-key="inventory.new_category" size="sm" @close="showCategory = false">
+        <VModal :open="showCategory" :title-key="editingCategory ? 'inventory.edit_category' : 'inventory.new_category'" size="sm" @close="showCategory = false">
             <form id="category-form" class="grid gap-4" @submit.prevent="submitCategory">
                 <FormField k="inventory.name" :error="categoryForm.errors.name" required>
                     <VInput v-model="categoryForm.name" />

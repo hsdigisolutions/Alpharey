@@ -2,10 +2,12 @@
 
 namespace App\Services\Inventory;
 
+use App\Enums\EquipmentAssignmentStatus;
 use App\Enums\EquipmentIssueStatus;
 use App\Enums\StockMovementType;
 use App\Models\EmployeeEquipmentIssue;
 use App\Models\EquipmentItem;
+use App\Models\EquipmentProjectAssignment;
 use App\Models\EquipmentStockMovement;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -118,6 +120,85 @@ class StockMovementService
             $issue->save();
 
             return $issue;
+        });
+    }
+
+    /**
+     * Assign kit to a site: one ledger movement (out of the store, still owned)
+     * and one assignment record, together. Same shape as issueTo but keyed to a
+     * project rather than a worker.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    public function assignToProject(EquipmentItem $item, array $data): EquipmentProjectAssignment
+    {
+        return DB::transaction(function () use ($item, $data): EquipmentProjectAssignment {
+            $quantity = (float) $data['quantity'];
+
+            // Issue moves available down and leaves total — the company still
+            // owns kit that is out on a site (refuses if the store is short).
+            $this->record($item, StockMovementType::Issue, $quantity, [
+                'project_id' => $data['project_id'],
+                'notes' => $data['notes'] ?? null,
+            ]);
+
+            $assignment = new EquipmentProjectAssignment([
+                'equipment_item_id' => $item->id,
+                'project_id' => $data['project_id'],
+                'quantity' => (string) $quantity,
+                'start_date' => $data['start_date'] ?? now()->toDateString(),
+                'end_date' => $data['end_date'] ?? null,
+                'notes' => $data['notes'] ?? null,
+            ]);
+            $assignment->company_id = $item->company_id;
+            $assignment->status = EquipmentAssignmentStatus::Active;
+            $assignment->save();
+
+            return $assignment;
+        });
+    }
+
+    /**
+     * Take kit back from a site. A partial return is normal, so the assignment
+     * stays Active until every unit is back, then it Completes with an end date.
+     *
+     * @throws ValidationException
+     */
+    public function returnFromProject(EquipmentProjectAssignment $assignment, float $quantity): EquipmentProjectAssignment
+    {
+        if ($quantity <= 0) {
+            throw ValidationException::withMessages([
+                'returned_quantity' => __('ui.inventory.quantity_positive'),
+            ]);
+        }
+
+        if ($quantity > $assignment->outstanding()) {
+            throw ValidationException::withMessages([
+                'returned_quantity' => __('ui.inventory.return_exceeds_issued', [
+                    'outstanding' => $assignment->outstanding(),
+                ]),
+            ]);
+        }
+
+        return DB::transaction(function () use ($assignment, $quantity): EquipmentProjectAssignment {
+            $item = EquipmentItem::query()->withoutGlobalScopes()->findOrFail($assignment->equipment_item_id);
+
+            $this->record($item, StockMovementType::Return, $quantity, [
+                'project_id' => $assignment->project_id,
+            ]);
+
+            $assignment->returned_quantity = (string) round((float) $assignment->returned_quantity + $quantity, 2);
+
+            $fullyReturned = $assignment->outstanding() <= 0;
+            $assignment->status = $fullyReturned
+                ? EquipmentAssignmentStatus::Completed
+                : EquipmentAssignmentStatus::Active;
+            if ($fullyReturned && $assignment->end_date === null) {
+                $assignment->end_date = now();
+            }
+            $assignment->save();
+
+            return $assignment;
         });
     }
 

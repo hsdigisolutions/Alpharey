@@ -410,7 +410,10 @@ Route::middleware(['auth', 'active', 'two_factor', 'not_worker'])->group(functio
     Route::post('/inventory/items/{item}/issue', [InventoryController::class, 'issue'])->name('inventory.issue');
     Route::post('/inventory/items/{item}/assign', [InventoryController::class, 'assignToProject'])->name('inventory.assign');
     Route::post('/inventory/issues/{issue}/return', [InventoryController::class, 'returnIssue'])->name('inventory.issues.return');
+    Route::post('/inventory/assignments/{assignment}/return', [InventoryController::class, 'returnAssignment'])->name('inventory.assignments.return');
     Route::post('/inventory/categories', [InventoryController::class, 'storeCategory'])->name('inventory.categories.store');
+    Route::put('/inventory/categories/{category}', [InventoryController::class, 'updateCategory'])->name('inventory.categories.update');
+    Route::delete('/inventory/categories/{category}', [InventoryController::class, 'destroyCategory'])->name('inventory.categories.destroy');
 
     // Screen 21 — Vehicles (Phase 7). Insurance/ITV expiries feed the same
     // compliance alerts as documents (VehicleCompliance + verto:scan-documents).

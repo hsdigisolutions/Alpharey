@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\EquipmentAssignmentStatus;
 use App\Enums\EquipmentIssueStatus;
 use App\Enums\EquipmentItemType;
 use App\Enums\StockMovementType;
@@ -7,11 +8,15 @@ use App\Enums\UserRole;
 use App\Models\Company;
 use App\Models\Employee;
 use App\Models\EmployeeEquipmentIssue;
+use App\Models\EquipmentCategory;
 use App\Models\EquipmentItem;
+use App\Models\EquipmentProjectAssignment;
 use App\Models\EquipmentStockMovement;
+use App\Models\Project;
 use App\Models\User;
 use App\Services\Inventory\StockMovementService;
 use Illuminate\Validation\ValidationException;
+use Inertia\Testing\AssertableInertia as Assert;
 
 beforeEach(function (): void {
     $this->company = Company::factory()->create();
@@ -315,4 +320,130 @@ it('denies inventory actions to a user without the permission', function (): voi
         'movement_type' => StockMovementType::StockIn->value,
         'quantity' => 1,
     ])->assertForbidden();
+});
+
+/**
+ * Phase A2 — project assignment now moves stock through the ledger (Bug 1/2 fix).
+ */
+it('assigns kit to a project through the ledger, reducing available', function (): void {
+    $project = Project::factory()->forCompany($this->company)->create();
+    $this->stock->record($this->item, StockMovementType::StockIn, 10);
+
+    $this->post("/inventory/items/{$this->item->id}/assign", [
+        'project_id' => $project->id, 'quantity' => 4, 'start_date' => now()->toDateString(),
+    ])->assertRedirect()->assertSessionHasNoErrors();
+
+    $assignment = EquipmentProjectAssignment::query()->firstOrFail();
+    expect((float) $this->item->fresh()->available_stock)->toBe(6.0)   // out of the store
+        ->and((float) $this->item->fresh()->total_stock)->toBe(10.0)   // still owned
+        ->and($assignment->status)->toBe(EquipmentAssignmentStatus::Active)
+        ->and($assignment->outstanding())->toBe(4.0);
+});
+
+it('returns kit from a project — partial keeps it active, full completes it', function (): void {
+    $project = Project::factory()->forCompany($this->company)->create();
+    $this->stock->record($this->item, StockMovementType::StockIn, 10);
+    $assignment = $this->stock->assignToProject($this->item->fresh(), [
+        'project_id' => $project->id, 'quantity' => 4, 'start_date' => now()->toDateString(),
+    ]);
+
+    // Partial return of 1 → available 7, still active.
+    $this->post("/inventory/assignments/{$assignment->id}/return", ['returned_quantity' => 1])->assertRedirect();
+    expect((float) $this->item->fresh()->available_stock)->toBe(7.0)
+        ->and($assignment->fresh()->status)->toBe(EquipmentAssignmentStatus::Active);
+
+    // Return the rest → available 10, completed with an end date.
+    $this->post("/inventory/assignments/{$assignment->id}/return", ['returned_quantity' => 3])->assertRedirect();
+    $assignment->refresh();
+    expect((float) $this->item->fresh()->available_stock)->toBe(10.0)
+        ->and($assignment->status)->toBe(EquipmentAssignmentStatus::Completed)
+        ->and($assignment->end_date)->not->toBeNull();
+});
+
+it('cannot return another company project assignment (404)', function (): void {
+    $other = Company::factory()->create();
+    $foreignItem = EquipmentItem::factory()->create(['company_id' => $other->id]);
+    $foreignProject = Project::factory()->forCompany($other)->create();
+    $foreignAssignment = EquipmentProjectAssignment::factory()->create([
+        'company_id' => $other->id, 'equipment_item_id' => $foreignItem->id, 'project_id' => $foreignProject->id,
+    ]);
+
+    $this->post("/inventory/assignments/{$foreignAssignment->id}/return", ['returned_quantity' => 1])->assertNotFound();
+});
+
+/**
+ * Phase A3 — item soft-delete + outstanding-kit guard.
+ */
+it('soft-deletes an item, hiding it from lists but keeping all history', function (): void {
+    $this->stock->record($this->item, StockMovementType::StockIn, 5);
+
+    $this->delete("/inventory/items/{$this->item->id}")->assertRedirect()->assertSessionHas('success');
+
+    expect(EquipmentItem::query()->count())->toBe(0)                     // hidden
+        ->and(EquipmentItem::withTrashed()->count())->toBe(1)           // kept
+        ->and(EquipmentStockMovement::query()->count())->toBe(1);       // ledger preserved
+});
+
+it('blocks deleting an item with kit still out with a worker', function (): void {
+    $employee = Employee::factory()->create(['company_id' => $this->company->id]);
+    $this->stock->record($this->item, StockMovementType::StockIn, 5);
+    $this->stock->issueTo($this->item->fresh(), ['employee_id' => $employee->id, 'issued_quantity' => 2]);
+
+    $this->delete("/inventory/items/{$this->item->id}")->assertRedirect()->assertSessionHas('error');
+
+    expect(EquipmentItem::query()->whereKey($this->item->id)->exists())->toBeTrue(); // not deleted
+});
+
+it('blocks deleting an item with an active project assignment', function (): void {
+    $project = Project::factory()->forCompany($this->company)->create();
+    $this->stock->record($this->item, StockMovementType::StockIn, 5);
+    $this->stock->assignToProject($this->item->fresh(), [
+        'project_id' => $project->id, 'quantity' => 2, 'start_date' => now()->toDateString(),
+    ]);
+
+    $this->delete("/inventory/items/{$this->item->id}")->assertRedirect()->assertSessionHas('error');
+    expect(EquipmentItem::query()->whereKey($this->item->id)->exists())->toBeTrue();
+});
+
+/**
+ * Phase A4 — category edit + delete.
+ */
+it('updates and deletes a company category', function (): void {
+    $category = EquipmentCategory::factory()->create(['company_id' => $this->company->id, 'name' => 'Old']);
+
+    $this->put("/inventory/categories/{$category->id}", ['name' => 'New', 'active' => true])->assertRedirect();
+    expect($category->fresh()->name)->toBe('New');
+
+    $this->delete("/inventory/categories/{$category->id}")->assertRedirect()->assertSessionHas('success');
+    expect(EquipmentCategory::query()->whereKey($category->id)->exists())->toBeFalse();
+});
+
+it('blocks deleting a category still used by an item', function (): void {
+    $category = EquipmentCategory::factory()->create(['company_id' => $this->company->id]);
+    EquipmentItem::factory()->create(['company_id' => $this->company->id, 'equipment_category_id' => $category->id]);
+
+    $this->delete("/inventory/categories/{$category->id}")->assertRedirect()->assertSessionHas('error');
+    expect(EquipmentCategory::query()->whereKey($category->id)->exists())->toBeTrue();
+});
+
+it('cannot edit a shared default or another company category (404)', function (): void {
+    $shared = EquipmentCategory::factory()->create(['company_id' => null]);
+    $other = Company::factory()->create();
+    $foreign = EquipmentCategory::factory()->create(['company_id' => $other->id]);
+
+    $this->put("/inventory/categories/{$shared->id}", ['name' => 'X'])->assertNotFound();
+    $this->delete("/inventory/categories/{$foreign->id}")->assertNotFound();
+});
+
+/**
+ * Phase A5 — movements-tab filter.
+ */
+it('filters the stock-movements ledger by item', function (): void {
+    $other = EquipmentItem::factory()->create(['company_id' => $this->company->id, 'name' => 'Taladro']);
+    $this->stock->record($this->item, StockMovementType::StockIn, 5);
+    $this->stock->record($other, StockMovementType::StockIn, 3);
+
+    $this->get("/inventory?mv_item={$this->item->id}")
+        ->assertInertia(fn (Assert $page) => $page->has('movements', 1)
+            ->where('movements.0.item', 'Casco de seguridad'));
 });

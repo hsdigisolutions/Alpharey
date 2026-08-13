@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
  * Screen 23 — a stock item. Company-owned: a helmet in one company's store is
@@ -35,6 +36,8 @@ class EquipmentItem extends Model
 
     /** @use HasFactory<EquipmentItemFactory> */
     use HasFactory;
+
+    use SoftDeletes;
 
     public string $auditModule = 'inventory';
 
@@ -87,5 +90,13 @@ class EquipmentItem extends Model
     public function issues(): HasMany
     {
         return $this->hasMany(EmployeeEquipmentIssue::class);
+    }
+
+    /**
+     * @return HasMany<EquipmentProjectAssignment, $this>
+     */
+    public function assignments(): HasMany
+    {
+        return $this->hasMany(EquipmentProjectAssignment::class);
     }
 }

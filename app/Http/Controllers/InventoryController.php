@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Enums\EquipmentAssignmentStatus;
+use App\Enums\EquipmentIssueStatus;
 use App\Enums\EquipmentItemType;
 use App\Enums\StockMovementType;
 use App\Http\Controllers\Admin\Concerns\ResolvesCompanyContext;
@@ -49,8 +50,11 @@ class InventoryController extends Controller
 
         return Inertia::render('Inventory/Index', [
             'items' => $items,
-            'filters' => $request->only(['search', 'equipment_category_id', 'item_type', 'active', 'low_stock', 'per_page']),
+            'filters' => $request->only(['search', 'equipment_category_id', 'item_type', 'active', 'low_stock', 'per_page', 'mv_item', 'mv_from', 'mv_to']),
             'categories' => $this->availableCategories(),
+            // Lightweight item list for the movements-tab filter dropdown.
+            'itemOptions' => EquipmentItem::query()->orderBy('name')->get(['id', 'name'])
+                ->map(fn (EquipmentItem $i): array => ['id' => $i->id, 'name' => $i->name])->all(),
             'itemTypes' => array_map(fn (EquipmentItemType $t): string => $t->value, EquipmentItemType::cases()),
             'movementTypes' => array_map(fn (StockMovementType $t): string => $t->value, StockMovementType::cases()),
             'employees' => Employee::query()->orderBy('full_name')->get(['id', 'full_name']),
@@ -93,6 +97,15 @@ class InventoryController extends Controller
     public function destroy(EquipmentItem $item): RedirectResponse
     {
         Gate::authorize('inventory.delete');
+
+        // Guard: kit still out with a worker or on a site must be resolved first
+        // (soft-delete keeps all ledger + issue history — decision Q7).
+        $kitStillOut = $item->issues()->where('status', '!=', EquipmentIssueStatus::Returned->value)->exists()
+            || $item->assignments()->where('status', EquipmentAssignmentStatus::Active->value)->exists();
+
+        if ($kitStillOut) {
+            return back()->with('error', __('ui.inventory.delete_blocked'));
+        }
 
         $item->delete();
 
@@ -172,14 +185,25 @@ class InventoryController extends Controller
             return back()->withErrors(['project_id' => __('ui.inventory.project_not_found')]);
         }
 
-        $assignment = new EquipmentProjectAssignment(array_merge($validated, [
-            'equipment_item_id' => $item->id,
-        ]));
-        $assignment->company_id = $item->company_id;
-        $assignment->status = EquipmentAssignmentStatus::Active;
-        $assignment->save();
+        // Through the ledger: assigning to a site takes the kit out of the store
+        // (Bug 1 fix) — available_stock now reflects kit on projects too.
+        $this->stock->assignToProject($item, $validated);
 
         return back()->with('success', __('ui.inventory.assigned'));
+    }
+
+    /** Take kit back from a site — partial returns supported (Bug 2 fix). */
+    public function returnAssignment(Request $request, EquipmentProjectAssignment $assignment): RedirectResponse
+    {
+        Gate::authorize('inventory.edit');
+
+        $validated = $request->validate([
+            'returned_quantity' => ['required', 'numeric', 'min:0.01'],
+        ]);
+
+        $this->stock->returnFromProject($assignment, (float) $validated['returned_quantity']);
+
+        return back()->with('success', __('ui.inventory.assignment_returned'));
     }
 
     public function storeCategory(Request $request): RedirectResponse
@@ -199,6 +223,40 @@ class InventoryController extends Controller
         ]));
 
         return back()->with('success', __('ui.inventory.category_saved'));
+    }
+
+    public function updateCategory(Request $request, EquipmentCategory $category): RedirectResponse
+    {
+        Gate::authorize('inventory.edit');
+
+        // Only this company's own categories are editable — the shared NULL
+        // defaults and other companies' categories are off limits.
+        abort_unless($category->company_id === $this->contextCompanyId(), 404);
+
+        $category->update($request->validate([
+            'name' => ['required', 'string', 'max:100'],
+            'description' => ['nullable', 'string', 'max:1000'],
+            'active' => ['boolean'],
+        ]));
+
+        return back()->with('success', __('ui.inventory.category_saved'));
+    }
+
+    public function destroyCategory(EquipmentCategory $category): RedirectResponse
+    {
+        Gate::authorize('inventory.delete');
+
+        abort_unless($category->company_id === $this->contextCompanyId(), 404);
+
+        // A category still used by an item cannot be deleted — deactivate it
+        // instead (ExpenseCategory pattern).
+        if ($category->items()->exists()) {
+            return back()->with('error', __('ui.inventory.category_in_use'));
+        }
+
+        $category->delete();
+
+        return back()->with('success', __('ui.inventory.category_deleted'));
     }
 
     /**
@@ -252,7 +310,9 @@ class InventoryController extends Controller
     {
         return EquipmentStockMovement::query()
             ->with(['item:id,name,sku,unit', 'employee:id,full_name', 'project:id,name'])
-            ->when($request->filled('item_id'), fn (Builder $q) => $q->where('equipment_item_id', $request->integer('item_id')))
+            ->when($request->filled('mv_item'), fn (Builder $q) => $q->where('equipment_item_id', $request->integer('mv_item')))
+            ->when($request->filled('mv_from'), fn (Builder $q) => $q->whereDate('created_at', '>=', $request->string('mv_from')))
+            ->when($request->filled('mv_to'), fn (Builder $q) => $q->whereDate('created_at', '<=', $request->string('mv_to')))
             ->orderByDesc('id')
             ->limit(100)
             ->get()
@@ -314,6 +374,8 @@ class InventoryController extends Controller
                 'item' => $a->item?->name,
                 'project' => $a->project?->name,
                 'quantity' => (float) $a->quantity,
+                'returned_quantity' => (float) $a->returned_quantity,
+                'outstanding' => $a->outstanding(),
                 'start_date' => $a->start_date->toDateString(),
                 'end_date' => $a->end_date?->toDateString(),
                 'status' => $a->status->value,
@@ -334,16 +396,20 @@ class InventoryController extends Controller
             ->groupBy('equipment_category_id')
             ->pluck('total', 'equipment_category_id');
 
+        $companyId = app(CurrentCompany::class)->id();
+
         return EquipmentCategory::query()
-            ->forCompany(app(CurrentCompany::class)->id())
+            ->forCompany($companyId)
             ->orderBy('name')
-            ->get(['id', 'name', 'description', 'active'])
+            ->get(['id', 'company_id', 'name', 'description', 'active'])
             ->map(fn (EquipmentCategory $c): array => [
                 'id' => $c->id,
                 'name' => $c->name,
                 'description' => $c->description,
                 'active' => $c->active,
                 'item_count' => (int) ($counts[$c->id] ?? 0),
+                // Shared NULL defaults are read-only; only the company's own edit.
+                'editable' => $c->company_id === $companyId,
             ])
             ->values()
             ->all();
