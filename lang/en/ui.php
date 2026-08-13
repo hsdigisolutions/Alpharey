@@ -1148,6 +1148,7 @@ return [
         'designation' => 'Designation',
         'client_rate' => 'Client rate',
         'worker_rate' => 'Worker rate',
+        'worker_rate_hint' => 'Worker rate: reference only — it never affects pay. Workers are always paid their profile/wage-history rate.',
         'rate_type' => 'Rate type',
         'add' => 'Add rate',
         'empty' => 'No per-designation rates — the worker profile rate is used.',

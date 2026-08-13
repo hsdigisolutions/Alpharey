@@ -319,14 +319,16 @@ function destroy() {
                     </div>
                 </VCard>
 
-                <!-- Feature 2 — per-designation rates (client + worker) -->
+                <!-- Per-designation CLIENT billing rates. worker_rate is reference
+                     only — pay always comes from the profile/wage history. -->
                 <VCard v-if="canSeeWages" title-key="project_rates.title" class="lg:col-span-2" :padded="false">
+                    <p class="border-b border-line px-4 py-2 text-xs text-muted">{{ $t('project_rates.worker_rate_hint') }}</p>
                     <table class="w-full text-sm">
                         <thead class="bg-surface-sunken text-[11px] uppercase tracking-wide text-muted">
                             <tr>
                                 <th class="px-4 py-2 text-start"><Bilingual k="project_rates.designation" inline /></th>
                                 <th class="px-4 py-2 text-end"><Bilingual k="project_rates.client_rate" inline /></th>
-                                <th class="px-4 py-2 text-end"><Bilingual k="project_rates.worker_rate" inline /></th>
+                                <th class="px-4 py-2 text-end" :title="$t('project_rates.worker_rate_hint')"><Bilingual k="project_rates.worker_rate" inline /></th>
                                 <th class="px-4 py-2 text-start"><Bilingual k="project_rates.rate_type" inline /></th>
                                 <th class="px-4 py-2"></th>
                             </tr>

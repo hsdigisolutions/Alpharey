@@ -1149,6 +1149,7 @@ return [
         'designation' => 'Designación',
         'client_rate' => 'Tarifa cliente',
         'worker_rate' => 'Tarifa trabajador',
+        'worker_rate_hint' => 'Tarifa trabajador: solo referencia — no afecta al salario. El trabajador siempre cobra su tarifa de perfil/historial.',
         'rate_type' => 'Tipo de tarifa',
         'add' => 'Añadir tarifa',
         'empty' => 'Sin tarifas por designación — se usa la tarifa del perfil del trabajador.',

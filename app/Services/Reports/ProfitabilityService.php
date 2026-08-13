@@ -218,7 +218,7 @@ class ProfitabilityService
                 'designation' => $r->employee?->designation,
                 'hours' => round($hours, 2),
                 'client_rate' => $this->unitClientRate($r, $rates, $clientHour, $clientMeter),
-                'worker_rate' => $this->unitWorkerRate($r, $rates),
+                'worker_rate' => $this->unitWorkerRate($r),
                 'income' => round($income, 2),
                 'cost' => round($cost, 2),
                 'profit' => round($income - $cost, 2),
@@ -353,16 +353,14 @@ class ProfitabilityService
     }
 
     /**
-     * @param  Collection<int, ProjectDesignationRate>  $rates
+     * The rate the worker actually COSTS us — always the frozen pay snapshot.
+     * Never project_designation_rates.worker_rate: that field is reference-only
+     * (salary-structure rule 2026-08-12) and the row's real cost is priced from
+     * the profile/wage-history snapshot, so showing anything else would make the
+     * displayed rate disagree with the summed cost.
      */
-    private function unitWorkerRate(Attendance $r, Collection $rates): float
+    private function unitWorkerRate(Attendance $r): float
     {
-        $rate = $r->employee?->designation_id !== null ? $rates->get($r->employee->designation_id) : null;
-
-        if ($rate instanceof ProjectDesignationRate) {
-            return (float) $rate->worker_rate;
-        }
-
         return (float) ($r->hourly_rate_snapshot ?? $r->wage_rate_snapshot ?? 0);
     }
 

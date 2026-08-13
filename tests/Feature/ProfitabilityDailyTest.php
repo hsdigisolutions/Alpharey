@@ -38,7 +38,9 @@ function worker(int $designationId): Employee
     ]);
 }
 
-it('computes the daily P&L per worker from client vs worker rates', function (): void {
+// Spec acceptance test 7: designation client_rate DOES drive P&L income, while
+// COST comes from the workers' own profile rates (worker_rate is reference-only).
+it('computes daily P&L income from designation client rates and cost from profile rates', function (): void {
     $svc = app(AttendanceService::class);
 
     // 07 Aug: Maestro, 2× Peón, Electricista — all 8h on the project.
@@ -52,23 +54,27 @@ it('computes the daily P&L per worker from client vs worker rates', function ():
     expect($pnl['days'])->toHaveCount(1);
     $day = $pnl['days'][0];
 
-    // Income = 160 + 120 + 120 + 200 = 600. Cost (worker) = 120 + 80 + 80 + 144 = 424.
+    // Income (client side) = 160 + 120 + 120 + 200 = 600.
+    // Cost = each worker's PROFILE rate: 4 workers × 8h × 5 €/h = 160.
+    // The designation worker_rate (15/10/18) is reference-only — never cost.
     expect($day['date'])->toBe('2026-08-07')
         ->and($day['workers_count'])->toBe(4)
         ->and((float) $day['hours'])->toBe(32.0)
         ->and((float) $day['income'])->toBe(600.0)
-        ->and((float) $day['labour'])->toBe(424.0)
-        ->and((float) $day['profit'])->toBe(176.0)
+        ->and((float) $day['labour'])->toBe(160.0)
+        ->and((float) $day['profit'])->toBe(440.0)
         ->and($day['workers'])->toHaveCount(4);
 
-    // One electricista worker line: 8h × 25 client = 200, × 18 worker = 144.
+    // One electricista worker line: income 8h × 25 client = 200; cost 8h × 5
+    // profile = 40; the displayed worker rate is the real snapshot (5), never
+    // the reference worker_rate (18).
     $elecLine = collect($day['workers'])->firstWhere('income', 200.0);
-    expect((float) $elecLine['cost'])->toBe(144.0)
+    expect((float) $elecLine['cost'])->toBe(40.0)
         ->and((float) $elecLine['client_rate'])->toBe(25.0)
-        ->and((float) $elecLine['worker_rate'])->toBe(18.0);
+        ->and((float) $elecLine['worker_rate'])->toBe(5.0);
 
     // Total + KPI figures.
     expect((float) $pnl['totals']['income'])->toBe(600.0)
-        ->and((float) $pnl['totals']['profit'])->toBe(176.0)
+        ->and((float) $pnl['totals']['profit'])->toBe(440.0)
         ->and((float) $pnl['months'][0]['income'])->toBe(600.0);
 });

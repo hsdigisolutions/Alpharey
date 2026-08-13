@@ -4,6 +4,23 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Status: Phase 9 in progress — hardening (2026-08-01)
 
+### Salary structure build (2026-08-12, in progress — spec confirmed by client)
+
+Building the confirmed salary-structure spec in 8 ordered increments. **Fix 1
+(done):** `project_designation_rates.worker_rate` is OUT of the pay path — the
+old `AttendanceService::applyProjectDesignationRate()` (which froze the project
+worker_rate over the profile rate and rewrote day_type) is deleted; every day is
+priced from `WageRateService::ratesForDate` (wage history → profile fallback).
+worker_rate is now REFERENCE ONLY ('Solo referencia — no afecta al salario' hint
+on the Project rates card); designation client_rate still drives daily-P&L
+income. `ProfitabilityService::unitWorkerRate` now reports the real frozen
+snapshot rate, never worker_rate, so displayed rate = summed cost. Cutover per
+client: rows frozen under the old rule keep their historical totals (history is
+never rewritten); only new/repriced-unpaid rows use the corrected logic.
+DesignationRateTest inverted (acceptance test 6: profile 50 beats worker_rate
+80); ProfitabilityDailyTest now pins acceptance test 7 (income 600 from client
+rates, cost 160 from profile rates).
+
 **Every screen 01–26 is built (Phase 8 complete).** Phase 9 is hardening, UAT, and
 launch — no new screens. Current: **781 Pest tests / 4526 assertions passing (1
 skipped) · Pint clean · Larastan level 6 clean · `composer audit` + `npm audit`

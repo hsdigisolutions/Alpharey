@@ -6,7 +6,6 @@ use App\Enums\AttendanceMode;
 use App\Enums\DayType;
 use App\Enums\DeploymentStatus;
 use App\Enums\OvertimePolicyType;
-use App\Enums\ProjectRateType;
 use App\Enums\WageType;
 use App\Enums\WeekendRateType;
 use App\Models\Attendance;
@@ -14,7 +13,6 @@ use App\Models\AttendanceLog;
 use App\Models\Employee;
 use App\Models\EmployeeDeployment;
 use App\Models\OvertimePolicy;
-use App\Models\ProjectDesignationRate;
 use App\Models\Scopes\CompanyScope;
 use App\Services\Employees\WageRateService;
 use App\Services\Settings\SettingsService;
@@ -287,15 +285,12 @@ class AttendanceService
      */
     private function applySnapshots(Attendance $attendance, Employee $employee): void
     {
-        // Feature 2 — a project rate for THIS worker's designation overrides the
-        // profile rate for this day. The project rate's own type (per hour/day/
-        // metre) sets how the day prices; a half day stays a half day. Only kicks
-        // in when the row is on a project AND a matching rate exists — every other
-        // row falls through to the profile-rate path below, unchanged.
-        if ($this->applyProjectDesignationRate($attendance, $employee)) {
-            return;
-        }
-
+        // Salary-structure rule (2026-08-12): the worker is ALWAYS paid their
+        // profile / wage-history rate. Project designation rates are CLIENT
+        // BILLING data — client_rate feeds P&L income, worker_rate is reference
+        // only — and must never reach the pay snapshot. (Rows frozen under the
+        // pre-rule behaviour keep their historical totals; history is never
+        // rewritten.)
         $dayType = $this->dayTypeFor($attendance);
         $attendance->day_type = $dayType;
 
@@ -315,48 +310,6 @@ class AttendanceService
         $attendance->wage_type_snapshot = $wageType;
         $attendance->wage_rate_snapshot = $rate;
         $attendance->hourly_rate_snapshot = $hourly;
-    }
-
-    /**
-     * Freeze the project's rate for the worker's designation onto the row, if one
-     * exists. Returns true when it applied (the caller then skips the profile
-     * path). The rate TYPE drives the day type: per_hour → priced by the hour,
-     * per_meter → by the metre, per_day → a full jornada (a half day stays half).
-     */
-    private function applyProjectDesignationRate(Attendance $attendance, Employee $employee): bool
-    {
-        if ($attendance->project_id === null || $employee->designation_id === null) {
-            return false;
-        }
-
-        $rate = ProjectDesignationRate::query()
-            ->withoutGlobalScope(CompanyScope::class)
-            ->where('project_id', $attendance->project_id)
-            ->where('designation_id', $employee->designation_id)
-            ->first();
-
-        if ($rate === null) {
-            return false;
-        }
-
-        $worker = (float) $rate->worker_rate;
-
-        [$dayType, $wageType, $wageRate, $hourly] = match ($rate->rate_type) {
-            ProjectRateType::PerHour => [DayType::Hourly, WageType::Hourly, $worker, $worker],
-            ProjectRateType::PerMeter => [DayType::PerMeter, WageType::PerMeter, $worker, null],
-            // per_day → a daily jornada; keep an explicit half day as a half day.
-            ProjectRateType::PerDay => [
-                $attendance->day_type === DayType::Half ? DayType::Half : DayType::Full,
-                WageType::Daily, $worker, round($worker / 8, 2),
-            ],
-        };
-
-        $attendance->day_type = $dayType;
-        $attendance->wage_type_snapshot = $wageType;
-        $attendance->wage_rate_snapshot = $wageRate;
-        $attendance->hourly_rate_snapshot = $hourly;
-
-        return true;
     }
 
     /**

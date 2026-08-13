@@ -75,48 +75,54 @@ it('cannot delete a rate through another project', function (): void {
     $this->delete("/projects/{$other->id}/designation-rates/{$r->id}")->assertNotFound();
 });
 
-it('prices a per-hour project designation rate over the profile rate', function (): void {
+// Salary-structure rule (2026-08-12): designation rates are CLIENT BILLING
+// data. worker_rate is reference-only and must NEVER price a day — the worker
+// is always paid their profile / wage-history rate, on every project.
+
+it('never pays from a per-hour designation rate — the profile rate wins', function (): void {
     rate($this->project->id, $this->designation->id, ProjectRateType::PerHour->value, '15');
 
     $row = logProjectDay($this->employee->id, $this->project->id, 'hourly', ['hours_worked' => '8']);
 
-    // 8h × 15 (project rate) = 120, NOT 8 × 8 (profile).
-    expect((float) $row->total_amount)->toBe(120.0)
-        ->and((float) $row->wage_rate_snapshot)->toBe(15.0);
+    // 8h × 8 (profile hourly), NOT 8 × 15 (project worker_rate).
+    expect((float) $row->total_amount)->toBe(64.0)
+        ->and((float) $row->wage_rate_snapshot)->toBe(8.0);
 });
 
-it('prices a per-day project designation rate as a full jornada', function (): void {
-    rate($this->project->id, $this->designation->id, ProjectRateType::PerDay->value, '90');
+it('never pays from a per-day designation rate — spec acceptance test 6', function (): void {
+    // Profile daily 50; project designation worker_rate 80 → paid 50, not 80.
+    rate($this->project->id, $this->designation->id, ProjectRateType::PerDay->value, '80');
 
     $row = logProjectDay($this->employee->id, $this->project->id, 'full');
 
-    expect((float) $row->total_amount)->toBe(90.0); // the project daily rate
+    expect((float) $row->total_amount)->toBe(50.0)
+        ->and((float) $row->wage_rate_snapshot)->toBe(50.0);
 });
 
-it('prices a per-meter project designation rate by quantity', function (): void {
+it('never pays from a per-meter designation rate — the profile per-meter rate wins', function (): void {
     rate($this->project->id, $this->designation->id, ProjectRateType::PerMeter->value, '4');
 
     $row = logProjectDay($this->employee->id, $this->project->id, 'per_meter', ['quantity' => '30']);
 
-    expect((float) $row->total_amount)->toBe(120.0); // 30 × 4
+    expect((float) $row->total_amount)->toBe(90.0); // 30 × 3 (profile), not 30 × 4
 });
 
-it('falls back to the profile rate when the project has no rate for the designation', function (): void {
+it('pays the profile rate when the project has no rate for the designation', function (): void {
     // No ProjectDesignationRate row for this project/designation.
     $row = logProjectDay($this->employee->id, $this->project->id, 'hourly', ['hours_worked' => '8']);
 
     expect((float) $row->total_amount)->toBe(64.0); // 8 × 8 (profile hourly)
 });
 
-it('freezes the project rate so a later rate change never rewrites the day', function (): void {
+it('ignores designation-rate changes entirely — the frozen profile snapshot stands', function (): void {
     $projectRate = rate($this->project->id, $this->designation->id, ProjectRateType::PerHour->value, '15');
 
     $row = logProjectDay($this->employee->id, $this->project->id, 'hourly', ['hours_worked' => '8']);
-    expect((float) $row->total_amount)->toBe(120.0);
+    expect((float) $row->total_amount)->toBe(64.0); // profile 8/h — worker_rate ignored
 
-    // Raise the project rate — the already-logged day keeps its frozen 15.
+    // Changing the project worker_rate never touches a logged day.
     $projectRate->update(['worker_rate' => '99']);
 
-    expect((float) $row->fresh()->wage_rate_snapshot)->toBe(15.0)
-        ->and((float) $row->fresh()->total_amount)->toBe(120.0);
+    expect((float) $row->fresh()->wage_rate_snapshot)->toBe(8.0)
+        ->and((float) $row->fresh()->total_amount)->toBe(64.0);
 });
