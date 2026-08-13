@@ -6,6 +6,7 @@
  */
 import { computed, ref } from 'vue';
 import { Head, router, useForm } from '@inertiajs/vue3';
+import { t } from '@/translate';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import ProjectFormModal from '@/Components/Projects/ProjectFormModal.vue';
 import DocumentsPanel from '@/Components/Documents/DocumentsPanel.vue';
@@ -14,6 +15,7 @@ import VAlert from '@/Components/ui/VAlert.vue';
 import VBadge from '@/Components/ui/VBadge.vue';
 import VButton from '@/Components/ui/VButton.vue';
 import VCard from '@/Components/ui/VCard.vue';
+import VChart from '@/Components/ui/VChart.vue';
 import VConfirmDialog from '@/Components/ui/VConfirmDialog.vue';
 import VCurrencyInput from '@/Components/ui/VCurrencyInput.vue';
 import VEmptyState from '@/Components/ui/VEmptyState.vue';
@@ -62,6 +64,7 @@ const props = defineProps({
     taskCategories: { type: Array, default: () => [] },
     taskStatuses: { type: Array, default: () => [] },
     taskTemplates: { type: Array, default: () => [] },
+    taskReport: { type: Object, default: null },
     canManageTasks: { type: Object, default: () => ({}) },
     can: { type: Object, required: true },
 });
@@ -229,6 +232,21 @@ function submitRejectMeas() {
 // ── Production tasks (Tareas tab) ───────────────────────────────────────────
 const taskHealth = { ok: 'bg-status-ok', warn: 'bg-status-warn', danger: 'bg-status-danger' };
 const taskStatusVariant = { open: 'neutral', in_progress: 'info', done: 'ok' };
+
+// Phase E — production trend chart (one line per category).
+const categoryRole = { civil: 'accent', electrical: 'info', plumbing: 'ok', finishing: 'warn', other: 'neutral' };
+const trendChart = computed(() => {
+    const trend = props.taskReport?.trend;
+    if (!trend || !trend.labels.length) return null;
+    return {
+        labels: trend.labels,
+        datasets: trend.series.map((s) => ({
+            label: t(`production_tasks.cat_${s.category}`),
+            data: s.data,
+            role: categoryRole[s.category] ?? 'neutral',
+        })),
+    };
+});
 
 const blankTaskRow = () => ({ name: '', category: 'other', house_number: '', unit: 'm²', unit_price: 0, planned_quantity: null, weightage: 0, status: 'open', notes: '' });
 
@@ -999,6 +1017,89 @@ function destroy() {
                         </div>
                     </VCard>
                     <p class="text-xs text-muted">{{ $t('production_tasks.internal_hint') }}</p>
+
+                    <!-- Phase E — production reports -->
+                    <template v-if="taskReport">
+                        <!-- E1 · Planned vs actual + estimated finish -->
+                        <VCard v-if="taskReport.planned_vs_actual.rows.length" :padded="false">
+                            <div class="border-b border-line px-4 py-3">
+                                <h3 class="text-sm font-semibold"><Bilingual k="task_report.planned_vs_actual" inline /></h3>
+                            </div>
+                            <div class="overflow-x-auto">
+                                <table class="w-full text-sm">
+                                    <thead class="bg-surface-sunken text-[11px] uppercase tracking-wide text-muted">
+                                        <tr>
+                                            <th class="px-3 py-2 text-start"><Bilingual k="production_tasks.name" inline /></th>
+                                            <th class="px-3 py-2 text-end"><Bilingual k="task_report.planned" inline /></th>
+                                            <th class="px-3 py-2 text-end"><Bilingual k="task_report.done" inline /></th>
+                                            <th class="px-3 py-2 text-end"><Bilingual k="task_report.remaining" inline /></th>
+                                            <th class="px-3 py-2 text-end"><Bilingual k="task_report.pct_done" inline /></th>
+                                            <th class="px-3 py-2 text-start"><Bilingual k="task_report.est_finish" inline /></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr v-for="r in taskReport.planned_vs_actual.rows" :key="r.id" class="border-b border-line last:border-0">
+                                            <td class="px-3 py-2 font-medium">{{ r.name }}</td>
+                                            <td class="tabular-nums px-3 py-2 text-end">{{ r.planned }} {{ r.unit }}</td>
+                                            <td class="tabular-nums px-3 py-2 text-end">{{ r.done }}</td>
+                                            <td class="tabular-nums px-3 py-2 text-end">{{ r.remaining }}</td>
+                                            <td class="tabular-nums px-3 py-2 text-end"><span :class="{ 'text-status-ok': r.health === 'ok', 'text-status-warn': r.health === 'warn', 'text-status-danger': r.health === 'danger' }">{{ r.progress }}%</span></td>
+                                            <td class="px-3 py-2">
+                                                <VBadge v-if="r.est_finish === 'done'" status="ok"><Bilingual k="task_report.finished" inline /></VBadge>
+                                                <span v-else-if="r.est_finish" class="tabular-nums">{{ r.est_finish }}</span>
+                                                <span v-else class="text-muted">—</span>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                    <tfoot class="border-t border-line-strong bg-surface-sunken/50 font-medium">
+                                        <tr>
+                                            <td class="px-3 py-2"><Bilingual k="common.total" inline /></td>
+                                            <td class="tabular-nums px-3 py-2 text-end">{{ taskReport.planned_vs_actual.totals.planned }}</td>
+                                            <td class="tabular-nums px-3 py-2 text-end">{{ taskReport.planned_vs_actual.totals.done }}</td>
+                                            <td class="tabular-nums px-3 py-2 text-end">{{ taskReport.planned_vs_actual.totals.remaining }}</td>
+                                            <td colspan="2"></td>
+                                        </tr>
+                                    </tfoot>
+                                </table>
+                            </div>
+                            <p class="px-4 py-2 text-xs text-muted">{{ $t('task_report.est_hint') }}</p>
+                        </VCard>
+
+                        <div class="grid gap-4 lg:grid-cols-2">
+                            <!-- E2 · Per-worker productivity -->
+                            <VCard v-if="taskReport.per_worker.length" :padded="false">
+                                <div class="border-b border-line px-4 py-3">
+                                    <h3 class="text-sm font-semibold"><Bilingual k="task_report.per_worker" inline /></h3>
+                                </div>
+                                <div class="overflow-x-auto">
+                                    <table class="w-full text-sm">
+                                        <thead class="bg-surface-sunken text-[11px] uppercase tracking-wide text-muted">
+                                            <tr>
+                                                <th class="px-3 py-2 text-start"><Bilingual k="task_progress.workers" inline /></th>
+                                                <th class="px-3 py-2 text-end"><Bilingual k="task_report.total_qty" inline /></th>
+                                                <th class="px-3 py-2 text-end"><Bilingual k="task_report.last7" inline /></th>
+                                                <th class="px-3 py-2 text-end"><Bilingual k="task_report.entries" inline /></th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <tr v-for="(w, i) in taskReport.per_worker" :key="i" class="border-b border-line last:border-0">
+                                                <td class="px-3 py-2 font-medium">{{ w.employee }}</td>
+                                                <td class="tabular-nums px-3 py-2 text-end">{{ w.total }}</td>
+                                                <td class="tabular-nums px-3 py-2 text-end">{{ w.last7 }}</td>
+                                                <td class="tabular-nums px-3 py-2 text-end">{{ w.entries }}</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </VCard>
+
+                            <!-- E3 · Production trend -->
+                            <VCard v-if="trendChart">
+                                <h3 class="mb-3 text-sm font-semibold"><Bilingual k="task_report.trend" inline /></h3>
+                                <VChart type="line" :labels="trendChart.labels" :datasets="trendChart.datasets" :height="220" />
+                            </VCard>
+                        </div>
+                    </template>
                 </template>
             </div>
 

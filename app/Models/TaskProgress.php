@@ -4,6 +4,8 @@ namespace App\Models;
 
 use App\Models\Concerns\Auditable;
 use App\Models\Concerns\BelongsToCompany;
+use Database\Factories\TaskProgressFactory;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Carbon;
@@ -31,6 +33,9 @@ class TaskProgress extends Model
 {
     use Auditable;
     use BelongsToCompany;
+
+    /** @use HasFactory<TaskProgressFactory> */
+    use HasFactory;
 
     protected $table = 'task_progress';
 

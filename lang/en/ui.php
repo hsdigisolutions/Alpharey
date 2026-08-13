@@ -351,6 +351,7 @@ return [
         'delete' => 'Delete',
         'back' => 'Back',
         'next' => 'Next',
+        'total' => 'Total',
         'employees' => 'employees',
     ],
 
@@ -1026,6 +1027,22 @@ return [
         'photo' => 'Photo',
         'notes' => 'Notes',
         'save_btn' => 'Log',
+    ],
+
+    'task_report' => [
+        'planned_vs_actual' => 'Planned vs actual',
+        'planned' => 'Planned',
+        'done' => 'Done',
+        'remaining' => 'Remaining',
+        'pct_done' => '% Done',
+        'est_finish' => 'Est. finish',
+        'finished' => 'Done',
+        'est_hint' => 'Estimated finish = today + remaining ÷ the average daily rate over the last 7 days.',
+        'per_worker' => 'Per-worker productivity',
+        'total_qty' => 'Total',
+        'last7' => 'Last 7 days',
+        'entries' => 'Entries',
+        'trend' => 'Production trend',
     ],
 
     'task_templates' => [

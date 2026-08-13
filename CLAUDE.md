@@ -133,6 +133,22 @@ tab bar is now a `computed` so the Tareas count updates live after a partial
 reload. Tests: `ProductionTaskTest` (+2 — standalone list filter/tenancy,
 export gated+audited). **869 Pest tests.**
 
+**Phase E (done) — Reports & Charts.** `ProductionReportService` (read-only
+analytics over production_tasks + task_progress), shipped in the project
+`show` payload as `taskReport` (gated `production_tasks.view`) and rendered in
+the Tareas tab: **E1 planned-vs-actual** per task — planned · done · remaining
+· % · **estimated finish** = today + ⌈remaining ÷ avg daily rate over the last
+7 days⌉ (a completed task reads "Done"; a stalled one with no recent
+production shows "—"), plus a totals row; **E2 per-worker productivity** — each
+worker's total credited quantity + last-7-days + entry count, heaviest first
+(employee eager-loaded `withTrashed` so a later soft-deleted worker still
+names their history); **E3 production trend** — a `VChart` line per category
+(distinct units stay on separate lines) over the daily production dates. New
+`TaskProgressFactory` + `HasFactory` on TaskProgress. Tests:
+`ProductionReportTest` (4 — est-finish math 500/320 → 19 Aug, done/stalled
+states, per-worker heaviest-first with window, per-category trend series).
+**873 Pest tests.**
+
 ### Subcontractor deal model (2026-08-13, COMPLETE — all 5 steps, 835 tests)
 
 **Step 5 (done):** tenancy on the deal fields (cross-company read/edit → 404,

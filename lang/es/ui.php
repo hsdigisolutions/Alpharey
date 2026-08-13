@@ -353,6 +353,7 @@ return [
         'delete' => 'Eliminar',
         'back' => 'Atrás',
         'next' => 'Siguiente',
+        'total' => 'Total',
         'employees' => 'empleados',
     ],
 
@@ -1027,6 +1028,22 @@ return [
         'photo' => 'Foto',
         'notes' => 'Notas',
         'save_btn' => 'Registrar',
+    ],
+
+    'task_report' => [
+        'planned_vs_actual' => 'Previsto vs real',
+        'planned' => 'Previsto',
+        'done' => 'Hecho',
+        'remaining' => 'Restante',
+        'pct_done' => '% Hecho',
+        'est_finish' => 'Fin estimado',
+        'finished' => 'Completada',
+        'est_hint' => 'Fin estimado = hoy + restante ÷ la media diaria de los últimos 7 días.',
+        'per_worker' => 'Productividad por trabajador',
+        'total_qty' => 'Total',
+        'last7' => 'Últimos 7 días',
+        'entries' => 'Registros',
+        'trend' => 'Tendencia de producción',
     ],
 
     'task_templates' => [

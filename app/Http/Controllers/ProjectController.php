@@ -24,6 +24,7 @@ use App\Models\ProjectDesignationRate;
 use App\Models\TaskProgress;
 use App\Models\TaskTemplate;
 use App\Services\Documents\DocumentStatus;
+use App\Services\ProductionTasks\ProductionReportService;
 use App\Services\Reports\ProfitabilityService;
 use App\Support\CurrentCompany;
 use App\Support\DocumentTypes;
@@ -243,6 +244,7 @@ class ProjectController extends Controller
             'taskCategories' => array_map(fn (ProductionTaskCategory $c) => $c->value, ProductionTaskCategory::cases()),
             'taskStatuses' => array_map(fn (ProductionTaskStatus $s) => $s->value, ProductionTaskStatus::cases()),
             'taskTemplates' => Gate::allows('production_tasks.view') ? $this->taskTemplates() : [],
+            'taskReport' => Gate::allows('production_tasks.view') ? $this->taskReport($project) : null,
             'canManageTasks' => [
                 'view' => Gate::allows('production_tasks.view'),
                 'create' => Gate::allows('production_tasks.create'),
@@ -502,6 +504,23 @@ class ProjectController extends Controller
         }
 
         return $batches;
+    }
+
+    /**
+     * Phase E — production reporting (planned-vs-actual, per-worker, trend) for
+     * the Tareas tab.
+     *
+     * @return array<string, mixed>
+     */
+    private function taskReport(Project $project): array
+    {
+        $service = app(ProductionReportService::class);
+
+        return [
+            'planned_vs_actual' => $service->plannedVsActual($project),
+            'per_worker' => $service->perWorker($project),
+            'trend' => $service->trend($project),
+        ];
     }
 
     /**
