@@ -3,6 +3,7 @@
 namespace App\Services\Reports;
 
 use App\Enums\BillingType;
+use App\Enums\ExpenseResponsibility;
 use App\Enums\ProjectRateType;
 use App\Models\Attendance;
 use App\Models\Expense;
@@ -123,24 +124,49 @@ class ProfitabilityService
 
         $revenue = $this->revenueFor($project, $hours, $meters, $from, $to);
 
-        // COST rules (spec C9, thaekedar model) — exactly one labour basis:
-        //   subcontractor record exists → cost = paid subcontractor payments
-        //     (+ our own approved expenses). The thaekedar's budget covers the
-        //     crews — own attendance labour AND outsource_cost are NOT added,
-        //     so external labour is never counted twice.
-        //   outsourced flag (no subcontractor) → the flat outsource_cost
-        //     replaces our crew's wages.
-        //   neither → our own attendance labour (the normal case).
+        // COST rules (thaekedar DEAL model, confirmed 2026-08-13) — exactly one
+        // labour basis, never our own crew's wages on an externalised project:
+        //
+        //   subcontractor with an agreed_budget → cost = the FULL budget the
+        //     moment the deal exists (it is committed money, regardless of how
+        //     much has been paid out yet). Scenario A: expenses are HIS, ours
+        //     add nothing. Scenario B: our approved expenses add on top.
+        //   subcontractor with NULL budget (legacy) → paid payments + expenses
+        //     (the pre-deal behaviour, until an admin fills the budget in).
+        //   outsourced flag (no subcontractor) → the flat outsource_cost.
+        //   none of the above → our own attendance labour + expenses.
+        //
+        // Cancelled deals never cost; completed ones keep costing (committed).
         $outsourced = (bool) $project->outsourced;
-        $hasSubcontractor = Subcontractor::query()
+        $subs = Subcontractor::query()
             ->withoutGlobalScope(CompanyScope::class)
             ->where('company_id', $project->company_id)
             ->where('project_id', $project->id)
-            ->exists();
+            ->where('status', '!=', 'cancelled')
+            ->get(['id', 'agreed_budget', 'expense_responsibility']);
+        $hasSubcontractor = $subs->isNotEmpty();
 
         if ($hasSubcontractor) {
+            $budgeted = $subs->filter(fn (Subcontractor $s) => $s->agreed_budget !== null);
+            $budgetCost = round((float) $budgeted->sum(fn (Subcontractor $s) => (float) $s->agreed_budget), 2);
+
+            // Legacy records (no budget yet): their PAID payments stay the cost.
+            $legacyIds = $subs->filter(fn (Subcontractor $s) => $s->agreed_budget === null)->pluck('id');
+            $legacyPayments = $legacyIds->isEmpty() ? 0.0 : round((float) SubcontractorPayment::query()
+                ->whereIn('subcontractor_id', $legacyIds)
+                ->where('status', 'paid')
+                ->when($from !== null, fn ($q) => $q->whereDate('payment_date', '>=', $from))
+                ->when($to !== null, fn ($q) => $q->whereDate('payment_date', '<=', $to))
+                ->sum('amount'), 2);
+
+            // Expenses are OUR cost only when a deal says WE bear them — or on
+            // a pure-legacy project (pre-deal behaviour kept verbatim).
+            $weBearExpenses = $budgeted->isEmpty()
+                || $subs->contains(fn (Subcontractor $s) => $s->expense_responsibility === ExpenseResponsibility::Ours);
+
+            $subcontract = round($budgetCost + $legacyPayments, 2);
             $labourCost = 0.0;
-            $cost = round($subcontract + $expenses, 2);
+            $cost = round($subcontract + ($weBearExpenses ? $expenses : 0.0), 2);
         } elseif ($outsourced) {
             $labourCost = (float) ($project->outsource_cost ?? 0.0);
             $cost = round($labourCost + $expenses, 2);
@@ -915,8 +941,11 @@ class ProfitabilityService
             ->where('company_id', $companyId)->max('updated_at');
         $inv = Invoice::query()->withoutGlobalScope(CompanyScope::class)
             ->where('company_id', $companyId)->max('updated_at');
+        // Deal edits (agreed_budget / responsibility) change the cost basis.
+        $deal = Subcontractor::query()->withoutGlobalScope(CompanyScope::class)
+            ->where('company_id', $companyId)->max('updated_at');
 
-        return implode('|', [(string) $att, (string) $exp, (string) $prj, (string) $sub, (string) $mea, (string) $inv]);
+        return implode('|', [(string) $att, (string) $exp, (string) $prj, (string) $sub, (string) $mea, (string) $inv, (string) $deal]);
     }
 
     /** Portable "year-month" grouping — SQLite in tests, MySQL in production. */

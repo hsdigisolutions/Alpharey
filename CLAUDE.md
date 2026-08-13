@@ -33,6 +33,19 @@ CompanyScope, never SoftDeletes (ScopeDisciplineTest). Tests: Scenario A
 (80−30−20−20=10, still-to-pay 5, our profit 20), Scenario B (profit 15,
 still-to-pay 10, our profit 5), live-pull-not-typed (+window bound).
 
+**Step 3 (done):** P&L cost basis — a subcontracted project with an
+`agreed_budget` costs the FULL budget the moment the deal is live (committed
+money; paid-so-far is irrelevant to cost). Scenario A: our approved expenses
+are NOT our cost; Scenario B: budget + our expenses. NULL-budget legacy deals
+keep payments-as-cost (+ expenses, the exact pre-deal behaviour); CANCELLED
+deals never cost (the project falls back to its own labour). Cache signature
+now also tracks `subcontractors` MAX(updated_at) so a budget edit refreshes
+the reports. Note: the daily Rentabilidad view still shows payments by
+payment_date (cash view) — a fixed budget cannot be attributed to single days,
+same convention as the outsource flat fee. Tests: budget-A (cost 80, not 5
+paid / 1000 labour / +20 expenses), budget-B (95), cancelled-deal (labour),
+legacy fallback (existing tests unchanged).
+
 ### Salary structure build (2026-08-12, COMPLETE — all 8 steps, all 12 acceptance tests green)
 
 **Deep-review pass 2 (2026-08-12, post-build).** Full scenario re-test of all 8

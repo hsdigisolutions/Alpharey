@@ -150,6 +150,77 @@ it('costs an outsourced project by its flat fee, not our attendance', function (
         ->and($r['profit'])->toBe(1500.0);
 });
 
+it('costs a budgeted deal by the FULL agreed budget — Scenario A', function (): void {
+    // Confirmed model: the budget is committed money the moment the deal is
+    // active — cost 80 immediately, even though only 5 has been paid out.
+    // Scenario A: expenses are the thaekedar's, NOT our cost.
+    $project = Project::factory()->create([
+        'company_id' => $this->company->id, 'billing_type' => 'hourly', 'client_hour_rate' => '20',
+    ]);
+    punch($this->company, $this->employee, $project, '2026-06-01', 100, 1000);
+
+    $sub = new Subcontractor([
+        'project_id' => $project->id, 'name' => 'Thaekedar SL', 'status' => 'active',
+        'agreed_budget' => '80', 'expense_responsibility' => 'thaekedar',
+    ]);
+    $sub->company_id = $this->company->id;
+    $sub->save();
+    $paid = new SubcontractorPayment(['payment_number' => 1, 'payment_date' => '2026-06-03', 'amount' => '5', 'status' => 'paid']);
+    $paid->subcontractor_id = $sub->id;
+    $paid->save();
+
+    Expense::factory()->create([ // thaekedar's problem — not our cost
+        'company_id' => $this->company->id, 'project_id' => $project->id,
+        'approved' => true, 'total' => '20', 'date' => '2026-06-05',
+    ]);
+
+    $r = $this->service->forProject($project->fresh());
+
+    expect($r['cost'])->toBe(80.0)                 // the budget — not 5, not 1000, not +20
+        ->and($r['subcontractor_cost'])->toBe(80.0)
+        ->and($r['labour_cost'])->toBe(0.0);
+});
+
+it('costs a budgeted deal as budget + our expenses — Scenario B', function (): void {
+    $project = Project::factory()->create([
+        'company_id' => $this->company->id, 'billing_type' => 'hourly', 'client_hour_rate' => '20',
+    ]);
+    punch($this->company, $this->employee, $project, '2026-06-01', 100, 1000);
+
+    $sub = new Subcontractor([
+        'project_id' => $project->id, 'name' => 'Thaekedar SL', 'status' => 'active',
+        'agreed_budget' => '80', 'expense_responsibility' => 'ours',
+    ]);
+    $sub->company_id = $this->company->id;
+    $sub->save();
+
+    Expense::factory()->create([ // OUR expense — reduces our profit
+        'company_id' => $this->company->id, 'project_id' => $project->id,
+        'approved' => true, 'total' => '15', 'date' => '2026-06-05',
+    ]);
+
+    $r = $this->service->forProject($project->fresh());
+
+    expect($r['cost'])->toBe(95.0); // 80 budget + 15 our expenses
+});
+
+it('never costs a CANCELLED deal', function (): void {
+    $project = Project::factory()->create([
+        'company_id' => $this->company->id, 'billing_type' => 'hourly', 'client_hour_rate' => '20',
+    ]);
+    punch($this->company, $this->employee, $project, '2026-06-01', 10, 500);
+
+    $sub = new Subcontractor([
+        'project_id' => $project->id, 'name' => 'Cancelled SL', 'status' => 'cancelled',
+        'agreed_budget' => '8000', 'expense_responsibility' => 'thaekedar',
+    ]);
+    $sub->company_id = $this->company->id;
+    $sub->save();
+
+    // No live deal → the project costs its own labour as normal.
+    expect($this->service->forProject($project->fresh())['cost'])->toBe(500.0);
+});
+
 it('costs a subcontracted project by its payments ONLY — no double count', function (): void {
     // Spec C9 / acceptance test 9: the thaekedar's budget covers the crews, so
     // when a subcontractor record exists, our own attendance labour is NOT
