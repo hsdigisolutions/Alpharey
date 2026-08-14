@@ -4,6 +4,27 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Status: Phase 9 in progress — hardening (2026-08-01)
 
+### Smart document panel generalized to Employee + Project (2026-08-14, DONE)
+
+The company smart-document panel (below) was generalized to the **Employee** and
+**Project** document tabs — same clickable slide-over, **repeatable
+points-of-contact**, and **version history**, verified live. **931 Pest tests /
+5444 assertions.** New `App\Support\DocumentPanelPayload` is the single builder
+for the panel payload (current + metadata + contacts + field_defs + history +
+ccc); `CompanyController` was refactored onto it and Employee/Project `show` now
+use it (shipping `documentFieldDefs` + `can.editDocs`). `DocumentTypes` gained
+entity-aware `fieldsFor` / `metadataKeysFor` / `columnBindingsFor` /
+`fieldDefsMap` — employee + project types get **generic date fields** (issue_date,
+plus expiry_date when expiry-tracked) so the panel + the 90/60/30 alert engine
+work without inventing bespoke per-type fields (company helpers now delegate to
+these). `ValidatesDocumentMetadata` + the Store/UpdateMetadata requests key off
+`entity_type` (employee/project carry an EMPTY metadata whitelist — only
+contacts + the top-level dates; sent metadata is rejected). `DocumentsPanel`
+rows are clickable for every surface, new-version resolves the type's category,
+refresh reloads all props, and the upload modal renders the dynamic field form
+for any non-custom doc. Tests: `EntityDocumentPanelTest` (5). **Clients + Vendors
+have no document surface yet — a separate future slice.**
+
 ### Company Documents — smart detail panel + version history (2026-08-14, DONE)
 
 Rebuilt the Companies → Documentos tab from a flat list into a clickable
