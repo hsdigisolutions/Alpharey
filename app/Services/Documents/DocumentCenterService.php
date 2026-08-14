@@ -18,6 +18,7 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 
 /**
  * The Document Command Center dataset. Builds — once, cached 5 min behind a
@@ -545,22 +546,33 @@ class DocumentCenterService
      */
     private function signature(?int $scope): string
     {
-        $max = fn (string $model, string $table) => $model::query()
-            ->withoutGlobalScope(CompanyScope::class)
-            ->when($scope !== null && $table !== 'companies', fn ($q) => $q->where('company_id', $scope))
-            ->when($scope !== null && $table === 'companies', fn ($q) => $q->whereKey($scope))
-            ->max('updated_at');
+        // ONE round-trip (not 5-7 separate MAX() calls per request): every
+        // tracked table's MAX(updated_at) as scalar sub-selects, plus a document
+        // COUNT so a hard row removal (whose updated_at wouldn't change the max)
+        // still busts the cache. Portable across MySQL + SQLite.
+        $scoped = $scope !== null ? ' WHERE company_id = ?' : '';
+        $byId = $scope !== null ? ' WHERE id = ?' : '';
+
+        $sql = "SELECT
+            (SELECT MAX(updated_at) FROM documents{$scoped}) AS d,
+            (SELECT COUNT(*) FROM documents{$scoped}) AS dc,
+            (SELECT MAX(updated_at) FROM vehicles{$scoped}) AS v,
+            (SELECT MAX(updated_at) FROM employees{$scoped}) AS e,
+            (SELECT MAX(updated_at) FROM projects{$scoped}) AS p,
+            (SELECT MAX(updated_at) FROM companies{$byId}) AS c,
+            (SELECT MAX(updated_at) FROM clients) AS cl,
+            (SELECT MAX(updated_at) FROM vendors) AS ve";
+
+        // Bindings match the scoped sub-selects in order: documents(MAX),
+        // documents(COUNT), vehicles, employees, projects, companies.
+        $bindings = $scope !== null ? array_fill(0, 6, $scope) : [];
+
+        $row = DB::selectOne($sql, $bindings);
 
         return implode('|', [
-            (string) $max(Document::class, 'documents'),
-            (string) $max(Vehicle::class, 'vehicles'),
-            (string) $max(Employee::class, 'employees'),
-            (string) $max(Project::class, 'projects'),
-            (string) $max(Company::class, 'companies'),
-            // Shared entities carry no company_id — a rename must still bust the
-            // cached entity_name, so track them globally.
-            (string) Client::query()->max('updated_at'),
-            (string) Vendor::query()->max('updated_at'),
+            (string) ($row->d ?? ''), (string) ($row->dc ?? ''), (string) ($row->v ?? ''),
+            (string) ($row->e ?? ''), (string) ($row->p ?? ''), (string) ($row->c ?? ''),
+            (string) ($row->cl ?? ''), (string) ($row->ve ?? ''),
         ]);
     }
 }
