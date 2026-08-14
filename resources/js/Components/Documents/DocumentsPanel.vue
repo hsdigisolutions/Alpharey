@@ -64,7 +64,10 @@ function rowClick(typeKey, category, cfg) {
 }
 
 // A "New version" from the detail panel reuses the upload modal for this type.
+// Close the detail slide-over first so the modal isn't stacked behind it — the
+// pre-fill still works because openUpload reads the row from props.documents.
 function newVersion(typeKey) {
+    selectedDocId.value = null;
     openUpload(typeKey, 'company', props.sets[typeKey] ?? { flag: false, file: true, expiry: true });
 }
 
