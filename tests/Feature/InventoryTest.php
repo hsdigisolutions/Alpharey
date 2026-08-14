@@ -478,6 +478,28 @@ it('carries the serial onto the worker issue row', function (): void {
         ->where('issues', fn ($rows) => collect($rows)->firstWhere('serial', 'DR-007') !== null));
 });
 
+it('records consumable usage: both counters drop, and saves the consumable type', function (): void {
+    $this->post('/inventory/items', [
+        'name' => 'Cemento', 'sku' => 'CEM-1', 'item_type' => EquipmentItemType::Consumable->value, 'unit' => 'sacos',
+        'opening_stock' => 50,
+    ])->assertRedirect()->assertSessionHasNoErrors();
+
+    $item = EquipmentItem::query()->where('sku', 'CEM-1')->firstOrFail();
+    expect($item->item_type)->toBe(EquipmentItemType::Consumable)
+        ->and((float) $item->available_stock)->toBe(50.0);
+
+    // Use 12 sacks — a Usage movement drops total AND available.
+    $this->post("/inventory/items/{$item->id}/movements", [
+        'movement_type' => StockMovementType::Usage->value, 'quantity' => 12,
+    ])->assertRedirect()->assertSessionHasNoErrors();
+
+    $item->refresh();
+    expect((float) $item->available_stock)->toBe(38.0)
+        ->and((float) $item->total_stock)->toBe(38.0)
+        ->and(EquipmentStockMovement::query()->where('equipment_item_id', $item->id)
+            ->where('movement_type', StockMovementType::Usage->value)->count())->toBe(1);
+});
+
 it('writes off a damaged return: total drops, available unchanged, incident logged', function (): void {
     $employee = Employee::factory()->create(['company_id' => $this->company->id]);
     $this->stock->record($this->item, StockMovementType::StockIn, 10);

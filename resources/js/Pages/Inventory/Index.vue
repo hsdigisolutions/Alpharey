@@ -109,9 +109,10 @@ function deleteItem(item) {
 /* Movement */
 const movingItem = ref(null);
 const movementForm = useForm({ movement_type: 'stock_in', quantity: null, employee_id: '', project_id: '', notes: '' });
-function openMovement(item) {
+function openMovement(item, type = 'stock_in') {
     movingItem.value = item;
     movementForm.reset();
+    movementForm.movement_type = type;
     movementForm.clearErrors();
 }
 function submitMovement() {
@@ -314,15 +315,26 @@ const categoryColumns = [
                     <td class="tabular-nums px-3 py-2.5 text-end text-sm text-ink-soft">{{ i.issued_stock }}</td>
                     <td class="px-3 py-2.5 text-end">
                         <span class="flex items-center justify-end gap-1.5">
-                            <VButton v-if="can.edit" variant="ghost" size="sm" @click="openMovement(i)">
-                                <Bilingual k="inventory.record_movement" inline />
-                            </VButton>
-                            <VButton v-if="can.edit" variant="ghost" size="sm" @click="openIssue(i)">
-                                <Bilingual k="inventory.issue" inline />
-                            </VButton>
-                            <VButton v-if="can.edit" variant="ghost" size="sm" @click="openAssign(i)">
-                                <Bilingual k="inventory.assign_to_project" inline />
-                            </VButton>
+                            <!-- Consumables are used up, never issued/assigned. -->
+                            <template v-if="i.item_type === 'consumable'">
+                                <VButton v-if="can.edit" variant="ghost" size="sm" @click="openMovement(i, 'usage')">
+                                    <Bilingual k="inventory.record_usage" inline />
+                                </VButton>
+                                <VButton v-if="can.edit" variant="ghost" size="sm" @click="openMovement(i)">
+                                    <Bilingual k="inventory.record_movement" inline />
+                                </VButton>
+                            </template>
+                            <template v-else>
+                                <VButton v-if="can.edit" variant="ghost" size="sm" @click="openMovement(i)">
+                                    <Bilingual k="inventory.record_movement" inline />
+                                </VButton>
+                                <VButton v-if="can.edit" variant="ghost" size="sm" @click="openIssue(i)">
+                                    <Bilingual k="inventory.issue" inline />
+                                </VButton>
+                                <VButton v-if="can.edit" variant="ghost" size="sm" @click="openAssign(i)">
+                                    <Bilingual k="inventory.assign_to_project" inline />
+                                </VButton>
+                            </template>
                             <VButton v-if="can.edit" variant="ghost" size="sm" icon="edit" @click="openItem(i)" />
                             <VButton v-if="can.delete" variant="ghost" size="sm" icon="trash" @click="deleteItem(i)" />
                         </span>

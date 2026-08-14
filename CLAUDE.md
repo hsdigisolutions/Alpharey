@@ -145,6 +145,18 @@ caught a bare `Employee::query()->withoutGlobalScopes()` in the missing sweep �
 switched to `withoutGlobalScope(CompanyScope::class)`. Tests:
 `InventoryAlertsTest` (6). **907 Pest tests / 5261 assertions.**
 
+**Phase G — consumables (done, no migration).** New `EquipmentItemType::
+Consumable` (cement/paint/screws — quantity-tracked, never issued to a worker or
+assigned to a project) + new `StockMovementType::Usage` (a consumable used up
+normally: total −q AND available −q, mechanically like Damaged but a distinct,
+expected event — Q-F). The Items-tab actions branch on the type: a consumable
+shows **Registrar consumo** (opens the movement modal pre-set to `usage`) +
+Record movement, and hides Issue / Assign-to-project; other types keep the full
+set. Reorder alerts are already handled by the Phase-F low-stock sweep. Lang:
+`inventory.type_consumable` / `type_usage` / `record_usage`. Tests:
+`InventoryTest` (+1 — consumable saved + a Usage movement drops both counters).
+**908 Pest tests / 5270 assertions.**
+
 ### Measurements + Production Tasks — full deep review (2026-08-13, COMPLETE)
 
 A line-by-line re-review of the whole Measurements/Production subsystem (Phases

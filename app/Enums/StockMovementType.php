@@ -13,6 +13,9 @@ enum StockMovementType: string
     case Return = 'return';
     case Adjustment = 'adjustment';
     case Damaged = 'damaged';
+    // A consumable used up normally (expected) — distinct from Damaged (an
+    // unexpected incident). Both leave the store AND reduce total.
+    case Usage = 'usage';
 
     /**
      * How this movement moves available stock. Adjustment is the exception:
@@ -22,7 +25,7 @@ enum StockMovementType: string
     {
         return match ($this) {
             self::StockIn, self::Return => 1,
-            self::Issue, self::Damaged => -1,
+            self::Issue, self::Damaged, self::Usage => -1,
             self::Adjustment => 0,
         };
     }

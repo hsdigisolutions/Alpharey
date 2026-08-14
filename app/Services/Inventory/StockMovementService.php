@@ -33,6 +33,7 @@ use Illuminate\Validation\ValidationException;
  *   issue                  available −q   (out with a worker; still owned)
  *   return                 available +q   (came back)
  *   damaged     total −q   available −q   (written off out of the store)
+ *   usage       total −q   available −q   (a consumable used up normally)
  *   adjustment             available = q  (a recount; total moves by the
  *                                          same delta so what is out with
  *                                          workers is not silently rewritten)
@@ -297,7 +298,9 @@ class StockMovementService
             StockMovementType::StockIn => [$available + $quantity, $total + $quantity],
             StockMovementType::Issue => [$available - $quantity, $total],
             StockMovementType::Return => [$available + $quantity, $total],
-            StockMovementType::Damaged => [$available - $quantity, $total - $quantity],
+            // A consumable used up, or damaged kit written off — gone from the
+            // store and no longer owned.
+            StockMovementType::Damaged, StockMovementType::Usage => [$available - $quantity, $total - $quantity],
             // A recount sets what is in the store; the same delta moves the
             // total so the quantity out with workers survives untouched.
             StockMovementType::Adjustment => [$quantity, $total + ($quantity - $available)],
