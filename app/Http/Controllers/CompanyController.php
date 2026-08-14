@@ -102,7 +102,6 @@ class CompanyController extends Controller
 
         $config = DocumentTypes::companyFields()[$document->type_key] ?? null;
         $fieldDefs = $config['fields'] ?? [];
-        $hasContact = ($config['contact'] ?? false) === true;
 
         // 2E — CCC is read-only from the company; inject it whenever the type
         // declares a ccc field so the panel never asks the admin to type it.
@@ -126,16 +125,8 @@ class CompanyController extends Controller
             'uploaded_by' => $document->uploader?->name,
             // Smart-panel payload
             'metadata' => $document->metadata ?? [],
-            'contact' => $hasContact ? [
-                'name' => $document->contact_name,
-                'phone' => $document->contact_phone,
-                'email' => $document->contact_email,
-                'emergency_phone' => $document->contact_emergency_phone,
-                'notes' => $document->contact_notes,
-            ] : null,
+            'contacts' => $document->contacts ?? [],
             'field_defs' => $fieldDefs,
-            'has_contact' => $hasContact,
-            'emergency_label' => $config['emergency_label'] ?? null,
             'ccc' => $hasCcc ? $company->ccc : null,
             'history' => $history
                 ->sortByDesc('version')

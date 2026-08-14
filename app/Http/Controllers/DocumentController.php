@@ -66,11 +66,7 @@ class DocumentController extends Controller
             'expiry_date' => $validated['expiry_date'] ?? null,
             'notes' => $validated['notes'] ?? null,
             'metadata' => $this->cleanMetadata($validated['metadata'] ?? null),
-            'contact_name' => $validated['contact_name'] ?? null,
-            'contact_phone' => $validated['contact_phone'] ?? null,
-            'contact_email' => $validated['contact_email'] ?? null,
-            'contact_emergency_phone' => $validated['contact_emergency_phone'] ?? null,
-            'contact_notes' => $validated['contact_notes'] ?? null,
+            'contacts' => $this->cleanContacts($validated['contacts'] ?? null),
         ]);
         $document->documentable()->associate($entity);
         $document->company_id = $entity instanceof Company ? $entity->id : $entity->getAttribute('company_id');
@@ -140,11 +136,7 @@ class DocumentController extends Controller
 
         $document->update([
             'metadata' => $this->cleanMetadata($validated['metadata'] ?? null),
-            'contact_name' => $validated['contact_name'] ?? null,
-            'contact_phone' => $validated['contact_phone'] ?? null,
-            'contact_email' => $validated['contact_email'] ?? null,
-            'contact_emergency_phone' => $validated['contact_emergency_phone'] ?? null,
-            'contact_notes' => $validated['contact_notes'] ?? null,
+            'contacts' => $this->cleanContacts($validated['contacts'] ?? null),
         ]);
 
         $audit->log('updated', $document, null, null, $document->type_key, 'documents');
@@ -171,6 +163,44 @@ class DocumentController extends Controller
             $metadata,
             static fn ($value): bool => $value !== null && $value !== '' && $value !== [],
         );
+
+        return $clean === [] ? null : $clean;
+    }
+
+    /**
+     * Drop fully-empty contact rows and non-field keys so an untouched
+     * "add contact" line doesn't persist as a blank entry.
+     *
+     * @param  array<int, mixed>|null  $contacts
+     * @return list<array<string, string>>|null
+     */
+    private function cleanContacts(?array $contacts): ?array
+    {
+        if ($contacts === null) {
+            return null;
+        }
+
+        $allowed = ['name', 'role', 'phone', 'email', 'notes'];
+
+        $clean = [];
+
+        foreach ($contacts as $contact) {
+            if (! is_array($contact)) {
+                continue;
+            }
+
+            $row = [];
+            foreach ($allowed as $key) {
+                $value = $contact[$key] ?? null;
+                if (is_string($value) && trim($value) !== '') {
+                    $row[$key] = trim($value);
+                }
+            }
+
+            if ($row !== []) {
+                $clean[] = $row;
+            }
+        }
 
         return $clean === [] ? null : $clean;
     }

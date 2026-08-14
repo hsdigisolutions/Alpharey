@@ -559,7 +559,11 @@ return [
     'doc_fields' => [
         'section_details' => 'Datos del documento',
         'contact_section' => 'Punto de contacto',
+        'contacts_section' => 'Puntos de contacto',
+        'add_contact' => 'Añadir contacto',
+        'no_contacts' => 'Sin contactos',
         'contact_name' => 'Nombre de contacto',
+        'contact_role' => 'Cargo / Rol',
         'contact_phone' => 'Teléfono directo',
         'contact_email' => 'Email',
         'contact_notes' => 'Notas de contacto',

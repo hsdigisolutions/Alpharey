@@ -43,7 +43,11 @@ const createForm = useForm({ ...blankFields });
 const editForm = useForm({ ...blankFields });
 const deleteForm = useForm({ confirm_name: '' });
 
-watch(selected, (company) => {
+// Keyed on the ID, not the computed object: a partial reload (after saving a
+// document) mints a new `selected` object with the same id — watching the object
+// would bounce the open tab back to Información on every save.
+watch(selectedId, () => {
+    const company = selected.value;
     if (company) {
         Object.keys(blankFields).forEach((key) => {
             editForm[key] = company[key] ?? (key === 'status' ? 'active' : '');

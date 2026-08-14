@@ -9,6 +9,7 @@
  * editable; when EDITING an existing version's fields they are read-only, since
  * the metadata endpoint never rewrites a version's dates (that is a renewal).
  */
+import AppIcon from '@/Components/AppIcon.vue';
 import FormField from '@/Components/ui/FormField.vue';
 import VCheckbox from '@/Components/ui/VCheckbox.vue';
 import VCurrencyInput from '@/Components/ui/VCurrencyInput.vue';
@@ -20,12 +21,21 @@ import VTextarea from '@/Components/ui/VTextarea.vue';
 
 const props = defineProps({
     fields: { type: Array, required: true },
-    form: { type: Object, required: true }, // Inertia useForm — carries metadata{}, contact_*, issue_date, expiry_date
-    hasContact: { type: Boolean, default: false },
-    emergencyLabel: { type: String, default: null },
+    form: { type: Object, required: true }, // Inertia useForm — carries metadata{}, contacts[], issue_date, expiry_date
     ccc: { type: String, default: null },
     datesEditable: { type: Boolean, default: true },
 });
+
+function addContact() {
+    if (!Array.isArray(props.form.contacts)) {
+        props.form.contacts = [];
+    }
+    props.form.contacts.push({ name: '', role: '', phone: '', email: '', notes: '' });
+}
+
+function removeContact(index) {
+    props.form.contacts.splice(index, 1);
+}
 
 function wide(field) {
     return field.type === 'textarea' || field.type === 'checkbox_group';
@@ -113,27 +123,49 @@ function toggleCheckbox(key, opt, checked) {
             </div>
         </section>
 
-        <section v-if="hasContact" class="space-y-3">
-            <p class="text-[11px] font-semibold uppercase tracking-wide text-muted">
-                <Bilingual k="doc_fields.contact_section" inline />
+        <section class="space-y-3">
+            <div class="flex items-center justify-between">
+                <p class="text-[11px] font-semibold uppercase tracking-wide text-muted">
+                    <Bilingual k="doc_fields.contacts_section" inline />
+                </p>
+                <button type="button"
+                    class="flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-accent hover:bg-accent-soft"
+                    @click="addContact">
+                    <AppIcon name="plus" class="h-3.5 w-3.5" />
+                    <Bilingual k="doc_fields.add_contact" inline />
+                </button>
+            </div>
+
+            <p v-if="!form.contacts || form.contacts.length === 0" class="text-xs text-muted">
+                <Bilingual k="doc_fields.no_contacts" inline />
             </p>
-            <div class="grid gap-3 sm:grid-cols-2">
-                <FormField k="doc_fields.contact_name" :error="form.errors?.contact_name">
-                    <VInput v-model="form.contact_name" />
-                </FormField>
-                <FormField k="doc_fields.contact_phone" :error="form.errors?.contact_phone">
-                    <VPhoneInput v-model="form.contact_phone" />
-                </FormField>
-                <FormField k="doc_fields.contact_email" :error="form.errors?.contact_email">
-                    <VInput v-model="form.contact_email" type="email" />
-                </FormField>
-                <FormField :k="emergencyLabel ?? 'doc_fields.emergency_medical'"
-                    :error="form.errors?.contact_emergency_phone">
-                    <VPhoneInput v-model="form.contact_emergency_phone" />
-                </FormField>
-                <FormField k="doc_fields.contact_notes" :error="form.errors?.contact_notes" class="sm:col-span-2">
-                    <VTextarea v-model="form.contact_notes" :rows="2" />
-                </FormField>
+
+            <div v-for="(contact, i) in form.contacts" :key="i"
+                class="space-y-3 rounded-lg border border-line bg-surface-sunken/40 p-3">
+                <div class="flex items-center justify-between">
+                    <span class="text-xs font-medium text-ink-soft">#{{ i + 1 }}</span>
+                    <button type="button" class="rounded-md p-1 text-status-danger hover:bg-status-danger-soft"
+                        :aria-label="`remove contact ${i + 1}`" @click="removeContact(i)">
+                        <AppIcon name="trash" class="h-3.5 w-3.5" />
+                    </button>
+                </div>
+                <div class="grid gap-3 sm:grid-cols-2">
+                    <FormField k="doc_fields.contact_name">
+                        <VInput v-model="contact.name" />
+                    </FormField>
+                    <FormField k="doc_fields.contact_role">
+                        <VInput v-model="contact.role" />
+                    </FormField>
+                    <FormField k="doc_fields.contact_phone">
+                        <VPhoneInput v-model="contact.phone" />
+                    </FormField>
+                    <FormField k="doc_fields.contact_email" :error="form.errors?.[`contacts.${i}.email`]">
+                        <VInput v-model="contact.email" type="email" />
+                    </FormField>
+                    <FormField k="doc_fields.contact_notes" class="sm:col-span-2">
+                        <VTextarea v-model="contact.notes" :rows="2" />
+                    </FormField>
+                </div>
             </div>
         </section>
     </div>

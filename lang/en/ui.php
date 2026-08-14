@@ -558,7 +558,11 @@ return [
     'doc_fields' => [
         'section_details' => 'Document details',
         'contact_section' => 'Point of contact',
+        'contacts_section' => 'Points of contact',
+        'add_contact' => 'Add contact',
+        'no_contacts' => 'No contacts',
         'contact_name' => 'Contact name',
+        'contact_role' => 'Role',
         'contact_phone' => 'Direct phone',
         'contact_email' => 'Email',
         'contact_notes' => 'Contact notes',

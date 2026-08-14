@@ -48,10 +48,10 @@ it('saves per-type metadata and contact fields, dropping empty and CCC keys', fu
             'premium' => '1200',
             'ccc' => 'should-be-ignored', // read-only from company, never stored
         ],
-        'contact_name' => 'Juan Gestor',
-        'contact_phone' => '600111222',
-        'contact_email' => 'juan@mapfre.es',
-        'contact_emergency_phone' => '112',
+        'contacts' => [
+            ['name' => 'Juan Gestor', 'role' => 'Gestor', 'phone' => '600111222', 'email' => 'juan@mapfre.es', 'notes' => ''],
+            ['name' => 'Siniestros 24h', 'phone' => '112'],
+        ],
     ])->assertRedirect()->assertSessionHasNoErrors();
 
     $doc = Document::query()->where('company_id', $company->id)->where('type_key', 'poliza_rc')->firstOrFail();
@@ -59,10 +59,30 @@ it('saves per-type metadata and contact fields, dropping empty and CCC keys', fu
     expect($doc->metadata['policy_number'])->toBe('POL-1')
         ->and($doc->metadata['coverage_amount'])->toBe('300000')
         ->and($doc->metadata)->not->toHaveKey('ccc')
-        ->and($doc->contact_name)->toBe('Juan Gestor')
-        ->and($doc->contact_emergency_phone)->toBe('112')
+        ->and($doc->contacts)->toHaveCount(2)
+        ->and($doc->contacts[0]['name'])->toBe('Juan Gestor')
+        ->and($doc->contacts[0]['role'])->toBe('Gestor')
+        ->and($doc->contacts[1]['phone'])->toBe('112')
         ->and($doc->issue_date?->toDateString())->toBe('2026-01-01')
         ->and($doc->expiry_date?->toDateString())->toBe('2026-12-31');
+});
+
+it('accepts contacts on any type and drops fully-empty contact rows', function (): void {
+    $company = Company::factory()->create();
+
+    // recibo_rc had no contact section before — it does now (every type does).
+    $this->actingAs($this->sa);
+    uploadCompanyDoc($company, 'recibo_rc', [
+        'contacts' => [
+            ['name' => 'Contabilidad', 'phone' => '900100200'],
+            ['name' => '', 'role' => '', 'phone' => '', 'email' => '', 'notes' => ''], // blank → dropped
+        ],
+    ])->assertRedirect()->assertSessionHasNoErrors();
+
+    $doc = Document::query()->where('type_key', 'recibo_rc')->firstOrFail();
+
+    expect($doc->contacts)->toHaveCount(1)
+        ->and($doc->contacts[0]['name'])->toBe('Contabilidad');
 });
 
 it('stores checkbox_group disciplines as an array', function (): void {
@@ -96,13 +116,13 @@ it('rejects an invalid select option', function (): void {
     ])->assertSessionHasErrors('metadata.policy_type');
 });
 
-it('rejects contact fields on a type that has no contact section', function (): void {
+it('rejects an invalid contact email', function (): void {
     $company = Company::factory()->create();
 
     $this->actingAs($this->sa);
     uploadCompanyDoc($company, 'rea', [
-        'contact_name' => 'Nobody',
-    ])->assertSessionHasErrors('contact_name');
+        'contacts' => [['name' => 'X', 'email' => 'not-an-email']],
+    ])->assertSessionHasErrors('contacts.0.email');
 });
 
 it('keeps previous versions in the history array, newest first', function (): void {
@@ -134,8 +154,7 @@ it('injects the company CCC read-only into a document that declares a ccc field'
 
     $this->get('/companies')->assertInertia(fn (AssertableInertia $page) => $page
         ->where('companies.0.documents.0.type_key', 'documento_mutua')
-        ->where('companies.0.documents.0.ccc', '28/99999999/11')
-        ->where('companies.0.documents.0.has_contact', true));
+        ->where('companies.0.documents.0.ccc', '28/99999999/11'));
 });
 
 it('replaces the file in place keeping the same version and deleting the old file', function (): void {
@@ -179,7 +198,7 @@ it('edits metadata without changing the version, file, or dates', function (): v
 
     $this->patch("/documents/{$doc->id}/metadata", [
         'metadata' => ['policy_number' => 'NEW', 'insurer' => 'AXA'],
-        'contact_name' => 'Nueva Gestora',
+        'contacts' => [['name' => 'Nueva Gestora', 'role' => 'Gestora']],
     ])->assertRedirect()->assertSessionHasNoErrors();
 
     $doc->refresh();
@@ -190,7 +209,24 @@ it('edits metadata without changing the version, file, or dates', function (): v
         ->and($doc->expiry_date?->toDateString())->toBe('2026-12-31')
         ->and($doc->metadata['policy_number'])->toBe('NEW')
         ->and($doc->metadata['insurer'])->toBe('AXA')
-        ->and($doc->contact_name)->toBe('Nueva Gestora');
+        ->and($doc->contacts[0]['name'])->toBe('Nueva Gestora');
+});
+
+it('fills metadata on a document that was uploaded with none', function (): void {
+    // Regression: a doc created empty (metadata null) must accept a later edit —
+    // the panel coerces the empty [] payload to an object so keys serialize.
+    $company = Company::factory()->create();
+
+    $this->actingAs($this->sa);
+    uploadCompanyDoc($company, 'poliza_rc')->assertSessionHasNoErrors();
+    $doc = Document::query()->where('type_key', 'poliza_rc')->firstOrFail();
+    expect($doc->metadata)->toBeNull();
+
+    $this->patch("/documents/{$doc->id}/metadata", [
+        'metadata' => ['policy_number' => 'FIRST', 'insurer' => 'Generali'],
+    ])->assertRedirect()->assertSessionHasNoErrors();
+
+    expect($doc->refresh()->metadata['policy_number'])->toBe('FIRST');
 });
 
 it('rejects unknown metadata fields on the edit endpoint too', function (): void {

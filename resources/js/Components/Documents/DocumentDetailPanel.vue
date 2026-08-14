@@ -5,7 +5,7 @@
  * the point-of-contact block, with Download / Edit fields / New version / Replace
  * actions. Previous versions (Step 4) render collapsed at the bottom.
  */
-import { computed, reactive, ref, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { router, useForm } from '@inertiajs/vue3';
 import { tPair } from '@/translate';
 import AppIcon from '@/Components/AppIcon.vue';
@@ -33,11 +33,7 @@ const editForm = useForm({
     metadata: {},
     issue_date: null,
     expiry_date: null,
-    contact_name: '',
-    contact_phone: '',
-    contact_email: '',
-    contact_emergency_phone: '',
-    contact_notes: '',
+    contacts: [],
 });
 
 const replaceForm = useForm({ file: null });
@@ -74,33 +70,18 @@ function displayValue(field) {
     return raw;
 }
 
-const contactRows = computed(() => {
-    const c = props.doc?.contact;
-    if (!c) {
-        return [];
-    }
-
-    return [
-        { key: 'doc_fields.contact_name', value: c.name },
-        { key: 'doc_fields.contact_phone', value: c.phone },
-        { key: 'doc_fields.contact_email', value: c.email },
-        { key: props.doc.emergency_label ?? 'doc_fields.emergency_medical', value: c.emergency_phone },
-        { key: 'doc_fields.contact_notes', value: c.notes },
-    ];
-});
+const contacts = computed(() => props.doc?.contacts ?? []);
 
 function startEdit() {
     const doc = props.doc;
     editForm.clearErrors();
-    // Fresh copy so edits don't mutate the prop; checkbox groups stay arrays.
-    editForm.metadata = reactive(JSON.parse(JSON.stringify(doc.metadata ?? {})));
+    // Fresh copy, coerced to a plain OBJECT — the backend ships empty metadata
+    // as [] (a JS array), and string keys set on an array never serialize, so a
+    // metadata edit would silently save nothing. Spreading [] yields {}.
+    editForm.metadata = { ...(doc.metadata || {}) };
     editForm.issue_date = doc.issue_date ?? null;
     editForm.expiry_date = doc.expiry_date ?? null;
-    editForm.contact_name = doc.contact?.name ?? '';
-    editForm.contact_phone = doc.contact?.phone ?? '';
-    editForm.contact_email = doc.contact?.email ?? '';
-    editForm.contact_emergency_phone = doc.contact?.emergency_phone ?? '';
-    editForm.contact_notes = doc.contact?.notes ?? '';
+    editForm.contacts = (doc.contacts || []).map((c) => ({ ...c }));
     editing.value = true;
 }
 
@@ -177,15 +158,20 @@ function download() {
                     <p v-if="!doc.field_defs || doc.field_defs.length === 0" class="text-sm text-muted sm:col-span-2">—</p>
                 </dl>
 
-                <!-- Contact -->
-                <div v-if="doc.has_contact" class="mt-5">
-                    <p class="text-[11px] font-semibold uppercase tracking-wide text-muted"><Bilingual k="doc_fields.contact_section" inline /></p>
-                    <dl class="mt-2 grid grid-cols-1 gap-x-6 gap-y-2.5 sm:grid-cols-2">
-                        <div v-for="row in contactRows" :key="row.key">
-                            <dt class="text-xs text-muted"><Bilingual :k="row.key" inline /></dt>
-                            <dd class="text-sm text-ink">{{ row.value || '—' }}</dd>
+                <!-- Contacts (every type; a document may have several) -->
+                <div class="mt-5">
+                    <p class="text-[11px] font-semibold uppercase tracking-wide text-muted"><Bilingual k="doc_fields.contacts_section" inline /></p>
+                    <p v-if="contacts.length === 0" class="mt-2 text-sm text-muted">—</p>
+                    <div v-for="(c, i) in contacts" :key="i" class="mt-2 rounded-lg border border-line p-3">
+                        <p class="text-sm font-medium text-ink">
+                            {{ c.name || '—' }}<span v-if="c.role" class="ms-2 text-xs font-normal text-muted">· {{ c.role }}</span>
+                        </p>
+                        <div class="mt-1 flex flex-col gap-0.5 text-xs text-ink-soft">
+                            <span v-if="c.phone">{{ c.phone }}</span>
+                            <span v-if="c.email">{{ c.email }}</span>
+                            <span v-if="c.notes" class="text-muted">{{ c.notes }}</span>
                         </div>
-                    </dl>
+                    </div>
                 </div>
 
                 <!-- Actions -->
@@ -208,7 +194,6 @@ function download() {
             <!-- EDIT MODE -->
             <form v-else class="mt-4" @submit.prevent="submitEdit">
                 <DocumentFieldForm :fields="doc.field_defs" :form="editForm"
-                    :has-contact="doc.has_contact" :emergency-label="doc.emergency_label"
                     :ccc="doc.ccc" :dates-editable="false" />
                 <div class="mt-5 flex justify-end gap-2">
                     <VButton variant="ghost" size="sm" @click="editing = false">

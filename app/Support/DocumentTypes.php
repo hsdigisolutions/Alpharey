@@ -66,7 +66,8 @@ class DocumentTypes
     /**
      * Per-type descriptive fields for the smart company-document detail panel
      * (client-confirmed spec, 2026-08-14). Each type declares an ordered field
-     * list plus whether it carries a point-of-contact block.
+     * list. EVERY type also carries a repeatable point-of-contact section
+     * (stored in the `contacts` JSON column, not the registry).
      *
      * A field entry:
      *   key      — stable identifier (also the doc_fields.* label suffix)
@@ -83,7 +84,7 @@ class DocumentTypes
      * type 'ccc' renders READ-ONLY from the company's own CCC (Q3) — it is never
      * a stored metadata key.
      *
-     * @return array<string, array{fields: list<array{key: string, type: string, label: string, column?: string, options?: list<string>}>, contact?: bool, emergency_label?: string}>
+     * @return array<string, array{fields: list<array{key: string, type: string, label: string, column?: string, options?: list<string>}>}>
      */
     public static function companyFields(): array
     {
@@ -108,8 +109,6 @@ class DocumentTypes
                     ['key' => 'start_date', 'type' => 'date', 'label' => 'doc_fields.start_date', 'column' => 'issue_date'],
                     ['key' => 'end_date', 'type' => 'date', 'label' => 'doc_fields.end_date', 'column' => 'expiry_date'],
                 ],
-                'contact' => true,
-                'emergency_label' => 'doc_fields.emergency_claims',
             ],
             'recibo_rc' => ['fields' => $receiptFields],
             'poliza_accidentes' => [
@@ -121,8 +120,6 @@ class DocumentTypes
                     ['key' => 'start_date', 'type' => 'date', 'label' => 'doc_fields.start_date', 'column' => 'issue_date'],
                     ['key' => 'end_date', 'type' => 'date', 'label' => 'doc_fields.end_date', 'column' => 'expiry_date'],
                 ],
-                'contact' => true,
-                'emergency_label' => 'doc_fields.emergency_accidents',
             ],
             'recibo_accidentes' => ['fields' => $receiptFields],
             'certificado_spa' => [
@@ -134,8 +131,6 @@ class DocumentTypes
                     ['key' => 'start_date', 'type' => 'date', 'label' => 'doc_fields.start_date', 'column' => 'issue_date'],
                     ['key' => 'end_date', 'type' => 'date', 'label' => 'doc_fields.end_date', 'column' => 'expiry_date'],
                 ],
-                'contact' => true,
-                'emergency_label' => 'doc_fields.emergency_site',
             ],
             'recibo_spa' => ['fields' => [
                 ['key' => 'receipt_number', 'type' => 'text', 'label' => 'doc_fields.receipt_number'],
@@ -170,8 +165,6 @@ class DocumentTypes
                     ['key' => 'medical_center', 'type' => 'textarea', 'label' => 'doc_fields.medical_center'],
                     ['key' => 'start_date', 'type' => 'date', 'label' => 'doc_fields.start_date', 'column' => 'issue_date'],
                 ],
-                'contact' => true,
-                'emergency_label' => 'doc_fields.emergency_medical',
             ],
 
             // ── Ciclo mensual ─────────────────────────────────────────────────

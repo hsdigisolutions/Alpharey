@@ -69,18 +69,20 @@ trait ValidatesDocumentMetadata
      */
     protected function contactRules(): array
     {
+        // Every document type carries a repeatable point-of-contact section
+        // (client decision 2026-08-14). Each entry: name/role/phone/email/notes.
         return [
-            'contact_name' => ['nullable', 'string', 'max:150'],
-            'contact_phone' => ['nullable', 'string', 'max:40'],
-            'contact_email' => ['nullable', 'email', 'max:150'],
-            'contact_emergency_phone' => ['nullable', 'string', 'max:40'],
-            'contact_notes' => ['nullable', 'string', 'max:2000'],
+            'contacts' => ['nullable', 'array', 'max:20'],
+            'contacts.*.name' => ['nullable', 'string', 'max:150'],
+            'contacts.*.role' => ['nullable', 'string', 'max:100'],
+            'contacts.*.phone' => ['nullable', 'string', 'max:40'],
+            'contacts.*.email' => ['nullable', 'email', 'max:150'],
+            'contacts.*.notes' => ['nullable', 'string', 'max:1000'],
         ];
     }
 
     /**
-     * Reject metadata keys outside the type whitelist, and contact values sent
-     * for a type that has no contact section. Whitelist-only, per the spec.
+     * Reject metadata keys outside the type whitelist (whitelist-only, per spec).
      */
     protected function afterMetadataValidation(Validator $validator, string $category, string $typeKey): void
     {
@@ -100,20 +102,5 @@ trait ValidatesDocumentMetadata
                 $validator->errors()->add('metadata.'.$key, 'Unknown field for this document type.');
             }
         }
-
-        $hasContact = $category === 'company' && ($this->typeHasContact($typeKey));
-
-        if (! $hasContact) {
-            foreach (['contact_name', 'contact_phone', 'contact_email', 'contact_emergency_phone', 'contact_notes'] as $key) {
-                if (filled($data[$key] ?? null)) {
-                    $validator->errors()->add($key, 'This document type has no contact section.');
-                }
-            }
-        }
-    }
-
-    protected function typeHasContact(string $typeKey): bool
-    {
-        return (DocumentTypes::companyFields()[$typeKey]['contact'] ?? false) === true;
     }
 }
