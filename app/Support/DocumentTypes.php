@@ -477,6 +477,26 @@ class DocumentTypes
     }
 
     /**
+     * The upload `category` for a type — the value the store endpoint expects.
+     * Employee types resolve to their registry group (personal/employment/
+     * prevencion); the others map straight to the entity name.
+     */
+    public static function categoryFor(string $entityType, string $typeKey): string
+    {
+        if ($entityType !== 'employee') {
+            return $entityType;
+        }
+
+        foreach (self::employee() as $category => $types) {
+            if (isset($types[$typeKey])) {
+                return $category;
+            }
+        }
+
+        return 'personal';
+    }
+
+    /**
      * Vendor document slots — a supplier/subcontractor's compliance paperwork
      * (RC insurance, TGSS/AEAT clearances, REA…). Shared entity, company-owned.
      *

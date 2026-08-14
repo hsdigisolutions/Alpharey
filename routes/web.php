@@ -23,9 +23,9 @@ use App\Http\Controllers\ColumnSettingsController;
 use App\Http\Controllers\CommissionController;
 use App\Http\Controllers\CompanyController;
 use App\Http\Controllers\CompanySwitchController;
-use App\Http\Controllers\ComplianceController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DeploymentController;
+use App\Http\Controllers\DocumentCenterController;
 use App\Http\Controllers\DocumentController;
 use App\Http\Controllers\EmployeeCallLogController;
 use App\Http\Controllers\EmployeeController;
@@ -227,16 +227,22 @@ Route::middleware(['auth', 'active', 'two_factor', 'not_worker'])->group(functio
     Route::post('/employees/{employee}/consent/reset', [EmployeeController::class, 'resetConsent'])->name('employees.consent.reset');
     Route::get('/employees/{employee}/consent/{consent}/pdf', [EmployeeController::class, 'consentPdf'])->name('employees.consent.pdf');
 
+    // Global Document Command Center — /documents index (before {document} routes)
+    Route::get('/documents', [DocumentCenterController::class, 'index'])->name('documents.index');
+    Route::get('/documents/export', [DocumentCenterController::class, 'export'])->name('documents.export');
+    Route::post('/documents/bulk-exempt', [DocumentCenterController::class, 'bulkExempt'])->name('documents.bulk_exempt');
+
     // Unified documents (employee + company surfaces in Phase 2)
     Route::post('/documents', [DocumentController::class, 'store'])->name('documents.store');
+    Route::get('/documents/{document}/panel', [DocumentCenterController::class, 'panel'])->name('documents.panel');
     Route::post('/documents/{document}/replace', [DocumentController::class, 'replace'])->name('documents.replace');
     Route::patch('/documents/{document}/metadata', [DocumentController::class, 'updateMetadata'])->name('documents.metadata');
     Route::get('/documents/{document}/download', [DocumentController::class, 'download'])->name('documents.download');
     Route::delete('/documents/{document}', [DocumentController::class, 'destroy'])->name('documents.destroy');
     Route::post('/documents/{document}/exempt', [DocumentController::class, 'exempt'])->name('documents.exempt');
 
-    // Screen 16 — Compliance Center
-    Route::get('/compliance', [ComplianceController::class, 'index'])->name('compliance.index');
+    // Screen 16 — Compliance Center, superseded by the Document Command Center.
+    Route::get('/compliance', fn () => redirect('/documents'))->name('compliance.index');
 
     // Screen 07 — Clients (shared pool; module-permission gated in controllers)
     Route::get('/clients', [ClientController::class, 'index'])->name('clients.index');

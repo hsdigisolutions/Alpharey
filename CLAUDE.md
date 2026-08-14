@@ -4,6 +4,40 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Status: Phase 9 in progress — hardening (2026-08-01)
 
+### Global Document Command Center + Client/Vendor docs (2026-08-14, DONE)
+
+Client + Vendor detail pages gained the smart document panel (shared records,
+company-owned docs — each doc takes the acting company's company_id, same rule
+as their invoices/expenses), then a **Global Document Command Center** at
+`/documents` (nav "Documentos"; `documents.view`) that **replaces** the old
+`/compliance` screen (redirects; ComplianceController/Compliance.vue deleted).
+**947 Pest tests / ~5.5k assertions.**
+
+`DocumentCenterService` builds — once, **cached 5 min behind a MAX(updated_at)
+signature** — the full row set every view slices from: uploaded documents (all
+five entity types, status via DocumentStatus), **computed MISSING slots**
+(Company + Employee, never stored) and **vehicle expiry pseudo-documents**
+(insurance/ITV/road-tax via VehicleCompliance, read-only). Cold load is a
+handful of scoped queries (documents + companies + employees + vehicles + name
+lookups); a hit is one signature query. **Monthly rule (Q4):** a monthly company
+type not refreshed THIS month is a single Faltante (the stale upload is skipped,
+no double-count). Super Admin sees all companies (or the selected one); everyone
+else their own — the scope is `CurrentCompany->id()`.
+
+Five views (`Documents/Index.vue`, VTabs): **Urgent** (expired/this-week/
+this-month/missing, most-critical-first), **All** (server-side filter +
+PHP-paginated 25/page + Excel/PDF export + bulk select), **By Entity** (per-
+entity compliance score + deep-link), **Timeline** (6-month weekly expiry counts
+→ click a week drills into All filtered to that range), **Dashboard** (summary
+cards + per-company scores + category breakdown). Inline actions: **View** fetches
+the panel on demand (`GET /documents/{document}/panel` → `DocumentPanelPayload::
+single`) and opens the shared `DocumentDetailPanel`; **Renovar/Subir** open an
+inline upload modal (reusing `DocumentFieldForm`); **bulk exempt** toggles
+`is_exempt` (`POST /documents/bulk-exempt`, gated `documents.approve`, audited).
+`Module::Documents` gained an **Export** action (`documents.export`, matrix-
+grantable). Routes register before `/documents/{document}`. Tests:
+`DocumentCenterTest` (8), `ClientDocumentTest` (4), `VendorDocumentTest` (3).
+
 ### Smart document panel generalized to Employee + Project (2026-08-14, DONE)
 
 The company smart-document panel (below) was generalized to the **Employee** and

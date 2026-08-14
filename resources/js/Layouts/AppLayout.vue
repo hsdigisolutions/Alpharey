@@ -64,7 +64,7 @@ const secondaryNav = computed(() => [
     { key: 'tasks', labelKey: 'nav.tasks', icon: 'columns', href: '/tasks' },
     { key: 'deployments', labelKey: 'nav.deployments', icon: 'deployments', href: '/deployments' },
     { key: 'subcontractors', labelKey: 'nav.subcontractors', icon: 'employees', href: '/subcontractors' },
-    { key: 'compliance', labelKey: 'nav.compliance', icon: 'check', href: '/compliance' },
+    { key: 'documents', labelKey: 'nav.documents', icon: 'file', href: '/documents' },
     { key: 'worker_expenses', labelKey: 'nav.worker_expenses', icon: 'expenses', href: isAdmin.value ? '/worker-expenses' : null },
     { key: 'permissions', labelKey: 'permissions.title', icon: 'lock', href: isAdmin.value ? '/admin/permissions' : null },
     { key: 'audit_logs', labelKey: 'nav.audit_logs', icon: 'eye', href: isAdmin.value ? '/admin/audit-logs' : null },

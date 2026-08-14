@@ -7,6 +7,7 @@ use App\Models\Company;
 use App\Models\Document;
 use App\Models\Employee;
 use App\Models\Project;
+use App\Models\Scopes\CompanyScope;
 use App\Models\Vendor;
 use App\Services\Documents\DocumentStatus;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
@@ -56,6 +57,39 @@ class DocumentPanelPayload
             ))
             ->values()
             ->all();
+    }
+
+    /**
+     * The panel payload for ONE document — the on-demand View in the Document
+     * Command Center. History is filtered by the doc's own company so shared
+     * client/vendor version chains stay per-company.
+     *
+     * @return array<string, mixed>
+     */
+    public function single(Document $document): array
+    {
+        $entityType = match ($document->documentable_type) {
+            Company::class => 'company',
+            Project::class => 'project',
+            Client::class => 'client',
+            Vendor::class => 'vendor',
+            default => 'employee',
+        };
+
+        $history = Document::query()->withoutGlobalScope(CompanyScope::class)
+            ->where('documentable_type', $document->documentable_type)
+            ->where('documentable_id', $document->documentable_id)
+            ->where('type_key', $document->type_key)
+            ->where('company_id', $document->company_id)
+            ->where('is_current', false)
+            ->with('uploader:id,name')
+            ->get();
+
+        $ccc = $document->documentable_type === Company::class
+            ? Company::query()->whereKey($document->documentable_id)->value('ccc')
+            : null;
+
+        return $this->row($document->loadMissing('uploader'), $entityType, is_string($ccc) ? $ccc : null, $history);
     }
 
     /**
