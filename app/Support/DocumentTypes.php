@@ -222,28 +222,37 @@ class DocumentTypes
     }
 
     /**
-     * Field defs for one company document type ([] for an unknown/custom slot).
+     * Field defs for one document type of any entity ([] for unknown/custom).
+     * Company types carry the bespoke client spec; employee + project types get
+     * generic date fields derived from their cfg (issue_date, plus expiry_date
+     * when the type is expiry-tracked) so the smart panel + version history +
+     * repeatable contacts work everywhere without inventing per-type fields.
      *
      * @return list<array{key: string, type: string, label: string, column?: string, options?: list<string>}>
      */
-    public static function companyFieldDefs(string $typeKey): array
+    public static function fieldsFor(string $entityType, string $typeKey): array
     {
-        return self::companyFields()[$typeKey]['fields'] ?? [];
+        return match ($entityType) {
+            'company' => self::companyFields()[$typeKey]['fields'] ?? [],
+            'employee' => self::genericDateFields(self::employeeTypeCfg($typeKey)),
+            'project' => self::genericDateFields(self::projectTypeCfg($typeKey)),
+            default => [],
+        };
     }
 
     /**
      * The metadata keys a type stores in the JSON blob: every field that is
-     * neither column-bound nor the read-only CCC. This is the write whitelist
-     * the Form Request validates against — anything else is rejected.
+     * neither column-bound nor the read-only CCC. The write whitelist the Form
+     * Request validates against — anything else is rejected.
      *
      * @return list<string>
      */
-    public static function companyMetadataKeys(string $typeKey): array
+    public static function metadataKeysFor(string $entityType, string $typeKey): array
     {
         return array_values(array_map(
             static fn (array $f): string => $f['key'],
             array_filter(
-                self::companyFieldDefs($typeKey),
+                self::fieldsFor($entityType, $typeKey),
                 static fn (array $f): bool => ! isset($f['column']) && $f['type'] !== 'ccc',
             ),
         ));
@@ -255,17 +264,110 @@ class DocumentTypes
      *
      * @return array<string, string>
      */
-    public static function companyColumnBindings(string $typeKey): array
+    public static function columnBindingsFor(string $entityType, string $typeKey): array
     {
         $map = [];
 
-        foreach (self::companyFieldDefs($typeKey) as $field) {
+        foreach (self::fieldsFor($entityType, $typeKey) as $field) {
             if (isset($field['column'])) {
                 $map[$field['key']] = $field['column'];
             }
         }
 
         return $map;
+    }
+
+    /**
+     * A flat {typeKey: {fields: [...]}} map for one entity — feeds the upload
+     * modal's dynamic field form.
+     *
+     * @return array<string, array{fields: list<array<string, mixed>>}>
+     */
+    public static function fieldDefsMap(string $entityType): array
+    {
+        $keys = match ($entityType) {
+            'company' => self::companyKeys(),
+            'employee' => self::employeeKeys(),
+            'project' => self::projectKeys(),
+            default => [],
+        };
+
+        $map = [];
+
+        foreach ($keys as $key) {
+            $map[$key] = ['fields' => self::fieldsFor($entityType, $key)];
+        }
+
+        return $map;
+    }
+
+    /**
+     * Generic date fields for a non-company type: always an issue date, plus an
+     * expiry date when the type is expiry-tracked. Column-bound so the alert
+     * engine keeps reading expiry_date.
+     *
+     * @param  array{flag?: bool, file?: bool, expiry?: bool}  $cfg
+     * @return list<array{key: string, type: string, label: string, column: string}>
+     */
+    private static function genericDateFields(array $cfg): array
+    {
+        $fields = [
+            ['key' => 'issue_date', 'type' => 'date', 'label' => 'documents.issue_date', 'column' => 'issue_date'],
+        ];
+
+        if ($cfg['expiry'] ?? false) {
+            $fields[] = ['key' => 'expiry_date', 'type' => 'date', 'label' => 'documents.expiry_date', 'column' => 'expiry_date'];
+        }
+
+        return $fields;
+    }
+
+    /**
+     * @return array{flag?: bool, file?: bool, expiry?: bool}
+     */
+    private static function employeeTypeCfg(string $typeKey): array
+    {
+        foreach (self::employee() as $types) {
+            if (isset($types[$typeKey])) {
+                return $types[$typeKey];
+            }
+        }
+
+        return [];
+    }
+
+    /**
+     * @return array{flag?: bool, file?: bool, expiry?: bool}
+     */
+    private static function projectTypeCfg(string $typeKey): array
+    {
+        return self::project()['project'][$typeKey] ?? [];
+    }
+
+    /**
+     * Company-scoped wrappers (kept for existing callers + tests).
+     *
+     * @return list<array{key: string, type: string, label: string, column?: string, options?: list<string>}>
+     */
+    public static function companyFieldDefs(string $typeKey): array
+    {
+        return self::fieldsFor('company', $typeKey);
+    }
+
+    /**
+     * @return list<string>
+     */
+    public static function companyMetadataKeys(string $typeKey): array
+    {
+        return self::metadataKeysFor('company', $typeKey);
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public static function companyColumnBindings(string $typeKey): array
+    {
+        return self::columnBindingsFor('company', $typeKey);
     }
 
     /**

@@ -24,6 +24,7 @@ use App\Services\Inventory\PpeComplianceService;
 use App\Services\Workers\WorkerConsentService;
 use App\Support\AttendanceAbsence;
 use App\Support\CurrentCompany;
+use App\Support\DocumentPanelPayload;
 use App\Support\DocumentTypes;
 use App\Support\WorkerPrivacyNotice;
 use Barryvdh\DomPDF\Facade\Pdf;
@@ -111,7 +112,7 @@ class EmployeeController extends Controller
         ]);
     }
 
-    public function show(Request $request, Employee $employee, DocumentStatus $status, WageRateService $wageRates): Response
+    public function show(Request $request, Employee $employee, DocumentStatus $status, WageRateService $wageRates, DocumentPanelPayload $panel): Response
     {
         Gate::authorize('employees.view');
 
@@ -146,8 +147,9 @@ class EmployeeController extends Controller
                 'email' => $employee->user?->email,
                 'active' => (bool) $employee->user?->active,
             ],
-            'documents' => $this->documentsPayload($employee, $status),
+            'documents' => $panel->forEntity($employee, 'employee'),
             'documentSets' => DocumentTypes::employee(),
+            'documentFieldDefs' => DocumentTypes::fieldDefsMap('employee'),
             'notes' => $employee->employeeNotes()->with('author:id,name')->orderByDesc('noted_at')->get()
                 ->map(fn ($note) => [
                     'id' => $note->id,
@@ -194,6 +196,7 @@ class EmployeeController extends Controller
                 'upload' => Gate::allows('documents.upload'),
                 'download' => Gate::allows('documents.download'),
                 'deleteDocs' => Gate::allows('documents.delete'),
+                'editDocs' => Gate::allows('documents.edit'),
             ],
         ]);
     }
@@ -587,32 +590,5 @@ class EmployeeController extends Controller
             ->each(fn (Employee $employee) => $employee->update(['active' => $validated['active']]));
 
         return back()->with('success', __('ui.employees.saved'));
-    }
-
-    /**
-     * @return list<array<string, mixed>>
-     */
-    private function documentsPayload(Employee $employee, DocumentStatus $status): array
-    {
-        return $employee->documents()->where('is_current', true)->get()
-            ->map(function ($document) use ($status): array {
-                [$state, $daysLeft] = $status->of($document);
-
-                return [
-                    'id' => $document->id,
-                    'category' => $document->category,
-                    'type_key' => $document->type_key,
-                    'name' => $document->name,
-                    'original_name' => $document->original_name,
-                    'has_file' => $document->file_path !== null,
-                    'has_flag' => $document->has_flag,
-                    'issue_date' => $document->issue_date?->toDateString(),
-                    'expiry_date' => $document->expiry_date?->toDateString(),
-                    'version' => $document->version,
-                    'status' => $state,
-                    'days_left' => $daysLeft,
-                    'notes' => $document->notes,
-                ];
-            })->values()->all();
     }
 }

@@ -18,22 +18,18 @@ use Illuminate\Validation\Rule;
 trait ValidatesDocumentMetadata
 {
     /**
-     * Rules for the metadata.* keys of a company document type. Only the
+     * Rules for the metadata.* keys of a document type (by entity). Only the
      * registry's own metadata keys are described; unknown keys are rejected in
-     * afterMetadataValidation().
+     * afterMetadataValidation(). Employee/project types have no metadata keys
+     * (their dates are column-bound), so any metadata sent for them is rejected.
      *
      * @return array<string, array<int, mixed>>
      */
-    protected function metadataRules(string $category, string $typeKey): array
+    protected function metadataRules(string $entityType, string $typeKey): array
     {
-        if ($category !== 'company') {
-            // Only company documents carry per-type metadata (this feature).
-            return ['metadata' => ['nullable', 'array', 'size:0']];
-        }
-
         $rules = ['metadata' => ['nullable', 'array']];
 
-        foreach (DocumentTypes::companyFieldDefs($typeKey) as $field) {
+        foreach (DocumentTypes::fieldsFor($entityType, $typeKey) as $field) {
             if (isset($field['column']) || $field['type'] === 'ccc') {
                 continue; // column-bound dates + read-only CCC are not metadata
             }
@@ -84,7 +80,7 @@ trait ValidatesDocumentMetadata
     /**
      * Reject metadata keys outside the type whitelist (whitelist-only, per spec).
      */
-    protected function afterMetadataValidation(Validator $validator, string $category, string $typeKey): void
+    protected function afterMetadataValidation(Validator $validator, string $entityType, string $typeKey): void
     {
         /** @var array<string, mixed> $data */
         $data = $this->all();
@@ -92,7 +88,7 @@ trait ValidatesDocumentMetadata
         $metadata = $data['metadata'] ?? [];
 
         if (is_array($metadata) && $metadata !== []) {
-            $allowed = $category === 'company' ? DocumentTypes::companyMetadataKeys($typeKey) : [];
+            $allowed = DocumentTypes::metadataKeysFor($entityType, $typeKey);
 
             // 'ccc' is a reserved read-only key (value comes from the company
             // record and is stripped before storage) — tolerated on any type.

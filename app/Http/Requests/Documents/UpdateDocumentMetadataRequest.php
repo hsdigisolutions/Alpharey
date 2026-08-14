@@ -3,7 +3,9 @@
 namespace App\Http\Requests\Documents;
 
 use App\Http\Requests\Documents\Concerns\ValidatesDocumentMetadata;
+use App\Models\Company;
 use App\Models\Document;
+use App\Models\Project;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\Gate;
@@ -30,7 +32,7 @@ class UpdateDocumentMetadataRequest extends FormRequest
         $document = $this->document();
 
         return [
-            ...$this->metadataRules($document->category, $document->type_key),
+            ...$this->metadataRules($this->entityType($document), $document->type_key),
             ...$this->contactRules(),
         ];
     }
@@ -39,7 +41,7 @@ class UpdateDocumentMetadataRequest extends FormRequest
     {
         $validator->after(function (Validator $validator): void {
             $document = $this->document();
-            $this->afterMetadataValidation($validator, $document->category, $document->type_key);
+            $this->afterMetadataValidation($validator, $this->entityType($document), $document->type_key);
         });
     }
 
@@ -49,5 +51,14 @@ class UpdateDocumentMetadataRequest extends FormRequest
         $document = $this->route('document');
 
         return $document;
+    }
+
+    private function entityType(Document $document): string
+    {
+        return match ($document->documentable_type) {
+            Company::class => 'company',
+            Project::class => 'project',
+            default => 'employee',
+        };
     }
 }

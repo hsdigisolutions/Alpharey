@@ -26,7 +26,7 @@ class StoreDocumentRequest extends FormRequest
      */
     public function rules(): array
     {
-        $category = (string) $this->input('category');
+        $entityType = (string) $this->input('entity_type');
         $typeKey = (string) $this->input('type_key');
 
         return [
@@ -40,7 +40,7 @@ class StoreDocumentRequest extends FormRequest
             'issue_date' => ['nullable', 'date'],
             'expiry_date' => ['nullable', 'date'],
             'notes' => ['nullable', 'string', 'max:2000'],
-            ...$this->metadataRules($category, $typeKey),
+            ...$this->metadataRules($entityType, $typeKey),
             ...$this->contactRules(),
         ];
     }
@@ -50,7 +50,7 @@ class StoreDocumentRequest extends FormRequest
         $validator->after(function (Validator $validator): void {
             $this->afterMetadataValidation(
                 $validator,
-                (string) $this->input('category'),
+                (string) $this->input('entity_type'),
                 (string) $this->input('type_key'),
             );
         });

@@ -27,6 +27,7 @@ use App\Services\Documents\DocumentStatus;
 use App\Services\ProductionTasks\ProductionReportService;
 use App\Services\Reports\ProfitabilityService;
 use App\Support\CurrentCompany;
+use App\Support\DocumentPanelPayload;
 use App\Support\DocumentTypes;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
@@ -133,7 +134,7 @@ class ProjectController extends Controller
         ];
     }
 
-    public function show(Request $request, Project $project, DocumentStatus $status, ProfitabilityService $profitability): Response
+    public function show(Request $request, Project $project, DocumentStatus $status, ProfitabilityService $profitability, DocumentPanelPayload $panel): Response
     {
         Gate::authorize('projects.view');
 
@@ -169,19 +170,9 @@ class ProjectController extends Controller
                     'wage_type' => $rate->wage_type,
                     'project_rate' => $canSeeWages ? $rate->getAttribute('project_rate') : null,
                 ]),
-            'documents' => $project->documents()->where('is_current', true)->get()
-                ->map(function ($d) use ($status): array {
-                    [$state, $daysLeft] = $status->of($d);
-
-                    return [
-                        'id' => $d->id, 'category' => $d->category, 'type_key' => $d->type_key,
-                        'name' => $d->name, 'original_name' => $d->original_name,
-                        'has_file' => $d->getAttribute('file_path') !== null, 'has_flag' => $d->has_flag,
-                        'expiry_date' => $d->expiry_date?->toDateString(), 'version' => $d->version,
-                        'status' => $state, 'days_left' => $daysLeft,
-                    ];
-                }),
+            'documents' => $panel->forEntity($project, 'project'),
             'documentSets' => DocumentTypes::project(),
+            'documentFieldDefs' => DocumentTypes::fieldDefsMap('project'),
             'remarks' => $project->remarks()->with('author:id,name')->orderByDesc('noted_at')->get()
                 ->map(fn ($r) => [
                     'id' => $r->id, 'type' => $r->type, 'body' => $r->body,
@@ -257,6 +248,7 @@ class ProjectController extends Controller
                 'upload' => Gate::allows('documents.upload'),
                 'download' => Gate::allows('documents.download'),
                 'deleteDocs' => Gate::allows('documents.delete'),
+                'editDocs' => Gate::allows('documents.edit'),
             ],
         ]);
     }

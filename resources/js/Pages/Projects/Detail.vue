@@ -34,6 +34,7 @@ const props = defineProps({
     workers: { type: Array, required: true },
     documents: { type: Array, required: true },
     documentSets: { type: Object, required: true },
+    documentFieldDefs: { type: Object, default: () => ({}) },
     remarks: { type: Array, required: true },
     alerts: { type: Array, required: true },
     availableEmployees: { type: Array, required: true },
@@ -709,7 +710,7 @@ function destroy() {
 
             <!-- Documentos -->
             <DocumentsPanel v-else-if="tab === 'documents'" entity-type="project" :entity-id="project.id"
-                :documents="documents" :sets="documentSets" :can="can" />
+                :documents="documents" :sets="documentSets" :field-defs="documentFieldDefs" :can="can" />
 
             <!-- Notas (immutable) -->
             <div v-else-if="tab === 'notes'" class="grid gap-5 lg:grid-cols-[1fr_320px]">

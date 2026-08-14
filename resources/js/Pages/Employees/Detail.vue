@@ -33,6 +33,7 @@ const props = defineProps({
     employee: { type: Object, required: true },
     documents: { type: Array, required: true },
     documentSets: { type: Object, required: true },
+    documentFieldDefs: { type: Object, default: () => ({}) },
     notes: { type: Array, required: true },
     calls: { type: Array, required: true },
     payroll: { type: Array, default: () => [] },
@@ -451,7 +452,7 @@ function destroy() {
             <!-- Documentos -->
             <DocumentsPanel v-else-if="tab === 'docs'"
                 entity-type="employee" :entity-id="employee.id"
-                :documents="documents" :sets="documentSets" :can="can" />
+                :documents="documents" :sets="documentSets" :field-defs="documentFieldDefs" :can="can" />
 
             <!-- Asistencia — per-employee month calendar + summary -->
             <div v-else-if="tab === 'attendance'">

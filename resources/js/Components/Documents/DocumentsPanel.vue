@@ -46,15 +46,22 @@ function currentDoc(typeKey) {
     return props.documents.find((d) => d.type_key === typeKey && d.category !== 'custom') ?? null;
 }
 
-/* ---------- smart detail panel (company documents only) ---------- */
-const isCompany = computed(() => props.entityType === 'company');
+/* ---------- smart detail panel (all document surfaces) ---------- */
 const selectedDocId = ref(null);
 const selectedDoc = computed(() => props.documents.find((d) => d.id === selectedDocId.value) ?? null);
 
-function rowClick(typeKey, category, cfg) {
-    if (!isCompany.value) {
-        return;
+// Resolve a type's category + cfg across the (possibly grouped) sets.
+function findType(typeKey) {
+    for (const group of groups.value) {
+        if (group.types[typeKey]) {
+            return { category: group.category, cfg: group.types[typeKey] };
+        }
     }
+
+    return { category: props.entityType, cfg: { flag: false, file: true, expiry: true } };
+}
+
+function rowClick(typeKey, category, cfg) {
     const existing = currentDoc(typeKey);
     if (existing) {
         selectedDocId.value = existing.id;
@@ -68,11 +75,14 @@ function rowClick(typeKey, category, cfg) {
 // pre-fill still works because openUpload reads the row from props.documents.
 function newVersion(typeKey) {
     selectedDocId.value = null;
-    openUpload(typeKey, 'company', props.sets[typeKey] ?? { flag: false, file: true, expiry: true });
+    const { category, cfg } = findType(typeKey);
+    openUpload(typeKey, category, cfg);
 }
 
+// Reload all props so whichever detail page (companies / employee / project)
+// hosts the panel refreshes its document list after a save.
 function refreshDocs() {
-    router.reload({ only: ['companies'], preserveScroll: true });
+    router.reload({ preserveScroll: true });
 }
 
 const statusBadge = { ok: 'ok', warn: 'warn', danger: 'danger', neutral: 'neutral', exempt: 'info' };
@@ -98,7 +108,7 @@ const uploadForm = useForm({
 
 // Field defs for the type being uploaded (company docs only).
 const uploadFields = computed(() => {
-    if (!uploadTarget.value || uploadTarget.value.category !== 'company') {
+    if (!uploadTarget.value || uploadTarget.value.custom) {
         return [];
     }
 
@@ -161,8 +171,7 @@ function removeDoc(doc) {
                 <table class="w-full min-w-max text-sm">
                     <tbody class="divide-y divide-line">
                         <tr v-for="(cfg, typeKey) in group.types" :key="typeKey"
-                            class="hover:bg-surface-hover"
-                            :class="isCompany ? 'cursor-pointer' : ''"
+                            class="cursor-pointer hover:bg-surface-hover"
                             @click="rowClick(typeKey, group.category === 'company' ? 'company' : group.category, cfg)">
                             <td class="px-3 py-2.5">
                                 <Bilingual :k="`doc_types.${typeKey}`" class="text-sm" />
@@ -265,7 +274,7 @@ function removeDoc(doc) {
 
         <!-- Upload modal -->
         <VModal :open="uploadTarget !== null" title-key="documents.upload"
-            :size="uploadTarget?.category === 'company' && !uploadTarget?.custom ? 'lg' : 'sm'"
+            :size="uploadTarget && !uploadTarget.custom ? 'lg' : 'sm'"
             @close="uploadTarget = null">
             <form v-if="uploadTarget" id="doc-upload" class="space-y-3" @submit.prevent="submitUpload">
                 <p v-if="!uploadTarget.custom" class="text-sm font-medium">
@@ -279,11 +288,11 @@ function removeDoc(doc) {
                 <p v-if="file" class="truncate text-xs text-ink-soft">{{ file.name }}</p>
                 <p v-if="uploadForm.errors.file" class="text-xs text-status-danger">{{ uploadForm.errors.file }}</p>
 
-                <!-- Company docs: the type's smart fields + repeatable contacts -->
-                <DocumentFieldForm v-if="uploadTarget.category === 'company' && !uploadTarget.custom"
+                <!-- Defined types: the type's smart fields + repeatable contacts -->
+                <DocumentFieldForm v-if="!uploadTarget.custom"
                     :fields="uploadFields" :form="uploadForm" :ccc="companyCcc" :dates-editable="true" />
 
-                <!-- Employee / project / custom: the simple fields -->
+                <!-- Custom slots: the simple fields -->
                 <template v-else>
                     <VCheckbox v-if="uploadTarget.cfg.flag" v-model="uploadForm.has_flag">
                         <Bilingual k="documents.flag" inline class="text-sm" />
@@ -314,7 +323,7 @@ function removeDoc(doc) {
 
     <VConfirmDialog :open="confirm.open" :message="confirm.message" @confirm="runDelete" @cancel="confirm.open = false" />
 
-    <!-- Smart detail slide-over (company documents) -->
-    <DocumentDetailPanel v-if="isCompany" :doc="selectedDoc" :can="can"
+    <!-- Smart detail slide-over (all document surfaces) -->
+    <DocumentDetailPanel :doc="selectedDoc" :can="can"
         @close="selectedDocId = null" @new-version="newVersion" @refresh="refreshDocs" />
 </template>
