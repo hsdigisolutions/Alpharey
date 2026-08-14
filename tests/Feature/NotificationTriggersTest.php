@@ -22,6 +22,28 @@ use App\Models\WorkerExpense;
 use App\Notifications\SystemNotification;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Facades\Route;
+
+/**
+ * A notification whose `url` points at a route that does not exist sends the
+ * recipient to a 404 (this shipped once — the call-follow-up alert linked to
+ * /call-panel, but the route is /calls). Guard every hard-coded scan-alert URL.
+ */
+it('points every scan-alert notification url at a real GET route', function (): void {
+    $source = (string) file_get_contents(base_path('app/Console/Commands/ScanAlerts.php'));
+    preg_match_all("/'url' => '([^']+)'/", $source, $matches);
+    $urls = array_values(array_unique($matches[1]));
+
+    expect($urls)->not->toBeEmpty();
+
+    $getRoutes = collect(Route::getRoutes()->getRoutesByMethod()['GET'] ?? [])
+        ->map(fn ($r) => $r->uri())->all();
+
+    foreach ($urls as $url) {
+        expect(in_array(ltrim($url, '/'), $getRoutes, true))
+            ->toBeTrue("notification url {$url} must resolve to a registered GET route");
+    }
+});
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 

@@ -226,7 +226,7 @@ class ScanAlerts extends Command
             $dispatcher->dispatchToUser(NotificationType::CallFollowUp, $log->caller, [
                 'title_es' => "Seguimiento de llamada hoy: {$worker}",
                 'title_en' => "Call follow-up due today: {$worker}",
-                'entity' => $worker, 'url' => '/call-panel',
+                'entity' => $worker, 'url' => '/calls',
             ]);
 
             $sent++;
