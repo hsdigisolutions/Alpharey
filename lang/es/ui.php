@@ -670,6 +670,14 @@ return [
         'informacion_art18' => 'Artículo 18',
         'entrega_epis' => 'EPIs',
         'autorizacion_maquinaria' => 'Autorización Uso Maquinaria',
+        // Cliente / Proveedor
+        'contrato' => 'Contrato',
+        'pedido' => 'Pedido',
+        'datos_fiscales' => 'Datos Fiscales',
+        'certificado_bancario' => 'Certificado Bancario',
+        'seguro' => 'Seguro',
+        'seguro_rc' => 'Seguro RC',
+        'certificado_aeat' => 'Certificado AEAT',
         // Obras
         'permit' => 'Licencia de Obra',
         'health_safety_plan' => 'Plan de Seguridad y Salud',
@@ -729,6 +737,7 @@ return [
         'tab_projects' => 'Proyectos',
         'tab_invoices' => 'Facturas',
         'tab_proposals' => 'Propuestas',
+        'tab_documents' => 'Documentos',
         'tab_communication' => 'Comunicación',
         'add_contact' => 'Añadir contacto',
         'contact_saved' => 'Contacto guardado / Contact saved',

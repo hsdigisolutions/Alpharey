@@ -669,6 +669,14 @@ return [
         'informacion_art18' => 'Article 18 Information',
         'entrega_epis' => 'PPE Issue Record',
         'autorizacion_maquinaria' => 'Machinery Use Authorisation',
+        // Client / Vendor
+        'contrato' => 'Contract',
+        'pedido' => 'Purchase Order',
+        'datos_fiscales' => 'Tax Details',
+        'certificado_bancario' => 'Bank Certificate',
+        'seguro' => 'Insurance',
+        'seguro_rc' => 'Civil Liability Insurance',
+        'certificado_aeat' => 'Tax Clearance (AEAT)',
         // Projects
         'permit' => 'Works Permit',
         'health_safety_plan' => 'Health & Safety Plan',
@@ -728,6 +736,7 @@ return [
         'tab_projects' => 'Projects',
         'tab_invoices' => 'Invoices',
         'tab_proposals' => 'Proposals',
+        'tab_documents' => 'Documents',
         'tab_communication' => 'Communication',
         'add_contact' => 'Add contact',
         'contact_saved' => 'Contacto guardado / Contact saved',

@@ -2,10 +2,12 @@
 
 namespace App\Support;
 
+use App\Models\Client;
 use App\Models\Company;
 use App\Models\Document;
 use App\Models\Employee;
 use App\Models\Project;
+use App\Models\Vendor;
 use App\Services\Documents\DocumentStatus;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Support\Collection;
@@ -25,7 +27,7 @@ class DocumentPanelPayload
      *
      * @return list<array<string, mixed>>
      */
-    public function forEntity(Company|Employee|Project $entity, string $entityType, ?string $ccc = null): array
+    public function forEntity(Company|Employee|Project|Client|Vendor $entity, string $entityType, ?string $ccc = null): array
     {
         /** @var EloquentCollection<int, Document> $all */
         $all = $entity->documents()->with('uploader:id,name')->orderByDesc('version')->get();

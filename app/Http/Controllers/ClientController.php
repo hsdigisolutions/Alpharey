@@ -7,6 +7,8 @@ use App\Http\Requests\Clients\StoreClientRequest;
 use App\Http\Requests\Clients\UpdateClientRequest;
 use App\Models\Client;
 use App\Models\Invoice;
+use App\Support\DocumentPanelPayload;
+use App\Support\DocumentTypes;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -75,7 +77,7 @@ class ClientController extends Controller
         ]);
     }
 
-    public function show(Client $client): Response
+    public function show(Client $client, DocumentPanelPayload $panel): Response
     {
         Gate::authorize('clients.view');
 
@@ -111,9 +113,18 @@ class ClientController extends Controller
             // invoices to the client, never another company's.
             'invoices' => Gate::allows('invoices.view') ? $this->clientInvoices($client) : [],
             'canViewInvoices' => Gate::allows('invoices.view'),
+            // Documentos tab — the shared client's docs, scoped to this company.
+            'documents' => Gate::allows('documents.view') ? $panel->forEntity($client, 'client') : [],
+            'documentSets' => DocumentTypes::client(),
+            'documentFieldDefs' => DocumentTypes::fieldDefsMap('client'),
             'can' => [
                 'edit' => Gate::allows('clients.edit'),
                 'delete' => Gate::allows('clients.delete'),
+                'view' => Gate::allows('documents.view'),
+                'upload' => Gate::allows('documents.upload'),
+                'download' => Gate::allows('documents.download'),
+                'deleteDocs' => Gate::allows('documents.delete'),
+                'editDocs' => Gate::allows('documents.edit'),
             ],
         ]);
     }

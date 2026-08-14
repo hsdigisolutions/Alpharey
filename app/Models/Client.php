@@ -8,6 +8,7 @@ use Database\Factories\ClientFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
@@ -76,5 +77,18 @@ class Client extends Model
     public function proposals(): HasMany
     {
         return $this->hasMany(Proposal::class);
+    }
+
+    /**
+     * Documents for this client. The client record is shared across companies,
+     * but each document carries the acting company's company_id (set on upload),
+     * so a company sees only its own paperwork for the shared client — the same
+     * rule the client's invoices follow.
+     *
+     * @return MorphMany<Document, $this>
+     */
+    public function documents(): MorphMany
+    {
+        return $this->morphMany(Document::class, 'documentable');
     }
 }

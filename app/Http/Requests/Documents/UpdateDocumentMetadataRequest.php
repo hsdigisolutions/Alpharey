@@ -3,9 +3,11 @@
 namespace App\Http\Requests\Documents;
 
 use App\Http\Requests\Documents\Concerns\ValidatesDocumentMetadata;
+use App\Models\Client;
 use App\Models\Company;
 use App\Models\Document;
 use App\Models\Project;
+use App\Models\Vendor;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\Gate;
@@ -58,6 +60,8 @@ class UpdateDocumentMetadataRequest extends FormRequest
         return match ($document->documentable_type) {
             Company::class => 'company',
             Project::class => 'project',
+            Client::class => 'client',
+            Vendor::class => 'vendor',
             default => 'employee',
         };
     }

@@ -236,6 +236,8 @@ class DocumentTypes
             'company' => self::companyFields()[$typeKey]['fields'] ?? [],
             'employee' => self::genericDateFields(self::employeeTypeCfg($typeKey)),
             'project' => self::genericDateFields(self::projectTypeCfg($typeKey)),
+            'client' => self::genericDateFields(self::client()['client'][$typeKey] ?? []),
+            'vendor' => self::genericDateFields(self::vendor()['vendor'][$typeKey] ?? []),
             default => [],
         };
     }
@@ -289,6 +291,8 @@ class DocumentTypes
             'company' => self::companyKeys(),
             'employee' => self::employeeKeys(),
             'project' => self::projectKeys(),
+            'client' => self::clientKeys(),
+            'vendor' => self::vendorKeys(),
             default => [],
         };
 
@@ -442,6 +446,63 @@ class DocumentTypes
     public static function projectKeys(): array
     {
         return array_keys(self::project()['project']);
+    }
+
+    /**
+     * Client document slots (shared entity, company-owned files). Sensible
+     * defaults for a Spanish construction CRM; each gets the generic date +
+     * repeatable-contacts smart panel. Adjust the set as the client confirms.
+     *
+     * @return array<string, array<string, array{flag: bool, file: bool, expiry: bool}>>
+     */
+    public static function client(): array
+    {
+        return [
+            'client' => [
+                'contrato' => ['flag' => false, 'file' => true, 'expiry' => true],
+                'pedido' => ['flag' => false, 'file' => true, 'expiry' => false],
+                'datos_fiscales' => ['flag' => false, 'file' => true, 'expiry' => false],
+                'certificado_bancario' => ['flag' => false, 'file' => true, 'expiry' => false],
+                'seguro' => ['flag' => false, 'file' => true, 'expiry' => true],
+            ],
+        ];
+    }
+
+    /**
+     * @return list<string>
+     */
+    public static function clientKeys(): array
+    {
+        return array_keys(self::client()['client']);
+    }
+
+    /**
+     * Vendor document slots — a supplier/subcontractor's compliance paperwork
+     * (RC insurance, TGSS/AEAT clearances, REA…). Shared entity, company-owned.
+     *
+     * @return array<string, array<string, array{flag: bool, file: bool, expiry: bool}>>
+     */
+    public static function vendor(): array
+    {
+        return [
+            'vendor' => [
+                'contrato' => ['flag' => false, 'file' => true, 'expiry' => true],
+                'seguro_rc' => ['flag' => false, 'file' => true, 'expiry' => true],
+                'certificado_ss' => ['flag' => false, 'file' => true, 'expiry' => false],
+                'certificado_aeat' => ['flag' => false, 'file' => true, 'expiry' => false],
+                'rea' => ['flag' => false, 'file' => true, 'expiry' => true],
+                'datos_fiscales' => ['flag' => false, 'file' => true, 'expiry' => false],
+                'certificado_bancario' => ['flag' => false, 'file' => true, 'expiry' => false],
+            ],
+        ];
+    }
+
+    /**
+     * @return list<string>
+     */
+    public static function vendorKeys(): array
+    {
+        return array_keys(self::vendor()['vendor']);
     }
 
     /**

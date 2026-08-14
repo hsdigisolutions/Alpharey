@@ -5,11 +5,14 @@ namespace App\Http\Controllers;
 use App\Http\Requests\Documents\ReplaceDocumentFileRequest;
 use App\Http\Requests\Documents\StoreDocumentRequest;
 use App\Http\Requests\Documents\UpdateDocumentMetadataRequest;
+use App\Models\Client;
 use App\Models\Company;
 use App\Models\Document;
 use App\Models\Employee;
 use App\Models\Project;
+use App\Models\Vendor;
 use App\Services\Audit\AuditLogger;
+use App\Support\CurrentCompany;
 use App\Support\DocumentTypes;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\RedirectResponse;
@@ -69,7 +72,14 @@ class DocumentController extends Controller
             'contacts' => $this->cleanContacts($validated['contacts'] ?? null),
         ]);
         $document->documentable()->associate($entity);
-        $document->company_id = $entity instanceof Company ? $entity->id : $entity->getAttribute('company_id');
+        // Company owns its own docs; employee/project inherit their company_id;
+        // shared entities (client/vendor) take the ACTING company so each company
+        // sees only its own paperwork for the shared record (same as invoices).
+        $document->company_id = match (true) {
+            $entity instanceof Company => $entity->id,
+            $entity instanceof Client, $entity instanceof Vendor => app(CurrentCompany::class)->id(),
+            default => $entity->getAttribute('company_id'),
+        };
         $document->uploaded_by = $request->user()?->id;
         $document->version = $previous !== null ? $previous->version + 1 : 1;
         $document->setAttribute('file_path', $path);
@@ -213,6 +223,8 @@ class DocumentController extends Controller
         return match ($document->documentable_type) {
             Company::class => 'company',
             Project::class => 'project',
+            Client::class => 'client',
+            Vendor::class => 'vendor',
             default => 'employee',
         };
     }
@@ -280,6 +292,16 @@ class DocumentController extends Controller
             return Project::query()->findOrFail($id);
         }
 
+        if ($type === 'client') {
+            // Shared record; the document takes the acting company's id on save,
+            // so visibility is still tenant-scoped.
+            return Client::query()->findOrFail($id);
+        }
+
+        if ($type === 'vendor') {
+            return Vendor::query()->findOrFail($id);
+        }
+
         // Employee carries the company scope — out-of-company ids 404 here
         return Employee::query()->findOrFail($id);
     }
@@ -293,6 +315,8 @@ class DocumentController extends Controller
         $known = match ($entityType) {
             'company' => DocumentTypes::companyKeys(),
             'project' => DocumentTypes::projectKeys(),
+            'client' => DocumentTypes::clientKeys(),
+            'vendor' => DocumentTypes::vendorKeys(),
             default => DocumentTypes::employeeKeys(),
         };
 

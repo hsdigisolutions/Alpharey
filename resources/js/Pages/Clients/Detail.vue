@@ -7,6 +7,7 @@ import { ref } from 'vue';
 import { Head, router, useForm } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import ClientFormModal from '@/Components/Clients/ClientFormModal.vue';
+import DocumentsPanel from '@/Components/Documents/DocumentsPanel.vue';
 import FormField from '@/Components/ui/FormField.vue';
 import VAvatar from '@/Components/ui/VAvatar.vue';
 import VBadge from '@/Components/ui/VBadge.vue';
@@ -30,6 +31,9 @@ const props = defineProps({
     communications: { type: Array, required: true },
     invoices: { type: Array, default: () => [] },
     canViewInvoices: { type: Boolean, default: false },
+    documents: { type: Array, default: () => [] },
+    documentSets: { type: Object, default: () => ({}) },
+    documentFieldDefs: { type: Object, default: () => ({}) },
     can: { type: Object, required: true },
 });
 
@@ -42,6 +46,7 @@ const tabs = [
     { key: 'projects', labelKey: 'clients.tab_projects', count: props.projects.length },
     { key: 'proposals', labelKey: 'clients.tab_proposals', count: props.proposals.length },
     { key: 'invoices', labelKey: 'clients.tab_invoices' },
+    { key: 'documents', labelKey: 'clients.tab_documents', count: props.documents.length },
     { key: 'communication', labelKey: 'clients.tab_communication', count: props.communications.length },
 ];
 
@@ -168,6 +173,9 @@ const statusBadge = { active: 'ok', in_progress: 'info', completed: 'ok', cancel
             <VFinanceRows v-else-if="tab === 'invoices'"
                 :rows="invoices" :can-view="canViewInvoices" empty-key="finance.no_invoices" :show-party="false" />
 
+            <!-- Documentos — this company's paperwork for the shared client -->
+            <DocumentsPanel v-else-if="tab === 'documents'" entity-type="client" :entity-id="client.id"
+                :documents="documents" :sets="documentSets" :field-defs="documentFieldDefs" :can="can" />
 
             <div v-else-if="tab === 'communication'" class="grid gap-5 lg:grid-cols-[1fr_320px]">
                 <VCard>

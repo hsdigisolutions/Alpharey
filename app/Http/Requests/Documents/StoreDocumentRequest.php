@@ -30,10 +30,10 @@ class StoreDocumentRequest extends FormRequest
         $typeKey = (string) $this->input('type_key');
 
         return [
-            'entity_type' => ['required', 'in:employee,company,project'],
+            'entity_type' => ['required', 'in:employee,company,project,client,vendor'],
             'entity_id' => ['required', 'integer'],
             'type_key' => ['required', 'string', 'max:60'],
-            'category' => ['required', 'in:personal,employment,prevencion,custom,company,project'],
+            'category' => ['required', 'in:personal,employment,prevencion,custom,company,project,client,vendor'],
             'name' => ['nullable', 'string', 'max:150'],
             'file' => ['nullable', 'file', 'max:15360', 'mimes:pdf,jpg,jpeg,png,webp,doc,docx,xls,xlsx'],
             'has_flag' => ['nullable', 'boolean'],
