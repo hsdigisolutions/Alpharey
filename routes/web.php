@@ -229,6 +229,8 @@ Route::middleware(['auth', 'active', 'two_factor', 'not_worker'])->group(functio
 
     // Unified documents (employee + company surfaces in Phase 2)
     Route::post('/documents', [DocumentController::class, 'store'])->name('documents.store');
+    Route::post('/documents/{document}/replace', [DocumentController::class, 'replace'])->name('documents.replace');
+    Route::patch('/documents/{document}/metadata', [DocumentController::class, 'updateMetadata'])->name('documents.metadata');
     Route::get('/documents/{document}/download', [DocumentController::class, 'download'])->name('documents.download');
     Route::delete('/documents/{document}', [DocumentController::class, 'destroy'])->name('documents.destroy');
     Route::post('/documents/{document}/exempt', [DocumentController::class, 'exempt'])->name('documents.exempt');

@@ -40,30 +40,45 @@ class CompanyController extends Controller
         return Inertia::render('Companies/Index', [
             'companies' => Company::query()
                 ->withCount('users')
-                ->with(['documents' => fn ($q) => $q->where('is_current', true)])
+                ->with(['documents' => fn ($q) => $q->with('uploader:id,name')->orderByDesc('version')])
                 ->orderBy('name')
                 ->get()
-                ->map(fn (Company $company): array => [
-                    'id' => $company->id,
-                    'name' => $company->name,
-                    'cif' => $company->cif,
-                    'ccc' => $company->ccc,
-                    'province' => $company->province,
-                    'address' => $company->address,
-                    'city' => $company->city,
-                    'postal_code' => $company->postal_code,
-                    'phone' => $company->phone,
-                    'email' => $company->email,
-                    'website' => $company->website,
-                    'status' => $company->status,
-                    'notes' => $company->notes,
-                    'users_count' => $company->users_count,
-                    'employees_count' => (int) ($employeeCounts[$company->id] ?? 0),
-                    'projects_count' => null, // Phase 3
-                    'compliance_score' => $this->complianceScore($company->documents, $status),
-                    'documents' => $company->documents->map(fn ($document): array => $this->documentRow($document, $status))->values(),
-                ]),
+                ->map(function (Company $company) use ($status, $employeeCounts): array {
+                    // One eager load carries both the live docs and their history;
+                    // split here so the panel gets current rows + prior versions.
+                    $current = $company->documents->where('is_current', true)->values();
+                    $history = $company->documents->where('is_current', false)->groupBy('type_key');
+
+                    return [
+                        'id' => $company->id,
+                        'name' => $company->name,
+                        'cif' => $company->cif,
+                        'ccc' => $company->ccc,
+                        'province' => $company->province,
+                        'address' => $company->address,
+                        'city' => $company->city,
+                        'postal_code' => $company->postal_code,
+                        'phone' => $company->phone,
+                        'email' => $company->email,
+                        'website' => $company->website,
+                        'status' => $company->status,
+                        'notes' => $company->notes,
+                        'users_count' => $company->users_count,
+                        'employees_count' => (int) ($employeeCounts[$company->id] ?? 0),
+                        'projects_count' => null, // Phase 3
+                        'compliance_score' => $this->complianceScore($current, $status),
+                        'documents' => $current
+                            ->map(fn (Document $document): array => $this->documentRow(
+                                $document,
+                                $status,
+                                $company,
+                                $history->get($document->type_key, collect()),
+                            ))
+                            ->values(),
+                    ];
+                }),
             'companyDocTypes' => DocumentTypes::company(),
+            'companyFieldDefs' => DocumentTypes::companyFields(),
         ]);
     }
 
@@ -78,11 +93,20 @@ class CompanyController extends Controller
     }
 
     /**
+     * @param  Collection<int, Document>  $history  prior versions of this slot
      * @return array<string, mixed>
      */
-    private function documentRow(Document $document, DocumentStatus $status): array
+    private function documentRow(Document $document, DocumentStatus $status, Company $company, Collection $history): array
     {
         [$state, $daysLeft] = $status->of($document);
+
+        $config = DocumentTypes::companyFields()[$document->type_key] ?? null;
+        $fieldDefs = $config['fields'] ?? [];
+        $hasContact = ($config['contact'] ?? false) === true;
+
+        // 2E — CCC is read-only from the company; inject it whenever the type
+        // declares a ccc field so the panel never asks the admin to type it.
+        $hasCcc = collect($fieldDefs)->contains(fn (array $f): bool => $f['type'] === 'ccc');
 
         return [
             'id' => $document->id,
@@ -92,10 +116,40 @@ class CompanyController extends Controller
             'original_name' => $document->original_name,
             'has_file' => $document->getAttribute('file_path') !== null,
             'has_flag' => $document->has_flag,
+            'issue_date' => $document->issue_date?->toDateString(),
             'expiry_date' => $document->expiry_date?->toDateString(),
+            'notes' => $document->notes,
             'version' => $document->version,
             'status' => $state,
             'days_left' => $daysLeft,
+            'uploaded_at' => $document->created_at?->toDateString(),
+            'uploaded_by' => $document->uploader?->name,
+            // Smart-panel payload
+            'metadata' => $document->metadata ?? [],
+            'contact' => $hasContact ? [
+                'name' => $document->contact_name,
+                'phone' => $document->contact_phone,
+                'email' => $document->contact_email,
+                'emergency_phone' => $document->contact_emergency_phone,
+                'notes' => $document->contact_notes,
+            ] : null,
+            'field_defs' => $fieldDefs,
+            'has_contact' => $hasContact,
+            'emergency_label' => $config['emergency_label'] ?? null,
+            'ccc' => $hasCcc ? $company->ccc : null,
+            'history' => $history
+                ->sortByDesc('version')
+                ->map(fn (Document $version): array => [
+                    'id' => $version->id,
+                    'version' => $version->version,
+                    'uploaded_at' => $version->created_at?->toDateString(),
+                    'uploaded_by' => $version->uploader?->name,
+                    'issue_date' => $version->issue_date?->toDateString(),
+                    'expiry_date' => $version->expiry_date?->toDateString(),
+                    'has_file' => $version->getAttribute('file_path') !== null,
+                ])
+                ->values()
+                ->all(),
         ];
     }
 

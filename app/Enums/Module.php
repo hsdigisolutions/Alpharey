@@ -62,7 +62,7 @@ enum Module: string
             self::Deployments => [$a::View, $a::Create, $a::Edit, $a::Approve],
             self::Attendance => [$a::View, $a::Create, $a::Edit, $a::Delete, $a::Export],
             self::Payroll => [$a::View, $a::Create, $a::Edit, $a::Download, $a::Export, $a::Approve],
-            self::Documents => [$a::View, $a::Delete, $a::Upload, $a::Download, $a::Approve],
+            self::Documents => [$a::View, $a::Edit, $a::Delete, $a::Upload, $a::Download, $a::Approve],
             self::Reports => [$a::View, $a::Export],
             self::CallPanel => [$a::View, $a::Create, $a::Edit, $a::Delete],
             self::CommissionReports => [$a::View, $a::Edit, $a::Export, $a::Approve],

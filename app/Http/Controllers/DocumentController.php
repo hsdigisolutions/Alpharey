@@ -2,6 +2,9 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\Documents\ReplaceDocumentFileRequest;
+use App\Http\Requests\Documents\StoreDocumentRequest;
+use App\Http\Requests\Documents\UpdateDocumentMetadataRequest;
 use App\Models\Company;
 use App\Models\Document;
 use App\Models\Employee;
@@ -28,22 +31,9 @@ class DocumentController extends Controller
 {
     private const MAX_KB = 15360; // 15 MB
 
-    public function store(Request $request, AuditLogger $audit): RedirectResponse
+    public function store(StoreDocumentRequest $request, AuditLogger $audit): RedirectResponse
     {
-        Gate::authorize('documents.upload');
-
-        $validated = $request->validate([
-            'entity_type' => ['required', 'in:employee,company,project'],
-            'entity_id' => ['required', 'integer'],
-            'type_key' => ['required', 'string', 'max:60'],
-            'category' => ['required', 'in:personal,employment,prevencion,custom,company,project'],
-            'name' => ['nullable', 'string', 'max:150'],
-            'file' => ['nullable', 'file', 'max:'.self::MAX_KB, 'mimes:pdf,jpg,jpeg,png,webp,doc,docx,xls,xlsx'],
-            'has_flag' => ['nullable', 'boolean'],
-            'issue_date' => ['nullable', 'date'],
-            'expiry_date' => ['nullable', 'date'],
-            'notes' => ['nullable', 'string', 'max:2000'],
-        ]);
+        $validated = $request->validated();
 
         $entity = $this->resolveEntity($validated['entity_type'], (int) $validated['entity_id']);
         $this->assertKnownType($validated['entity_type'], $validated['category'], $validated['type_key']);
@@ -77,6 +67,12 @@ class DocumentController extends Controller
             'issue_date' => $validated['issue_date'] ?? null,
             'expiry_date' => $validated['expiry_date'] ?? null,
             'notes' => $validated['notes'] ?? null,
+            'metadata' => $this->cleanMetadata($validated['metadata'] ?? null),
+            'contact_name' => $validated['contact_name'] ?? null,
+            'contact_phone' => $validated['contact_phone'] ?? null,
+            'contact_email' => $validated['contact_email'] ?? null,
+            'contact_emergency_phone' => $validated['contact_emergency_phone'] ?? null,
+            'contact_notes' => $validated['contact_notes'] ?? null,
         ]);
         $document->documentable()->associate($entity);
         $document->company_id = $entity instanceof Company ? $entity->id : $entity->getAttribute('company_id');
@@ -101,6 +97,96 @@ class DocumentController extends Controller
         $audit->log('uploaded', $document, null, null, $document->type_key, 'documents');
 
         return back()->with('success', __('ui.documents.saved'));
+    }
+
+    /**
+     * Replace the file on an existing version — a correction, NOT a renewal, so
+     * the version number is untouched. The prior physical file is deleted.
+     */
+    public function replace(ReplaceDocumentFileRequest $request, Document $document, AuditLogger $audit): RedirectResponse
+    {
+        $file = $request->file('file');
+        abort_if($file === null, 422);
+
+        $entityType = $this->entityTypeFor($document);
+        $folder = $entityType.'s/'.$document->documentable_id.'/documents';
+        $newPath = $file->storeAs($folder, Str::random(40).'.'.$file->getClientOriginalExtension(), 'local');
+
+        $oldPath = $document->getAttribute('file_path');
+
+        $document->fill([
+            'original_name' => $file->getClientOriginalName(),
+            'mime' => $file->getMimeType(),
+            'size' => $file->getSize(),
+        ]);
+        $document->setAttribute('file_path', $newPath); // not mass-assignable
+        $document->save();
+
+        // Old file removed only after the row points at the new one.
+        if ($oldPath !== null && Storage::disk('local')->exists($oldPath)) {
+            Storage::disk('local')->delete($oldPath);
+        }
+
+        $audit->log('updated', $document, null, null, $document->type_key, 'documents');
+
+        return back()->with('success', __('ui.documents.saved'));
+    }
+
+    /**
+     * Edit the descriptive fields (metadata JSON + contact block) without
+     * touching the file, version, or the alert dates.
+     */
+    public function updateMetadata(UpdateDocumentMetadataRequest $request, Document $document, AuditLogger $audit): RedirectResponse
+    {
+        $validated = $request->validated();
+
+        $document->update([
+            'metadata' => $this->cleanMetadata($validated['metadata'] ?? null),
+            'contact_name' => $validated['contact_name'] ?? null,
+            'contact_phone' => $validated['contact_phone'] ?? null,
+            'contact_email' => $validated['contact_email'] ?? null,
+            'contact_emergency_phone' => $validated['contact_emergency_phone'] ?? null,
+            'contact_notes' => $validated['contact_notes'] ?? null,
+        ]);
+
+        $audit->log('updated', $document, null, null, $document->type_key, 'documents');
+
+        return back()->with('success', __('ui.documents.saved'));
+    }
+
+    /**
+     * Drop empty metadata values so a blank form stores null, not a bag of
+     * empty strings. CCC is never stored — it's read-only from the company.
+     *
+     * @param  array<string, mixed>|null  $metadata
+     * @return array<string, mixed>|null
+     */
+    private function cleanMetadata(?array $metadata): ?array
+    {
+        if ($metadata === null) {
+            return null;
+        }
+
+        unset($metadata['ccc']);
+
+        $clean = array_filter(
+            $metadata,
+            static fn ($value): bool => $value !== null && $value !== '' && $value !== [],
+        );
+
+        return $clean === [] ? null : $clean;
+    }
+
+    /**
+     * The upload folder prefix for a document's owner (employee|company|project).
+     */
+    private function entityTypeFor(Document $document): string
+    {
+        return match ($document->documentable_type) {
+            Company::class => 'company',
+            Project::class => 'project',
+            default => 'employee',
+        };
     }
 
     public function download(Request $request, Document $document, AuditLogger $audit): StreamedResponse
