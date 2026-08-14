@@ -10,6 +10,7 @@ use App\Models\Company;
 use App\Models\Document;
 use App\Models\Employee;
 use App\Models\Project;
+use App\Models\Scopes\CompanyScope;
 use App\Models\Vendor;
 use App\Services\Audit\AuditLogger;
 use App\Support\CurrentCompany;
@@ -39,6 +40,22 @@ class DocumentController extends Controller
         $entity = $this->resolveEntity($validated['entity_type'], (int) $validated['entity_id']);
         $this->assertKnownType($validated['entity_type'], $validated['category'], $validated['type_key']);
 
+        // Owning company, resolved UP FRONT so the version-chain lookup is
+        // deterministic (session-independent). Company owns its own docs;
+        // employee/project inherit; shared entities (client/vendor) take the
+        // ACTING company, so each company keeps its own paperwork for the
+        // shared record (same rule as invoices) — and must have one selected.
+        $companyId = match (true) {
+            $entity instanceof Company => $entity->id,
+            $entity instanceof Client, $entity instanceof Vendor => app(CurrentCompany::class)->id(),
+            default => $entity->getAttribute('company_id'),
+        };
+        abort_if(
+            $companyId === null && ($entity instanceof Client || $entity instanceof Vendor),
+            422,
+            'Select a company before adding documents to a shared record.',
+        );
+
         $path = null;
         $file = $request->file('file');
 
@@ -48,11 +65,14 @@ class DocumentController extends Controller
             $path = $file->storeAs($folder, Str::random(40).'.'.$file->getClientOriginalExtension(), 'local');
         }
 
-        // Versioning: the previous current row of this slot becomes history
-        $previous = Document::query()
+        // Versioning: the previous current row of this slot (THIS company's
+        // chain) becomes history. Scoped by company_id explicitly so a Super
+        // Admin browsing all companies can't demote another company's version.
+        $previous = Document::query()->withoutGlobalScope(CompanyScope::class)
             ->where('documentable_type', $entity->getMorphClass())
             ->where('documentable_id', $entity->getKey())
             ->where('type_key', $validated['type_key'])
+            ->where('company_id', $companyId)
             ->where('is_current', true)
             ->when($validated['category'] === 'custom', fn ($q) => $q->where('name', $validated['name'] ?? ''))
             ->first();
@@ -72,14 +92,7 @@ class DocumentController extends Controller
             'contacts' => $this->cleanContacts($validated['contacts'] ?? null),
         ]);
         $document->documentable()->associate($entity);
-        // Company owns its own docs; employee/project inherit their company_id;
-        // shared entities (client/vendor) take the ACTING company so each company
-        // sees only its own paperwork for the shared record (same as invoices).
-        $document->company_id = match (true) {
-            $entity instanceof Company => $entity->id,
-            $entity instanceof Client, $entity instanceof Vendor => app(CurrentCompany::class)->id(),
-            default => $entity->getAttribute('company_id'),
-        };
+        $document->company_id = $companyId;
         $document->uploaded_by = $request->user()?->id;
         $document->version = $previous !== null ? $previous->version + 1 : 1;
         $document->setAttribute('file_path', $path);
@@ -229,9 +242,26 @@ class DocumentController extends Controller
         };
     }
 
+    /**
+     * Company official records are admin-only — the flat documents.* grant a
+     * Company Admin might give a Manager (for employee paperwork) must NOT reach
+     * the company's own compliance files. Enforced on write in resolveEntity();
+     * mirrored here on read/delete/exempt.
+     */
+    public function assertCompanyDocumentAccess(Document $document): void
+    {
+        if ($document->documentable_type !== Company::class) {
+            return;
+        }
+
+        $user = request()->user();
+        abort_if($user === null || (! $user->isSuperAdmin() && ! $user->isCompanyAdmin()), 403);
+    }
+
     public function download(Request $request, Document $document, AuditLogger $audit): StreamedResponse
     {
         Gate::authorize('documents.download');
+        $this->assertCompanyDocumentAccess($document);
 
         $path = $document->getAttribute('file_path');
 
@@ -245,6 +275,7 @@ class DocumentController extends Controller
     public function destroy(Request $request, Document $document): RedirectResponse
     {
         Gate::authorize('documents.delete');
+        $this->assertCompanyDocumentAccess($document);
 
         $document->delete(); // soft delete — metadata + audit survive
 
@@ -257,6 +288,7 @@ class DocumentController extends Controller
     public function exempt(Request $request, Document $document): RedirectResponse
     {
         Gate::authorize('documents.approve');
+        $this->assertCompanyDocumentAccess($document);
 
         $document->update(['is_exempt' => ! $document->is_exempt]);
 

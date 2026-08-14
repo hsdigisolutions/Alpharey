@@ -171,10 +171,11 @@ function exportView(format) {
 }
 
 const urgentGroups = computed(() => [
-    { key: 'expired', rows: props.urgent.expired, status: 'danger' },
-    { key: 'week', rows: props.urgent.week, status: 'warn' },
-    { key: 'month', rows: props.urgent.month, status: 'warn' },
-    { key: 'missing', rows: props.urgent.missing, status: 'neutral' },
+    { key: 'expired', rows: props.urgent.expired, status: 'danger', total: props.urgent.expired.length },
+    { key: 'week', rows: props.urgent.week, status: 'warn', total: props.urgent.week.length },
+    { key: 'month', rows: props.urgent.month, status: 'warn', total: props.urgent.month.length },
+    // The missing bucket is capped for payload size; show the true total.
+    { key: 'missing', rows: props.urgent.missing, status: 'neutral', total: props.urgent.missing_total ?? props.urgent.missing.length },
 ]);
 
 const entityGroups = computed(() => props.entityTypes.filter((t) => props.byEntity[t]?.length));
@@ -235,7 +236,7 @@ function entityHref(row) {
             <section v-for="group in urgentGroups" v-show="group.rows.length" :key="group.key">
                 <div class="mb-2 flex items-center gap-2">
                     <VBadge :status="group.status"><Bilingual :k="`doc_center.${group.key}`" inline /></VBadge>
-                    <span class="tabular-nums text-sm text-muted">{{ group.rows.length }}</span>
+                    <span class="tabular-nums text-sm text-muted">{{ group.total }}</span>
                 </div>
                 <div class="overflow-hidden rounded-lg border border-line bg-surface-raised">
                     <div v-for="row in group.rows" :key="row.key"

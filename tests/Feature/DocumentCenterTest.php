@@ -6,6 +6,7 @@ use App\Models\Document;
 use App\Models\Employee;
 use App\Models\User;
 use App\Models\Vehicle;
+use App\Models\Vendor;
 use App\Services\Documents\DocumentCenterService;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
@@ -77,6 +78,31 @@ it('surfaces an expired vehicle as a read-only danger row', function (): void {
     expect($row)->not->toBeNull()
         ->and($row['status'])->toBe('danger')
         ->and($row['is_vehicle'])->toBeTrue();
+});
+
+it('keeps a vendor certificado_ss visible — the monthly skip is company-only', function (): void {
+    $admin = User::factory()->companyAdmin()->forCompany($this->company)->create();
+    $vendor = Vendor::factory()->create();
+
+    $this->actingAs($admin)->post('/documents', [
+        'entity_type' => 'vendor', 'entity_id' => $vendor->id, 'category' => 'vendor', 'type_key' => 'certificado_ss',
+    ])->assertSessionHasNoErrors();
+
+    $row = centerRows()->firstWhere(fn ($r) => $r['entity_type'] === 'vendor' && $r['type_key'] === 'certificado_ss');
+    expect($row)->not->toBeNull()->and($row['is_missing'])->toBeFalse();
+});
+
+it('marks a vehicle with no expiry date as missing, not neutral', function (): void {
+    Vehicle::factory()->for($this->company)->create([
+        'active' => true,
+        'insurance_expiry_date' => null,
+        'ita_expiry_date' => now()->addYear()->toDateString(),
+        'road_tax_expiry_date' => now()->addYear()->toDateString(),
+    ]);
+
+    $this->actingAs($this->sa);
+    $row = centerRows()->firstWhere(fn ($r) => $r['entity_type'] === 'vehicle' && $r['type_key'] === 'insurance');
+    expect($row['status'])->toBe('missing')->and($row['is_missing'])->toBeTrue();
 });
 
 it('scopes the center to a company admin\'s own company', function (): void {

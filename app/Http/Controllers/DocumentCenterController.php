@@ -41,8 +41,9 @@ class DocumentCenterController extends Controller
         $filters = $this->filters($request);
         $filtered = $center->filter($rows, $filters);
 
-        $page = max(1, (int) $request->integer('page', 1));
         $total = count($filtered);
+        $lastPage = max(1, (int) ceil($total / self::PER_PAGE));
+        $page = min(max(1, (int) $request->integer('page', 1)), $lastPage);
 
         return Inertia::render('Documents/Index', [
             'summary' => $data['summary'],
@@ -54,7 +55,7 @@ class DocumentCenterController extends Controller
                 'data' => array_slice($filtered, ($page - 1) * self::PER_PAGE, self::PER_PAGE),
                 'total' => $total,
                 'current_page' => $page,
-                'last_page' => max(1, (int) ceil($total / self::PER_PAGE)),
+                'last_page' => $lastPage,
                 'per_page' => self::PER_PAGE,
             ],
             'filters' => $filters,
@@ -82,9 +83,10 @@ class DocumentCenterController extends Controller
     /**
      * On-demand panel payload for one document (inline View).
      */
-    public function panel(Document $document, DocumentPanelPayload $panel): JsonResponse
+    public function panel(Document $document, DocumentPanelPayload $panel, DocumentController $documents): JsonResponse
     {
         Gate::authorize('documents.view');
+        $documents->assertCompanyDocumentAccess($document); // company docs are admin-only
 
         return response()->json(['doc' => $panel->single($document)]);
     }
@@ -102,10 +104,18 @@ class DocumentCenterController extends Controller
             'exempt' => ['required', 'boolean'],
         ]);
 
-        // Route-model-bound scope applies: only documents the user may see.
+        // The global CompanyScope applies here: only documents the user's
+        // company can see are returned; foreign ids are silently dropped.
         $documents = Document::query()->whereIn('id', $validated['ids'])->get();
 
+        $user = $request->user();
+        $isAdmin = $user !== null && ($user->isSuperAdmin() || $user->isCompanyAdmin());
+
         foreach ($documents as $document) {
+            // Company official records stay admin-only, even in a bulk action.
+            if ($document->documentable_type === Company::class && ! $isAdmin) {
+                continue;
+            }
             $document->update(['is_exempt' => $validated['exempt']]);
             $audit->log('updated', $document, null, null, $document->type_key, 'documents');
         }

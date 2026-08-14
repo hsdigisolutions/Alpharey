@@ -57,19 +57,24 @@ class DocumentStatus
             return ['neutral', null];
         }
 
-        if ($document->expiry_date === null) {
+        return $this->expiryGrade($document->expiry_date);
+    }
+
+    /**
+     * Grade a single expiry date against the 90/60/30 + expiry-day windows.
+     * No date is 'ok' (nothing to expire).
+     *
+     * @return array{0: string, 1: int|null}
+     */
+    private function expiryGrade(?Carbon $expiry): array
+    {
+        if ($expiry === null) {
             return ['ok', null];
         }
 
-        /** @var Carbon $expiry */
-        $expiry = $document->expiry_date;
         $daysLeft = (int) now()->startOfDay()->diffInDays($expiry->startOfDay(), false);
 
-        if ($daysLeft < 0) {
-            return ['danger', $daysLeft];
-        }
-
-        if ($daysLeft <= $this->dangerDays()) {
+        if ($daysLeft < 0 || $daysLeft <= $this->dangerDays()) {
             return ['danger', $daysLeft];
         }
 
@@ -119,13 +124,34 @@ class DocumentStatus
     }
 
     /**
+     * Monthly company documents grade on the WORSE of two rules (client Q1):
+     * the month-end refresh cadence AND the certificate's own valid_until.
+     *
      * @return array{0: string, 1: int|null}
      */
     private function monthlyStatus(Document $document): array
     {
+        $cadence = $this->monthlyCadence($document);
+
+        if ($document->expiry_date === null) {
+            return $cadence;
+        }
+
+        return $this->worse($cadence, $this->expiryGrade($document->expiry_date));
+    }
+
+    /**
+     * Month-end refresh cadence. "Uploaded this month" is keyed on the current
+     * version's created_at (its upload time) — NOT updated_at, so a later
+     * metadata edit can't fabricate compliance.
+     *
+     * @return array{0: string, 1: int|null}
+     */
+    private function monthlyCadence(Document $document): array
+    {
         $uploadedThisMonth = $document->file_path !== null
-            && $document->updated_at !== null
-            && $document->updated_at->isSameMonth(now());
+            && $document->created_at !== null
+            && $document->created_at->isSameMonth(now());
 
         if ($uploadedThisMonth) {
             return ['ok', null];
@@ -135,5 +161,19 @@ class DocumentStatus
 
         // First reminder window opens 5 days before month end (DECISIONS.md)
         return $daysToMonthEnd <= 5 ? ['warn', $daysToMonthEnd] : ['neutral', null];
+    }
+
+    /**
+     * The worse of two graded results (higher traffic-light rank wins).
+     *
+     * @param  array{0: string, 1: int|null}  $a
+     * @param  array{0: string, 1: int|null}  $b
+     * @return array{0: string, 1: int|null}
+     */
+    private function worse(array $a, array $b): array
+    {
+        $rank = ['danger' => 3, 'warn' => 2, 'neutral' => 1, 'ok' => 0, 'exempt' => 0];
+
+        return ($rank[$a[0]] ?? 0) >= ($rank[$b[0]] ?? 0) ? $a : $b;
     }
 }

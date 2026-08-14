@@ -8,6 +8,7 @@ use App\Models\Document;
 use App\Models\Employee;
 use App\Models\Project;
 use App\Models\Scopes\CompanyScope;
+use App\Models\User;
 use App\Models\Vehicle;
 use App\Models\Vendor;
 use App\Services\Vehicles\VehicleCompliance;
@@ -15,6 +16,7 @@ use App\Support\CurrentCompany;
 use App\Support\DocumentTypes;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
 
 /**
@@ -46,6 +48,14 @@ class DocumentCenterService
     public function dataset(): array
     {
         $scope = $this->currentCompany->id(); // null = Super Admin, all companies
+
+        // Fail CLOSED: a non-Super-Admin must never reach the "all companies"
+        // branch. If somehow scopeless, sentinel -1 matches zero rows (the
+        // global CompanyScope's own null-company behaviour).
+        $user = Auth::user();
+        if ($scope === null && $user instanceof User && ! $user->isSuperAdmin()) {
+            $scope = -1;
+        }
 
         $key = 'doc-center:'.($scope ?? 'all').':'.md5($this->signature($scope));
 
@@ -111,7 +121,9 @@ class DocumentCenterService
             [$state, $daysLeft] = $this->status->of($doc);
 
             $uploadedThisMonth = $doc->created_at !== null && $doc->created_at->isSameMonth($today);
-            $isMonthly = in_array($doc->type_key, DocumentTypes::monthlyCompanyKeys(), true);
+            // The monthly cadence is a COMPANY rule — a vendor/client type that
+            // happens to share a key (e.g. certificado_ss) must not be skipped.
+            $isMonthly = $entityType === 'company' && in_array($doc->type_key, DocumentTypes::monthlyCompanyKeys(), true);
 
             // Monthly-this-month rule (Q4): a monthly type NOT refreshed this
             // month is a Faltante — skip the stale upload so the missing sweep
@@ -183,7 +195,7 @@ class DocumentCenterService
                     'company_name' => $companyName,
                     'type_key' => $field,
                     'category' => 'vehicle',
-                    'status' => $missing ? 'neutral' : $state,
+                    'status' => $missing ? 'missing' : $state,
                     'days_left' => $daysLeft,
                     'expiry_date' => $date?->toDateString(),
                     'uploaded_at' => null,
@@ -272,7 +284,7 @@ class DocumentCenterService
      * Urgent buckets, most-critical-first. Exempt rows never appear.
      *
      * @param  list<array<string, mixed>>  $rows
-     * @return array{expired: list<array<string,mixed>>, week: list<array<string,mixed>>, month: list<array<string,mixed>>, missing: list<array<string,mixed>>}
+     * @return array{expired: list<array<string,mixed>>, week: list<array<string,mixed>>, month: list<array<string,mixed>>, missing: list<array<string,mixed>>, missing_total: int}
      */
     public function urgent(array $rows): array
     {
@@ -309,7 +321,16 @@ class DocumentCenterService
         usort($month, $byDays);
         usort($missing, fn (array $a, array $b): int => strcmp((string) $a['entity_name'], (string) $b['entity_name']));
 
-        return ['expired' => $expired, 'week' => $week, 'month' => $month, 'missing' => $missing];
+        // The missing set can be large (entities × expected types); the Urgent
+        // view is a priorities list, so cap the payload — the full set lives in
+        // the All view (status=Faltante) and the Missing KPI keeps the true count.
+        return [
+            'expired' => $expired,
+            'week' => $week,
+            'month' => $month,
+            'missing' => array_slice($missing, 0, 100),
+            'missing_total' => count($missing),
+        ];
     }
 
     /**
@@ -379,7 +400,9 @@ class DocumentCenterService
                 continue;
             }
             $weekStart = $date->copy()->startOfWeek();
-            $ym = $date->format('Y-m');
+            // Group by the WEEK's month so a Mon–Sun week straddling a month
+            // boundary appears once, not under both months.
+            $ym = $weekStart->format('Y-m');
             $buckets[$ym][$weekStart->toDateString()][] = $row['key'];
         }
 
@@ -534,6 +557,10 @@ class DocumentCenterService
             (string) $max(Employee::class, 'employees'),
             (string) $max(Project::class, 'projects'),
             (string) $max(Company::class, 'companies'),
+            // Shared entities carry no company_id — a rename must still bust the
+            // cached entity_name, so track them globally.
+            (string) Client::query()->max('updated_at'),
+            (string) Vendor::query()->max('updated_at'),
         ]);
     }
 }

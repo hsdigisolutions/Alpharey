@@ -10,7 +10,6 @@ import { router, useForm } from '@inertiajs/vue3';
 import { tPair } from '@/translate';
 import AppIcon from '@/Components/AppIcon.vue';
 import DocumentFieldForm from '@/Components/Documents/DocumentFieldForm.vue';
-import VBadge from '@/Components/ui/VBadge.vue';
 import VButton from '@/Components/ui/VButton.vue';
 import VFileDrop from '@/Components/ui/VFileDrop.vue';
 import VModal from '@/Components/ui/VModal.vue';
@@ -23,7 +22,15 @@ const props = defineProps({
 
 const emit = defineEmits(['close', 'new-version', 'refresh']);
 
-const statusBadge = { ok: 'ok', warn: 'warn', danger: 'danger', neutral: 'neutral', exempt: 'info' };
+// Full class strings (Tailwind scans these literals) for the status accent.
+const accent = {
+    ok: { strip: 'bg-status-ok', soft: 'bg-status-ok-soft', text: 'text-status-ok' },
+    warn: { strip: 'bg-status-warn', soft: 'bg-status-warn-soft', text: 'text-status-warn' },
+    danger: { strip: 'bg-status-danger', soft: 'bg-status-danger-soft', text: 'text-status-danger' },
+    neutral: { strip: 'bg-status-neutral', soft: 'bg-status-neutral-soft', text: 'text-status-neutral' },
+    missing: { strip: 'bg-status-neutral', soft: 'bg-status-neutral-soft', text: 'text-status-neutral' },
+    exempt: { strip: 'bg-status-info', soft: 'bg-status-info-soft', text: 'text-status-info' },
+};
 
 const editing = ref(false);
 const showReplace = ref(false);
@@ -70,6 +77,10 @@ function displayValue(field) {
     }
 
     return raw;
+}
+
+function isEmpty(field) {
+    return displayValue(field) === '—';
 }
 
 const contacts = computed(() => props.doc?.contacts ?? []);
@@ -127,61 +138,83 @@ function downloadVersion(id) {
 <template>
     <VSlideOver :open="doc !== null" title-key="documents.detail" width="md:max-w-xl" @close="emit('close')">
         <template v-if="doc">
-            <!-- Header: type name + traffic-light status -->
-            <div class="flex items-start justify-between gap-3">
-                <div class="min-w-0">
-                    <h3 class="text-[17px] font-semibold">
-                        <Bilingual :k="`doc_types.${doc.type_key}`" />
-                    </h3>
-                    <p class="tabular-nums mt-1 text-xs text-muted">
-                        <Bilingual k="documents.current_version" inline /> · v{{ doc.version }}
-                    </p>
-                </div>
-                <VBadge :status="statusBadge[doc.status] ?? 'neutral'">
-                    <Bilingual :k="`documents.status_${doc.status}`" inline />
-                    <span v-if="doc.days_left !== null" class="tabular-nums ms-1">({{ doc.days_left }}d)</span>
-                </VBadge>
-            </div>
+            <!-- Status-accented header card -->
+            <div class="relative overflow-hidden rounded-xl border border-line bg-surface-raised shadow-card">
+                <span class="absolute inset-y-0 start-0 w-1" :class="(accent[doc.status] ?? accent.neutral).strip" />
+                <div class="p-4 ps-5">
+                    <div class="flex items-start justify-between gap-3">
+                        <div class="min-w-0">
+                            <h3 class="text-[17px] font-semibold leading-tight">
+                                <Bilingual :k="`doc_types.${doc.type_key}`" />
+                            </h3>
+                            <p class="tabular-nums mt-1 text-xs text-muted">
+                                <Bilingual k="documents.current_version" inline /> · v{{ doc.version }}
+                            </p>
+                        </div>
+                        <span class="inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium"
+                            :class="[(accent[doc.status] ?? accent.neutral).soft, (accent[doc.status] ?? accent.neutral).text]">
+                            <span class="h-1.5 w-1.5 rounded-full" :class="(accent[doc.status] ?? accent.neutral).strip" />
+                            <Bilingual :k="doc.status === 'missing' ? 'doc_center.status_missing' : `documents.status_${doc.status}`" inline />
+                            <span v-if="doc.days_left !== null" class="tabular-nums">· {{ doc.days_left }}d</span>
+                        </span>
+                    </div>
 
-            <!-- Version meta -->
-            <div class="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 border-y border-line py-2.5 text-xs text-ink-soft">
-                <span><Bilingual k="documents.uploaded" inline />: {{ doc.uploaded_at ?? '—' }}</span>
-                <span v-if="doc.uploaded_by"><Bilingual k="documents.by" inline />: {{ doc.uploaded_by }}</span>
-                <span class="flex items-center gap-1">
-                    <AppIcon :name="doc.has_file ? 'file' : 'x'" class="h-3.5 w-3.5" />
-                    {{ doc.has_file ? doc.original_name : $tPair('documents.no_file') }}
-                </span>
+                    <div class="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-line pt-2.5 text-xs text-ink-soft">
+                        <span class="flex items-center gap-1.5"><AppIcon name="calendar" class="h-3.5 w-3.5 text-muted" />{{ doc.uploaded_at ?? '—' }}</span>
+                        <span v-if="doc.uploaded_by" class="flex items-center gap-1.5"><AppIcon name="user" class="h-3.5 w-3.5 text-muted" />{{ doc.uploaded_by }}</span>
+                        <span class="flex min-w-0 items-center gap-1.5">
+                            <AppIcon :name="doc.has_file ? 'file' : 'x'" class="h-3.5 w-3.5 shrink-0 text-muted" />
+                            <span class="truncate">{{ doc.has_file ? doc.original_name : $tPair('documents.no_file') }}</span>
+                        </span>
+                    </div>
+                </div>
             </div>
 
             <!-- VIEW MODE -->
             <template v-if="!editing">
-                <dl class="mt-4 grid grid-cols-1 gap-x-6 gap-y-2.5 sm:grid-cols-2">
-                    <div v-for="field in doc.field_defs" :key="field.key"
-                        :class="field.type === 'textarea' || field.type === 'checkbox_group' ? 'sm:col-span-2' : ''">
-                        <dt class="text-xs text-muted"><Bilingual :k="field.label" inline /></dt>
-                        <dd class="text-sm text-ink">{{ displayValue(field) }}</dd>
-                    </div>
-                    <p v-if="!doc.field_defs || doc.field_defs.length === 0" class="text-sm text-muted sm:col-span-2">—</p>
-                </dl>
+                <!-- Type-specific fields -->
+                <section v-if="doc.field_defs && doc.field_defs.length" class="mt-4 rounded-xl border border-line bg-surface-raised p-4">
+                    <p class="mb-3 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-muted">
+                        <span class="h-3 w-0.5 rounded-full bg-accent" /><Bilingual k="doc_fields.section_details" inline />
+                    </p>
+                    <dl class="grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2">
+                        <div v-for="field in doc.field_defs" :key="field.key"
+                            :class="field.type === 'textarea' || field.type === 'checkbox_group' ? 'sm:col-span-2' : ''">
+                            <dt class="text-[11px] uppercase tracking-wide text-muted"><Bilingual :k="field.label" inline /></dt>
+                            <dd class="mt-0.5 text-sm" :class="isEmpty(field) ? 'text-faint' : 'font-medium text-ink'">{{ displayValue(field) }}</dd>
+                        </div>
+                    </dl>
+                </section>
 
                 <!-- Contacts (every type; a document may have several) -->
-                <div class="mt-5">
-                    <p class="text-[11px] font-semibold uppercase tracking-wide text-muted"><Bilingual k="doc_fields.contacts_section" inline /></p>
-                    <p v-if="contacts.length === 0" class="mt-2 text-sm text-muted">—</p>
-                    <div v-for="(c, i) in contacts" :key="i" class="mt-2 rounded-lg border border-line p-3">
-                        <p class="text-sm font-medium text-ink">
-                            {{ c.name || '—' }}<span v-if="c.role" class="ms-2 text-xs font-normal text-muted">· {{ c.role }}</span>
-                        </p>
-                        <div class="mt-1 flex flex-col gap-0.5 text-xs text-ink-soft">
-                            <span v-if="c.phone">{{ c.phone }}</span>
-                            <span v-if="c.email">{{ c.email }}</span>
-                            <span v-if="c.notes" class="text-muted">{{ c.notes }}</span>
+                <section class="mt-4">
+                    <p class="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-muted">
+                        <span class="h-3 w-0.5 rounded-full bg-accent" /><Bilingual k="doc_fields.contacts_section" inline />
+                        <span v-if="contacts.length" class="tabular-nums text-muted">· {{ contacts.length }}</span>
+                    </p>
+                    <p v-if="contacts.length === 0" class="text-sm text-faint">—</p>
+                    <div class="grid gap-2">
+                        <div v-for="(c, i) in contacts" :key="i" class="flex gap-3 rounded-xl border border-line bg-surface-raised p-3">
+                            <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent-soft text-accent">
+                                <AppIcon name="user" class="h-4 w-4" />
+                            </span>
+                            <div class="min-w-0 flex-1">
+                                <p class="flex flex-wrap items-center gap-2 text-sm font-medium text-ink">
+                                    {{ c.name || '—' }}
+                                    <span v-if="c.role" class="rounded-full bg-surface-sunken px-2 py-0.5 text-[11px] font-normal text-ink-soft">{{ c.role }}</span>
+                                </p>
+                                <div class="mt-1 flex flex-col gap-0.5 text-xs text-ink-soft">
+                                    <span v-if="c.phone" class="flex items-center gap-1.5"><AppIcon name="calls" class="h-3 w-3 text-muted" />{{ c.phone }}</span>
+                                    <span v-if="c.email" class="truncate">{{ c.email }}</span>
+                                    <span v-if="c.notes" class="text-muted">{{ c.notes }}</span>
+                                </div>
+                            </div>
                         </div>
                     </div>
-                </div>
+                </section>
 
                 <!-- Actions -->
-                <div class="mt-6 flex flex-wrap gap-2">
+                <div class="mt-5 flex flex-wrap gap-2">
                     <VButton v-if="can.download && doc.has_file" variant="secondary" size="sm" icon="download" @click="download">
                         <Bilingual k="documents.download" inline />
                     </VButton>
@@ -197,23 +230,25 @@ function downloadVersion(id) {
                 </div>
 
                 <!-- Version history — never deletable (legal record) -->
-                <div v-if="doc.history && doc.history.length" class="mt-6 border-t border-line pt-4">
+                <div v-if="doc.history && doc.history.length" class="mt-5 border-t border-line pt-4">
                     <button type="button"
                         class="flex w-full items-center justify-between text-sm font-medium text-ink-soft hover:text-ink"
                         @click="showHistory = !showHistory">
-                        <span>
-                            <Bilingual k="documents.versions_history" inline /> ({{ doc.history.length }})
+                        <span class="flex items-center gap-2">
+                            <Bilingual k="documents.versions_history" inline />
+                            <span class="tabular-nums rounded-full bg-surface-sunken px-2 py-0.5 text-[11px]">{{ doc.history.length }}</span>
                         </span>
                         <span class="text-xs text-muted">{{ showHistory ? '−' : '+' }}</span>
                     </button>
 
-                    <ul v-if="showHistory" class="mt-3 space-y-1.5">
+                    <ol v-if="showHistory" class="relative mt-3 space-y-2 ps-4">
+                        <span class="absolute inset-y-1 start-1 w-px bg-line" />
                         <li v-for="v in doc.history" :key="v.id"
-                            class="flex items-center justify-between rounded-md bg-surface-sunken/50 px-3 py-2 text-xs">
+                            class="relative flex items-center justify-between rounded-lg bg-surface-sunken/50 px-3 py-2 text-xs">
+                            <span class="absolute -start-3 top-1/2 h-1.5 w-1.5 -translate-y-1/2 rounded-full bg-line-strong" />
                             <span class="tabular-nums text-ink-soft">
-                                v{{ v.version }} · {{ v.uploaded_at ?? '—' }}
+                                <span class="font-medium text-ink">v{{ v.version }}</span> · {{ v.uploaded_at ?? '—' }}
                                 <span v-if="v.uploaded_by" class="text-muted">· {{ v.uploaded_by }}</span>
-                                <span v-if="v.expiry_date" class="text-muted">· {{ v.issue_date ?? '—' }} → {{ v.expiry_date }}</span>
                             </span>
                             <button v-if="can.download && v.has_file" type="button"
                                 class="rounded-md p-1 text-ink-soft hover:bg-surface-hover hover:text-ink"
@@ -222,7 +257,7 @@ function downloadVersion(id) {
                             </button>
                             <span v-else class="text-muted"><Bilingual k="documents.no_file" inline /></span>
                         </li>
-                    </ul>
+                    </ol>
                 </div>
             </template>
 
