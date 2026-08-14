@@ -25,6 +25,7 @@ import VTextarea from '@/Components/ui/VTextarea.vue';
 const props = defineProps({
     companies: { type: Array, required: true },
     companyDocTypes: { type: Object, default: () => ({}) },
+    companyFieldDefs: { type: Object, default: () => ({}) },
 });
 
 const showCreate = ref(false);
@@ -173,6 +174,7 @@ const fieldRows = [
                 <div v-else-if="tab === 'docs'" class="mt-4">
                     <DocumentsPanel entity-type="company" :entity-id="selected.id"
                         :documents="selected.documents ?? []" :sets="companyDocTypes"
+                        :field-defs="companyFieldDefs" :company-ccc="selected.ccc"
                         :can="{ upload: true, download: true, deleteDocs: true, editDocs: true }" />
                 </div>
 

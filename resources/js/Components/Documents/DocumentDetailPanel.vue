@@ -27,6 +27,7 @@ const statusBadge = { ok: 'ok', warn: 'warn', danger: 'danger', neutral: 'neutra
 
 const editing = ref(false);
 const showReplace = ref(false);
+const showHistory = ref(false);
 const replaceFile = ref(null);
 
 const editForm = useForm({
@@ -42,6 +43,7 @@ const replaceForm = useForm({ file: null });
 watch(() => props.doc?.id, () => {
     editing.value = false;
     showReplace.value = false;
+    showHistory.value = false;
     replaceFile.value = null;
 });
 
@@ -116,6 +118,10 @@ function submitReplace() {
 function download() {
     window.location.href = `/documents/${props.doc.id}/download`;
 }
+
+function downloadVersion(id) {
+    window.location.href = `/documents/${id}/download`;
+}
 </script>
 
 <template>
@@ -188,6 +194,35 @@ function download() {
                     <VButton v-if="can.editDocs && doc.has_file" variant="ghost" size="sm" icon="copy" @click="showReplace = true">
                         <Bilingual k="documents.replace_file" inline />
                     </VButton>
+                </div>
+
+                <!-- Version history — never deletable (legal record) -->
+                <div v-if="doc.history && doc.history.length" class="mt-6 border-t border-line pt-4">
+                    <button type="button"
+                        class="flex w-full items-center justify-between text-sm font-medium text-ink-soft hover:text-ink"
+                        @click="showHistory = !showHistory">
+                        <span>
+                            <Bilingual k="documents.versions_history" inline /> ({{ doc.history.length }})
+                        </span>
+                        <span class="text-xs text-muted">{{ showHistory ? '−' : '+' }}</span>
+                    </button>
+
+                    <ul v-if="showHistory" class="mt-3 space-y-1.5">
+                        <li v-for="v in doc.history" :key="v.id"
+                            class="flex items-center justify-between rounded-md bg-surface-sunken/50 px-3 py-2 text-xs">
+                            <span class="tabular-nums text-ink-soft">
+                                v{{ v.version }} · {{ v.uploaded_at ?? '—' }}
+                                <span v-if="v.uploaded_by" class="text-muted">· {{ v.uploaded_by }}</span>
+                                <span v-if="v.expiry_date" class="text-muted">· {{ v.issue_date ?? '—' }} → {{ v.expiry_date }}</span>
+                            </span>
+                            <button v-if="can.download && v.has_file" type="button"
+                                class="rounded-md p-1 text-ink-soft hover:bg-surface-hover hover:text-ink"
+                                :aria-label="`download v${v.version}`" @click="downloadVersion(v.id)">
+                                <AppIcon name="download" class="h-3.5 w-3.5" />
+                            </button>
+                            <span v-else class="text-muted"><Bilingual k="documents.no_file" inline /></span>
+                        </li>
+                    </ul>
                 </div>
             </template>
 

@@ -9,6 +9,7 @@ import { computed, ref } from 'vue';
 import { router, useForm } from '@inertiajs/vue3';
 import AppIcon from '@/Components/AppIcon.vue';
 import DocumentDetailPanel from '@/Components/Documents/DocumentDetailPanel.vue';
+import DocumentFieldForm from '@/Components/Documents/DocumentFieldForm.vue';
 import FormField from '@/Components/ui/FormField.vue';
 import VBadge from '@/Components/ui/VBadge.vue';
 import VButton from '@/Components/ui/VButton.vue';
@@ -25,7 +26,10 @@ const props = defineProps({
     documents: { type: Array, required: true },
     /** employee: {category: {typeKey: cfg}} · company: {typeKey: cfg} */
     sets: { type: Object, required: true },
-    can: { type: Object, required: true }, // upload / download / deleteDocs
+    can: { type: Object, required: true }, // upload / download / deleteDocs / editDocs
+    /** company: {typeKey: {fields: [...]}} — per-type smart-panel field defs */
+    fieldDefs: { type: Object, default: () => ({}) },
+    companyCcc: { type: String, default: null },
 });
 
 const groups = computed(() => {
@@ -84,7 +88,18 @@ const uploadForm = useForm({
     issue_date: null,
     expiry_date: null,
     notes: '',
+    metadata: {},
+    contacts: [],
     file: null,
+});
+
+// Field defs for the type being uploaded (company docs only).
+const uploadFields = computed(() => {
+    if (!uploadTarget.value || uploadTarget.value.category !== 'company') {
+        return [];
+    }
+
+    return props.fieldDefs[uploadTarget.value.typeKey]?.fields ?? [];
 });
 
 function openUpload(typeKey, category, cfg, custom = false) {
@@ -98,6 +113,11 @@ function openUpload(typeKey, category, cfg, custom = false) {
     uploadForm.issue_date = existing?.issue_date ?? null;
     uploadForm.expiry_date = existing?.expiry_date ?? null;
     uploadForm.notes = '';
+    // Pre-fill from the current version (a new version starts from it). Coerce
+    // metadata to a plain object — empty comes from the API as [] (an array),
+    // whose string keys would never serialize.
+    uploadForm.metadata = { ...(existing?.metadata || {}) };
+    uploadForm.contacts = (existing?.contacts || []).map((c) => ({ ...c }));
     uploadForm.file = null;
     file.value = null;
 }
@@ -241,7 +261,9 @@ function removeDoc(doc) {
         </section>
 
         <!-- Upload modal -->
-        <VModal :open="uploadTarget !== null" title-key="documents.upload" size="sm" @close="uploadTarget = null">
+        <VModal :open="uploadTarget !== null" title-key="documents.upload"
+            :size="uploadTarget?.category === 'company' && !uploadTarget?.custom ? 'lg' : 'sm'"
+            @close="uploadTarget = null">
             <form v-if="uploadTarget" id="doc-upload" class="space-y-3" @submit.prevent="submitUpload">
                 <p v-if="!uploadTarget.custom" class="text-sm font-medium">
                     <Bilingual :k="`doc_types.${uploadTarget.typeKey}`" />
@@ -254,18 +276,25 @@ function removeDoc(doc) {
                 <p v-if="file" class="truncate text-xs text-ink-soft">{{ file.name }}</p>
                 <p v-if="uploadForm.errors.file" class="text-xs text-status-danger">{{ uploadForm.errors.file }}</p>
 
-                <VCheckbox v-if="uploadTarget.cfg.flag" v-model="uploadForm.has_flag">
-                    <Bilingual k="documents.flag" inline class="text-sm" />
-                </VCheckbox>
+                <!-- Company docs: the type's smart fields + repeatable contacts -->
+                <DocumentFieldForm v-if="uploadTarget.category === 'company' && !uploadTarget.custom"
+                    :fields="uploadFields" :form="uploadForm" :ccc="companyCcc" :dates-editable="true" />
 
-                <div class="grid grid-cols-2 gap-3">
-                    <FormField k="documents.issue_date" :error="uploadForm.errors.issue_date">
-                        <VDateInput v-model="uploadForm.issue_date" />
-                    </FormField>
-                    <FormField v-if="uploadTarget.cfg.expiry !== false" k="documents.expiry_date" :error="uploadForm.errors.expiry_date">
-                        <VDateInput v-model="uploadForm.expiry_date" />
-                    </FormField>
-                </div>
+                <!-- Employee / project / custom: the simple fields -->
+                <template v-else>
+                    <VCheckbox v-if="uploadTarget.cfg.flag" v-model="uploadForm.has_flag">
+                        <Bilingual k="documents.flag" inline class="text-sm" />
+                    </VCheckbox>
+
+                    <div class="grid grid-cols-2 gap-3">
+                        <FormField k="documents.issue_date" :error="uploadForm.errors.issue_date">
+                            <VDateInput v-model="uploadForm.issue_date" />
+                        </FormField>
+                        <FormField v-if="uploadTarget.cfg.expiry !== false" k="documents.expiry_date" :error="uploadForm.errors.expiry_date">
+                            <VDateInput v-model="uploadForm.expiry_date" />
+                        </FormField>
+                    </div>
+                </template>
 
                 <FormField k="documents.notes" :error="uploadForm.errors.notes">
                     <VInput v-model="uploadForm.notes" />
