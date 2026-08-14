@@ -23,6 +23,7 @@ class StoreCompanyRequest extends FormRequest
         return [
             'name' => ['required', 'string', 'max:255', Rule::unique('companies', 'name')->whereNull('deleted_at')],
             'cif' => ['nullable', 'string', 'max:20'],
+            'ccc' => ['nullable', 'string', 'max:30'],
             'province' => ['nullable', 'string', 'max:100'],
             'address' => ['nullable', 'string', 'max:255'],
             'city' => ['nullable', 'string', 'max:100'],

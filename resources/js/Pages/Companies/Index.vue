@@ -35,7 +35,7 @@ const showDelete = ref(false);
 const selected = computed(() => props.companies.find((c) => c.id === selectedId.value) ?? null);
 
 const blankFields = {
-    name: '', cif: '', province: '', address: '', city: '', postal_code: '',
+    name: '', cif: '', ccc: '', province: '', address: '', city: '', postal_code: '',
     phone: '', email: '', website: '', status: 'active', notes: '',
 };
 
@@ -80,10 +80,11 @@ function submitDelete() {
 
 const fieldRows = [
     ['name', 'cif'],
-    ['province', 'city'],
-    ['address', 'postal_code'],
-    ['phone', 'email'],
-    ['website', 'status'],
+    ['ccc', 'province'],
+    ['city', 'address'],
+    ['postal_code', 'phone'],
+    ['email', 'website'],
+    ['status'],
 ];
 </script>
 

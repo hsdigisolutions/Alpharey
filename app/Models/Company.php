@@ -26,6 +26,7 @@ class Company extends Model
         'brand_id',
         'name',
         'cif',
+        'ccc',
         'province',
         'address',
         'city',

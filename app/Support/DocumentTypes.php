@@ -64,6 +64,218 @@ class DocumentTypes
     }
 
     /**
+     * Per-type descriptive fields for the smart company-document detail panel
+     * (client-confirmed spec, 2026-08-14). Each type declares an ordered field
+     * list plus whether it carries a point-of-contact block.
+     *
+     * A field entry:
+     *   key      — stable identifier (also the doc_fields.* label suffix)
+     *   type     — text|number|money|date|select|tel|email|textarea|
+     *              checkbox_group|month_year|ccc
+     *   label    — translation key (doc_fields.*)
+     *   column   — OPTIONAL: binds to a top-level Document column
+     *              (issue_date | expiry_date) instead of the metadata JSON, so
+     *              the existing 90/60/30 alert engine keeps working off
+     *              expiry_date. Every type uses each column at most once.
+     *   options  — OPTIONAL: option values for select/checkbox_group; each
+     *              value's label is doc_fields.opt_{value}.
+     *
+     * type 'ccc' renders READ-ONLY from the company's own CCC (Q3) — it is never
+     * a stored metadata key.
+     *
+     * @return array<string, array{fields: list<array{key: string, type: string, label: string, column?: string, options?: list<string>}>, contact?: bool, emergency_label?: string}>
+     */
+    public static function companyFields(): array
+    {
+        // Shared by recibo_rc + recibo_accidentes (both carry forma de pago).
+        $receiptFields = [
+            ['key' => 'receipt_number', 'type' => 'text', 'label' => 'doc_fields.receipt_number'],
+            ['key' => 'amount_paid', 'type' => 'money', 'label' => 'doc_fields.amount_paid'],
+            ['key' => 'payment_method', 'type' => 'select', 'label' => 'doc_fields.payment_method', 'options' => ['transferencia', 'domiciliacion', 'cheque']],
+            ['key' => 'payment_date', 'type' => 'date', 'label' => 'doc_fields.payment_date', 'column' => 'issue_date'],
+            ['key' => 'period_covered', 'type' => 'text', 'label' => 'doc_fields.period_covered'],
+        ];
+
+        return [
+            // ── Seguros y prevención ──────────────────────────────────────────
+            'poliza_rc' => [
+                'fields' => [
+                    ['key' => 'policy_number', 'type' => 'text', 'label' => 'doc_fields.policy_number'],
+                    ['key' => 'insurer', 'type' => 'text', 'label' => 'doc_fields.insurer'],
+                    ['key' => 'policy_type', 'type' => 'select', 'label' => 'doc_fields.policy_type', 'options' => ['anual_abierta', 'por_obra']],
+                    ['key' => 'coverage_amount', 'type' => 'money', 'label' => 'doc_fields.coverage_amount'],
+                    ['key' => 'premium', 'type' => 'money', 'label' => 'doc_fields.premium'],
+                    ['key' => 'start_date', 'type' => 'date', 'label' => 'doc_fields.start_date', 'column' => 'issue_date'],
+                    ['key' => 'end_date', 'type' => 'date', 'label' => 'doc_fields.end_date', 'column' => 'expiry_date'],
+                ],
+                'contact' => true,
+                'emergency_label' => 'doc_fields.emergency_claims',
+            ],
+            'recibo_rc' => ['fields' => $receiptFields],
+            'poliza_accidentes' => [
+                'fields' => [
+                    ['key' => 'policy_number', 'type' => 'text', 'label' => 'doc_fields.policy_number'],
+                    ['key' => 'insurer', 'type' => 'text', 'label' => 'doc_fields.insurer'],
+                    ['key' => 'workers_covered', 'type' => 'number', 'label' => 'doc_fields.workers_covered'],
+                    ['key' => 'capital_insured', 'type' => 'money', 'label' => 'doc_fields.capital_insured'],
+                    ['key' => 'start_date', 'type' => 'date', 'label' => 'doc_fields.start_date', 'column' => 'issue_date'],
+                    ['key' => 'end_date', 'type' => 'date', 'label' => 'doc_fields.end_date', 'column' => 'expiry_date'],
+                ],
+                'contact' => true,
+                'emergency_label' => 'doc_fields.emergency_accidents',
+            ],
+            'recibo_accidentes' => ['fields' => $receiptFields],
+            'certificado_spa' => [
+                'fields' => [
+                    ['key' => 'spa_company', 'type' => 'text', 'label' => 'doc_fields.spa_company'],
+                    ['key' => 'spa_nif', 'type' => 'text', 'label' => 'doc_fields.spa_nif'],
+                    ['key' => 'contract_number', 'type' => 'text', 'label' => 'doc_fields.contract_number'],
+                    ['key' => 'disciplines', 'type' => 'checkbox_group', 'label' => 'doc_fields.disciplines', 'options' => ['seguridad', 'higiene', 'ergonomia', 'vigilancia']],
+                    ['key' => 'start_date', 'type' => 'date', 'label' => 'doc_fields.start_date', 'column' => 'issue_date'],
+                    ['key' => 'end_date', 'type' => 'date', 'label' => 'doc_fields.end_date', 'column' => 'expiry_date'],
+                ],
+                'contact' => true,
+                'emergency_label' => 'doc_fields.emergency_site',
+            ],
+            'recibo_spa' => ['fields' => [
+                ['key' => 'receipt_number', 'type' => 'text', 'label' => 'doc_fields.receipt_number'],
+                ['key' => 'amount_paid', 'type' => 'money', 'label' => 'doc_fields.amount_paid'],
+                ['key' => 'payment_date', 'type' => 'date', 'label' => 'doc_fields.payment_date', 'column' => 'issue_date'],
+                ['key' => 'period_covered', 'type' => 'text', 'label' => 'doc_fields.period_covered'],
+            ]],
+
+            // ── Periódicos ────────────────────────────────────────────────────
+            'evaluacion_riesgos' => ['fields' => [
+                ['key' => 'reference_number', 'type' => 'text', 'label' => 'doc_fields.reference_number'],
+                ['key' => 'prepared_by', 'type' => 'text', 'label' => 'doc_fields.prepared_by'],
+                ['key' => 'prl_technician', 'type' => 'text', 'label' => 'doc_fields.prl_technician'],
+                ['key' => 'risk_level', 'type' => 'select', 'label' => 'doc_fields.risk_level', 'options' => ['bajo', 'medio', 'alto']],
+                ['key' => 'elaboration_date', 'type' => 'date', 'label' => 'doc_fields.elaboration_date', 'column' => 'issue_date'],
+                ['key' => 'next_review_date', 'type' => 'date', 'label' => 'doc_fields.next_review_date', 'column' => 'expiry_date'],
+            ]],
+            'rea' => ['fields' => [
+                ['key' => 'rea_number', 'type' => 'text', 'label' => 'doc_fields.rea_number'],
+                ['key' => 'region', 'type' => 'text', 'label' => 'doc_fields.region'],
+                ['key' => 'labor_authority', 'type' => 'text', 'label' => 'doc_fields.labor_authority'],
+                ['key' => 'registration_date', 'type' => 'date', 'label' => 'doc_fields.registration_date', 'column' => 'issue_date'],
+                ['key' => 'rea_expiry', 'type' => 'date', 'label' => 'doc_fields.end_date', 'column' => 'expiry_date'],
+            ]],
+
+            'documento_mutua' => [
+                'fields' => [
+                    ['key' => 'mutua_name', 'type' => 'text', 'label' => 'doc_fields.mutua_name'],
+                    ['key' => 'associate_number', 'type' => 'text', 'label' => 'doc_fields.associate_number'],
+                    ['key' => 'ccc', 'type' => 'ccc', 'label' => 'doc_fields.ccc'],
+                    ['key' => 'mutua_coverage', 'type' => 'select', 'label' => 'doc_fields.mutua_coverage', 'options' => ['at_ep', 'at', 'other']],
+                    ['key' => 'medical_center', 'type' => 'textarea', 'label' => 'doc_fields.medical_center'],
+                    ['key' => 'start_date', 'type' => 'date', 'label' => 'doc_fields.start_date', 'column' => 'issue_date'],
+                ],
+                'contact' => true,
+                'emergency_label' => 'doc_fields.emergency_medical',
+            ],
+
+            // ── Ciclo mensual ─────────────────────────────────────────────────
+            // TGSS/AEAT: monthly upload cadence AND a valid_until date — the scan
+            // alerts on whichever fires first (Q1). valid_until binds to
+            // expiry_date so the 30-day check rides the existing engine.
+            'certificado_ss' => ['fields' => [
+                ['key' => 'certificate_number', 'type' => 'text', 'label' => 'doc_fields.certificate_number'],
+                ['key' => 'ccc', 'type' => 'ccc', 'label' => 'doc_fields.ccc'],
+                ['key' => 'issuing_office', 'type' => 'text', 'label' => 'doc_fields.issuing_office_tgss'],
+                ['key' => 'issue_date', 'type' => 'date', 'label' => 'doc_fields.issue_date', 'column' => 'issue_date'],
+                ['key' => 'valid_until', 'type' => 'date', 'label' => 'doc_fields.valid_until', 'column' => 'expiry_date'],
+            ]],
+            'certificado_hacienda' => ['fields' => [
+                ['key' => 'certificate_number', 'type' => 'text', 'label' => 'doc_fields.certificate_number'],
+                ['key' => 'nif_covered', 'type' => 'text', 'label' => 'doc_fields.nif_covered'],
+                ['key' => 'issuing_office', 'type' => 'text', 'label' => 'doc_fields.issuing_office_aeat'],
+                ['key' => 'issue_date', 'type' => 'date', 'label' => 'doc_fields.issue_date', 'column' => 'issue_date'],
+                ['key' => 'valid_until', 'type' => 'date', 'label' => 'doc_fields.valid_until', 'column' => 'expiry_date'],
+            ]],
+            'ita' => ['fields' => [
+                ['key' => 'ccc', 'type' => 'ccc', 'label' => 'doc_fields.ccc'],
+                ['key' => 'period', 'type' => 'month_year', 'label' => 'doc_fields.period'],
+                ['key' => 'workers_registered', 'type' => 'number', 'label' => 'doc_fields.workers_registered'],
+                ['key' => 'issuing_office', 'type' => 'text', 'label' => 'doc_fields.issuing_office_tgss'],
+                ['key' => 'report_date', 'type' => 'date', 'label' => 'doc_fields.report_date', 'column' => 'issue_date'],
+            ]],
+            'rnt' => ['fields' => [
+                ['key' => 'period', 'type' => 'month_year', 'label' => 'doc_fields.period'],
+                ['key' => 'workers_included', 'type' => 'number', 'label' => 'doc_fields.workers_included'],
+                ['key' => 'ccc', 'type' => 'ccc', 'label' => 'doc_fields.ccc'],
+                ['key' => 'validated_tgss', 'type' => 'select', 'label' => 'doc_fields.validated_tgss', 'options' => ['yes', 'no']],
+                ['key' => 'submission_date', 'type' => 'date', 'label' => 'doc_fields.submission_date', 'column' => 'issue_date'],
+            ]],
+            'rlc' => ['fields' => [
+                ['key' => 'period', 'type' => 'month_year', 'label' => 'doc_fields.period'],
+                ['key' => 'total_contributions', 'type' => 'money', 'label' => 'doc_fields.total_contributions'],
+                ['key' => 'ccc', 'type' => 'ccc', 'label' => 'doc_fields.ccc'],
+                ['key' => 'payment_reference', 'type' => 'text', 'label' => 'doc_fields.payment_reference'],
+                ['key' => 'payment_date', 'type' => 'date', 'label' => 'doc_fields.payment_date', 'column' => 'issue_date'],
+            ]],
+            'recibo_rlc' => ['fields' => [
+                ['key' => 'receipt_number', 'type' => 'text', 'label' => 'doc_fields.receipt_number'],
+                ['key' => 'amount_paid', 'type' => 'money', 'label' => 'doc_fields.amount_paid'],
+                ['key' => 'payment_date', 'type' => 'date', 'label' => 'doc_fields.payment_date', 'column' => 'issue_date'],
+                ['key' => 'period_covered', 'type' => 'text', 'label' => 'doc_fields.period_covered'],
+            ]],
+            'justificante_salarios' => ['fields' => [
+                ['key' => 'period', 'type' => 'month_year', 'label' => 'doc_fields.period'],
+                ['key' => 'workers_count', 'type' => 'number', 'label' => 'doc_fields.workers_count'],
+                ['key' => 'total_payroll', 'type' => 'money', 'label' => 'doc_fields.total_payroll'],
+                ['key' => 'payroll_payment_date', 'type' => 'date', 'label' => 'doc_fields.payroll_payment_date', 'column' => 'issue_date'],
+            ]],
+        ];
+    }
+
+    /**
+     * Field defs for one company document type ([] for an unknown/custom slot).
+     *
+     * @return list<array{key: string, type: string, label: string, column?: string, options?: list<string>}>
+     */
+    public static function companyFieldDefs(string $typeKey): array
+    {
+        return self::companyFields()[$typeKey]['fields'] ?? [];
+    }
+
+    /**
+     * The metadata keys a type stores in the JSON blob: every field that is
+     * neither column-bound nor the read-only CCC. This is the write whitelist
+     * the Form Request validates against — anything else is rejected.
+     *
+     * @return list<string>
+     */
+    public static function companyMetadataKeys(string $typeKey): array
+    {
+        return array_values(array_map(
+            static fn (array $f): string => $f['key'],
+            array_filter(
+                self::companyFieldDefs($typeKey),
+                static fn (array $f): bool => ! isset($f['column']) && $f['type'] !== 'ccc',
+            ),
+        ));
+    }
+
+    /**
+     * Column-bound fields: metadata field key => Document column. Lets the
+     * controller route start/end/valid_until dates onto issue_date/expiry_date.
+     *
+     * @return array<string, string>
+     */
+    public static function companyColumnBindings(string $typeKey): array
+    {
+        $map = [];
+
+        foreach (self::companyFieldDefs($typeKey) as $field) {
+            if (isset($field['column'])) {
+                $map[$field['key']] = $field['column'];
+            }
+        }
+
+        return $map;
+    }
+
+    /**
      * Worker document sets (sheet TRABAJADORES).
      *
      * The plain identity/contact columns on that sheet (NOMBRE, APELLIDOS, NIE,

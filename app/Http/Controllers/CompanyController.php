@@ -47,6 +47,7 @@ class CompanyController extends Controller
                     'id' => $company->id,
                     'name' => $company->name,
                     'cif' => $company->cif,
+                    'ccc' => $company->ccc,
                     'province' => $company->province,
                     'address' => $company->address,
                     'city' => $company->city,

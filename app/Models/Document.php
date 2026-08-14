@@ -29,6 +29,12 @@ use Illuminate\Support\Carbon;
  * @property bool $is_exempt
  * @property Carbon|null $issue_date
  * @property Carbon|null $expiry_date
+ * @property array<string, mixed>|null $metadata
+ * @property string|null $contact_name
+ * @property string|null $contact_phone
+ * @property string|null $contact_email
+ * @property string|null $contact_emergency_phone
+ * @property string|null $contact_notes
  * @property string|null $documentable_type
  */
 class Document extends Model
@@ -44,6 +50,8 @@ class Document extends Model
     protected $fillable = [
         'category', 'type_key', 'name', 'original_name', 'mime', 'size',
         'has_flag', 'issue_date', 'expiry_date', 'is_exempt', 'notes',
+        'metadata', 'contact_name', 'contact_phone', 'contact_email',
+        'contact_emergency_phone', 'contact_notes',
     ];
 
     /** file_path stays out of every payload — downloads go through the controller */
@@ -59,6 +67,7 @@ class Document extends Model
             'is_current' => 'boolean',
             'size' => 'integer',
             'version' => 'integer',
+            'metadata' => 'array',
         ];
     }
 
