@@ -143,6 +143,8 @@ class InventoryController extends Controller
             'issued_quantity' => ['required', 'numeric', 'min:0.01'],
             'issue_date' => ['nullable', 'date'],
             'expected_return_date' => ['nullable', 'date', 'after_or_equal:issue_date'],
+            // PPE expiry for this issue (pre-filled from the item, overridable).
+            'expiry_date' => ['nullable', 'date'],
             'notes' => ['nullable', 'string', 'max:1000'],
         ]);
 
@@ -214,6 +216,8 @@ class InventoryController extends Controller
             'name' => ['required', 'string', 'max:100'],
             'description' => ['nullable', 'string', 'max:1000'],
             'active' => ['boolean'],
+            'is_required_ppe' => ['boolean'],
+            'height_only' => ['boolean'],
         ]);
 
         // A category created here belongs to this company — never to the
@@ -237,6 +241,8 @@ class InventoryController extends Controller
             'name' => ['required', 'string', 'max:100'],
             'description' => ['nullable', 'string', 'max:1000'],
             'active' => ['boolean'],
+            'is_required_ppe' => ['boolean'],
+            'height_only' => ['boolean'],
         ]));
 
         return back()->with('success', __('ui.inventory.category_saved'));
@@ -290,6 +296,8 @@ class InventoryController extends Controller
             'category' => $i->category?->name,
             'equipment_category_id' => $i->equipment_category_id,
             'item_type' => $i->item_type->value,
+            'is_ppe' => $i->is_ppe,
+            'default_expiry_date' => $i->default_expiry_date?->toDateString(),
             'unit' => $i->unit,
             'total_stock' => (float) $i->total_stock,
             'available_stock' => (float) $i->available_stock,
@@ -354,9 +362,11 @@ class InventoryController extends Controller
                 'outstanding' => $i->outstanding(),
                 'issue_date' => $i->issue_date->toDateString(),
                 'expected_return_date' => $i->expected_return_date?->toDateString(),
+                'expiry_date' => $i->expiry_date?->toDateString(),
                 'return_date' => $i->return_date?->toDateString(),
                 'status' => $i->status->value,
                 'overdue' => $i->isOverdue(),
+                'expired' => $i->isExpired(),
             ])
             ->values()
             ->all();
@@ -405,12 +415,14 @@ class InventoryController extends Controller
         return EquipmentCategory::query()
             ->forCompany($companyId)
             ->orderBy('name')
-            ->get(['id', 'company_id', 'name', 'description', 'active'])
+            ->get(['id', 'company_id', 'name', 'description', 'active', 'is_required_ppe', 'height_only'])
             ->map(fn (EquipmentCategory $c): array => [
                 'id' => $c->id,
                 'name' => $c->name,
                 'description' => $c->description,
                 'active' => $c->active,
+                'is_required_ppe' => $c->is_required_ppe,
+                'height_only' => $c->height_only,
                 'item_count' => (int) ($counts[$c->id] ?? 0),
                 // Shared NULL defaults are read-only; only the company's own edit.
                 'editable' => $c->company_id === $companyId,

@@ -16,6 +16,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property int $id
  * @property int|null $company_id
  * @property bool $active
+ * @property bool $is_required_ppe
+ * @property bool $height_only
  */
 class EquipmentCategory extends Model
 {
@@ -27,11 +29,15 @@ class EquipmentCategory extends Model
     public string $auditModule = 'inventory';
 
     /** @var list<string> */
-    protected $fillable = ['company_id', 'name', 'description', 'active'];
+    protected $fillable = ['company_id', 'name', 'description', 'active', 'is_required_ppe', 'height_only'];
 
     protected function casts(): array
     {
-        return ['active' => 'boolean'];
+        return [
+            'active' => 'boolean',
+            'is_required_ppe' => 'boolean',
+            'height_only' => 'boolean',
+        ];
     }
 
     /**

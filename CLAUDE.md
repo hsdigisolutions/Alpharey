@@ -84,6 +84,27 @@ payload (the PWA test asserts amount/total/cost are `missing`). Tests:
 inventory.view, PWA equipment money-free). **895 Pest tests / 5218
 assertions.**
 
+**Phase D — PPE + compliance (done, alerts only).** Migration
+`2026_08_13_000009` adds: `is_ppe` + `default_expiry_date` to equipment_items,
+`expiry_date` to employee_equipment_issues, `is_required_ppe` + `height_only` to
+equipment_categories, `works_at_height` to employees; and seeds the 5 standard
+EPIs (Casco/Chaleco/Botas/Guantes required, Arnés required+height_only) as
+group-wide default categories. Confirmed model (Q-B/C/D): required PPE is defined
+by **category** (a worker "has" a casco = holds any item in a required Casco
+category); a `height_only` category (arnés) is required only for a worker flagged
+`works_at_height`; PPE expiry lives on the item (default) AND the issue
+(overridable — the issue form pre-fills from the item). `PpeComplianceService::
+forEmployee()` returns per-required-category status **valid / expired / missing**
+(alerts only — never a hard block). Surfaced as an **Estado EPIs** table on the
+Employee Detail Equipamiento tab (with a "works at height" badge). UI: item form
+gains a PPE toggle + default expiry; issue form gains an expiry (pre-filled); the
+category modal gains required-PPE + height-only toggles (+ a Required-PPE column);
+the employee form gains a works-at-height checkbox. Bug caught + fixed in build:
+`StockMovementService::issueTo` wasn't persisting `expiry_date` onto the issue.
+Tests: `InventoryProfileTest` (+2 — missing/valid/expired per category, arnés
+height-only), `InventoryTest` (+1 — item PPE fields + issue expiry saved). **899
+Pest tests / 5234 assertions.**
+
 ### Measurements + Production Tasks — full deep review (2026-08-13, COMPLETE)
 
 A line-by-line re-review of the whole Measurements/Production subsystem (Phases

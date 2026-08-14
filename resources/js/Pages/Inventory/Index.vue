@@ -73,6 +73,7 @@ const showItem = ref(false);
 const editingItem = ref(null);
 const itemBlank = {
     name: '', sku: '', serial_number: '', equipment_category_id: '', item_type: 'tool', unit: 'pcs',
+    is_ppe: false, default_expiry_date: null,
     minimum_stock: 0, active: true, notes: '', opening_stock: null,
 };
 const itemForm = useForm({ ...itemBlank });
@@ -126,10 +127,12 @@ function submitMovement() {
 
 /* Issue */
 const issuingItem = ref(null);
-const issueForm = useForm({ employee_id: '', issued_quantity: null, issue_date: null, expected_return_date: null, notes: '' });
+const issueForm = useForm({ employee_id: '', issued_quantity: null, issue_date: null, expected_return_date: null, expiry_date: null, notes: '' });
 function openIssue(item) {
     issuingItem.value = item;
     issueForm.reset();
+    // Pre-fill the PPE expiry from the item's default (overridable).
+    issueForm.expiry_date = item.is_ppe ? (item.default_expiry_date ?? null) : null;
     issueForm.clearErrors();
 }
 function submitIssue() {
@@ -187,12 +190,14 @@ function submitAssignReturn() {
 /* Category */
 const showCategory = ref(false);
 const editingCategory = ref(null);
-const categoryForm = useForm({ name: '', description: '', active: true });
+const categoryForm = useForm({ name: '', description: '', active: true, is_required_ppe: false, height_only: false });
 function openCategory(category = null) {
     editingCategory.value = category;
     categoryForm.name = category?.name ?? '';
     categoryForm.description = category?.description ?? '';
     categoryForm.active = category?.active ?? true;
+    categoryForm.is_required_ppe = category?.is_required_ppe ?? false;
+    categoryForm.height_only = category?.height_only ?? false;
     categoryForm.clearErrors();
     showCategory.value = true;
 }
@@ -252,6 +257,7 @@ const assignmentColumns = [
 const categoryColumns = [
     { key: 'name', labelKey: 'inventory.name' },
     { key: 'description', labelKey: 'inventory.description' },
+    { key: 'ppe', labelKey: 'inventory.required_ppe' },
     { key: 'count', labelKey: 'inventory.item_count', align: 'end' },
     { key: 'active', labelKey: 'inventory.active' },
     { key: 'actions', labelKey: 'common.actions', align: 'end' },
@@ -428,6 +434,12 @@ const categoryColumns = [
                 <tr v-for="c in categories" :key="c.id" class="hover:bg-surface-hover">
                     <td class="px-3 py-2.5 text-sm font-medium">{{ c.name }}</td>
                     <td class="px-3 py-2.5 text-sm text-ink-soft">{{ c.description ?? '—' }}</td>
+                    <td class="px-3 py-2.5 text-sm">
+                        <VBadge v-if="c.is_required_ppe" status="info">
+                            <Bilingual :k="c.height_only ? 'inventory.ppe_height' : 'inventory.ppe_required'" inline />
+                        </VBadge>
+                        <span v-else class="text-muted">—</span>
+                    </td>
                     <td class="tabular-nums px-3 py-2.5 text-end text-sm">{{ c.item_count }}</td>
                     <td class="px-3 py-2.5 text-sm text-ink-soft">{{ c.active ? '✓' : '—' }}</td>
                     <td class="px-3 py-2.5 text-end">
@@ -471,6 +483,12 @@ const categoryColumns = [
                 </FormField>
                 <FormField k="inventory.minimum_stock" :error="itemForm.errors.minimum_stock">
                     <VInput v-model="itemForm.minimum_stock" type="number" step="0.01" min="0" />
+                </FormField>
+                <FormField k="inventory.is_ppe" :error="itemForm.errors.is_ppe">
+                    <VToggle v-model="itemForm.is_ppe" />
+                </FormField>
+                <FormField v-if="itemForm.is_ppe" k="inventory.default_expiry_date" :error="itemForm.errors.default_expiry_date">
+                    <VDateInput v-model="itemForm.default_expiry_date" />
                 </FormField>
                 <!-- Opening stock is only offered on create: afterwards, stock
                      moves through the ledger, never through this form. -->
@@ -546,6 +564,9 @@ const categoryColumns = [
                 </FormField>
                 <FormField k="inventory.expected_return_date" :error="issueForm.errors.expected_return_date">
                     <VDateInput v-model="issueForm.expected_return_date" />
+                </FormField>
+                <FormField v-if="issuingItem?.is_ppe" k="inventory.expiry_date" :error="issueForm.errors.expiry_date">
+                    <VDateInput v-model="issueForm.expiry_date" />
                 </FormField>
                 <FormField k="inventory.notes" class="sm:col-span-2">
                     <VTextarea v-model="issueForm.notes" :rows="2" />
@@ -634,6 +655,14 @@ const categoryColumns = [
                     <VTextarea v-model="categoryForm.description" :rows="2" />
                 </FormField>
                 <FormField k="inventory.active"><VToggle v-model="categoryForm.active" /></FormField>
+                <FormField k="inventory.required_ppe">
+                    <VToggle v-model="categoryForm.is_required_ppe" />
+                    <p class="mt-1 text-xs text-muted">{{ $t('inventory.required_ppe_hint') }}</p>
+                </FormField>
+                <FormField v-if="categoryForm.is_required_ppe" k="inventory.height_only">
+                    <VToggle v-model="categoryForm.height_only" />
+                    <p class="mt-1 text-xs text-muted">{{ $t('inventory.height_only_hint') }}</p>
+                </FormField>
             </form>
             <template #footer>
                 <VButton variant="ghost" @click="showCategory = false"><Bilingual k="common.cancel" inline /></VButton>

@@ -25,6 +25,7 @@ use Illuminate\Support\Carbon;
  * @property numeric-string $returned_quantity
  * @property Carbon $issue_date
  * @property Carbon|null $expected_return_date
+ * @property Carbon|null $expiry_date
  * @property Carbon|null $return_date
  */
 class EmployeeEquipmentIssue extends Model
@@ -40,7 +41,7 @@ class EmployeeEquipmentIssue extends Model
     /** @var list<string> */
     protected $fillable = [
         'employee_id', 'equipment_item_id', 'issued_quantity', 'issue_date',
-        'expected_return_date', 'notes',
+        'expected_return_date', 'expiry_date', 'notes',
     ];
 
     protected function casts(): array
@@ -51,6 +52,7 @@ class EmployeeEquipmentIssue extends Model
             'returned_quantity' => 'decimal:2',
             'issue_date' => 'date:Y-m-d',
             'expected_return_date' => 'date:Y-m-d',
+            'expiry_date' => 'date:Y-m-d',
             'return_date' => 'date:Y-m-d',
         ];
     }
@@ -58,6 +60,14 @@ class EmployeeEquipmentIssue extends Model
     public function outstanding(): float
     {
         return round((float) $this->issued_quantity - (float) $this->returned_quantity, 2);
+    }
+
+    /** PPE expiry has passed while the kit is still out. */
+    public function isExpired(): bool
+    {
+        return $this->expiry_date !== null
+            && $this->status !== EquipmentIssueStatus::Returned
+            && $this->expiry_date->isPast();
     }
 
     /**

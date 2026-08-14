@@ -113,6 +113,7 @@ class StockMovementService
                 'issued_quantity' => (string) $quantity,
                 'issue_date' => $data['issue_date'] ?? now()->toDateString(),
                 'expected_return_date' => $data['expected_return_date'] ?? null,
+                'expiry_date' => $data['expiry_date'] ?? null,
                 'notes' => $data['notes'] ?? null,
             ]);
             $issue->company_id = $item->company_id;

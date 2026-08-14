@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Carbon;
 
 /**
  * Screen 23 — a stock item. Company-owned: a helmet in one company's store is
@@ -26,6 +27,8 @@ use Illuminate\Database\Eloquent\SoftDeletes;
  * @property string $sku
  * @property string|null $serial_number
  * @property EquipmentItemType $item_type
+ * @property bool $is_ppe
+ * @property Carbon|null $default_expiry_date
  * @property bool $active
  * @property numeric-string $total_stock
  * @property numeric-string $available_stock
@@ -46,13 +49,15 @@ class EquipmentItem extends Model
     /** @var list<string> */
     protected $fillable = [
         'equipment_category_id', 'name', 'sku', 'serial_number', 'item_type',
-        'unit', 'minimum_stock', 'active', 'notes',
+        'is_ppe', 'default_expiry_date', 'unit', 'minimum_stock', 'active', 'notes',
     ];
 
     protected function casts(): array
     {
         return [
             'item_type' => EquipmentItemType::class,
+            'is_ppe' => 'boolean',
+            'default_expiry_date' => 'date:Y-m-d',
             'active' => 'boolean',
             'total_stock' => 'decimal:2',
             'available_stock' => 'decimal:2',

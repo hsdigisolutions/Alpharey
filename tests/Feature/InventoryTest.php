@@ -476,6 +476,26 @@ it('carries the serial onto the worker issue row', function (): void {
         ->where('issues', fn ($rows) => collect($rows)->firstWhere('serial', 'DR-007') !== null));
 });
 
+it('saves the PPE flag + default expiry on an item and the expiry on an issue', function (): void {
+    $this->post('/inventory/items', [
+        'name' => 'Arnés', 'sku' => 'ARN-1', 'item_type' => EquipmentItemType::Safety->value, 'unit' => 'pcs',
+        'is_ppe' => true, 'default_expiry_date' => '2027-01-01',
+    ])->assertRedirect()->assertSessionHasNoErrors();
+
+    $item = EquipmentItem::query()->where('sku', 'ARN-1')->firstOrFail();
+    expect($item->is_ppe)->toBeTrue()
+        ->and($item->default_expiry_date->toDateString())->toBe('2027-01-01');
+
+    $employee = Employee::factory()->create(['company_id' => $this->company->id]);
+    $this->stock->record($item, StockMovementType::StockIn, 3);
+    $this->post("/inventory/items/{$item->id}/issue", [
+        'employee_id' => $employee->id, 'issued_quantity' => 1, 'expiry_date' => '2027-01-01',
+    ])->assertRedirect()->assertSessionHasNoErrors();
+
+    $issue = EmployeeEquipmentIssue::query()->where('employee_id', $employee->id)->firstOrFail();
+    expect($issue->expiry_date->toDateString())->toBe('2027-01-01');
+});
+
 it('filters the stock-movements ledger by item', function (): void {
     $other = EquipmentItem::factory()->create(['company_id' => $this->company->id, 'name' => 'Taladro']);
     $this->stock->record($this->item, StockMovementType::StockIn, 5);

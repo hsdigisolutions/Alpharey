@@ -60,7 +60,7 @@ class Employee extends Model
         'daily_wage', 'per_meter_rate', 'commission_percent', 'payment_method',
         'overtime_policy_id', 'supervisor_overtime_policy_id', 'iban',
         'bank_name', 'has_driving_license', 'has_company_vehicle',
-        'can_use_vehicles', 'notes',
+        'can_use_vehicles', 'works_at_height', 'notes',
     ];
 
     /**
@@ -94,6 +94,7 @@ class Employee extends Model
             'has_driving_license' => 'boolean',
             'has_company_vehicle' => 'boolean',
             'can_use_vehicles' => 'boolean',
+            'works_at_height' => 'boolean',
             'commission_percent' => 'decimal:2',
         ];
     }

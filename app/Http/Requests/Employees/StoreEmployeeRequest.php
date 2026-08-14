@@ -62,6 +62,9 @@ class StoreEmployeeRequest extends FormRequest
             // Grants this worker the PWA vehicle module (take/return company
             // vehicles). Distinct from has_company_vehicle (an HR data flag).
             'can_use_vehicles' => ['boolean'],
+            // Works at height → the height-only required PPE (arnés) applies in
+            // the compliance check.
+            'works_at_height' => ['boolean'],
             'notes' => ['nullable', 'string', 'max:5000'],
         ];
     }

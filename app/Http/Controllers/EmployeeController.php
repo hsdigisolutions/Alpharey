@@ -19,6 +19,7 @@ use App\Services\Documents\DocumentStatus;
 use App\Services\Employees\EmployeeQueryFilter;
 use App\Services\Employees\EmployeeService;
 use App\Services\Employees\WageRateService;
+use App\Services\Inventory\PpeComplianceService;
 use App\Services\Workers\WorkerConsentService;
 use App\Support\AttendanceAbsence;
 use App\Support\CurrentCompany;
@@ -121,7 +122,7 @@ class EmployeeController extends Controller
                 'id', 'employee_code', 'full_name', 'email', 'mobile', 'phone', 'city', 'address',
                 'department', 'designation', 'designation_id', 'team_leader_id', 'active', 'is_contracted',
                 'default_check_in', 'default_check_out', 'commission_percent',
-                'has_driving_license', 'has_company_vehicle', 'can_use_vehicles', 'notes',
+                'has_driving_license', 'has_company_vehicle', 'can_use_vehicles', 'works_at_height', 'notes',
             ]), [
                 'joining_date' => $employee->joining_date?->toDateString(),
                 'leaving_date' => $employee->leaving_date?->toDateString(),
@@ -221,9 +222,11 @@ class EmployeeController extends Controller
             'outstanding' => $i->outstanding(),
             'issue_date' => $i->issue_date->toDateString(),
             'expected_return_date' => $i->expected_return_date?->toDateString(),
+            'expiry_date' => $i->expiry_date?->toDateString(),
             'return_date' => $i->return_date?->toDateString(),
             'status' => $i->status->value,
             'overdue' => $i->isOverdue(),
+            'expired' => $i->isExpired(),
             'notes' => $i->notes,
         ];
 
@@ -235,6 +238,9 @@ class EmployeeController extends Controller
             'history' => $history->map($row)->values()->all(),
             'count' => $current->count(),
             'overdue_count' => $current->filter(fn (EmployeeEquipmentIssue $i) => $i->isOverdue())->count(),
+            // Estado EPIs — required-PPE compliance for this worker (alerts only).
+            'ppe' => app(PpeComplianceService::class)->forEmployee($employee),
+            'works_at_height' => $employee->works_at_height,
         ];
     }
 

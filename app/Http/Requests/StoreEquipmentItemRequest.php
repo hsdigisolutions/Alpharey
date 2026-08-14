@@ -47,6 +47,9 @@ class StoreEquipmentItemRequest extends FormRequest
             ],
             'equipment_category_id' => ['nullable', 'integer'],
             'item_type' => ['required', Rule::enum(EquipmentItemType::class)],
+            // PPE (EPI) flag + a default expiry that pre-fills the issue form.
+            'is_ppe' => ['boolean'],
+            'default_expiry_date' => ['nullable', 'date'],
             'unit' => ['required', 'string', 'max:20'],
             'minimum_stock' => ['nullable', 'numeric', 'min:0'],
             'active' => ['boolean'],

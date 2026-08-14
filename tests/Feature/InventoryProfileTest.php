@@ -5,11 +5,24 @@ use App\Enums\UserRole;
 use App\Enums\WageType;
 use App\Models\Company;
 use App\Models\Employee;
+use App\Models\EquipmentCategory;
 use App\Models\EquipmentItem;
 use App\Models\User;
 use App\Models\UserModulePermission;
+use App\Services\Inventory\PpeComplianceService;
 use App\Services\Inventory\StockMovementService;
 use Inertia\Testing\AssertableInertia as Assert;
+
+/** Issue an item to an employee, optionally with a PPE expiry, and return the issue. */
+function issueTo(Employee $employee, EquipmentItem $item, StockMovementService $stock, ?string $expiry = null): void
+{
+    $stock->record($item, StockMovementType::StockIn, 5);
+    $stock->issueTo($item->fresh(), array_filter([
+        'employee_id' => $employee->id,
+        'issued_quantity' => 1,
+        'expiry_date' => $expiry,
+    ]));
+}
 
 beforeEach(function (): void {
     $this->company = Company::factory()->create();
@@ -50,6 +63,40 @@ it('hides the equipment tab from a user without inventory.view', function (): vo
     $this->actingAs($user)->get("/employees/{$employee->id}")
         ->assertOk()
         ->assertInertia(fn (Assert $p) => $p->where('equipmentTab', null));
+});
+
+// ── D2 — PPE compliance ─────────────────────────────────────────────────────
+it('reports missing, valid and expired PPE per required category', function (): void {
+    $ppe = app(PpeComplianceService::class);
+    $casco = EquipmentCategory::query()->create(['company_id' => $this->company->id, 'name' => 'Casco', 'is_required_ppe' => true, 'active' => true]);
+    $guantes = EquipmentCategory::query()->create(['company_id' => $this->company->id, 'name' => 'Guantes', 'is_required_ppe' => true, 'active' => true]);
+
+    $worker = Employee::factory()->forCompany($this->company)->create();
+    // Holds a valid casco (future expiry), holds an EXPIRED pair of guantes.
+    $cascoItem = EquipmentItem::factory()->create(['company_id' => $this->company->id, 'equipment_category_id' => $casco->id, 'is_ppe' => true]);
+    $guantesItem = EquipmentItem::factory()->create(['company_id' => $this->company->id, 'equipment_category_id' => $guantes->id, 'is_ppe' => true]);
+    issueTo($worker, $cascoItem, $this->stock, now()->addYear()->toDateString());
+    issueTo($worker, $guantesItem, $this->stock, now()->subDay()->toDateString());
+
+    $rows = collect($ppe->forEmployee($worker->fresh()))->keyBy('category');
+    expect($rows['Casco']['status'])->toBe('valid')
+        ->and($rows['Guantes']['status'])->toBe('expired');
+
+    // A worker holding nothing → both missing.
+    $bare = Employee::factory()->forCompany($this->company)->create();
+    $bareRows = collect($ppe->forEmployee($bare))->pluck('status', 'category');
+    expect($bareRows['Casco'])->toBe('missing')->and($bareRows['Guantes'])->toBe('missing');
+});
+
+it('requires a height-only category (arnés) only for a height worker', function (): void {
+    $ppe = app(PpeComplianceService::class);
+    EquipmentCategory::query()->create(['company_id' => $this->company->id, 'name' => 'Arnés', 'is_required_ppe' => true, 'height_only' => true, 'active' => true]);
+
+    $ground = Employee::factory()->forCompany($this->company)->create(['works_at_height' => false]);
+    $climber = Employee::factory()->forCompany($this->company)->create(['works_at_height' => true]);
+
+    expect(collect($ppe->forEmployee($ground))->pluck('category'))->not->toContain('Arnés')
+        ->and(collect($ppe->forEmployee($climber))->pluck('category'))->toContain('Arnés');
 });
 
 // ── C2 — Worker PWA "My equipment" (read-only, no money) ────────────────────

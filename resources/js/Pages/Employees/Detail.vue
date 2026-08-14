@@ -626,6 +626,38 @@ function destroy() {
                     </div>
                 </VCard>
 
+                <!-- Estado EPIs — required-PPE compliance (alerts only) -->
+                <VCard v-if="equipmentTab.ppe.length" :padded="false">
+                    <div class="flex items-center gap-2 border-b border-line px-4 py-3">
+                        <h3 class="text-sm font-semibold"><Bilingual k="inventory.ppe_status" inline /></h3>
+                        <VBadge v-if="equipmentTab.works_at_height" status="info"><Bilingual k="employees.works_at_height" inline /></VBadge>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm">
+                            <thead class="bg-surface-sunken text-[11px] uppercase tracking-wide text-muted">
+                                <tr>
+                                    <th class="px-3 py-2 text-start"><Bilingual k="inventory.ppe_item_required" inline /></th>
+                                    <th class="px-3 py-2 text-start"><Bilingual k="inventory.ppe_has" inline /></th>
+                                    <th class="px-3 py-2 text-start"><Bilingual k="inventory.ppe_expires" inline /></th>
+                                    <th class="px-3 py-2 text-start"><Bilingual k="inventory.status" inline /></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr v-for="p in equipmentTab.ppe" :key="p.category" class="border-b border-line last:border-0">
+                                    <td class="px-3 py-2 font-medium">{{ p.category }}</td>
+                                    <td class="px-3 py-2">{{ p.has ? '✅' : '❌' }}</td>
+                                    <td class="tabular-nums px-3 py-2 text-ink-soft">{{ p.expiry_date ?? '—' }}</td>
+                                    <td class="px-3 py-2">
+                                        <VBadge :status="{ valid: 'ok', expired: 'danger', missing: 'warn' }[p.status]">
+                                            <Bilingual :k="`inventory.ppe_${p.status}`" inline />
+                                        </VBadge>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </VCard>
+
                 <VCard v-if="equipmentTab.history.length" :padded="false">
                     <div class="border-b border-line px-4 py-3">
                         <h3 class="text-sm font-semibold"><Bilingual k="inventory.equip_history" inline /></h3>
