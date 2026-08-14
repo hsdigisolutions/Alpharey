@@ -7,6 +7,7 @@ use Database\Factories\VendorFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\MorphMany;
 
 /**
  * Screen 20 — Vendors. SHARED across companies (dev skill Rule 1) — no
@@ -53,5 +54,17 @@ class Vendor extends Model
     public function paymentTerms(): HasMany
     {
         return $this->hasMany(VendorPaymentTerm::class);
+    }
+
+    /**
+     * Documents for this vendor. Shared record, but each document carries the
+     * acting company's company_id (set on upload), so a company sees only its
+     * own paperwork for the shared vendor — the same rule its expenses follow.
+     *
+     * @return MorphMany<Document, $this>
+     */
+    public function documents(): MorphMany
+    {
+        return $this->morphMany(Document::class, 'documentable');
     }
 }

@@ -779,6 +779,7 @@ return [
         'tab_contacts' => 'Contactos',
         'tab_terms' => 'Condiciones de pago',
         'tab_expenses' => 'Gastos',
+        'tab_documents' => 'Documentos',
         'add_contact' => 'Añadir contacto',
         'contact_saved' => 'Contacto guardado / Contact saved',
         'position' => 'Cargo',

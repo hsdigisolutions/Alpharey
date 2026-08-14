@@ -6,6 +6,8 @@ use App\Http\Requests\Vendors\StoreVendorRequest;
 use App\Http\Requests\Vendors\UpdateVendorRequest;
 use App\Models\Expense;
 use App\Models\Vendor;
+use App\Support\DocumentPanelPayload;
+use App\Support\DocumentTypes;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -60,7 +62,7 @@ class VendorController extends Controller
         ]);
     }
 
-    public function show(Vendor $vendor): Response
+    public function show(Vendor $vendor, DocumentPanelPayload $panel): Response
     {
         Gate::authorize('vendors.view');
 
@@ -76,9 +78,18 @@ class VendorController extends Controller
             // the tenant scope shows only THIS company's expenses to the vendor.
             'expenses' => Gate::allows('expenses.view') ? $this->vendorExpenses($vendor) : [],
             'canViewExpenses' => Gate::allows('expenses.view'),
+            // Documentos tab — the shared vendor's docs, scoped to this company.
+            'documents' => Gate::allows('documents.view') ? $panel->forEntity($vendor, 'vendor') : [],
+            'documentSets' => DocumentTypes::vendor(),
+            'documentFieldDefs' => DocumentTypes::fieldDefsMap('vendor'),
             'can' => [
                 'edit' => Gate::allows('vendors.edit'),
                 'delete' => Gate::allows('vendors.delete'),
+                'view' => Gate::allows('documents.view'),
+                'upload' => Gate::allows('documents.upload'),
+                'download' => Gate::allows('documents.download'),
+                'deleteDocs' => Gate::allows('documents.delete'),
+                'editDocs' => Gate::allows('documents.edit'),
             ],
         ]);
     }

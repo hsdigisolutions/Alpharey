@@ -6,6 +6,7 @@
 import { ref } from 'vue';
 import { Head, router, useForm } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
+import DocumentsPanel from '@/Components/Documents/DocumentsPanel.vue';
 import FormField from '@/Components/ui/FormField.vue';
 import VAvatar from '@/Components/ui/VAvatar.vue';
 import VBadge from '@/Components/ui/VBadge.vue';
@@ -24,6 +25,9 @@ const props = defineProps({
     paymentTerms: { type: Array, required: true },
     expenses: { type: Array, default: () => [] },
     canViewExpenses: { type: Boolean, default: false },
+    documents: { type: Array, default: () => [] },
+    documentSets: { type: Object, default: () => ({}) },
+    documentFieldDefs: { type: Object, default: () => ({}) },
     can: { type: Object, required: true },
 });
 
@@ -37,6 +41,7 @@ const tabs = [
     { key: 'contacts', labelKey: 'vendors.tab_contacts', count: props.contacts.length },
     { key: 'terms', labelKey: 'vendors.tab_terms', count: props.paymentTerms.length },
     { key: 'expenses', labelKey: 'vendors.tab_expenses' },
+    { key: 'documents', labelKey: 'vendors.tab_documents', count: props.documents.length },
 ];
 
 const infoRows = [
@@ -117,6 +122,10 @@ function addTerm() { termForm.post(`/vendors/${props.vendor.id}/payment-terms`, 
             <!-- Gastos — this company's expenses to the vendor -->
             <VFinanceRows v-else-if="tab === 'expenses'"
                 :rows="expenses" :can-view="canViewExpenses" empty-key="finance.no_expenses" :show-party="false" />
+
+            <!-- Documentos — this company's paperwork for the shared vendor -->
+            <DocumentsPanel v-else-if="tab === 'documents'" entity-type="vendor" :entity-id="vendor.id"
+                :documents="documents" :sets="documentSets" :field-defs="documentFieldDefs" :can="can" />
 
         </div>
 
