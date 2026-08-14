@@ -88,6 +88,11 @@ class StockMovementService
 
             $item->available_stock = (string) round($newAvailable, 2);
             $item->total_stock = (string) round(max(0, $newTotal), 2);
+            // Re-arm the low-stock alert once the item climbs back above its
+            // minimum, so the next dip notifies again (the scan sets the flag).
+            if ($item->low_stock_notified_at !== null && ! $item->isLowStock()) {
+                $item->low_stock_notified_at = null;
+            }
             $item->save();
 
             return $movement;

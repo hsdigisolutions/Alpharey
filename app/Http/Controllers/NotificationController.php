@@ -20,7 +20,7 @@ use Inertia\Response;
 class NotificationController extends Controller
 {
     /** Filter tab → the categories (NotificationType::category) it shows. */
-    private const FILTERS = ['all', 'unread', 'documents', 'payroll', 'invoices', 'vehicles', 'workers'];
+    private const FILTERS = ['all', 'unread', 'documents', 'payroll', 'invoices', 'vehicles', 'workers', 'inventory'];
 
     public function index(Request $request): Response
     {

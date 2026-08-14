@@ -1802,6 +1802,7 @@ return [
         'filter_invoices' => 'Facturas',
         'filter_vehicles' => 'Vehículos',
         'filter_workers' => 'Trabajadores',
+        'filter_inventory' => 'Inventario',
     ],
 
     'worker_expenses' => [

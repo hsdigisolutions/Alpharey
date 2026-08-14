@@ -124,6 +124,27 @@ Employee Detail Equipamiento tab lists a worker's damage/loss history.
 `InventoryTest` (+3 — damaged write-off math + incident, good return no incident,
 note required for damage/loss). **902 Pest tests / 5247 assertions.**
 
+**Phase F — notifications & alerts (done).** Migration `2026_08_13_000011`
+adds three once-per guards (server-set): `low_stock_notified_at` on
+equipment_items, `overdue_notified_at` + `ppe_expiry_notified_at` on
+employee_equipment_issues. Four new `NotificationType` cases (InventoryLowStock ·
+EquipmentOverdue · PpeExpiring · PpeMissing → Company Admin by the default-roles
+fallback; category `inventory` — added to the notifications-page filter tabs).
+`notifications:scan` (ScanAlerts) gains four sweeps: **low stock** (item ≤
+minimum, once; the movement service re-arms `low_stock_notified_at` when stock
+recovers above minimum), **overdue return** (kit past its expected return, once
+per issue), **PPE expiring** (a PPE issue ≤30 days from expiry or already
+expired, once per issue), and **PPE missing** — a per-company DAILY SUMMARY
+("N trabajadores sin EPI obligatorio", not one per worker, so a big crew can't
+flood the bell). Key design call: the missing-PPE ALERT fires only on a company's
+OWN required-PPE categories (opt-in — `PpeComplianceService::forEmployee($e,
+ownRequiredOnly: true)`), while the on-screen Estado-EPIs report still uses the
+shared group defaults; this stops the seeded defaults from making every worker
+"non-compliant by default" and spamming/breaking the scan. `ScopeDisciplineTest`
+caught a bare `Employee::query()->withoutGlobalScopes()` in the missing sweep →
+switched to `withoutGlobalScope(CompanyScope::class)`. Tests:
+`InventoryAlertsTest` (6). **907 Pest tests / 5261 assertions.**
+
 ### Measurements + Production Tasks — full deep review (2026-08-13, COMPLETE)
 
 A line-by-line re-review of the whole Measurements/Production subsystem (Phases

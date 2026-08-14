@@ -62,6 +62,7 @@ class EquipmentItem extends Model
             'total_stock' => 'decimal:2',
             'available_stock' => 'decimal:2',
             'minimum_stock' => 'decimal:2',
+            'low_stock_notified_at' => 'datetime',
         ];
     }
 

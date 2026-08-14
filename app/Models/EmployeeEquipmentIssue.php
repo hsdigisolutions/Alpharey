@@ -54,6 +54,8 @@ class EmployeeEquipmentIssue extends Model
             'expected_return_date' => 'date:Y-m-d',
             'expiry_date' => 'date:Y-m-d',
             'return_date' => 'date:Y-m-d',
+            'overdue_notified_at' => 'datetime',
+            'ppe_expiry_notified_at' => 'datetime',
         ];
     }
 

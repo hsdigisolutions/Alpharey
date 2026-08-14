@@ -20,12 +20,21 @@ use Illuminate\Support\Collection;
 class PpeComplianceService
 {
     /**
+     * @param  bool  $ownRequiredOnly  restrict to the company's OWN required-PPE
+     *                                 categories (exclude the shared group defaults). The proactive missing-PPE
+     *                                 ALERT is opt-in per company this way; the on-screen report uses defaults
+     *                                 too (so a worker sees the baseline EPIs even before a company configures
+     *                                 its own).
      * @return list<array<string, mixed>>
      */
-    public function forEmployee(Employee $employee): array
+    public function forEmployee(Employee $employee, bool $ownRequiredOnly = false): array
     {
         $required = EquipmentCategory::query()
-            ->forCompany($employee->company_id)
+            ->when(
+                $ownRequiredOnly,
+                fn (Builder $q) => $q->where('company_id', $employee->company_id),
+                fn (Builder $q) => $q->forCompany($employee->company_id),
+            )
             ->where('is_required_ppe', true)
             ->where('active', true)
             // A height-only requirement (arnés) applies only to height workers.

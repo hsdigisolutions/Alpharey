@@ -1797,6 +1797,7 @@ return [
         'filter_invoices' => 'Invoices',
         'filter_vehicles' => 'Vehicles',
         'filter_workers' => 'Workers',
+        'filter_inventory' => 'Inventory',
     ],
 
     'worker_expenses' => [

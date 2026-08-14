@@ -35,6 +35,11 @@ enum NotificationType: string
     case AutoAbsent = 'auto_absent';
     case VehicleExpiry = 'vehicle_expiry';
     case VehicleNotReturned = 'vehicle_not_returned';
+    // Inventory (Phase F)
+    case InventoryLowStock = 'inventory_low_stock';
+    case EquipmentOverdue = 'equipment_overdue';
+    case PpeExpiring = 'ppe_expiring';
+    case PpeMissing = 'ppe_missing';
     // Legacy Phase-8
     case ProjectAlert = 'project_alert';
     case DeploymentEvent = 'deployment_event';
@@ -107,6 +112,8 @@ enum NotificationType: string
             self::ShortHours => 'attendance',
             self::AutoAbsent => 'attendance',
             self::VehicleExpiry, self::VehicleNotReturned => 'vehicles',
+            self::InventoryLowStock, self::EquipmentOverdue,
+            self::PpeExpiring, self::PpeMissing => 'inventory',
             self::CallFollowUp => 'calls',
             self::WeekendOffer => 'calendar',
             self::ProjectAlert => 'projects',
@@ -124,6 +131,8 @@ enum NotificationType: string
             self::PayrollReady, self::PayrollApproved => 'payroll',
             self::InvoiceOverdue, self::InvoicePaid, self::InvoiceReminder => 'invoices',
             self::VehicleExpiry, self::VehicleNotReturned => 'vehicles',
+            self::InventoryLowStock, self::EquipmentOverdue,
+            self::PpeExpiring, self::PpeMissing => 'inventory',
             self::AdvancePending, self::AdvanceDecided,
             self::ExpensePending, self::ExpenseDecided,
             self::LeavePending, self::LeaveDecided,
