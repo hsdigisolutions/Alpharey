@@ -541,6 +541,18 @@ return [
         'cat_custom' => 'Adicionales',
         'cat_company' => 'Documentos de empresa',
         'cat_project' => 'Documentos de obra',
+        'detail' => 'Documento',
+        'current_version' => 'Versión actual',
+        'uploaded' => 'Subido',
+        'by' => 'Por',
+        'edit_fields' => 'Editar datos',
+        'new_version' => 'Nueva versión',
+        'replace_file' => 'Reemplazar archivo',
+        'replace_hint' => 'Corrige el archivo sin crear una nueva versión.',
+        'no_file' => 'Sin archivo',
+        'versions_history' => 'Versiones anteriores',
+        'no_previous' => 'Sin versiones anteriores',
+        'open_detail' => 'Ver detalle',
     ],
 
     // Nombres tal y como los usa el cliente en "DATOS OBLIGATORIOS EMPRESA"

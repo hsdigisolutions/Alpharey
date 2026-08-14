@@ -539,6 +539,18 @@ return [
         'cat_custom' => 'Additional',
         'cat_company' => 'Company documents',
         'cat_project' => 'Project documents',
+        'detail' => 'Document',
+        'current_version' => 'Current version',
+        'uploaded' => 'Uploaded',
+        'by' => 'By',
+        'edit_fields' => 'Edit fields',
+        'new_version' => 'New version',
+        'replace_file' => 'Replace file',
+        'replace_hint' => 'Fix the file without creating a new version.',
+        'no_file' => 'No file',
+        'versions_history' => 'Previous versions',
+        'no_previous' => 'No previous versions',
+        'open_detail' => 'View detail',
     ],
 
     // English glosses of the client's own document names — the Spanish side is

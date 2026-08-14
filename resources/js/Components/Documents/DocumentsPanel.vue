@@ -8,6 +8,7 @@
 import { computed, ref } from 'vue';
 import { router, useForm } from '@inertiajs/vue3';
 import AppIcon from '@/Components/AppIcon.vue';
+import DocumentDetailPanel from '@/Components/Documents/DocumentDetailPanel.vue';
 import FormField from '@/Components/ui/FormField.vue';
 import VBadge from '@/Components/ui/VBadge.vue';
 import VButton from '@/Components/ui/VButton.vue';
@@ -39,6 +40,32 @@ const customDocs = computed(() => props.documents.filter((d) => d.category === '
 
 function currentDoc(typeKey) {
     return props.documents.find((d) => d.type_key === typeKey && d.category !== 'custom') ?? null;
+}
+
+/* ---------- smart detail panel (company documents only) ---------- */
+const isCompany = computed(() => props.entityType === 'company');
+const selectedDocId = ref(null);
+const selectedDoc = computed(() => props.documents.find((d) => d.id === selectedDocId.value) ?? null);
+
+function rowClick(typeKey, category, cfg) {
+    if (!isCompany.value) {
+        return;
+    }
+    const existing = currentDoc(typeKey);
+    if (existing) {
+        selectedDocId.value = existing.id;
+    } else if (props.can.upload) {
+        openUpload(typeKey, category, cfg);
+    }
+}
+
+// A "New version" from the detail panel reuses the upload modal for this type.
+function newVersion(typeKey) {
+    openUpload(typeKey, 'company', props.sets[typeKey] ?? { flag: false, file: true, expiry: true });
+}
+
+function refreshDocs() {
+    router.reload({ only: ['companies'], preserveScroll: true });
 }
 
 const statusBadge = { ok: 'ok', warn: 'warn', danger: 'danger', neutral: 'neutral', exempt: 'info' };
@@ -110,7 +137,10 @@ function removeDoc(doc) {
             <div class="overflow-x-auto rounded-lg border border-line bg-surface-raised">
                 <table class="w-full min-w-max text-sm">
                     <tbody class="divide-y divide-line">
-                        <tr v-for="(cfg, typeKey) in group.types" :key="typeKey" class="hover:bg-surface-hover">
+                        <tr v-for="(cfg, typeKey) in group.types" :key="typeKey"
+                            class="hover:bg-surface-hover"
+                            :class="isCompany ? 'cursor-pointer' : ''"
+                            @click="rowClick(typeKey, group.category === 'company' ? 'company' : group.category, cfg)">
                             <td class="px-3 py-2.5">
                                 <Bilingual :k="`doc_types.${typeKey}`" class="text-sm" />
                             </td>
@@ -146,19 +176,19 @@ function removeDoc(doc) {
                                     <button v-if="can.upload" type="button"
                                         class="rounded-md p-1.5 text-ink-soft hover:bg-surface-sunken hover:text-ink"
                                         :aria-label="`${typeKey} — upload`"
-                                        @click="openUpload(typeKey, group.category === 'company' ? 'company' : group.category, cfg)">
+                                        @click.stop="openUpload(typeKey, group.category === 'company' ? 'company' : group.category, cfg)">
                                         <AppIcon name="upload" class="h-4 w-4" />
                                     </button>
                                     <button v-if="can.download && currentDoc(typeKey)?.has_file" type="button"
                                         class="rounded-md p-1.5 text-ink-soft hover:bg-surface-sunken hover:text-ink"
                                         :aria-label="`${typeKey} — download`"
-                                        @click="download(currentDoc(typeKey))">
+                                        @click.stop="download(currentDoc(typeKey))">
                                         <AppIcon name="download" class="h-4 w-4" />
                                     </button>
                                     <button v-if="can.deleteDocs && currentDoc(typeKey)" type="button"
                                         class="rounded-md p-1.5 text-status-danger hover:bg-status-danger-soft"
                                         :aria-label="`${typeKey} — delete`"
-                                        @click="removeDoc(currentDoc(typeKey))">
+                                        @click.stop="removeDoc(currentDoc(typeKey))">
                                         <AppIcon name="trash" class="h-4 w-4" />
                                     </button>
                                 </span>
@@ -251,4 +281,8 @@ function removeDoc(doc) {
     </div>
 
     <VConfirmDialog :open="confirm.open" :message="confirm.message" @confirm="runDelete" @cancel="confirm.open = false" />
+
+    <!-- Smart detail slide-over (company documents) -->
+    <DocumentDetailPanel v-if="isCompany" :doc="selectedDoc" :can="can"
+        @close="selectedDocId = null" @new-version="newVersion" @refresh="refreshDocs" />
 </template>

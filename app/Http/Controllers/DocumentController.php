@@ -29,8 +29,6 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
  */
 class DocumentController extends Controller
 {
-    private const MAX_KB = 15360; // 15 MB
-
     public function store(StoreDocumentRequest $request, AuditLogger $audit): RedirectResponse
     {
         $validated = $request->validated();

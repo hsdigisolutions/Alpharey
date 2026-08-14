@@ -169,7 +169,7 @@ const fieldRows = [
                 <div v-else-if="tab === 'docs'" class="mt-4">
                     <DocumentsPanel entity-type="company" :entity-id="selected.id"
                         :documents="selected.documents ?? []" :sets="companyDocTypes"
-                        :can="{ upload: true, download: true, deleteDocs: true }" />
+                        :can="{ upload: true, download: true, deleteDocs: true, editDocs: true }" />
                 </div>
 
                 <div v-else class="mt-4 grid grid-cols-2 gap-4">
