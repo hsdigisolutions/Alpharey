@@ -6,7 +6,7 @@
  * Stock counters are never edited here — every change is a movement, because
  * the ledger is the authority and the counters are its cached tail.
  */
-import { reactive, ref } from 'vue';
+import { computed, reactive, ref } from 'vue';
 import { Head, router, useForm } from '@inertiajs/vue3';
 import { ensureCompanySelected } from '@/composables/useCompanyGate';
 import AppLayout from '@/Layouts/AppLayout.vue';
@@ -215,6 +215,19 @@ function deleteCategory(category) {
 
 const issueTone = { open: 'warn', partially_returned: 'info', returned: 'ok' };
 
+/* Export — the current tab maps to a report (items/movements/issues); PPE is
+   a standalone company-wide report. Carries the active filters through. */
+const reportForView = computed(() => (['items', 'movements', 'issues'].includes(view.value) ? view.value : 'items'));
+function exportUrl(report, format) {
+    const params = new URLSearchParams({ report, format });
+    if (report === 'items') {
+        if (filters.search) params.set('search', filters.search);
+        if (filters.equipment_category_id) params.set('equipment_category_id', filters.equipment_category_id);
+        if (filters.item_type) params.set('item_type', filters.item_type);
+    }
+    return `/inventory/export?${params.toString()}`;
+}
+
 const itemColumns = [
     { key: 'name', labelKey: 'inventory.name' },
     { key: 'sku', labelKey: 'inventory.sku' },
@@ -270,6 +283,16 @@ const categoryColumns = [
     <Head :title="$t('inventory.title')" />
     <AppLayout>
         <VPageHeader k="inventory.title">
+            <template v-if="can.export">
+                <a v-for="fmt in ['excel', 'pdf']" :key="fmt" :href="exportUrl(reportForView, fmt)"
+                    class="inline-flex items-center gap-1.5 rounded-md border border-line-strong bg-surface-raised px-3 py-1.5 text-sm text-ink-soft hover:bg-surface-hover">
+                    <AppIcon :name="fmt === 'pdf' ? 'file' : 'download'" class="h-4 w-4" />{{ fmt === 'pdf' ? 'PDF' : 'Excel' }}
+                </a>
+                <a :href="exportUrl('ppe', 'excel')"
+                    class="inline-flex items-center gap-1.5 rounded-md border border-line-strong bg-surface-raised px-3 py-1.5 text-sm text-ink-soft hover:bg-surface-hover">
+                    <AppIcon name="download" class="h-4 w-4" />{{ $t('inventory.ppe_report') }}
+                </a>
+            </template>
             <VButton v-if="can.create && view === 'categories'" variant="secondary" icon="plus"
                 @click="openCategory()">
                 <Bilingual k="inventory.new_category" inline />

@@ -7,6 +7,7 @@ use App\Enums\EquipmentIssueStatus;
 use App\Enums\EquipmentItemType;
 use App\Enums\EquipmentReturnCondition;
 use App\Enums\StockMovementType;
+use App\Exports\InventoryReportExport;
 use App\Http\Controllers\Admin\Concerns\ResolvesCompanyContext;
 use App\Http\Requests\StoreEquipmentItemRequest;
 use App\Models\Employee;
@@ -16,15 +17,21 @@ use App\Models\EquipmentItem;
 use App\Models\EquipmentProjectAssignment;
 use App\Models\EquipmentStockMovement;
 use App\Models\Project;
+use App\Services\Audit\AuditLogger;
+use App\Services\Inventory\PpeComplianceService;
 use App\Services\Inventory\StockMovementService;
 use App\Support\CurrentCompany;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response as HttpResponse;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
+use Maatwebsite\Excel\Facades\Excel;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 /**
  * Screen 23 — Inventory / Equipment. Company-owned.
@@ -67,6 +74,7 @@ class InventoryController extends Controller
                 'create' => Gate::allows('inventory.create'),
                 'edit' => Gate::allows('inventory.edit'),
                 'delete' => Gate::allows('inventory.delete'),
+                'export' => Gate::allows('inventory.export'),
             ],
         ]);
     }
@@ -238,6 +246,97 @@ class InventoryController extends Controller
         ]));
 
         return back()->with('success', __('ui.inventory.category_saved'));
+    }
+
+    /**
+     * Export one of four reports (items / movements / issues / ppe) as Excel or
+     * PDF. Gated + audited; company scope is applied by the global scope on the
+     * underlying queries.
+     */
+    public function export(Request $request, AuditLogger $audit): BinaryFileResponse|HttpResponse
+    {
+        Gate::authorize('inventory.export');
+
+        $report = in_array($request->string('report')->value(), ['items', 'movements', 'issues', 'ppe'], true)
+            ? $request->string('report')->value()
+            : 'items';
+        $format = $request->string('format')->value() === 'pdf' ? 'pdf' : 'excel';
+
+        [$title, $headings, $rows] = $this->reportData($report, $request);
+
+        $audit->log('exported', new EquipmentItem, null, null, "Inventory {$report} ".strtoupper($format), 'inventory');
+
+        if ($format === 'pdf') {
+            return Pdf::loadView('exports.inventory-pdf', [
+                'title' => $title, 'headings' => $headings, 'rows' => $rows,
+                'generated_at' => now()->toDayDateTimeString(),
+            ])->download("inventario-{$report}.pdf");
+        }
+
+        return Excel::download(new InventoryReportExport($headings, $rows), "inventario-{$report}.xlsx");
+    }
+
+    /**
+     * @return array{0: string, 1: list<string>, 2: list<list<string|float|int|null>>}
+     */
+    private function reportData(string $report, Request $request): array
+    {
+        $yn = fn (bool $b): string => $b ? 'Sí' : 'No';
+
+        return match ($report) {
+            'movements' => [
+                'Movimientos de stock / Stock movements',
+                ['Fecha / Date', 'Artículo / Item', 'Nº serie / Serial', 'Tipo / Type', 'Cantidad / Qty', 'Saldo / Balance', 'Trabajador / Worker', 'Obra / Project', 'Notas / Notes'],
+                EquipmentStockMovement::query()
+                    ->with(['item:id,name,serial_number', 'employee:id,full_name', 'project:id,name'])
+                    ->when($request->filled('mv_item'), fn (Builder $q) => $q->where('equipment_item_id', $request->integer('mv_item')))
+                    ->when($request->filled('mv_from'), fn (Builder $q) => $q->whereDate('created_at', '>=', $request->string('mv_from')))
+                    ->when($request->filled('mv_to'), fn (Builder $q) => $q->whereDate('created_at', '<=', $request->string('mv_to')))
+                    ->orderByDesc('id')
+                    ->get()
+                    ->map(fn (EquipmentStockMovement $m): array => [
+                        $m->created_at?->toDateTimeString(), $m->item?->name, $m->item?->serial_number,
+                        $m->movement_type->value, (float) $m->quantity,
+                        $m->balance_after !== null ? (float) $m->balance_after : null,
+                        $m->employee?->full_name, $m->project?->name, $m->notes,
+                    ])->all(),
+            ],
+            'issues' => [
+                'Material entregado / Equipment issues',
+                ['Trabajador / Worker', 'Artículo / Item', 'Nº serie / Serial', 'Entregado / Issued', 'Devuelto / Returned', 'Pendiente / Outstanding', 'Fecha / Issued on', 'Devolución prevista / Expected', 'Caducidad / Expiry', 'Estado / Status', 'Vencido / Overdue'],
+                EmployeeEquipmentIssue::query()
+                    ->with(['item:id,name,serial_number', 'employee:id,full_name'])
+                    ->orderByDesc('issue_date')
+                    ->get()
+                    ->map(fn (EmployeeEquipmentIssue $i): array => [
+                        $i->employee?->full_name, $i->item?->name, $i->item?->serial_number,
+                        (float) $i->issued_quantity, (float) $i->returned_quantity, $i->outstanding(),
+                        $i->issue_date->toDateString(), $i->expected_return_date?->toDateString(),
+                        $i->expiry_date?->toDateString(), $i->status->value, $yn($i->isOverdue()),
+                    ])->all(),
+            ],
+            'ppe' => [
+                'Cumplimiento EPIs / PPE compliance',
+                ['Trabajador / Worker', 'EPI / PPE', 'Tiene / Has', 'Caduca / Expires', 'Estado / Status'],
+                Employee::query()->where('active', true)->orderBy('full_name')->get()
+                    ->flatMap(fn (Employee $e) => collect(app(PpeComplianceService::class)->forEmployee($e))
+                        ->map(fn (array $row): array => [
+                            $e->full_name, $row['category'], $yn($row['has']), $row['expiry_date'], $row['status'],
+                        ]))
+                    ->values()->all(),
+            ],
+            default => [
+                'Inventario / Inventory items',
+                ['Nombre / Name', 'SKU', 'Nº serie / Serial', 'Categoría / Category', 'Tipo / Type', 'EPI / PPE', 'Total', 'Disponible / Available', 'En uso / In use', 'Mínimo / Minimum', 'Activo / Active'],
+                $this->filteredQuery($request)->get()
+                    ->map(fn (EquipmentItem $i): array => [
+                        $i->name, $i->sku, $i->serial_number, $i->category?->name, $i->item_type->value, $yn($i->is_ppe),
+                        (float) $i->total_stock, (float) $i->available_stock,
+                        round((float) $i->total_stock - (float) $i->available_stock, 2),
+                        (float) $i->minimum_stock, $yn($i->active),
+                    ])->all(),
+            ],
+        };
     }
 
     public function updateCategory(Request $request, EquipmentCategory $category): RedirectResponse

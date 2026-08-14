@@ -157,6 +157,22 @@ set. Reorder alerts are already handled by the Phase-F low-stock sweep. Lang:
 `InventoryTest` (+1 — consumable saved + a Usage movement drops both counters).
 **908 Pest tests / 5270 assertions.**
 
+**Phase H — export (done, no migration).** Inventory regains the **Export**
+action (`Module::Inventory` — matrix + fuzz auto-extend; `inventory.export` is
+used by the new controller method so the "no dead toggle" guard passes).
+`GET /inventory/export?report=…&format=…` — gated `inventory.export` + audited —
+produces four reports (`items` · `movements` · `issues` · `ppe` compliance) in
+**Excel or PDF**. One generic `InventoryReportExport` (FromArray + WithHeadings)
++ one `exports/inventory-pdf` blade render all four from a `reportData()` builder
+(items carries serial + stock + PPE flag; issues = who-has-what with expiry +
+overdue; ppe = per-active-worker compliance rows). The items report honours the
+screen filters. Header shows Excel/PDF buttons for the current tab
+(items/movements/issues) plus a standalone **Informe EPIs** export. A dropped
+`Gate` import (from rewriting the use-block) briefly broke every inventory
+endpoint — caught by the suite, restored. Tests: `InventoryTest` (+2 — all four
+reports × both formats OK + audited, export refused without inventory.export).
+**910 Pest tests / 5281 assertions. Inventory rebuild A–H COMPLETE.**
+
 ### Measurements + Production Tasks — full deep review (2026-08-13, COMPLETE)
 
 A line-by-line re-review of the whole Measurements/Production subsystem (Phases

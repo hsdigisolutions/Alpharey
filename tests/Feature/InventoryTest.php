@@ -16,6 +16,7 @@ use App\Models\EquipmentProjectAssignment;
 use App\Models\EquipmentStockMovement;
 use App\Models\Project;
 use App\Models\User;
+use App\Models\UserModulePermission;
 use App\Services\Inventory\StockMovementService;
 use Illuminate\Validation\ValidationException;
 use Inertia\Testing\AssertableInertia as Assert;
@@ -312,6 +313,28 @@ it('refuses to issue kit to another company employee', function (): void {
     ])->assertSessionHasErrors('employee_id');
 
     expect(EmployeeEquipmentIssue::query()->count())->toBe(0);
+});
+
+it('exports each report, gated and audited', function (): void {
+    $employee = Employee::factory()->create(['company_id' => $this->company->id]);
+    $this->stock->record($this->item, StockMovementType::StockIn, 5);
+    $this->stock->issueTo($this->item->fresh(), ['employee_id' => $employee->id, 'issued_quantity' => 1]);
+
+    foreach (['items', 'movements', 'issues', 'ppe'] as $report) {
+        $this->get("/inventory/export?report={$report}&format=excel")->assertOk();
+        $this->get("/inventory/export?report={$report}&format=pdf")->assertOk();
+    }
+
+    $this->assertDatabaseHas('audit_logs', ['action' => 'exported', 'module' => 'inventory']);
+});
+
+it('refuses an export to a user without inventory.export', function (): void {
+    $user = User::factory()->create(['role' => UserRole::Manager, 'company_id' => $this->company->id]);
+    UserModulePermission::query()->create([
+        'user_id' => $user->id, 'company_id' => $this->company->id, 'module' => 'inventory', 'can_view' => true, 'can_export' => false,
+    ]);
+
+    $this->actingAs($user)->get('/inventory/export?report=items&format=excel')->assertForbidden();
 });
 
 it('denies inventory actions to a user without the permission', function (): void {

@@ -1162,6 +1162,7 @@ return [
         'type_damaged' => 'Damaged',
         'type_usage' => 'Usage',
         'record_usage' => 'Record usage',
+        'ppe_report' => 'PPE report',
         'quantity' => 'Quantity',
         'balance_after' => 'Balance after',
         'employee' => 'Employee',

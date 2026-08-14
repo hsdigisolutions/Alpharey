@@ -53,8 +53,9 @@ enum Module: string
             // CRUD without an export feature.
             self::Vendors,
             self::Vehicles,
-            self::Inventory,
             self::Subcontractors => [$a::View, $a::Create, $a::Edit, $a::Delete],
+            // Inventory ships item / movement / issue / PPE-compliance exports.
+            self::Inventory => [$a::View, $a::Create, $a::Edit, $a::Delete, $a::Export],
             self::Expenses => [$a::View, $a::Create, $a::Edit, $a::Delete, $a::Export, $a::Approve],
             // Deployments: create → complete/cancel + a cross-charge approval;
             // never deleted (decision 25), no export.

@@ -1163,6 +1163,7 @@ return [
         'type_damaged' => 'Dañado',
         'type_usage' => 'Consumo',
         'record_usage' => 'Registrar consumo',
+        'ppe_report' => 'Informe EPIs',
         'quantity' => 'Cantidad',
         'balance_after' => 'Saldo tras el movimiento',
         'employee' => 'Empleado',

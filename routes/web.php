@@ -403,6 +403,7 @@ Route::middleware(['auth', 'active', 'two_factor', 'not_worker'])->group(functio
     // Screen 23 — Inventory (Phase 7). Every stock change goes through
     // StockMovementService: the ledger and the item counters move together.
     Route::get('/inventory', [InventoryController::class, 'index'])->name('inventory.index');
+    Route::get('/inventory/export', [InventoryController::class, 'export'])->name('inventory.export');
     Route::post('/inventory/items', [InventoryController::class, 'store'])->name('inventory.items.store');
     Route::put('/inventory/items/{item}', [InventoryController::class, 'update'])->name('inventory.items.update');
     Route::delete('/inventory/items/{item}', [InventoryController::class, 'destroy'])->name('inventory.items.destroy');
