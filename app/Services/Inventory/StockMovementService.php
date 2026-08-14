@@ -4,8 +4,10 @@ namespace App\Services\Inventory;
 
 use App\Enums\EquipmentAssignmentStatus;
 use App\Enums\EquipmentIssueStatus;
+use App\Enums\EquipmentReturnCondition;
 use App\Enums\StockMovementType;
 use App\Models\EmployeeEquipmentIssue;
+use App\Models\EquipmentIncident;
 use App\Models\EquipmentItem;
 use App\Models\EquipmentProjectAssignment;
 use App\Models\EquipmentStockMovement;
@@ -207,10 +209,19 @@ class StockMovementService
      * Take kit back. A partial return is normal — a worker hands back three of
      * the five drills — so the issue stays open until the quantity matches.
      *
+     * The condition decides what happens to the units: GOOD go back into the
+     * store (a Return); DAMAGED/LOST are written off (Return then Damaged, so
+     * net available is unchanged and total drops by the quantity) and an
+     * incident is recorded against the worker. No auto-cost — Q4.
+     *
      * @throws ValidationException
      */
-    public function returnFrom(EmployeeEquipmentIssue $issue, float $quantity): EmployeeEquipmentIssue
-    {
+    public function returnFrom(
+        EmployeeEquipmentIssue $issue,
+        float $quantity,
+        EquipmentReturnCondition $condition = EquipmentReturnCondition::Good,
+        ?string $note = null,
+    ): EmployeeEquipmentIssue {
         if ($quantity <= 0) {
             throw ValidationException::withMessages([
                 'returned_quantity' => __('ui.inventory.quantity_positive'),
@@ -225,12 +236,35 @@ class StockMovementService
             ]);
         }
 
-        return DB::transaction(function () use ($issue, $quantity): EmployeeEquipmentIssue {
+        return DB::transaction(function () use ($issue, $quantity, $condition, $note): EmployeeEquipmentIssue {
             $item = EquipmentItem::query()->withoutGlobalScopes()->findOrFail($issue->equipment_item_id);
 
+            // The unit comes off the worker either way (Return).
             $this->record($item, StockMovementType::Return, $quantity, [
                 'employee_id' => $issue->employee_id,
             ]);
+
+            // Damaged/lost: write it straight back off the store (net available
+            // unchanged, total −q) and log the incident against the worker.
+            if ($condition->isIncident()) {
+                $this->record($item, StockMovementType::Damaged, $quantity, [
+                    'employee_id' => $issue->employee_id,
+                    'notes' => $note,
+                ]);
+
+                $incident = new EquipmentIncident([
+                    'employee_id' => $issue->employee_id,
+                    'equipment_item_id' => $item->id,
+                    'employee_equipment_issue_id' => $issue->id,
+                    'incident_date' => now()->toDateString(),
+                    'condition' => $condition,
+                    'quantity' => (string) $quantity,
+                    'notes' => $note,
+                ]);
+                $incident->company_id = $item->company_id;
+                $incident->created_by = Auth::id();
+                $incident->save();
+            }
 
             $issue->returned_quantity = (string) round((float) $issue->returned_quantity + $quantity, 2);
 

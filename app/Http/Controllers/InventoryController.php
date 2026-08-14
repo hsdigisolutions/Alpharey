@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Enums\EquipmentAssignmentStatus;
 use App\Enums\EquipmentIssueStatus;
 use App\Enums\EquipmentItemType;
+use App\Enums\EquipmentReturnCondition;
 use App\Enums\StockMovementType;
 use App\Http\Controllers\Admin\Concerns\ResolvesCompanyContext;
 use App\Http\Requests\StoreEquipmentItemRequest;
@@ -162,11 +163,21 @@ class InventoryController extends Controller
     {
         Gate::authorize('inventory.edit');
 
+        $request->mergeIfMissing(['condition' => EquipmentReturnCondition::Good->value]);
+
         $validated = $request->validate([
             'returned_quantity' => ['required', 'numeric', 'min:0.01'],
+            'condition' => ['required', Rule::enum(EquipmentReturnCondition::class)],
+            // A note is required to explain a damage/loss.
+            'notes' => ['nullable', 'string', 'max:1000', 'required_unless:condition,good'],
         ]);
 
-        $this->stock->returnFrom($issue, (float) $validated['returned_quantity']);
+        $this->stock->returnFrom(
+            $issue,
+            (float) $validated['returned_quantity'],
+            EquipmentReturnCondition::from($validated['condition'] ?? 'good'),
+            $validated['notes'] ?? null,
+        );
 
         return back()->with('success', __('ui.inventory.returned'));
     }

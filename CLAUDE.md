@@ -105,6 +105,25 @@ Tests: `InventoryProfileTest` (+2 — missing/valid/expired per category, arnés
 height-only), `InventoryTest` (+1 — item PPE fields + issue expiry saved). **899
 Pest tests / 5234 assertions.**
 
+**Phase E — damage & loss (done, recorded only).** Migration
+`2026_08_13_000010` adds `equipment_incidents` (company · employee · item ·
+issue · date · condition · quantity · notes · created_by), Auditable +
+company-scoped. New `EquipmentReturnCondition` enum (good/damaged/lost). The
+worker-return flow now takes a **condition**: GOOD goes back into the store (a
+Return, as before); DAMAGED/LOST are written off through the ledger — a Return
+then a Damaged movement, so **net available is unchanged and total drops by the
+quantity** (the unit is gone) — and an incident is logged against the worker.
+`StockMovementService::returnFrom($issue, $qty, $condition, $note)` is the single
+writer (incident is not mass-assignable). Per Q4 it is **recorded only** — NO
+auto-expense, NO payroll deduction; the note is required for a damage/loss. A
+serialized unit lost/damaged leaves `total_stock` at 0, not auto-deactivated
+(Q-E). UI: the Return modal gains a condition selector + required note (with a
+"recorded only, no deduction" hint); a **Historial de incidencias** table on the
+Employee Detail Equipamiento tab lists a worker's damage/loss history.
+`EmployeeController::equipmentTab` ships the `incidents` list. Tests:
+`InventoryTest` (+3 — damaged write-off math + incident, good return no incident,
+note required for damage/loss). **902 Pest tests / 5247 assertions.**
+
 ### Measurements + Production Tasks — full deep review (2026-08-13, COMPLETE)
 
 A line-by-line re-review of the whole Measurements/Production subsystem (Phases

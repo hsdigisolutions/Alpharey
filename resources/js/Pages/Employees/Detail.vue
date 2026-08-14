@@ -685,6 +685,40 @@ function destroy() {
                         </table>
                     </div>
                 </VCard>
+
+                <!-- Historial de incidencias — damage / loss recorded (no auto-cost) -->
+                <VCard v-if="equipmentTab.incidents.length" :padded="false">
+                    <div class="border-b border-line px-4 py-3">
+                        <h3 class="text-sm font-semibold"><Bilingual k="inventory.incident_history" inline /></h3>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm">
+                            <thead class="bg-surface-sunken text-[11px] uppercase tracking-wide text-muted">
+                                <tr>
+                                    <th class="px-3 py-2 text-start"><Bilingual k="inventory.date" inline /></th>
+                                    <th class="px-3 py-2 text-start"><Bilingual k="inventory.name" inline /></th>
+                                    <th class="px-3 py-2 text-start"><Bilingual k="inventory.return_condition" inline /></th>
+                                    <th class="px-3 py-2 text-start"><Bilingual k="inventory.notes" inline /></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr v-for="inc in equipmentTab.incidents" :key="inc.id" class="border-b border-line last:border-0">
+                                    <td class="tabular-nums px-3 py-2 text-ink-soft">{{ inc.date }}</td>
+                                    <td class="px-3 py-2 font-medium">
+                                        {{ inc.item ?? '—' }}
+                                        <span v-if="inc.serial" class="tabular-nums text-xs text-muted">· {{ inc.serial }}</span>
+                                    </td>
+                                    <td class="px-3 py-2">
+                                        <VBadge :status="inc.condition === 'lost' ? 'danger' : 'warn'">
+                                            <Bilingual :k="`inventory.cond_${inc.condition}`" inline />
+                                        </VBadge>
+                                    </td>
+                                    <td class="px-3 py-2 text-ink-soft">{{ inc.notes ?? '—' }}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </VCard>
             </div>
 
             <!-- Notas -->

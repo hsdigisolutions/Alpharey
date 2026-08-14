@@ -3,12 +3,14 @@
 use App\Enums\EquipmentAssignmentStatus;
 use App\Enums\EquipmentIssueStatus;
 use App\Enums\EquipmentItemType;
+use App\Enums\EquipmentReturnCondition;
 use App\Enums\StockMovementType;
 use App\Enums\UserRole;
 use App\Models\Company;
 use App\Models\Employee;
 use App\Models\EmployeeEquipmentIssue;
 use App\Models\EquipmentCategory;
+use App\Models\EquipmentIncident;
 use App\Models\EquipmentItem;
 use App\Models\EquipmentProjectAssignment;
 use App\Models\EquipmentStockMovement;
@@ -474,6 +476,55 @@ it('carries the serial onto the worker issue row', function (): void {
 
     $this->get('/inventory')->assertInertia(fn (Assert $page) => $page
         ->where('issues', fn ($rows) => collect($rows)->firstWhere('serial', 'DR-007') !== null));
+});
+
+it('writes off a damaged return: total drops, available unchanged, incident logged', function (): void {
+    $employee = Employee::factory()->create(['company_id' => $this->company->id]);
+    $this->stock->record($this->item, StockMovementType::StockIn, 10);
+    $issue = $this->stock->issueTo($this->item->fresh(), ['employee_id' => $employee->id, 'issued_quantity' => 4]);
+    // Now: total 10, available 6 (4 out with the worker).
+
+    $this->stock->returnFrom($issue, 4, EquipmentReturnCondition::Damaged, 'Dropped on site');
+
+    $item = $this->item->fresh();
+    // The 4 are gone: total 10 → 6; available stays 6 (they never re-entered the store).
+    expect((float) $item->total_stock)->toBe(6.0)
+        ->and((float) $item->available_stock)->toBe(6.0)
+        ->and($issue->fresh()->status)->toBe(EquipmentIssueStatus::Returned);
+
+    $incident = EquipmentIncident::withoutGlobalScopes()->firstOrFail();
+    expect($incident->condition)->toBe(EquipmentReturnCondition::Damaged)
+        ->and((float) $incident->quantity)->toBe(4.0)
+        ->and($incident->employee_id)->toBe($employee->id)
+        ->and($incident->notes)->toBe('Dropped on site');
+});
+
+it('a good return restores the store and logs no incident', function (): void {
+    $employee = Employee::factory()->create(['company_id' => $this->company->id]);
+    $this->stock->record($this->item, StockMovementType::StockIn, 10);
+    $issue = $this->stock->issueTo($this->item->fresh(), ['employee_id' => $employee->id, 'issued_quantity' => 4]);
+
+    $this->stock->returnFrom($issue, 4, EquipmentReturnCondition::Good);
+
+    $item = $this->item->fresh();
+    expect((float) $item->total_stock)->toBe(10.0)
+        ->and((float) $item->available_stock)->toBe(10.0)
+        ->and(EquipmentIncident::withoutGlobalScopes()->count())->toBe(0);
+});
+
+it('requires a note for a damaged or lost return', function (): void {
+    $employee = Employee::factory()->create(['company_id' => $this->company->id]);
+    $this->stock->record($this->item, StockMovementType::StockIn, 5);
+    $issue = $this->stock->issueTo($this->item->fresh(), ['employee_id' => $employee->id, 'issued_quantity' => 1]);
+
+    $this->post("/inventory/issues/{$issue->id}/return", [
+        'returned_quantity' => 1, 'condition' => 'damaged',
+    ])->assertSessionHasErrors('notes');
+
+    // A plain good return needs no note.
+    $this->post("/inventory/issues/{$issue->id}/return", [
+        'returned_quantity' => 1, 'condition' => 'good',
+    ])->assertSessionHasNoErrors();
 });
 
 it('saves the PPE flag + default expiry on an item and the expiry on an issue', function (): void {

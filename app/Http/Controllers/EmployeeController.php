@@ -10,6 +10,7 @@ use App\Models\Attendance;
 use App\Models\Employee;
 use App\Models\EmployeeEquipmentIssue;
 use App\Models\EmployeeWageRate;
+use App\Models\EquipmentIncident;
 use App\Models\Payroll;
 use App\Models\Project;
 use App\Models\UserColumnSetting;
@@ -241,6 +242,21 @@ class EmployeeController extends Controller
             // Estado EPIs — required-PPE compliance for this worker (alerts only).
             'ppe' => app(PpeComplianceService::class)->forEmployee($employee),
             'works_at_height' => $employee->works_at_height,
+            // Historial de incidencias — damage / loss recorded against this worker.
+            'incidents' => EquipmentIncident::query()
+                ->where('employee_id', $employee->id)
+                ->with('item:id,name,serial_number')
+                ->orderByDesc('incident_date')->orderByDesc('id')
+                ->get()
+                ->map(fn (EquipmentIncident $inc): array => [
+                    'id' => $inc->id,
+                    'date' => $inc->incident_date->toDateString(),
+                    'item' => $inc->item?->name,
+                    'serial' => $inc->item?->serial_number,
+                    'condition' => $inc->condition->value,
+                    'quantity' => (float) $inc->quantity,
+                    'notes' => $inc->notes,
+                ])->values()->all(),
         ];
     }
 

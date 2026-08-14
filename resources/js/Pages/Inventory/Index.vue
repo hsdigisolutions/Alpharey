@@ -144,9 +144,10 @@ function submitIssue() {
 
 /* Return */
 const returningIssue = ref(null);
-const returnForm = useForm({ returned_quantity: null });
+const returnForm = useForm({ returned_quantity: null, condition: 'good', notes: '' });
 function openReturn(issue) {
     returningIssue.value = issue;
+    returnForm.reset();
     returnForm.returned_quantity = issue.outstanding;
     returnForm.clearErrors();
 }
@@ -588,6 +589,17 @@ const categoryColumns = [
             <form id="return-form" class="grid gap-4" @submit.prevent="submitReturn">
                 <FormField k="inventory.returned_quantity" :error="returnForm.errors.returned_quantity" required>
                     <VInput v-model="returnForm.returned_quantity" type="number" step="0.01" min="0.01" />
+                </FormField>
+                <FormField k="inventory.return_condition" :error="returnForm.errors.condition">
+                    <VSelect v-model="returnForm.condition">
+                        <option value="good">{{ $t('inventory.cond_good') }}</option>
+                        <option value="damaged">{{ $t('inventory.cond_damaged') }}</option>
+                        <option value="lost">{{ $t('inventory.cond_lost') }}</option>
+                    </VSelect>
+                </FormField>
+                <FormField v-if="returnForm.condition !== 'good'" k="inventory.notes" :error="returnForm.errors.notes" required>
+                    <VTextarea v-model="returnForm.notes" :rows="2" :placeholder="$t('inventory.incident_note_hint')" />
+                    <p class="mt-1 text-xs text-muted">{{ $t('inventory.incident_no_deduction') }}</p>
                 </FormField>
             </form>
             <template #footer>
