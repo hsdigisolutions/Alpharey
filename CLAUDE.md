@@ -4,6 +4,65 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Status: Phase 9 in progress — hardening (2026-08-01)
 
+### Company Documents — smart detail panel + version history (2026-08-14, DONE)
+
+Rebuilt the Companies → Documentos tab from a flat list into a clickable
+**smart slide-over** with per-type fields, repeatable contacts, and version
+history. **926 Pest tests / 5389 assertions.** Six steps, all deployed to
+staging.
+
+**Schema.** Migration `2026_08_14_000001` adds `metadata` (JSON) + a CCC field
+on `companies`; `..._000002` replaces the fixed single-contact columns with a
+`contacts` JSON list (each entry name/role/phone/email/notes). The existing
+`version` + `is_current` + soft-delete columns already implemented version
+history — this only added the descriptive payload (no new version model).
+
+**Registry.** `DocumentTypes::companyFields()` defines the fields for all 16
+company doc types (10 input types: text/number/money/date/select/tel/email/
+textarea/checkbox_group/month_year + read-only ccc). Key design move —
+**column bindings**: a field can bind to the top-level `issue_date`/
+`expiry_date` columns (start/end/valid_until/next_review), so the existing
+90/60/30 alert engine keeps firing off `expiry_date` for free (satisfies the
+TGSS/AEAT "monthly cadence AND valid_until 30-day" rule with no new alert code).
+`companyMetadataKeys()` is the write whitelist; `companyColumnBindings()` maps
+the date fields. CCC renders read-only from the company (never re-typed —
+`documentRow` injects it whenever a type declares a ccc field). Fields are
+OPTIONAL at validation — a compliance record must be saveable half-filled.
+
+**Endpoints.** `Module::Documents` gained an **Edit** action (the
+`documents.edit` gate was already registered; this makes it matrix-grantable —
+fuzz count unchanged at 160). `StoreDocumentRequest` (replaces the old inline
+validation) + `UpdateDocumentMetadataRequest` + `ReplaceDocumentFileRequest`,
+sharing a `ValidatesDocumentMetadata` trait that validates per-type metadata
+against the registry whitelist (unknown keys rejected) and the `contacts.*`
+array. New routes: `POST /documents/{document}/replace` (swap file, keep
+version, delete old file) and `PATCH /documents/{document}/metadata` (edit
+fields only — never touches file/version/dates). `CompanyController` ships
+per-doc `metadata`, `contacts`, `field_defs`, injected `ccc`, and `history[]`
+(prior versions newest-first, from one eager load split into current + history).
+
+**UI.** `DocumentDetailPanel.vue` (a `VSlideOver`): type name + traffic-light
+status header, current-version meta (uploaded at/by, file), read-only
+type-specific fields, a **repeatable points-of-contact** section (every type;
+add/remove contacts), Download / Edit fields / New version / Replace actions,
+and a collapsed **Versiones anteriores (N)** list with per-version download
+(never deletable). `DocumentFieldForm.vue` renders the registry fields
+dynamically (dates read-only when editing metadata, editable on a new version /
+first upload). The first-upload + new-version modal now uses the same dynamic
+form, so metadata + dates + contacts are captured at upload. CCC is a
+company-level field on the Companies Información tab.
+
+**Two bugs caught in the live review + fixed:** (1) a metadata edit on a doc
+with no prior metadata silently saved nothing — the API ships empty metadata as
+a JS `[]` (array) and string keys set on an array never serialize; the panel
+now coerces to a plain object. (2) editing a document bounced the company panel
+back to the Información tab — the watch is now keyed on `selectedId`, not the
+recomputed `selected` object. Tests: `CompanyDocumentDetailTest` (15 — metadata
+save/whitelist, checkbox_group, invalid option/email, multi-contact + empty-row
+drop, history order + version-by-id download, first-upload capture, ccc
+injection, replace-keeps-version, metadata-edit immutability, empty-doc fill
+regression, cross-company 404).
+
 ### Salary × Subcontractor integration review (2026-08-13, COMPLETE — 0 bugs)
 
 Full cross-module review of the two finished modules together

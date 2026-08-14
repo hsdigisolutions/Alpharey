@@ -145,6 +145,42 @@ it('keeps previous versions in the history array, newest first', function (): vo
     expect(Document::query()->where('type_key', 'poliza_rc')->count())->toBe(2);
 });
 
+it('captures metadata, dates and contacts on the very first upload', function (): void {
+    $company = Company::factory()->create();
+
+    $this->actingAs($this->sa);
+    uploadCompanyDoc($company, 'poliza_rc', [
+        'issue_date' => '2026-02-01',
+        'expiry_date' => '2027-01-31',
+        'metadata' => ['policy_number' => 'FU-1', 'insurer' => 'AXA'],
+        'contacts' => [['name' => 'Ana', 'role' => 'Gestora']],
+    ])->assertRedirect()->assertSessionHasNoErrors();
+
+    $doc = Document::query()->where('type_key', 'poliza_rc')->firstOrFail();
+
+    expect($doc->metadata['policy_number'])->toBe('FU-1')
+        ->and($doc->issue_date?->toDateString())->toBe('2026-02-01')
+        ->and($doc->expiry_date?->toDateString())->toBe('2027-01-31')
+        ->and($doc->contacts[0]['name'])->toBe('Ana');
+});
+
+it('downloads a previous version by its own id', function (): void {
+    Storage::fake('local');
+    $company = Company::factory()->create();
+
+    $this->actingAs($this->sa);
+    uploadCompanyDoc($company, 'rea', ['file' => UploadedFile::fake()->create('v1.pdf', 20, 'application/pdf')])
+        ->assertSessionHasNoErrors();
+    $v1 = Document::query()->where('type_key', 'rea')->firstOrFail();
+
+    uploadCompanyDoc($company, 'rea', ['file' => UploadedFile::fake()->create('v2.pdf', 20, 'application/pdf')])
+        ->assertSessionHasNoErrors();
+
+    // v1 is now history (is_current false) but still downloadable by id.
+    expect($v1->refresh()->is_current)->toBeFalse();
+    $this->get("/documents/{$v1->id}/download")->assertOk();
+});
+
 it('injects the company CCC read-only into a document that declares a ccc field', function (): void {
     $company = Company::factory()->create(['ccc' => '28/99999999/11']);
 
