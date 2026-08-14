@@ -152,7 +152,7 @@ class ScanDocuments extends Command
             $this->notifyCompanyAdmins($document->company_id, [
                 'kind' => $daysLeft === 0 ? 'expired' : 'expiring',
                 'type' => $daysLeft === 0 ? 'document_expired' : 'document_expiry',
-                'url' => '/documents',
+                'url' => '/compliance',
                 'title_es' => $daysLeft === 0
                     ? "Documento vencido hoy: {$label}"
                     : "Documento vence en {$daysLeft} días: {$label}",
@@ -212,7 +212,7 @@ class ScanDocuments extends Command
                 $this->notifyCompanyAdmins($company->id, [
                     'kind' => $kind,
                     'type' => $kind === 'monthly_overdue' ? 'document_expired' : 'document_expiry',
-                    'url' => '/documents',
+                    'url' => '/compliance',
                     'title_es' => match ($kind) {
                         'monthly_overdue' => "Documento mensual NO subido el mes pasado: {$typeKey}",
                         'monthly_urgent' => "Urgente: documento mensual pendiente (quedan 2 días): {$typeKey}",
@@ -241,7 +241,7 @@ class ScanDocuments extends Command
                 ->each(fn (User $admin) => $admin->notify(new DocumentAlertNotification([
                     'kind' => 'overdue_summary',
                     'type' => 'document_expired',
-                    'url' => '/documents',
+                    'url' => '/compliance',
                     'title_es' => 'Resumen de documentos mensuales vencidos: '.$summary,
                     'title_en' => 'Overdue monthly documents summary: '.$summary,
                     'entity' => null,

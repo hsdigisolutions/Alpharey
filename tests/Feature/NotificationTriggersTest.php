@@ -26,13 +26,22 @@ use Illuminate\Support\Facades\Route;
 
 /**
  * A notification whose `url` points at a route that does not exist sends the
- * recipient to a 404 (this shipped once — the call-follow-up alert linked to
- * /call-panel, but the route is /calls). Guard every hard-coded scan-alert URL.
+ * recipient to a 404. This shipped twice — the call-follow-up alert linked to
+ * /call-panel (route is /calls), and the document alerts linked to /documents
+ * (there is no index; it is /compliance). Guard EVERY hard-coded notification
+ * url across the whole app, not just one command.
  */
-it('points every scan-alert notification url at a real GET route', function (): void {
-    $source = (string) file_get_contents(base_path('app/Console/Commands/ScanAlerts.php'));
-    preg_match_all("/'url' => '([^']+)'/", $source, $matches);
-    $urls = array_values(array_unique($matches[1]));
+it('points every notification url at a real GET route', function (): void {
+    $urls = [];
+    $it = new RecursiveIteratorIterator(new RecursiveDirectoryIterator(base_path('app'), FilesystemIterator::SKIP_DOTS));
+    foreach ($it as $file) {
+        if ($file->getExtension() !== 'php') {
+            continue;
+        }
+        preg_match_all("/'url' => '([^']+)'/", (string) file_get_contents($file->getPathname()), $m);
+        $urls = array_merge($urls, $m[1]);
+    }
+    $urls = array_values(array_unique($urls));
 
     expect($urls)->not->toBeEmpty();
 
@@ -40,7 +49,9 @@ it('points every scan-alert notification url at a real GET route', function (): 
         ->map(fn ($r) => $r->uri())->all();
 
     foreach ($urls as $url) {
-        expect(in_array(ltrim($url, '/'), $getRoutes, true))
+        // Drop any query string — the route match is on the path only.
+        $path = ltrim(explode('?', $url)[0], '/');
+        expect(in_array($path, $getRoutes, true))
             ->toBeTrue("notification url {$url} must resolve to a registered GET route");
     }
 });
