@@ -480,6 +480,11 @@ const dotStatus = { red: 'danger', amber: 'warn', green: 'ok' };
                                 </template>
                             </div>
 
+                            <!-- Inline player: stream the note from the gated route -->
+                            <div v-if="c.has_voice_note && !(renaming?.callId === c.id && renaming?.type === 'voice')" class="mt-1.5 ps-6">
+                                <audio :src="`/calls/${c.id}/download?type=voice`" controls preload="none" class="h-9 w-full"></audio>
+                            </div>
+
                             <!-- File attachment in this call entry -->
                             <div v-if="c.has_attachment" class="mt-2 flex items-center gap-2">
                                 <AppIcon name="file" class="h-4 w-4 shrink-0 text-ink-soft" />

@@ -59,6 +59,29 @@ it('sends a critical alert on the expiry day itself', function (): void {
     });
 });
 
+it('alerts once for a document that already expired on a missed day', function (): void {
+    // Expired five days ago, never notified — the old today..today+90 bound
+    // silently skipped this. It must now fire an expired alert.
+    $document = scanDoc($this->employee, ['expiry_date' => now()->subDays(5)->toDateString()]);
+
+    $this->artisan('verto:scan-documents');
+
+    Notification::assertSentTo($this->companyAdmin, function (DocumentAlertNotification $notification): bool {
+        return $notification->toDatabase($this->companyAdmin)['kind'] === 'expired';
+    });
+
+    expect($document->fresh()->expiry_notified_at)->not->toBeNull();
+});
+
+it('does not re-alert an already-notified expired document', function (): void {
+    $document = scanDoc($this->employee, ['expiry_date' => now()->subDays(5)->toDateString()]);
+    $document->forceFill(['expiry_notified_at' => now()->subDay()])->saveQuietly();
+
+    $this->artisan('verto:scan-documents');
+
+    Notification::assertNothingSent();
+});
+
 it('never alerts on an exempt document', function (): void {
     Carbon::setTestNow(now()->setDay(15));
     scanDoc($this->employee, ['expiry_date' => now()->addDays(30)->toDateString(), 'is_exempt' => true]);

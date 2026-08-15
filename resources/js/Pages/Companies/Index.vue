@@ -125,7 +125,8 @@ const fieldRows = [
         </div>
 
         <!-- Detail slide-over: Información + Estadísticas -->
-        <VSlideOver :open="selected !== null" title-key="companies.title" @close="selectedId = null">
+        <VSlideOver :open="selected !== null" title-key="companies.title"
+            width="md:max-w-4xl lg:max-w-6xl" @close="selectedId = null">
             <template v-if="selected">
                 <VTabs v-model="tab" :tabs="[
                     { key: 'info', labelKey: 'companies.tab_info' },

@@ -8,6 +8,7 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
 import { ensureCompanySelected } from '@/composables/useCompanyGate';
 import AppLayout from '@/Layouts/AppLayout.vue';
+import VehicleSessionPanel from '@/Components/Vehicles/VehicleSessionPanel.vue';
 import FormField from '@/Components/ui/FormField.vue';
 import VButton from '@/Components/ui/VButton.vue';
 import VDateInput from '@/Components/ui/VDateInput.vue';
@@ -90,6 +91,9 @@ const filters = reactive({
 function apply(extra = {}) {
     router.get('/vehicles', { ...filters, ...extra }, { preserveScroll: true, preserveState: true });
 }
+
+// Recent-activity row → the same luxury session detail panel as Show.vue.
+const activeSession = ref(null);
 
 const showModal = ref(false);
 const blank = {
@@ -176,47 +180,6 @@ const columns = [
             </div>
         </section>
 
-        <!-- ══════════ Recent Returns ══════════ -->
-        <section v-if="recentSessions.length" class="mb-8">
-            <div class="mb-3 flex items-center gap-2">
-                <AppIcon name="vehicles" class="h-4 w-4 text-muted" />
-                <Bilingual k="vehicles.recent_sessions" class="text-[13px] font-semibold text-ink-soft" />
-            </div>
-
-            <div class="overflow-hidden rounded-xl border border-line bg-surface-raised">
-                <table class="w-full text-sm">
-                    <thead>
-                        <tr class="border-b border-line bg-surface-sunken text-[11px] font-semibold uppercase tracking-wide text-muted">
-                            <th class="px-4 py-2.5 text-start">{{ $t('employees.title') }}</th>
-                            <th class="px-4 py-2.5 text-start">{{ $t('vehicles.plate_number') }}</th>
-                            <th class="tabular-nums px-4 py-2.5 text-start">{{ $t('vehicles.session_taken_at') }}</th>
-                            <th class="tabular-nums px-4 py-2.5 text-start">{{ $t('vehicles.session_returned_at') }}</th>
-                            <th class="tabular-nums px-4 py-2.5 text-end">{{ $t('vehicles.session_duration') }}</th>
-                            <th class="tabular-nums px-4 py-2.5 text-end">{{ $t('vehicles.session_km_driven') }}</th>
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y divide-line">
-                        <tr v-for="s in recentSessions" :key="s.id"
-                            class="cursor-pointer transition hover:bg-surface-hover"
-                            @click="router.get(`/vehicles/${s.vehicle_id}`)">
-                            <td class="px-4 py-2.5 font-medium">{{ s.employee ?? '—' }}</td>
-                            <td class="px-4 py-2.5">
-                                <span class="rounded-md bg-surface-sunken px-1.5 py-0.5 font-mono text-[12px] font-semibold">
-                                    {{ s.plate_number }}
-                                </span>
-                            </td>
-                            <td class="tabular-nums px-4 py-2.5 text-ink-soft">{{ dateTime(s.taken_at) }}</td>
-                            <td class="tabular-nums px-4 py-2.5 text-ink-soft">{{ dateTime(s.returned_at) }}</td>
-                            <td class="tabular-nums px-4 py-2.5 text-end font-medium text-ink">
-                                {{ sessionDuration(s.taken_at, s.returned_at) }}
-                            </td>
-                            <td class="tabular-nums px-4 py-2.5 text-end font-medium">{{ s.km_driven != null ? s.km_driven + ' km' : '—' }}</td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-        </section>
-
         <!-- ══════════ Fleet list ══════════ -->
         <div class="flex flex-wrap items-end gap-2 pb-3">
             <VSearchInput v-model="filters.search" class="w-full sm:w-72" :placeholder="$t('vehicles.search')"
@@ -253,6 +216,49 @@ const columns = [
         <VPagination :page="vehicles.current_page" :pages="vehicles.last_page" :per-page="filters.per_page"
             :total="vehicles.total" @update:page="(p) => apply({ page: p })"
             @update:per-page="(pp) => { filters.per_page = pp; apply(); }" />
+
+        <!-- ══════════ Recent activity ══════════ -->
+        <section v-if="recentSessions.length" class="mt-8">
+            <div class="mb-3 flex items-center gap-2">
+                <AppIcon name="vehicles" class="h-4 w-4 text-muted" />
+                <Bilingual k="vehicles.recent_sessions" class="text-[13px] font-semibold text-ink-soft" />
+                <span class="text-[12px] font-medium text-muted">({{ recentSessions.length }})</span>
+            </div>
+
+            <!-- Cap at ~10 rows, then scroll inside the card (sticky header). -->
+            <div class="max-h-[30rem] overflow-y-auto rounded-xl border border-line bg-surface-raised">
+                <table class="w-full text-sm">
+                    <thead class="sticky top-0 z-10">
+                        <tr class="border-b border-line bg-surface-sunken text-[11px] font-semibold uppercase tracking-wide text-muted">
+                            <th class="px-4 py-2.5 text-start">{{ $t('employees.title') }}</th>
+                            <th class="px-4 py-2.5 text-start">{{ $t('vehicles.plate_number') }}</th>
+                            <th class="tabular-nums px-4 py-2.5 text-start">{{ $t('vehicles.session_taken_at') }}</th>
+                            <th class="tabular-nums px-4 py-2.5 text-start">{{ $t('vehicles.session_returned_at') }}</th>
+                            <th class="tabular-nums px-4 py-2.5 text-end">{{ $t('vehicles.session_duration') }}</th>
+                            <th class="tabular-nums px-4 py-2.5 text-end">{{ $t('vehicles.session_km_driven') }}</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-line">
+                        <tr v-for="s in recentSessions" :key="s.id"
+                            class="cursor-pointer transition hover:bg-surface-hover"
+                            @click="activeSession = s">
+                            <td class="px-4 py-2.5 font-medium">{{ s.employee ?? '—' }}</td>
+                            <td class="px-4 py-2.5">
+                                <span class="rounded-md bg-surface-sunken px-1.5 py-0.5 font-mono text-[12px] font-semibold">
+                                    {{ s.vehicle_name }}
+                                </span>
+                            </td>
+                            <td class="tabular-nums px-4 py-2.5 text-ink-soft">{{ dateTime(s.taken_at) }}</td>
+                            <td class="tabular-nums px-4 py-2.5 text-ink-soft">{{ dateTime(s.returned_at) }}</td>
+                            <td class="tabular-nums px-4 py-2.5 text-end font-medium text-ink">
+                                {{ sessionDuration(s.taken_at, s.returned_at) }}
+                            </td>
+                            <td class="tabular-nums px-4 py-2.5 text-end font-medium">{{ s.km_driven != null ? s.km_driven + ' km' : '—' }}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
 
         <VModal :open="showModal" title-key="vehicles.new" size="lg" @close="showModal = false">
             <form id="vehicle-form" class="grid gap-4 sm:grid-cols-2" @submit.prevent="submit">
@@ -318,5 +324,7 @@ const columns = [
                 </VButton>
             </template>
         </VModal>
+
+        <VehicleSessionPanel :session="activeSession" @close="activeSession = null" />
     </AppLayout>
 </template>

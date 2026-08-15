@@ -26,6 +26,7 @@ use App\Services\Vehicles\VehicleService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
@@ -82,26 +83,32 @@ class VehicleController extends Controller
             ])
             ->values();
 
-        $recentSessions = VehicleSession::query()
+        $recent = VehicleSession::query()
             ->whereIn('vehicle_id', $vehicleIds)
             ->whereNotNull('returned_at')
             ->with(['employee:id,full_name', 'vehicle:id,plate_number,brand,model'])
             ->orderBy('returned_at', 'desc')
             ->limit(30)
-            ->get()
-            ->map(fn (VehicleSession $s): array => [
-                'id' => $s->id,
-                'employee' => $s->employee?->full_name,
-                'vehicle_id' => $s->vehicle_id,
-                'plate_number' => $s->vehicle?->plate_number,
-                'brand' => $s->vehicle?->brand,
-                'model' => $s->vehicle?->model,
-                'taken_at' => $s->taken_at->toIso8601ZuluString(),
-                'returned_at' => $s->returned_at?->toIso8601ZuluString(),
-                'km_driven' => $s->km_driven,
-                'return_notes' => $s->return_notes,
-            ])
-            ->values();
+            ->get();
+
+        // Prefetch fuel (per employee) + fines (per vehicle) once, so every recent
+        // row can open the same luxury detail panel without an N+1.
+        $fuelByEmp = WorkerExpense::query()->withoutGlobalScope(CompanyScope::class)
+            ->whereIn('employee_id', $recent->pluck('employee_id')->unique()->filter()->all())
+            ->where('category', 'fuel')
+            ->get(['id', 'employee_id', 'date', 'amount', 'receipt_path', 'description'])
+            ->groupBy('employee_id');
+        $finesByVeh = VehicleFine::query()->withoutGlobalScope(CompanyScope::class)
+            ->whereIn('vehicle_id', $recent->pluck('vehicle_id')->unique()->all())
+            ->get(['id', 'vehicle_id', 'fine_date', 'amount', 'description', 'paid'])
+            ->groupBy('vehicle_id');
+
+        $recentSessions = $recent->map(fn (VehicleSession $s): array => $this->enrichSession(
+            $s,
+            trim("{$s->vehicle?->plate_number} · {$s->vehicle?->brand} {$s->vehicle?->model}"),
+            $fuelByEmp[$s->employee_id] ?? collect(),
+            $finesByVeh[$s->vehicle_id] ?? collect(),
+        ))->values();
 
         return Inertia::render('Vehicles/Index', [
             'vehicles' => $vehicles,
@@ -226,57 +233,12 @@ class VehicleController extends Controller
                 'employee' => $r->employee?->full_name,
                 'notes' => $r->notes,
             ])->values(),
-            'sessions' => $vehicle->sessions->map(function ($s) use ($vehicle, $fuelByEmployee): array {
-                $from = $s->taken_at->toDateString();
-                $to = ($s->returned_at ?? now())->toDateString();
-
-                // Worker fuel added during the session window (€ + receipt only).
-                $fuel = ($fuelByEmployee[$s->employee_id] ?? collect())
-                    ->filter(fn ($e) => $e->date->toDateString() >= $from && $e->date->toDateString() <= $to)
-                    ->map(fn ($e): array => [
-                        'amount' => (float) $e->amount,
-                        'description' => $e->description,
-                        'date' => $e->date->toDateString(),
-                        'receipt_url' => $e->receipt_path !== null ? route('worker-expenses.receipt', $e->id) : null,
-                    ])->values()->all();
-
-                // Fines recorded against this vehicle within the session window.
-                $fines = $vehicle->fines
-                    ->filter(fn ($f) => $f->fine_date->toDateString() >= $from && $f->fine_date->toDateString() <= $to)
-                    ->map(fn ($f): array => [
-                        'amount' => (float) $f->amount,
-                        'description' => $f->description,
-                        'paid' => (bool) $f->paid,
-                        'fine_date' => $f->fine_date->toDateString(),
-                    ])->values()->all();
-
-                $mediaUrl = fn (string $kind, string $which, ?string $path): ?string => $path !== null
-                    ? route("vehicles.sessions.{$kind}", ['vehicle' => $vehicle->id, 'session' => $s->id, 'which' => $which])
-                    : null;
-
-                return [
-                    'id' => $s->id,
-                    'employee' => $s->employee?->full_name,
-                    'employee_id' => $s->employee_id,
-                    'vehicle_name' => trim("{$vehicle->plate_number} · {$vehicle->brand} {$vehicle->model}"),
-                    'taken_at' => $s->taken_at->toDateTimeString(),
-                    'returned_at' => $s->returned_at?->toDateTimeString(),
-                    'duration_minutes' => $s->returned_at !== null ? (int) $s->taken_at->diffInMinutes($s->returned_at) : null,
-                    'starting_mileage' => $s->starting_mileage,
-                    'ending_mileage' => $s->ending_mileage,
-                    'km_driven' => $s->km_driven,
-                    'return_notes' => $s->return_notes,
-                    'open' => $s->isOpen(),
-                    'take_photo_url' => $mediaUrl('photo', 'take', $s->take_photo_path),
-                    'return_photo_url' => $mediaUrl('photo', 'return', $s->return_photo_path),
-                    'take_voice_url' => $mediaUrl('voice', 'take', $s->take_voice_note_path),
-                    'return_voice_url' => $mediaUrl('voice', 'return', $s->return_voice_note_path),
-                    'take_voice_duration' => $s->take_voice_duration,
-                    'return_voice_duration' => $s->return_voice_duration,
-                    'fuel' => $fuel,
-                    'fines' => $fines,
-                ];
-            })->values(),
+            'sessions' => $vehicle->sessions->map(fn (VehicleSession $s): array => $this->enrichSession(
+                $s,
+                trim("{$vehicle->plate_number} · {$vehicle->brand} {$vehicle->model}"),
+                $fuelByEmployee[$s->employee_id] ?? collect(),
+                $vehicle->fines,
+            ))->values(),
             'employees' => Employee::query()->orderBy('full_name')->get(['id', 'full_name']),
             'can' => [
                 'edit' => Gate::allows('vehicles.edit'),
@@ -407,6 +369,68 @@ class VehicleController extends Controller
         $this->vehicles->deleteFine($fine);
 
         return back()->with('success', __('ui.vehicles.fine_deleted'));
+    }
+
+    /**
+     * The full luxury-card payload for one worker session: media download URLs,
+     * computed duration, worker fuel (€ + receipt) added in the window, and any
+     * fines recorded on the vehicle in the window. Reused by the vehicle detail
+     * sessions tab AND the Recent-activity list on the fleet index.
+     *
+     * @param  Collection<int, WorkerExpense>  $fuelForEmployee
+     * @param  Collection<int, VehicleFine>  $finesForVehicle
+     * @return array<string, mixed>
+     */
+    private function enrichSession(VehicleSession $s, string $vehicleName, Collection $fuelForEmployee, Collection $finesForVehicle): array
+    {
+        $from = $s->taken_at->toDateString();
+        $to = ($s->returned_at ?? now())->toDateString();
+
+        $fuel = $fuelForEmployee
+            ->filter(fn ($e) => $e->date->toDateString() >= $from && $e->date->toDateString() <= $to)
+            ->map(fn ($e): array => [
+                'amount' => (float) $e->amount,
+                'description' => $e->description,
+                'date' => $e->date->toDateString(),
+                'receipt_url' => $e->receipt_path !== null ? route('worker-expenses.receipt', $e->id) : null,
+            ])->values()->all();
+
+        $fines = $finesForVehicle
+            ->filter(fn ($f) => $f->fine_date->toDateString() >= $from && $f->fine_date->toDateString() <= $to)
+            ->map(fn ($f): array => [
+                'amount' => (float) $f->amount,
+                'description' => $f->description,
+                'paid' => (bool) $f->paid,
+                'fine_date' => $f->fine_date->toDateString(),
+            ])->values()->all();
+
+        $mediaUrl = fn (string $kind, string $which, ?string $path): ?string => $path !== null
+            ? route("vehicles.sessions.{$kind}", ['vehicle' => $s->vehicle_id, 'session' => $s->id, 'which' => $which])
+            : null;
+
+        return [
+            'id' => $s->id,
+            'employee' => $s->employee?->full_name,
+            'employee_id' => $s->employee_id,
+            'vehicle_id' => $s->vehicle_id,
+            'vehicle_name' => $vehicleName,
+            'taken_at' => $s->taken_at->toDateTimeString(),
+            'returned_at' => $s->returned_at?->toDateTimeString(),
+            'duration_minutes' => $s->returned_at !== null ? (int) $s->taken_at->diffInMinutes($s->returned_at) : null,
+            'starting_mileage' => $s->starting_mileage,
+            'ending_mileage' => $s->ending_mileage,
+            'km_driven' => $s->km_driven,
+            'return_notes' => $s->return_notes,
+            'open' => $s->isOpen(),
+            'take_photo_url' => $mediaUrl('photo', 'take', $s->take_photo_path),
+            'return_photo_url' => $mediaUrl('photo', 'return', $s->return_photo_path),
+            'take_voice_url' => $mediaUrl('voice', 'take', $s->take_voice_note_path),
+            'return_voice_url' => $mediaUrl('voice', 'return', $s->return_voice_note_path),
+            'take_voice_duration' => $s->take_voice_duration,
+            'return_voice_duration' => $s->return_voice_duration,
+            'fuel' => $fuel,
+            'fines' => $fines,
+        ];
     }
 
     /** A worker session's condition photo (which = take|return). */

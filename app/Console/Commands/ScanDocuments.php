@@ -124,46 +124,82 @@ class ScanDocuments extends Command
         $today = now()->startOfDay();
         $sent = 0;
 
-        // today..today+maxWarn already includes the expiry day itself
+        // Two windows in one sweep:
+        //  1. UPCOMING — expiry between today and today+maxWarn (the 90/60/30
+        //     advance warnings; the expiry day itself lives in the expired
+        //     branch below).
+        //  2. EXPIRED — expiry_date <= today AND never alerted. This catches a
+        //     document that slipped past its date on a day the scan did not run
+        //     (or was uploaded after the 07:00 sweep), which the old
+        //     today..today+maxWarn bound silently excluded.
         $documents = Document::query()
             ->withoutGlobalScopes()
             ->where('is_current', true)
             ->where('is_exempt', false)
             ->whereNotNull('expiry_date')
-            // Date-string bounds so a same-day (expiry today) row is included
-            // under both MySQL and SQLite comparison semantics
-            ->whereBetween('expiry_date', [
-                $today->toDateString(),
-                $today->copy()->addDays(max($warnDays))->toDateString(),
-            ])
+            ->where(function ($q) use ($today, $warnDays): void {
+                // Date-string bounds so a same-day row is included under both
+                // MySQL and SQLite comparison semantics.
+                $q->whereBetween('expiry_date', [
+                    $today->copy()->addDay()->toDateString(),
+                    $today->copy()->addDays(max($warnDays))->toDateString(),
+                ])->orWhere(function ($q2) use ($today): void {
+                    $q2->where('expiry_date', '<=', $today->toDateString())
+                        ->whereNull('expiry_notified_at');
+                });
+            })
             ->get();
 
         foreach ($documents as $document) {
             $daysLeft = (int) $today->diffInDays($document->expiry_date?->startOfDay(), false);
+            $label = $document->name ?? $document->type_key;
 
-            $isMilestone = in_array($daysLeft, $warnDays, true) || $daysLeft === 0;
+            if ($daysLeft > 0) {
+                // Upcoming: fire only on an exact advance-warning milestone.
+                if (! in_array($daysLeft, $warnDays, true)) {
+                    continue;
+                }
 
-            if (! $isMilestone) {
+                $this->notifyCompanyAdmins($document->company_id, [
+                    'kind' => 'expiring',
+                    'type' => 'document_expiry',
+                    'url' => '/documents',
+                    'title_es' => "Documento vence en {$daysLeft} días: {$label}",
+                    'title_en' => "Document expires in {$daysLeft} days: {$label}",
+                    'entity' => $label,
+                    'company' => $document->company?->name,
+                    'days' => $daysLeft,
+                    'document_id' => $document->id,
+                ]);
+
+                $sent++;
+
                 continue;
             }
 
-            $label = $document->name ?? $document->type_key;
+            // Expired (today or already past): alert ONCE, then stamp the guard
+            // so the daily run does not re-fire. forceFill + saveQuietly: the
+            // column is server-set (never fillable) and this is not an audited
+            // business change.
+            $overdueBy = abs($daysLeft);
 
             $this->notifyCompanyAdmins($document->company_id, [
-                'kind' => $daysLeft === 0 ? 'expired' : 'expiring',
-                'type' => $daysLeft === 0 ? 'document_expired' : 'document_expiry',
-                'url' => '/compliance',
-                'title_es' => $daysLeft === 0
+                'kind' => 'expired',
+                'type' => 'document_expired',
+                'url' => '/documents',
+                'title_es' => $overdueBy === 0
                     ? "Documento vencido hoy: {$label}"
-                    : "Documento vence en {$daysLeft} días: {$label}",
-                'title_en' => $daysLeft === 0
-                    ? "Document expires today: {$label}"
-                    : "Document expires in {$daysLeft} days: {$label}",
+                    : "Documento vencido hace {$overdueBy} días: {$label}",
+                'title_en' => $overdueBy === 0
+                    ? "Document expired today: {$label}"
+                    : "Document expired {$overdueBy} days ago: {$label}",
                 'entity' => $label,
                 'company' => $document->company?->name,
                 'days' => $daysLeft,
                 'document_id' => $document->id,
             ]);
+
+            $document->forceFill(['expiry_notified_at' => now()])->saveQuietly();
 
             $sent++;
         }
@@ -212,7 +248,7 @@ class ScanDocuments extends Command
                 $this->notifyCompanyAdmins($company->id, [
                     'kind' => $kind,
                     'type' => $kind === 'monthly_overdue' ? 'document_expired' : 'document_expiry',
-                    'url' => '/compliance',
+                    'url' => '/documents',
                     'title_es' => match ($kind) {
                         'monthly_overdue' => "Documento mensual NO subido el mes pasado: {$typeKey}",
                         'monthly_urgent' => "Urgente: documento mensual pendiente (quedan 2 días): {$typeKey}",
@@ -241,7 +277,7 @@ class ScanDocuments extends Command
                 ->each(fn (User $admin) => $admin->notify(new DocumentAlertNotification([
                     'kind' => 'overdue_summary',
                     'type' => 'document_expired',
-                    'url' => '/compliance',
+                    'url' => '/documents',
                     'title_es' => 'Resumen de documentos mensuales vencidos: '.$summary,
                     'title_en' => 'Overdue monthly documents summary: '.$summary,
                     'entity' => null,

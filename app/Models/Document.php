@@ -28,6 +28,7 @@ use Illuminate\Support\Carbon;
  * @property bool $is_current
  * @property bool|null $has_flag
  * @property bool $is_exempt
+ * @property Carbon|null $expiry_notified_at
  * @property Carbon|null $issue_date
  * @property Carbon|null $expiry_date
  * @property array<string, mixed>|null $metadata
@@ -61,6 +62,7 @@ class Document extends Model
             'issue_date' => 'date:Y-m-d',
             'expiry_date' => 'date:Y-m-d',
             'is_current' => 'boolean',
+            'expiry_notified_at' => 'datetime',
             'size' => 'integer',
             'version' => 'integer',
             'metadata' => 'array',
