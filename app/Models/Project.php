@@ -24,7 +24,6 @@ use Illuminate\Support\Carbon;
  * @property int $company_id
  * @property string $code
  * @property string $name
- * @property string|null $address
  * @property ProjectStatus $status
  * @property ProjectPriority $priority
  * @property BillingType|null $billing_type

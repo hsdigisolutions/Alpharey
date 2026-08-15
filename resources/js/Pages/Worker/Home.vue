@@ -522,8 +522,6 @@ const noteTextForm = useForm({ attendance_id: null, text_note: '', duration_seco
                         </option>
                     </VSelect>
 
-                    <p v-if="selectedProject?.address" class="mt-1 text-sm text-ink-soft">{{ selectedProject.address }}</p>
-
                     <div class="mt-2 flex items-center gap-2">
                         <span v-if="selectedDistance != null" class="text-sm"
                             :class="distanceWarn ? 'text-status-warn' : 'text-status-ok'">

@@ -396,7 +396,7 @@ class WorkerAttendanceService
             ->whereIn('id', $ids)
             ->where('status', ProjectStatus::Active)
             ->orderBy('name')
-            ->get(['id', 'name', 'address', 'latitude', 'longitude', 'geofence_radius']);
+            ->get(['id', 'name', 'latitude', 'longitude', 'geofence_radius']);
     }
 
     /**

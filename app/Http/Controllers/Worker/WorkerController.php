@@ -100,7 +100,6 @@ class WorkerController extends Controller
             ->map(fn (Project $p): array => [
                 'id' => $p->id,
                 'name' => $p->name,
-                'address' => $p->address,
                 'latitude' => $p->latitude !== null ? (float) $p->latitude : null,
                 'longitude' => $p->longitude !== null ? (float) $p->longitude : null,
                 'geofence_radius' => $p->geofence_radius,

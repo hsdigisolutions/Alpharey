@@ -16,7 +16,7 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('projects', function (Blueprint $table): void {
-            $table->decimal('latitude', 10, 7)->nullable()->after('address');
+            $table->decimal('latitude', 10, 7)->nullable()->after('description');
             $table->decimal('longitude', 10, 7)->nullable()->after('latitude');
             $table->unsignedInteger('geofence_radius')->default(500)->after('longitude');
         });
