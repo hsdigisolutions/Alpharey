@@ -56,6 +56,9 @@ class TaskProgressController extends Controller
     public function store(StoreTaskProgressRequest $request, Project $project, ProductionTask $task): RedirectResponse
     {
         abort_unless($task->project_id === $project->id, 404);
+        // Production is logged on sub-tasks, never on a parent — a parent's
+        // completed rolls up from its children (UI hides the button; enforce it).
+        abort_if($task->children()->exists(), 422, 'Log production on the sub-tasks, not the parent task.');
 
         $this->service->logWork($task, $request->validated(), $request->file('photo'));
 

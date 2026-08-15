@@ -2491,6 +2491,7 @@ return [
         'deduct_from_salary' => 'Descontar de la nómina del trabajador',
         'approved_locked' => 'Gasto aprobado — bloqueado (retira la aprobación para editar).',
         'subcontractor_expense_locked' => 'Gasto automático de subcontrata — no se aprueba: el pago ya cuenta en la rentabilidad / Automatic subcontractor expense — cannot be approved: the payment already counts in the P&L',
+        'auto_fuel_locked' => 'Gasto automático de combustible — no se aprueba: ya se reembolsa al trabajador en nómina / Automatic fuel expense — cannot be approved: it is already reimbursed to the worker in payroll',
     ],
 
     'commissions' => [

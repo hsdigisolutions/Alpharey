@@ -5,6 +5,7 @@ use App\Models\Company;
 use App\Models\Employee;
 use App\Models\ProductionTask;
 use App\Models\Project;
+use App\Models\TaskProgress;
 use App\Models\User;
 use App\Services\ProductionTasks\TaskProgressService;
 
@@ -94,6 +95,36 @@ it('deletes all sub-tasks when the parent is deleted', function (): void {
 
     expect(ProductionTask::withoutGlobalScopes()->where('parent_task_id', $this->parent->id)->count())->toBe(0)
         ->and(ProductionTask::withoutGlobalScopes()->find($this->parent->id))->toBeNull();
+});
+
+it('refuses to make a task that already has logged production into a parent', function (): void {
+    TaskProgress::factory()->create([
+        'company_id' => $this->companyA->id, 'production_task_id' => $this->parent->id,
+        'employee_id' => Employee::factory()->create(['company_id' => $this->companyA->id])->id,
+        'date' => now()->subDay()->toDateString(), 'quantity' => 40,
+    ]);
+
+    $this->actingAs($this->admin)->post("/projects/{$this->project->id}/tasks", [
+        'parent_task_id' => $this->parent->id,
+        'tasks' => [subtaskPayload()],
+    ])->assertStatus(422);
+
+    expect(ProductionTask::withoutGlobalScopes()->where('name', 'Sub-tarea')->exists())->toBeFalse();
+});
+
+it('refuses to log production directly on a parent that has children', function (): void {
+    ProductionTask::factory()->create([
+        'company_id' => $this->companyA->id, 'project_id' => $this->project->id, 'parent_task_id' => $this->parent->id,
+    ]);
+    $date = now()->subDay()->toDateString();
+    $emp = Employee::factory()->create(['company_id' => $this->companyA->id]);
+    Attendance::factory()->create(['company_id' => $this->companyA->id, 'employee_id' => $emp->id, 'project_id' => $this->project->id, 'date' => $date, 'status' => 'present']);
+
+    $this->actingAs($this->admin)->post("/projects/{$this->project->id}/tasks/{$this->parent->id}/progress", [
+        'date' => $date, 'quantity' => 10, 'employee_ids' => [$emp->id],
+    ])->assertStatus(422);
+
+    expect((float) $this->parent->fresh()->completed_quantity)->toBe(0.0);
 });
 
 it('cannot parent a sub-task under another company task', function (): void {

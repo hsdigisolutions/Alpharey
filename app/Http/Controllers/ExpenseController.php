@@ -19,6 +19,7 @@ use App\Models\Vendor;
 use App\Rules\OwnCompanyEmployee;
 use App\Rules\OwnCompanyProject;
 use App\Services\Audit\AuditLogger;
+use App\Services\Workers\WorkerFuelExpenseService;
 use App\Support\CurrentCompany;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Database\Eloquent\Builder;
@@ -159,6 +160,15 @@ class ExpenseController extends Controller
             ]);
         }
 
+        // Same reasoning for a worker-fuel mirror expense: the worker is already
+        // reimbursed the fuel through payroll, so approving this mirror would
+        // count the same euro again in the approved-expense sum. Kept unapproved.
+        if ($validated['approved'] && $expense->source === WorkerFuelExpenseService::SOURCE) {
+            throw ValidationException::withMessages([
+                'approved' => __('ui.expenses.auto_fuel_locked'),
+            ]);
+        }
+
         // Not mass-assignable — set directly (Measurement/Document convention).
         $expense->approved = $validated['approved'];
         $expense->approved_by = $validated['approved'] ? Auth::id() : null;
@@ -218,7 +228,10 @@ class ExpenseController extends Controller
 
         abort_if($expense->approved, 422, 'Approved expenses cannot be removed.');
 
-        if ($expense->file_path !== null) {
+        // A worker-fuel mirror expense REFERENCES the worker expense's receipt
+        // file (shared, not copied) — deleting it here would destroy the
+        // worker's own receipt, so leave the file and only drop the mirror row.
+        if ($expense->file_path !== null && $expense->source !== WorkerFuelExpenseService::SOURCE) {
             Storage::disk('local')->delete($expense->file_path);
         }
 

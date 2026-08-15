@@ -7,6 +7,8 @@ use App\Models\Expense;
 use App\Models\User;
 use App\Models\Vehicle;
 use App\Models\WorkerExpense;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 
 beforeEach(function (): void {
     $this->company = Company::factory()->create();
@@ -94,6 +96,37 @@ it('degrades the description gracefully when no vehicle is linked', function ():
 
     $expense = Expense::query()->find($we->fresh()->auto_expense_id);
     expect($expense->notes)->toContain('Combustible')->toContain('Carlos García');
+});
+
+it('refuses to approve the auto-created fuel expense — it would double-count', function (): void {
+    $we = fuelExpense($this->company, $this->employee);
+    $this->actingAs($this->admin)->post("/worker-expenses/{$we->id}/approve");
+    $mirror = Expense::query()->where('source', 'worker_fuel')->firstOrFail();
+
+    $this->actingAs($this->admin)->post("/expenses/{$mirror->id}/approve", ['approved' => true])
+        ->assertSessionHasErrors('approved');
+
+    expect($mirror->fresh()->approved)->toBeFalse();
+});
+
+it('does not delete the shared worker receipt when the mirror expense is removed', function (): void {
+    Storage::fake('local');
+    $we = WorkerExpense::factory()->create([
+        'company_id' => $this->company->id, 'employee_id' => $this->employee->id,
+        'category' => 'fuel', 'amount' => '30.00', 'date' => '2026-08-10',
+    ]);
+    $we->receipt_path = UploadedFile::fake()->image('recibo.jpg')->store('worker-expense-receipts', 'local');
+    $we->save();
+
+    $this->actingAs($this->admin)->post("/worker-expenses/{$we->id}/approve");
+    $mirror = Expense::query()->where('source', 'worker_fuel')->firstOrFail();
+    expect($mirror->file_path)->toBe($we->receipt_path);
+
+    $this->actingAs($this->admin)->delete("/expenses/{$mirror->id}")->assertRedirect();
+
+    // The mirror row is gone but the worker's receipt file survives.
+    expect(Expense::query()->find($mirror->id))->toBeNull();
+    Storage::disk('local')->assertExists($we->receipt_path);
 });
 
 it('creates the auto expense in the worker expense own company (tenancy)', function (): void {

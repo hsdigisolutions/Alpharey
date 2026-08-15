@@ -99,3 +99,10 @@ it('returns descriptions as JSON from the endpoint for an authenticated admin', 
 it('denies the autocomplete endpoint to a guest', function (): void {
     $this->get('/autocomplete/descriptions?q=mano')->assertRedirect(route('login'));
 });
+
+it('denies the endpoint to a user without invoices or expenses view', function (): void {
+    // A Manager with no module grants can see neither invoices nor expenses.
+    $manager = User::factory()->create(['role' => UserRole::Manager, 'company_id' => $this->company->id]);
+
+    $this->actingAs($manager)->getJson('/autocomplete/descriptions?q=mano')->assertForbidden();
+});

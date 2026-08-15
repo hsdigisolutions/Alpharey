@@ -188,6 +188,8 @@ onUnmounted(() => {
     if (ticker) clearInterval(ticker);
     if (bellTimer) clearInterval(bellTimer);
     if (recordingTimer) clearInterval(recordingTimer);
+    // Release any check-out photo preview object URLs.
+    Object.values(photoPreviews.value).forEach((url) => url && URL.revokeObjectURL(url));
 });
 
 // Live worked hours (decimal) since check-in — the source for both the "Hours"
@@ -390,7 +392,10 @@ function onPhotoChange(slot, e) {
     e.target.value = ''; // allow re-picking the same file (retake)
 }
 function removePhoto(slot) {
-    setPhoto(slot, null);
+    // Higher slots are revealed only after the lower one is taken, so clearing a
+    // slot also clears the ones that depend on it — otherwise a hidden photo
+    // would still be submitted.
+    for (let s = slot; s <= 3; s++) setPhoto(s, null);
 }
 function resetCheckoutPhotos() {
     [1, 2, 3].forEach((s) => setPhoto(s, null));

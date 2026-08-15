@@ -149,6 +149,10 @@ class ProductionTaskController extends Controller
         abort_if($parent === null, 404);
         // A sub-task cannot itself be a parent (max one level deep).
         abort_if($parent->parent_task_id !== null, 422, 'A sub-task cannot have sub-tasks.');
+        // A parent's numbers roll up from its children, so a task that already
+        // carries its OWN logged production cannot become a parent — that
+        // production would be silently excluded from the roll-up.
+        abort_if($parent->progress()->exists(), 422, 'This task already has logged production; it cannot become a parent.');
 
         return $parent;
     }

@@ -6,6 +6,7 @@ use App\Services\Autocomplete\DescriptionAutocomplete;
 use App\Support\CurrentCompany;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Gate;
 
 /**
  * Lightweight JSON autocomplete for free-text fields (like the global-search
@@ -18,6 +19,10 @@ class AutocompleteController extends Controller
 
     public function descriptions(Request $request, CurrentCompany $company): JsonResponse
     {
+        // The pool is invoice + expense line items, so the caller must be able to
+        // see one of those modules (Rule 2 — no data endpoint is ungated).
+        abort_unless(Gate::allows('invoices.view') || Gate::allows('expenses.view'), 403);
+
         $companyId = $company->id();
 
         // A Super Admin browsing "all companies" has no single company to scope
