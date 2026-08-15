@@ -5,7 +5,7 @@
  * Phases 4/6. Project notes are IMMUTABLE once saved (no edit/delete).
  */
 import { computed, ref } from 'vue';
-import { Head, router, useForm } from '@inertiajs/vue3';
+import { Head, Link, router, useForm } from '@inertiajs/vue3';
 import { t } from '@/translate';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import ProjectFormModal from '@/Components/Projects/ProjectFormModal.vue';
@@ -53,6 +53,8 @@ const props = defineProps({
     // Client-side contacts for this project (supervisor / engineer / PM / other).
     projectContacts: { type: Array, default: () => [] },
     contactRoles: { type: Array, default: () => [] },
+    // Active employees of the project's company, for the manager dropdowns.
+    employeeOptions: { type: Array, default: () => [] },
     // Attendance tab
     projectAttendance: { type: Object, default: null },
     attendanceMonth: { type: String, default: '' },
@@ -104,11 +106,13 @@ const marginTone = {
     ok: 'text-status-ok', warn: 'text-status-warn', danger: 'text-status-danger', neutral: 'text-ink-soft',
 };
 
+// Each project person resolves to the linked employee (name · designation ·
+// phone), or the legacy free-text fallback the server already merged in.
 const contactCards = [
-    { k: 'projects.jefe_de_obra', name: props.project.jefe_de_obra, phone: props.project.jefe_phone, email: props.project.jefe_email },
-    { k: 'projects.encargado', name: props.project.encargado },
-    { k: 'projects.seguridad', name: props.project.seguridad },
-    { k: 'projects.coordinator', name: props.project.coordinator },
+    { k: 'projects.jefe_de_obra', c: props.project.site_manager },
+    { k: 'projects.encargado', c: props.project.foreman },
+    { k: 'projects.seguridad', c: props.project.safety },
+    { k: 'projects.coordinator', c: props.project.coordinator_contact },
 ];
 
 const confirm = ref({ open: false, message: '', fn: null });
@@ -515,9 +519,15 @@ function destroy() {
                     <div class="grid gap-3 sm:grid-cols-2">
                         <div v-for="c in contactCards" :key="c.k" class="rounded-md border border-line p-3">
                             <Bilingual :k="c.k" class="text-xs text-muted" />
-                            <p class="mt-0.5 text-sm font-medium">{{ c.name ?? '—' }}</p>
-                            <p v-if="c.phone" class="text-xs text-muted">{{ c.phone }}</p>
-                            <p v-if="c.email" class="text-xs text-muted">{{ c.email }}</p>
+                            <template v-if="c.c">
+                                <p class="mt-0.5 text-sm font-medium">
+                                    <Link v-if="c.c.employee_id" :href="`/employees/${c.c.employee_id}`" class="text-accent hover:underline">{{ c.c.name }}</Link>
+                                    <span v-else>{{ c.c.name }}</span>
+                                </p>
+                                <p v-if="c.c.designation" class="text-xs text-muted">{{ c.c.designation }}</p>
+                                <a v-if="c.c.phone" :href="`tel:${c.c.phone}`" class="text-xs text-accent hover:underline">{{ c.c.phone }}</a>
+                            </template>
+                            <p v-else class="mt-0.5 text-sm text-muted">—</p>
                         </div>
                     </div>
                 </VCard>
@@ -1422,7 +1432,7 @@ function destroy() {
             </template>
         </VModal>
 
-        <ProjectFormModal :open="showEdit" :project="project" :clients="clients" :vat-options="vatOptions" @close="showEdit = false" />
+        <ProjectFormModal :open="showEdit" :project="project" :clients="clients" :employees="employeeOptions" :vat-options="vatOptions" @close="showEdit = false" />
         <VConfirmDialog :open="confirm.open" :message="confirm.message" @confirm="runDelete" @cancel="confirm.open = false" />
     </AppLayout>
 </template>

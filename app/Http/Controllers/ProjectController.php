@@ -23,6 +23,7 @@ use App\Models\ProductionTask;
 use App\Models\Project;
 use App\Models\ProjectContact;
 use App\Models\ProjectDesignationRate;
+use App\Models\Scopes\CompanyScope;
 use App\Models\TaskProgress;
 use App\Models\TaskTemplate;
 use App\Services\Documents\DocumentStatus;
@@ -98,6 +99,9 @@ class ProjectController extends Controller
                 'clients' => Client::query()->orderBy('name')->get(['id', 'name']),
                 'statuses' => array_map(fn (ProjectStatus $s) => $s->value, ProjectStatus::cases()),
                 'priorities' => array_map(fn (ProjectPriority $p) => $p->value, ProjectPriority::cases()),
+                // Active employees of the acting company, for the manager/foreman
+                // /safety/coordinator dropdowns on the create form.
+                'employees' => self::employeeOptionsFor(app(CurrentCompany::class)->id()),
             ],
             'vatOptions' => VatRate::options(),
             'can' => [
@@ -110,6 +114,32 @@ class ProjectController extends Controller
                 'export' => Gate::allows('projects.export'),
             ],
         ]);
+    }
+
+    /**
+     * Active employees of a company, for the project manager/foreman/safety/
+     * coordinator dropdowns. Tenant scope dropped + pinned to the company id so
+     * it resolves under any session (a Super Admin browsing a specific company).
+     *
+     * @return list<array{id: int, name: string, designation: string|null}>
+     */
+    public static function employeeOptionsFor(?int $companyId): array
+    {
+        if ($companyId === null) {
+            return [];
+        }
+
+        return Employee::query()->withoutGlobalScope(CompanyScope::class)
+            ->where('company_id', $companyId)
+            ->where('active', true)
+            ->orderBy('full_name')
+            ->get(['id', 'full_name', 'designation'])
+            ->map(fn (Employee $e): array => [
+                'id' => $e->id,
+                'name' => $e->full_name,
+                'designation' => $e->designation,
+            ])
+            ->all();
     }
 
     /**
@@ -143,6 +173,19 @@ class ProjectController extends Controller
         $canSeeWages = Gate::allows('payroll.view') || Gate::allows('employees.edit');
         $attMonth = $request->string('att_month')->value() ?: now()->format('Y-m');
 
+        // The project's people, resolved to the linked employee (name · designation
+        // · phone). Tenant scope dropped for display (SoftDeletes kept — a removed
+        // employee falls back to the legacy free-text value instead).
+        $project->loadMissing([
+            'siteManager' => fn ($q) => $q->withoutGlobalScope(CompanyScope::class),
+            'foreman' => fn ($q) => $q->withoutGlobalScope(CompanyScope::class),
+            'safety' => fn ($q) => $q->withoutGlobalScope(CompanyScope::class),
+            'coordinatorEmployee' => fn ($q) => $q->withoutGlobalScope(CompanyScope::class),
+        ]);
+        $contact = fn (?Employee $e, ?string $name, ?string $phone = null): ?array => $e !== null
+            ? ['employee_id' => $e->id, 'name' => $e->full_name, 'designation' => $e->designation, 'phone' => $e->mobile ?: $e->phone]
+            : ($name !== null && $name !== '' ? ['employee_id' => null, 'name' => $name, 'designation' => null, 'phone' => $phone] : null);
+
         return Inertia::render('Projects/Detail', [
             'project' => array_merge($project->only([
                 'id', 'code', 'name', 'project_type', 'jefe_de_obra', 'jefe_phone',
@@ -165,6 +208,17 @@ class ProjectController extends Controller
                 'client_id' => $project->client_id,
                 'client' => $project->client?->name,
                 'company' => $project->company?->name,
+                // Manager FKs for the edit-form prefill …
+                'site_manager_id' => $project->site_manager_id,
+                'foreman_id' => $project->foreman_id,
+                'safety_id' => $project->safety_id,
+                'coordinator_id' => $project->coordinator_id,
+                // … and the resolved people for the Site-contacts display (linked
+                // employee, else the legacy free-text fallback).
+                'site_manager' => $contact($project->siteManager, $project->jefe_de_obra, $project->jefe_phone),
+                'foreman' => $contact($project->foreman, $project->encargado),
+                'safety' => $contact($project->safety, $project->seguridad),
+                'coordinator_contact' => $contact($project->coordinatorEmployee, $project->coordinator),
             ]),
             'workers' => $project->employeeRates()->with('employee:id,full_name,designation,wage_type')->get()
                 ->map(fn ($rate) => [
@@ -214,6 +268,8 @@ class ProjectController extends Controller
                 ]),
             'designations' => ProjectDesignationRateController::optionsFor($project->company_id),
             'rateTypes' => array_map(fn (ProjectRateType $t) => $t->value, ProjectRateType::cases()),
+            // Active employees of the project's company, for the manager dropdowns.
+            'employeeOptions' => self::employeeOptionsFor($project->company_id),
             // Client-side contacts for this project (supervisor / engineer / PM / other).
             'projectContacts' => $project->contacts()->orderBy('name')->get()
                 ->map(fn (ProjectContact $c) => [

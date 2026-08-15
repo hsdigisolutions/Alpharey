@@ -37,6 +37,10 @@ use Illuminate\Support\Carbon;
  * @property numeric-string|null $latitude
  * @property numeric-string|null $longitude
  * @property int $geofence_radius
+ * @property int|null $site_manager_id
+ * @property int|null $foreman_id
+ * @property int|null $safety_id
+ * @property int|null $coordinator_id
  */
 class Project extends Model
 {
@@ -54,6 +58,7 @@ class Project extends Model
         'latitude', 'longitude', 'geofence_radius',
         'billing_type', 'vat_rate', 'jefe_de_obra', 'jefe_phone', 'jefe_email',
         'encargado', 'seguridad', 'coordinator', 'start_date', 'end_date',
+        'site_manager_id', 'foreman_id', 'safety_id', 'coordinator_id',
         'budget', 'estimated_hours', 'estimated_meters', 'outsourced',
         'client_hour_rate', 'client_meter_rate', 'outsource_cost',
         'outsourced_employee_id', 'google_drive_link', 'document_url',
@@ -107,6 +112,35 @@ class Project extends Model
     public function contacts(): HasMany
     {
         return $this->hasMany(ProjectContact::class);
+    }
+
+    /**
+     * The project's own people — links to Employee records (the free-text
+     * jefe_de_obra / encargado / … columns are kept only as legacy fallback).
+     *
+     * @return BelongsTo<Employee, $this>
+     */
+    public function siteManager(): BelongsTo
+    {
+        return $this->belongsTo(Employee::class, 'site_manager_id');
+    }
+
+    /** @return BelongsTo<Employee, $this> */
+    public function foreman(): BelongsTo
+    {
+        return $this->belongsTo(Employee::class, 'foreman_id');
+    }
+
+    /** @return BelongsTo<Employee, $this> */
+    public function safety(): BelongsTo
+    {
+        return $this->belongsTo(Employee::class, 'safety_id');
+    }
+
+    /** @return BelongsTo<Employee, $this> */
+    public function coordinatorEmployee(): BelongsTo
+    {
+        return $this->belongsTo(Employee::class, 'coordinator_id');
     }
 
     /**

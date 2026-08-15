@@ -134,6 +134,6 @@ const columns = [
             </div>
         </div>
 
-        <ProjectFormModal :open="showForm" :clients="filterOptions.clients" :vat-options="vatOptions" @close="showForm = false" />
+        <ProjectFormModal :open="showForm" :clients="filterOptions.clients" :employees="filterOptions.employees" :vat-options="vatOptions" @close="showForm = false" />
     </AppLayout>
 </template>

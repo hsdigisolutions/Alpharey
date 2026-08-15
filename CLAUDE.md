@@ -4,6 +4,28 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Status: Phase 9 in progress — hardening (2026-08-01)
 
+### Project people → employee dropdowns (2026-08-15, DONE)
+
+The project's four people — **site manager / foreman / safety / coordinator** —
+changed from free-text inputs to **employee dropdowns** (active employees of the
+acting company, shown "Name · Designation", null allowed). Migration
+`2026_08_15_000004` adds `site_manager_id` / `foreman_id` / `safety_id` /
+`coordinator_id` (nullable FK employees, `nullOnDelete`); the legacy text columns
+(`jefe_de_obra` / `encargado` / `seguridad` / `coordinator` + `jefe_phone/email`)
+are **kept as a display fallback** — no data migration (lorem names can't map to
+real employees). `Project` gained the FKs + `siteManager/foreman/safety/
+coordinatorEmployee` belongsTo relations. `StoreProjectRequest` validates each
+`*_id` with `OwnCompanyEmployee` (cross-company id → error); the old text rules
+were dropped (columns stay fillable, so an importer can still set them, and an
+edit never nulls them). `ProjectController::employeeOptionsFor()` (scope-dropped,
+active-only) feeds the form on **both** create (`filterOptions.employees`) and
+edit (`employeeOptions`); `show` resolves each person to `{employee_id, name,
+designation, phone}` (mobile ?: phone), falling back to the legacy text. Detail →
+Site contacts renders the name **linked to the employee page** + designation +
+**clickable `tel:`** phone. Tests: `ProjectManagerFieldsTest` (7 — store/update,
+null allowed, cross-company rejected, resolved payload, legacy fallback,
+active-own-company-only options). **972 Pest tests.**
+
 ### Project client contacts (2026-08-15, DONE)
 
 Per-project client-side contacts — the specific people on the CLIENT side who run

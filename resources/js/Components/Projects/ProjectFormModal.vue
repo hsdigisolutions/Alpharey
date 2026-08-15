@@ -20,13 +20,17 @@ const props = defineProps({
     project: { type: Object, default: null },
     clients: { type: Array, required: true },
     vatOptions: { type: Array, required: true },
+    // Active employees of the acting company — the project's people are chosen
+    // from these ({ id, name, designation }).
+    employees: { type: Array, default: () => [] },
 });
 const emit = defineEmits(['close']);
 
 const blank = {
     client_id: '', name: '', project_type: '', status: 'active', priority: 'medium',
-    billing_type: '', vat_rate: null, jefe_de_obra: '', encargado: '', seguridad: '',
-    coordinator: '', start_date: null, end_date: null, budget: null,
+    billing_type: '', vat_rate: null,
+    site_manager_id: null, foreman_id: null, safety_id: null, coordinator_id: null,
+    start_date: null, end_date: null, budget: null,
     estimated_hours: null, estimated_meters: null, description: '',
     client_hour_rate: null, client_meter_rate: null, outsource_cost: null,
     latitude: null, longitude: null, geofence_radius: 500,
@@ -44,6 +48,10 @@ function submit() {
         ...d,
         client_id: d.client_id || null,
         billing_type: d.billing_type || null,
+        site_manager_id: d.site_manager_id || null,
+        foreman_id: d.foreman_id || null,
+        safety_id: d.safety_id || null,
+        coordinator_id: d.coordinator_id || null,
         latitude: d.latitude === '' ? null : d.latitude,
         longitude: d.longitude === '' ? null : d.longitude,
         geofence_radius: d.geofence_radius === '' || d.geofence_radius === null ? 500 : d.geofence_radius,
@@ -55,6 +63,11 @@ function submit() {
 const statuses = ['active', 'in_progress', 'completed', 'cancelled', 'on_hold'];
 const priorities = ['low', 'medium', 'high', 'urgent'];
 const billingTypes = ['fixed', 'hourly', 'per_meter', 'milestone'];
+
+// "Name · Designation" for the manager/foreman/safety/coordinator dropdowns.
+function employeeLabel(e) {
+    return e.designation ? `${e.name} · ${e.designation}` : e.name;
+}
 </script>
 
 <template>
@@ -91,8 +104,30 @@ const billingTypes = ['fixed', 'hourly', 'per_meter', 'milestone'];
                 <FormField k="projects.end" :error="form.errors.end_date"><VDateInput v-model="form.end_date" /></FormField>
                 <FormField k="projects.budget"><VCurrencyInput v-model="form.budget" /></FormField>
                 <FormField k="projects.vat"><VVatSelect v-model="form.vat_rate" :options="vatOptions" /></FormField>
-                <FormField k="projects.jefe_de_obra"><VInput v-model="form.jefe_de_obra" /></FormField>
-                <FormField k="projects.encargado"><VInput v-model="form.encargado" /></FormField>
+                <FormField k="projects.jefe_de_obra" :error="form.errors.site_manager_id">
+                    <VSelect v-model="form.site_manager_id">
+                        <option :value="null">—</option>
+                        <option v-for="e in employees" :key="e.id" :value="e.id">{{ employeeLabel(e) }}</option>
+                    </VSelect>
+                </FormField>
+                <FormField k="projects.encargado" :error="form.errors.foreman_id">
+                    <VSelect v-model="form.foreman_id">
+                        <option :value="null">—</option>
+                        <option v-for="e in employees" :key="e.id" :value="e.id">{{ employeeLabel(e) }}</option>
+                    </VSelect>
+                </FormField>
+                <FormField k="projects.seguridad" :error="form.errors.safety_id">
+                    <VSelect v-model="form.safety_id">
+                        <option :value="null">—</option>
+                        <option v-for="e in employees" :key="e.id" :value="e.id">{{ employeeLabel(e) }}</option>
+                    </VSelect>
+                </FormField>
+                <FormField k="projects.coordinator" :error="form.errors.coordinator_id">
+                    <VSelect v-model="form.coordinator_id">
+                        <option :value="null">—</option>
+                        <option v-for="e in employees" :key="e.id" :value="e.id">{{ employeeLabel(e) }}</option>
+                    </VSelect>
+                </FormField>
             </div>
 
             <!-- Site location — worker check-in distance verification -->

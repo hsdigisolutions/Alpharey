@@ -6,6 +6,7 @@ use App\Enums\BillingType;
 use App\Enums\ProjectPriority;
 use App\Enums\ProjectStatus;
 use App\Enums\VatRate;
+use App\Rules\OwnCompanyEmployee;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
@@ -33,12 +34,13 @@ class StoreProjectRequest extends FormRequest
             'priority' => ['required', Rule::enum(ProjectPriority::class)],
             'billing_type' => ['nullable', Rule::enum(BillingType::class)],
             'vat_rate' => ['nullable', Rule::enum(VatRate::class)],
-            'jefe_de_obra' => ['nullable', 'string', 'max:255'],
-            'jefe_phone' => ['nullable', 'string', 'max:30'],
-            'jefe_email' => ['nullable', 'email', 'max:255'],
-            'encargado' => ['nullable', 'string', 'max:255'],
-            'seguridad' => ['nullable', 'string', 'max:255'],
-            'coordinator' => ['nullable', 'string', 'max:255'],
+            // The project's people are now links to EMPLOYEE records of the
+            // acting company (the legacy free-text columns stay untouched as a
+            // display fallback). OwnCompanyEmployee blocks a cross-company id.
+            'site_manager_id' => ['nullable', 'integer', new OwnCompanyEmployee],
+            'foreman_id' => ['nullable', 'integer', new OwnCompanyEmployee],
+            'safety_id' => ['nullable', 'integer', new OwnCompanyEmployee],
+            'coordinator_id' => ['nullable', 'integer', new OwnCompanyEmployee],
             'start_date' => ['nullable', 'date'],
             'end_date' => ['nullable', 'date', 'after_or_equal:start_date'],
             // Site location — for worker check-in distance verification. Radius
