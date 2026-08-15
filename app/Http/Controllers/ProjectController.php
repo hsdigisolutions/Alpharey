@@ -501,42 +501,63 @@ class ProjectController extends Controller
      */
     private function projectTasks(Project $project): array
     {
-        $tasks = ProductionTask::query()
+        $all = ProductionTask::query()
             ->where('project_id', $project->id)
             ->with(['progress' => fn ($q) => $q->with('employee:id,full_name')->orderByDesc('date')->orderByDesc('id')])
             ->orderBy('category')->orderBy('name')
             ->get();
 
-        // Weighted overall progress (advisory): Σ(pct × weightage) / Σ(weightage);
-        // if no weightage is set, fall back to the simple mean of the percentages.
-        $weightSum = (float) $tasks->sum(fn (ProductionTask $t) => (float) $t->weightage);
+        $childrenByParent = $all->whereNotNull('parent_task_id')->groupBy('parent_task_id');
+        $topLevel = $all->whereNull('parent_task_id')->values();
+
+        // Weighted overall progress (advisory) counts TOP-LEVEL tasks only —
+        // sub-tasks roll up into their parent, which participates in the project.
+        $weightSum = (float) $topLevel->sum(fn (ProductionTask $t) => (float) $t->weightage);
         if ($weightSum > 0) {
-            $overall = round((float) $tasks->sum(fn (ProductionTask $t) => $t->progressPercent() * (float) $t->weightage) / $weightSum, 1);
+            $overall = round((float) $topLevel->sum(fn (ProductionTask $t) => $t->progressPercent() * (float) $t->weightage) / $weightSum, 1);
         } else {
-            $overall = $tasks->isNotEmpty() ? round((float) $tasks->avg(fn (ProductionTask $t) => $t->progressPercent()), 1) : 0.0;
+            $overall = $topLevel->isNotEmpty() ? round((float) $topLevel->avg(fn (ProductionTask $t) => $t->progressPercent()), 1) : 0.0;
         }
 
         return [
-            'tasks' => $tasks->map(fn (ProductionTask $t): array => [
-                'id' => $t->id,
-                'name' => $t->name,
-                'category' => $t->category->value,
-                'house_number' => $t->house_number,
-                'unit' => $t->unit,
-                'unit_price' => (float) $t->unit_price,
-                'planned_quantity' => (float) $t->planned_quantity,
-                'completed_quantity' => (float) $t->completed_quantity,
-                'weightage' => (float) $t->weightage,
-                'status' => $t->status->value,
-                'progress' => $t->progressPercent(),
-                'health' => $t->health(),
-                'notes' => $t->notes,
-                // Daily-production history, grouped into multi-worker batches.
-                'batches' => $this->taskBatches($t),
-            ])->values()->all(),
+            'tasks' => $topLevel->map(function (ProductionTask $t) use ($childrenByParent): array {
+                $row = $this->taskRow($t);
+                $children = $childrenByParent->get($t->id);
+                $row['children'] = $children === null ? [] : $children
+                    ->map(fn (ProductionTask $c): array => $this->taskRow($c))->values()->all();
+
+                return $row;
+            })->values()->all(),
             'overall_progress' => min(100.0, $overall),
             // Advisory: warn (do not block) when the weightage does not sum to 100.
             'weightage_sum' => round($weightSum, 2),
+        ];
+    }
+
+    /**
+     * Shape a single production task (parent or sub-task) for the Tareas tab.
+     *
+     * @return array<string, mixed>
+     */
+    private function taskRow(ProductionTask $t): array
+    {
+        return [
+            'id' => $t->id,
+            'name' => $t->name,
+            'parent_task_id' => $t->parent_task_id,
+            'category' => $t->category->value,
+            'house_number' => $t->house_number,
+            'unit' => $t->unit,
+            'unit_price' => (float) $t->unit_price,
+            'planned_quantity' => (float) $t->planned_quantity,
+            'completed_quantity' => (float) $t->completed_quantity,
+            'weightage' => (float) $t->weightage,
+            'status' => $t->status->value,
+            'progress' => $t->progressPercent(),
+            'health' => $t->health(),
+            'notes' => $t->notes,
+            // Daily-production history, grouped into multi-worker batches.
+            'batches' => $this->taskBatches($t),
         ];
     }
 

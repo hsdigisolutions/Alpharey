@@ -132,6 +132,26 @@ class TaskProgressService
 
         $task->completed_quantity = (string) round($sum, 2);
         $task->save();
+
+        // A sub-task's numbers roll up into its parent.
+        if ($task->parent_task_id !== null && $task->parent !== null) {
+            $this->recomputeParent($task->parent);
+        }
+    }
+
+    /**
+     * A parent's planned + completed are the sum of its children's, so its
+     * progress% (= completed / planned) equals the children's progress weighted
+     * by their quantities. Direct assignment; the parent is never logged
+     * against directly.
+     */
+    public function recomputeParent(ProductionTask $parent): void
+    {
+        $children = $parent->children()->get();
+
+        $parent->completed_quantity = (string) round((float) $children->sum(fn (ProductionTask $c): float => (float) $c->completed_quantity), 2);
+        $parent->planned_quantity = (string) round((float) $children->sum(fn (ProductionTask $c): float => (float) $c->planned_quantity), 2);
+        $parent->save();
     }
 
     /**

@@ -25,6 +25,9 @@ class StoreProductionTaskRequest extends FormRequest
     public function rules(): array
     {
         return [
+            // When present, every task in this submission is a sub-task of it.
+            // Ownership + one-level-deep are enforced in the controller.
+            'parent_task_id' => ['nullable', 'integer'],
             'tasks' => ['required', 'array', 'min:1', 'max:100'],
             'tasks.*.name' => ['required', 'string', 'max:255'],
             'tasks.*.category' => ['required', Rule::enum(ProductionTaskCategory::class)],

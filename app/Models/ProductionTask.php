@@ -22,6 +22,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property int $id
  * @property int $company_id
  * @property int $project_id
+ * @property int|null $parent_task_id
  * @property string $name
  * @property ProductionTaskCategory $category
  * @property string|null $house_number
@@ -101,5 +102,25 @@ class ProductionTask extends Model
     public function progress(): HasMany
     {
         return $this->hasMany(TaskProgress::class);
+    }
+
+    /**
+     * The parent task, if this is a sub-task (max one level deep).
+     *
+     * @return BelongsTo<ProductionTask, $this>
+     */
+    public function parent(): BelongsTo
+    {
+        return $this->belongsTo(ProductionTask::class, 'parent_task_id');
+    }
+
+    /**
+     * Sub-tasks under this task.
+     *
+     * @return HasMany<ProductionTask, $this>
+     */
+    public function children(): HasMany
+    {
+        return $this->hasMany(ProductionTask::class, 'parent_task_id');
     }
 }

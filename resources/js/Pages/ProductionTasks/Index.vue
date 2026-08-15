@@ -222,15 +222,24 @@ function submitLog() {
         <!-- Edit task -->
         <VModal :open="editOpen" title-key="production_tasks.edit" @close="editOpen = false">
             <form id="task-edit-form" class="grid gap-4 sm:grid-cols-2" @submit.prevent="submitEdit">
-                <FormField k="production_tasks.name" :error="editForm.errors.name" required><VInput v-model="editForm.name" /></FormField>
                 <FormField k="production_tasks.category" :error="editForm.errors.category" required>
                     <VSelect v-model="editForm.category"><option v-for="c in filterOptions.categories" :key="c" :value="c">{{ $t(`production_tasks.cat_${c}`) }}</option></VSelect>
                 </FormField>
-                <FormField k="production_tasks.house" :error="editForm.errors.house_number"><VInput v-model="editForm.house_number" /></FormField>
-                <FormField k="production_tasks.unit" :error="editForm.errors.unit"><VInput v-model="editForm.unit" /></FormField>
-                <FormField k="production_tasks.planned" :error="editForm.errors.planned_quantity" required><VInput v-model="editForm.planned_quantity" type="number" step="0.01" min="0" /></FormField>
-                <FormField k="production_tasks.unit_price" :error="editForm.errors.unit_price"><VInput v-model="editForm.unit_price" type="number" step="0.01" min="0" /></FormField>
-                <FormField k="production_tasks.weightage" :error="editForm.errors.weightage"><VInput v-model="editForm.weightage" type="number" step="0.01" min="0" max="100" /></FormField>
+                <FormField k="production_tasks.unit" :error="editForm.errors.unit"><VInput v-model="editForm.unit" :placeholder="$t('production_tasks.ph_unit')" /></FormField>
+                <FormField k="production_tasks.name" class="sm:col-span-2" :error="editForm.errors.name" required><VInput v-model="editForm.name" :placeholder="$t('production_tasks.ph_name')" /></FormField>
+                <FormField k="production_tasks.unit_price" :error="editForm.errors.unit_price">
+                    <div class="relative">
+                        <VInput v-model="editForm.unit_price" type="number" step="0.01" min="0" class="pe-7" :placeholder="$t('production_tasks.ph_unit_price')" />
+                        <span class="pointer-events-none absolute end-3 top-1/2 -translate-y-1/2 text-sm text-muted">€</span>
+                    </div>
+                    <p class="mt-1 text-xs text-muted">{{ $t('production_tasks.unit_price_hint') }}</p>
+                </FormField>
+                <FormField k="production_tasks.planned" :error="editForm.errors.planned_quantity" required><VInput v-model="editForm.planned_quantity" type="number" step="0.01" min="0" :placeholder="$t('production_tasks.ph_planned')" /></FormField>
+                <FormField k="production_tasks.weightage" :error="editForm.errors.weightage">
+                    <VInput v-model="editForm.weightage" type="number" step="0.01" min="0" max="100" :placeholder="$t('production_tasks.ph_weightage')" />
+                    <p class="mt-1 text-xs text-muted">{{ $t('production_tasks.weightage_hint') }}</p>
+                </FormField>
+                <FormField k="production_tasks.house" :error="editForm.errors.house_number"><VInput v-model="editForm.house_number" :placeholder="$t('production_tasks.ph_house')" /></FormField>
                 <FormField k="production_tasks.status" :error="editForm.errors.status" required>
                     <VSelect v-model="editForm.status"><option v-for="s in filterOptions.statuses" :key="s" :value="s">{{ $t(`production_tasks.st_${s}`) }}</option></VSelect>
                 </FormField>

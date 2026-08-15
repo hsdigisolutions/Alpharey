@@ -72,23 +72,41 @@ class ProductionTaskController extends Controller
         return Pdf::loadView('exports.production-tasks-pdf', ['rows' => $rows])->download('production-tasks.pdf');
     }
 
-    public function store(StoreProductionTaskRequest $request, Project $project): RedirectResponse
+    public function store(StoreProductionTaskRequest $request, Project $project, TaskProgressService $progress): RedirectResponse
     {
-        foreach ($request->validated()['tasks'] as $data) {
+        $validated = $request->validated();
+        $parent = $this->resolveParent($validated['parent_task_id'] ?? null, $project);
+
+        foreach ($validated['tasks'] as $data) {
             $task = new ProductionTask($data);
             $task->project_id = $project->id;
+            // Server-set — a sub-task links to its parent (not mass-assignable).
+            $task->parent_task_id = $parent?->id;
             // company_id is filled from the active company by BelongsToCompany.
             $task->save();
+        }
+
+        // New sub-tasks change the parent's rolled-up planned/completed.
+        if ($parent !== null) {
+            $progress->recomputeParent($parent);
         }
 
         return back()->with('success', __('ui.production_tasks.saved'));
     }
 
-    public function update(UpdateProductionTaskRequest $request, Project $project, ProductionTask $task): RedirectResponse
+    public function update(UpdateProductionTaskRequest $request, Project $project, ProductionTask $task, TaskProgressService $progress): RedirectResponse
     {
         abort_unless($task->project_id === $project->id, 404);
 
         $task->update($request->validated());
+
+        // Keep the roll-up honest: a sub-task edit re-rolls its parent; editing a
+        // parent that has children re-derives its planned/completed from them.
+        if ($task->parent_task_id !== null && $task->parent !== null) {
+            $progress->recomputeParent($task->parent);
+        } elseif ($task->children()->exists()) {
+            $progress->recomputeParent($task);
+        }
 
         return back()->with('success', __('ui.production_tasks.saved'));
     }
@@ -98,12 +116,41 @@ class ProductionTaskController extends Controller
         Gate::authorize('production_tasks.delete');
         abort_unless($task->project_id === $project->id, 404);
 
-        // Clean proof photos before the DB cascade removes the progress rows
-        // (cascade fires no model events, so files would otherwise orphan).
+        $parent = $task->parent;
+
+        // Clean proof photos for the task AND any sub-tasks before the DB cascade
+        // removes them + their progress rows (cascade fires no model events, so
+        // files would otherwise orphan).
+        foreach ($task->children()->get() as $child) {
+            $progress->purgePhotosForTask($child);
+        }
         $progress->purgePhotosForTask($task);
-        $task->delete();
+        $task->delete(); // cascades to sub-tasks + their progress
+
+        // Deleting a sub-task changes what remains under its parent.
+        if ($parent !== null) {
+            $progress->recomputeParent($parent);
+        }
 
         return back()->with('success', __('ui.production_tasks.deleted'));
+    }
+
+    /**
+     * Resolve + validate an optional parent for new sub-tasks: it must belong to
+     * this project and be TOP-LEVEL (one level deep only — no sub-sub-tasks).
+     */
+    private function resolveParent(?int $parentId, Project $project): ?ProductionTask
+    {
+        if ($parentId === null) {
+            return null;
+        }
+
+        $parent = ProductionTask::query()->where('project_id', $project->id)->find($parentId);
+        abort_if($parent === null, 404);
+        // A sub-task cannot itself be a parent (max one level deep).
+        abort_if($parent->parent_task_id !== null, 422, 'A sub-task cannot have sub-tasks.');
+
+        return $parent;
     }
 
     /**

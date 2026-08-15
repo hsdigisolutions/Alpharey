@@ -311,9 +311,29 @@ function deleteTask(t) {
     askDelete(t.name, () => router.delete(`/projects/${props.project.id}/tasks/${t.id}`, { preserveScroll: true }));
 }
 
-// Expand a task row to show its daily-production history.
-const expandedTaskId = ref(null);
-function toggleExpand(t) { expandedTaskId.value = expandedTaskId.value === t.id ? null : t.id; }
+// Expand task rows (a parent + a child can each be open independently).
+const expandedIds = ref(new Set());
+function isExpanded(t) { return expandedIds.value.has(t.id); }
+function toggleExpand(t) {
+    const next = new Set(expandedIds.value);
+    next.has(t.id) ? next.delete(t.id) : next.add(t.id);
+    expandedIds.value = next;
+}
+
+// Add a sub-task under a top-level task (one level deep only).
+const subtaskOpen = ref(false);
+const subtaskParent = ref(null);
+const subtaskForm = useForm(blankTaskRow());
+function openSubtask(parent) {
+    subtaskParent.value = parent;
+    Object.assign(subtaskForm, blankTaskRow());
+    subtaskForm.clearErrors();
+    subtaskOpen.value = true;
+}
+function submitSubtask() {
+    subtaskForm.transform((d) => ({ parent_task_id: subtaskParent.value?.id, tasks: [d] }))
+        .post(`/projects/${props.project.id}/tasks`, { preserveScroll: true, onSuccess: () => (subtaskOpen.value = false) });
+}
 
 // ── Log work (daily production entry) ───────────────────────────────────────
 const logOpen = ref(false);
@@ -1055,13 +1075,14 @@ function destroy() {
                                 </thead>
                                 <tbody>
                                     <template v-for="t in projectTasks.tasks" :key="t.id">
-                                        <tr class="border-b border-line hover:bg-surface-hover" :class="{ 'border-b-0': expandedTaskId === t.id }">
+                                        <!-- Top-level task -->
+                                        <tr class="border-b border-line hover:bg-surface-hover" :class="{ 'border-b-0': isExpanded(t) }">
                                             <td class="px-3 py-2 font-medium">
                                                 <button type="button" class="flex items-center gap-1.5 text-start hover:text-accent" @click="toggleExpand(t)">
-                                                    <AppIcon name="dots" v-if="false" />
-                                                    <span class="text-muted transition-transform" :class="{ 'rotate-90': expandedTaskId === t.id }">▸</span>
+                                                    <span class="text-muted transition-transform" :class="{ 'rotate-90': isExpanded(t) }">▸</span>
                                                     <span>{{ t.name }}</span>
-                                                    <span v-if="t.batches.length" class="rounded-full bg-surface-sunken px-1.5 text-[10px] text-muted">{{ t.batches.length }}</span>
+                                                    <span v-if="t.children.length" class="rounded-full bg-accent-soft px-1.5 text-[10px] font-medium text-accent">{{ t.children.length }}</span>
+                                                    <span v-else-if="t.batches.length" class="rounded-full bg-surface-sunken px-1.5 text-[10px] text-muted">{{ t.batches.length }}</span>
                                                 </button>
                                             </td>
                                             <td class="px-3 py-2 text-ink-soft">{{ $t(`production_tasks.cat_${t.category}`) }}</td>
@@ -1078,12 +1099,73 @@ function destroy() {
                                             </td>
                                             <td class="px-3 py-2"><VBadge :status="taskStatusVariant[t.status]">{{ $t(`production_tasks.st_${t.status}`) }}</VBadge></td>
                                             <td class="px-3 py-2 text-end whitespace-nowrap">
-                                                <VButton v-if="canManageTasks.edit" variant="ghost" size="sm" icon="attendance" :title="$t('task_progress.log')" @click="openLog(t)" />
+                                                <VButton v-if="canManageTasks.create" variant="ghost" size="sm" icon="plus" :title="$t('production_tasks.add_subtask')" @click="openSubtask(t)" />
+                                                <VButton v-if="canManageTasks.edit && t.children.length === 0" variant="ghost" size="sm" icon="attendance" :title="$t('task_progress.log')" @click="openLog(t)" />
                                                 <VButton v-if="canManageTasks.edit" variant="ghost" size="sm" icon="edit" @click="openTaskEdit(t)" />
                                                 <VButton v-if="canManageTasks.delete" variant="ghost" size="sm" icon="trash" @click="deleteTask(t)" />
                                             </td>
                                         </tr>
-                                        <tr v-if="expandedTaskId === t.id" class="border-b border-line bg-surface-sunken/40">
+
+                                        <!-- Expanded parent WITH sub-tasks → indented child rows -->
+                                        <template v-if="isExpanded(t) && t.children.length">
+                                            <template v-for="c in t.children" :key="c.id">
+                                                <tr class="border-b border-line bg-surface-sunken/30 hover:bg-surface-hover" :class="{ 'border-b-0': isExpanded(c) }">
+                                                    <td class="px-3 py-2 font-medium">
+                                                        <button type="button" class="flex items-center gap-1.5 ps-6 text-start hover:text-accent" @click="toggleExpand(c)">
+                                                            <span class="text-muted">↳</span>
+                                                            <span class="text-muted transition-transform" :class="{ 'rotate-90': isExpanded(c) }">▸</span>
+                                                            <span>{{ c.name }}</span>
+                                                            <span v-if="c.batches.length" class="rounded-full bg-surface-sunken px-1.5 text-[10px] text-muted">{{ c.batches.length }}</span>
+                                                        </button>
+                                                    </td>
+                                                    <td class="px-3 py-2 text-ink-soft">{{ $t(`production_tasks.cat_${c.category}`) }}</td>
+                                                    <td class="px-3 py-2 text-ink-soft">{{ c.house_number ?? '—' }}</td>
+                                                    <td class="tabular-nums px-3 py-2 text-end">{{ c.planned_quantity }} {{ c.unit }}</td>
+                                                    <td class="tabular-nums px-3 py-2 text-end">{{ c.completed_quantity }}</td>
+                                                    <td class="px-3 py-2">
+                                                        <div class="flex items-center gap-2">
+                                                            <div class="h-2 w-24 overflow-hidden rounded-full bg-surface-sunken">
+                                                                <div class="h-full rounded-full" :class="taskHealth[c.health]" :style="{ width: c.progress + '%' }" />
+                                                            </div>
+                                                            <span class="tabular-nums text-xs">{{ c.progress }}%</span>
+                                                        </div>
+                                                    </td>
+                                                    <td class="px-3 py-2"><VBadge :status="taskStatusVariant[c.status]">{{ $t(`production_tasks.st_${c.status}`) }}</VBadge></td>
+                                                    <td class="px-3 py-2 text-end whitespace-nowrap">
+                                                        <VButton v-if="canManageTasks.edit" variant="ghost" size="sm" icon="attendance" :title="$t('task_progress.log')" @click="openLog(c)" />
+                                                        <VButton v-if="canManageTasks.edit" variant="ghost" size="sm" icon="edit" @click="openTaskEdit(c)" />
+                                                        <VButton v-if="canManageTasks.delete" variant="ghost" size="sm" icon="trash" @click="deleteTask(c)" />
+                                                    </td>
+                                                </tr>
+                                                <tr v-if="isExpanded(c)" class="border-b border-line bg-surface-sunken/40">
+                                                    <td colspan="8" class="px-3 py-2 ps-10">
+                                                        <p class="mb-2 text-xs font-medium uppercase tracking-wide text-muted">{{ $t('task_progress.history') }}</p>
+                                                        <div v-if="c.batches.length === 0" class="py-2 text-sm text-muted">{{ $t('task_progress.empty') }}</div>
+                                                        <table v-else class="w-full text-sm">
+                                                            <tbody>
+                                                                <tr v-for="b in c.batches" :key="b.batch_id" class="border-b border-line/60 last:border-0">
+                                                                    <td class="py-1.5 pe-3 tabular-nums text-ink-soft">{{ b.date }}</td>
+                                                                    <td class="py-1.5 pe-3 tabular-nums font-medium">{{ b.quantity }} {{ c.unit }}</td>
+                                                                    <td class="py-1.5 pe-3 text-ink-soft">{{ b.workers.join(', ') || '—' }}</td>
+                                                                    <td class="py-1.5 pe-3 text-muted">{{ b.notes }}</td>
+                                                                    <td class="py-1.5 pe-3">
+                                                                        <a v-if="b.photo_id" :href="`/task-progress/${b.photo_id}/photo`" target="_blank" class="inline-flex items-center gap-1 text-accent hover:underline">
+                                                                            <AppIcon name="camera" class="h-3.5 w-3.5" />{{ $t('task_progress.photo') }}
+                                                                        </a>
+                                                                    </td>
+                                                                    <td class="py-1.5 text-end">
+                                                                        <VButton v-if="canManageTasks.edit" variant="ghost" size="sm" icon="trash" @click="deleteBatch(c, b)" />
+                                                                    </td>
+                                                                </tr>
+                                                            </tbody>
+                                                        </table>
+                                                    </td>
+                                                </tr>
+                                            </template>
+                                        </template>
+
+                                        <!-- Expanded leaf (no sub-tasks) → its own daily-production history -->
+                                        <tr v-else-if="isExpanded(t)" class="border-b border-line bg-surface-sunken/40">
                                             <td colspan="8" class="px-3 py-2">
                                                 <p class="mb-2 text-xs font-medium uppercase tracking-wide text-muted">{{ $t('task_progress.history') }}</p>
                                                 <div v-if="t.batches.length === 0" class="py-2 text-sm text-muted">{{ $t('task_progress.empty') }}</div>
@@ -1297,18 +1379,27 @@ function destroy() {
                         <option v-for="tpl in taskTemplates" :key="tpl.id" :value="tpl.id">{{ tpl.name }}</option>
                     </VSelect>
                 </div>
+                <!-- Column headers in the agreed order -->
+                <div class="grid grid-cols-12 gap-2 px-0.5 text-[11px] font-medium uppercase tracking-wide text-muted">
+                    <span class="col-span-2">{{ $t('production_tasks.category') }}</span>
+                    <span class="col-span-1">{{ $t('production_tasks.unit') }}</span>
+                    <span class="col-span-3">{{ $t('production_tasks.name') }}</span>
+                    <span class="col-span-1">{{ $t('production_tasks.unit_price') }} €</span>
+                    <span class="col-span-2">{{ $t('production_tasks.planned') }}</span>
+                    <span class="col-span-1">{{ $t('production_tasks.weightage') }} %</span>
+                    <span class="col-span-1">{{ $t('production_tasks.house') }}</span>
+                    <span class="col-span-1"></span>
+                </div>
                 <div v-for="(row, i) in bulkForm.tasks" :key="i" class="grid grid-cols-12 items-start gap-2">
-                    <VInput v-model="row.name" class="col-span-3" :placeholder="$t('production_tasks.name')" />
                     <VSelect v-model="row.category" class="col-span-2">
                         <option v-for="c in taskCategories" :key="c" :value="c">{{ $t(`production_tasks.cat_${c}`) }}</option>
                     </VSelect>
-                    <VInput v-model="row.house_number" class="col-span-1" :placeholder="$t('production_tasks.house')" />
-                    <VInput v-model="row.unit" class="col-span-1" placeholder="m²" />
-                    <VInput v-model="row.planned_quantity" type="number" step="0.01" min="0" class="col-span-2" :placeholder="$t('production_tasks.planned')" />
-                    <VInput v-model="row.weightage" type="number" step="0.01" min="0" max="100" class="col-span-1" placeholder="%" />
-                    <VSelect v-model="row.status" class="col-span-1">
-                        <option v-for="s in taskStatuses" :key="s" :value="s">{{ $t(`production_tasks.st_${s}`) }}</option>
-                    </VSelect>
+                    <VInput v-model="row.unit" class="col-span-1" :placeholder="$t('production_tasks.ph_unit')" />
+                    <VInput v-model="row.name" class="col-span-3" :placeholder="$t('production_tasks.ph_name')" />
+                    <VInput v-model="row.unit_price" type="number" step="0.01" min="0" class="col-span-1" :placeholder="$t('production_tasks.ph_unit_price')" />
+                    <VInput v-model="row.planned_quantity" type="number" step="0.01" min="0" class="col-span-2" :placeholder="$t('production_tasks.ph_planned')" />
+                    <VInput v-model="row.weightage" type="number" step="0.01" min="0" max="100" class="col-span-1" :placeholder="$t('production_tasks.ph_weightage')" />
+                    <VInput v-model="row.house_number" class="col-span-1" :placeholder="$t('production_tasks.ph_house')" />
                     <button type="button" class="col-span-1 rounded-sm p-1.5 text-muted hover:text-status-danger" :disabled="bulkForm.tasks.length === 1" @click="removeBulkRow(i)">
                         <AppIcon name="trash" class="h-3.5 w-3.5" />
                     </button>
@@ -1325,15 +1416,31 @@ function destroy() {
         <!-- Edit a single production task -->
         <VModal :open="taskEditOpen" title-key="production_tasks.edit" @close="taskEditOpen = false">
             <form id="task-edit-form" class="grid gap-4 sm:grid-cols-2" @submit.prevent="submitTaskEdit">
-                <FormField k="production_tasks.name" :error="taskForm.errors.name" required><VInput v-model="taskForm.name" /></FormField>
+                <!-- 1. Category -->
                 <FormField k="production_tasks.category" :error="taskForm.errors.category" required>
                     <VSelect v-model="taskForm.category"><option v-for="c in taskCategories" :key="c" :value="c">{{ $t(`production_tasks.cat_${c}`) }}</option></VSelect>
                 </FormField>
-                <FormField k="production_tasks.house" :error="taskForm.errors.house_number"><VInput v-model="taskForm.house_number" /></FormField>
-                <FormField k="production_tasks.unit" :error="taskForm.errors.unit"><VInput v-model="taskForm.unit" /></FormField>
-                <FormField k="production_tasks.planned" :error="taskForm.errors.planned_quantity" required><VInput v-model="taskForm.planned_quantity" type="number" step="0.01" min="0" /></FormField>
-                <FormField k="production_tasks.unit_price" :error="taskForm.errors.unit_price"><VInput v-model="taskForm.unit_price" type="number" step="0.01" min="0" /></FormField>
-                <FormField k="production_tasks.weightage" :error="taskForm.errors.weightage"><VInput v-model="taskForm.weightage" type="number" step="0.01" min="0" max="100" /></FormField>
+                <!-- 2. Unit -->
+                <FormField k="production_tasks.unit" :error="taskForm.errors.unit"><VInput v-model="taskForm.unit" :placeholder="$t('production_tasks.ph_unit')" /></FormField>
+                <!-- 3. Task description -->
+                <FormField k="production_tasks.name" class="sm:col-span-2" :error="taskForm.errors.name" required><VInput v-model="taskForm.name" :placeholder="$t('production_tasks.ph_name')" /></FormField>
+                <!-- 4. Price per unit -->
+                <FormField k="production_tasks.unit_price" :error="taskForm.errors.unit_price">
+                    <div class="relative">
+                        <VInput v-model="taskForm.unit_price" type="number" step="0.01" min="0" class="pe-7" :placeholder="$t('production_tasks.ph_unit_price')" />
+                        <span class="pointer-events-none absolute end-3 top-1/2 -translate-y-1/2 text-sm text-muted">€</span>
+                    </div>
+                    <p class="mt-1 text-xs text-muted">{{ $t('production_tasks.unit_price_hint') }}</p>
+                </FormField>
+                <!-- 5. Total measurement / planned quantity -->
+                <FormField k="production_tasks.planned" :error="taskForm.errors.planned_quantity" required><VInput v-model="taskForm.planned_quantity" type="number" step="0.01" min="0" :placeholder="$t('production_tasks.ph_planned')" /></FormField>
+                <!-- 6. Weightage % -->
+                <FormField k="production_tasks.weightage" :error="taskForm.errors.weightage">
+                    <VInput v-model="taskForm.weightage" type="number" step="0.01" min="0" max="100" :placeholder="$t('production_tasks.ph_weightage')" />
+                    <p class="mt-1 text-xs text-muted">{{ $t('production_tasks.weightage_hint') }}</p>
+                </FormField>
+                <!-- 7. House number (optional) -->
+                <FormField k="production_tasks.house" :error="taskForm.errors.house_number"><VInput v-model="taskForm.house_number" :placeholder="$t('production_tasks.ph_house')" /></FormField>
                 <FormField k="production_tasks.status" :error="taskForm.errors.status" required>
                     <VSelect v-model="taskForm.status"><option v-for="s in taskStatuses" :key="s" :value="s">{{ $t(`production_tasks.st_${s}`) }}</option></VSelect>
                 </FormField>
@@ -1342,6 +1449,37 @@ function destroy() {
             <template #footer>
                 <VButton variant="ghost" @click="taskEditOpen = false"><Bilingual k="common.cancel" inline /></VButton>
                 <VButton type="submit" form="task-edit-form" :loading="taskForm.processing"><Bilingual k="common.save" inline /></VButton>
+            </template>
+        </VModal>
+
+        <!-- Add a sub-task under a top-level task -->
+        <VModal :open="subtaskOpen" title-key="production_tasks.add_subtask" @close="subtaskOpen = false">
+            <p v-if="subtaskParent" class="mb-3 text-xs text-muted">{{ $t('production_tasks.subtask_of') }}: <span class="font-medium text-ink">{{ subtaskParent.name }}</span></p>
+            <form id="subtask-form" class="grid gap-4 sm:grid-cols-2" @submit.prevent="submitSubtask">
+                <FormField k="production_tasks.category" :error="subtaskForm.errors['tasks.0.category']" required>
+                    <VSelect v-model="subtaskForm.category"><option v-for="c in taskCategories" :key="c" :value="c">{{ $t(`production_tasks.cat_${c}`) }}</option></VSelect>
+                </FormField>
+                <FormField k="production_tasks.unit" :error="subtaskForm.errors['tasks.0.unit']"><VInput v-model="subtaskForm.unit" :placeholder="$t('production_tasks.ph_unit')" /></FormField>
+                <FormField k="production_tasks.name" class="sm:col-span-2" :error="subtaskForm.errors['tasks.0.name']" required><VInput v-model="subtaskForm.name" :placeholder="$t('production_tasks.ph_name')" /></FormField>
+                <FormField k="production_tasks.unit_price" :error="subtaskForm.errors['tasks.0.unit_price']">
+                    <div class="relative">
+                        <VInput v-model="subtaskForm.unit_price" type="number" step="0.01" min="0" class="pe-7" :placeholder="$t('production_tasks.ph_unit_price')" />
+                        <span class="pointer-events-none absolute end-3 top-1/2 -translate-y-1/2 text-sm text-muted">€</span>
+                    </div>
+                    <p class="mt-1 text-xs text-muted">{{ $t('production_tasks.unit_price_hint') }}</p>
+                </FormField>
+                <FormField k="production_tasks.planned" :error="subtaskForm.errors['tasks.0.planned_quantity']" required><VInput v-model="subtaskForm.planned_quantity" type="number" step="0.01" min="0" :placeholder="$t('production_tasks.ph_planned')" /></FormField>
+                <FormField k="production_tasks.weightage" :error="subtaskForm.errors['tasks.0.weightage']">
+                    <VInput v-model="subtaskForm.weightage" type="number" step="0.01" min="0" max="100" :placeholder="$t('production_tasks.ph_weightage')" />
+                </FormField>
+                <FormField k="production_tasks.house" :error="subtaskForm.errors['tasks.0.house_number']"><VInput v-model="subtaskForm.house_number" :placeholder="$t('production_tasks.ph_house')" /></FormField>
+                <FormField k="production_tasks.status" :error="subtaskForm.errors['tasks.0.status']" required>
+                    <VSelect v-model="subtaskForm.status"><option v-for="s in taskStatuses" :key="s" :value="s">{{ $t(`production_tasks.st_${s}`) }}</option></VSelect>
+                </FormField>
+            </form>
+            <template #footer>
+                <VButton variant="ghost" @click="subtaskOpen = false"><Bilingual k="common.cancel" inline /></VButton>
+                <VButton type="submit" form="subtask-form" :loading="subtaskForm.processing"><Bilingual k="common.save" inline /></VButton>
             </template>
         </VModal>
 
