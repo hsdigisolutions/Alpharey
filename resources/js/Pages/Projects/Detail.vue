@@ -8,6 +8,7 @@ import { computed, ref } from 'vue';
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
 import { t } from '@/translate';
 import AppLayout from '@/Layouts/AppLayout.vue';
+import AppIcon from '@/Components/AppIcon.vue';
 import ProjectFormModal from '@/Components/Projects/ProjectFormModal.vue';
 import DocumentsPanel from '@/Components/Documents/DocumentsPanel.vue';
 import FormField from '@/Components/ui/FormField.vue';

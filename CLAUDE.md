@@ -1511,18 +1511,21 @@ treats multiple NULLs as distinct anyway).
 
 **`WageRateService` is the single writer.** `rateForDate()` is the spec lookup
 (`effective_from <= date <= effective_to|∞`, newest wins, unscoped by company so a
-deployed worker's home-company rates resolve). `snapshotValues()` is what
-AttendanceService now freezes onto each day — the dated rate if one covers the day,
+deployed worker's home-company rates resolve). AttendanceService freezes the
+rate onto each day from `ratesForDate()` — the dated rate if one covers the day,
 else a FALLBACK to the employee's live wage fields that replicates the pre-history
-`applySnapshots` EXACTLY (so factory-made employees with no rate row still price as
+pricing EXACTLY (so factory-made employees with no rate row still price as
 before — this is why every existing attendance/payroll test still passes).
+(Note 2026-08-16: `WageRateService::snapshotValues()` is now DEAD code — the live
+freeze path is `ratesForDate()` + AttendanceService's own private `applySnapshots`;
+`snapshotValues` is slated for Phase-7 removal, kept for now.)
 `createRate()` closes the open row the day before the new one, opens the new one,
 syncs the employee's cached wage columns to today's rate, and reprices UNPAID/unlocked
 attendance from the new date (edge case 2 — a paid month or `PeriodLock`ed month is
 never touched). `deleteRate()` refuses if any attendance falls in the row's range.
 
-**AttendanceService** now delegates `applySnapshots` to `WageRateService::snapshotValues($employee, $date)`
-and re-snapshots on employee OR date change; `recalculateRow()` is the public entry the
+**AttendanceService** freezes each day via `WageRateService::ratesForDate()` in its
+own private `applySnapshots`, and re-snapshots on employee OR date change; `recalculateRow()` is the public entry the
 back-dated reprice calls. **EmployeeService** no longer writes wage-rate rows itself —
 create seeds the first rate; a direct wage-field edit on the employee form updates the
 OPEN row in place (a correction to the current rate), never a new dated period. A new
