@@ -6,6 +6,7 @@ use App\Enums\MeasurementStatus;
 use App\Enums\MeasurementType;
 use App\Enums\ProductionTaskCategory;
 use App\Enums\ProductionTaskStatus;
+use App\Enums\ProjectContactRole;
 use App\Enums\ProjectPriority;
 use App\Enums\ProjectRateType;
 use App\Enums\ProjectStatus;
@@ -20,6 +21,7 @@ use App\Models\Invoice;
 use App\Models\Measurement;
 use App\Models\ProductionTask;
 use App\Models\Project;
+use App\Models\ProjectContact;
 use App\Models\ProjectDesignationRate;
 use App\Models\TaskProgress;
 use App\Models\TaskTemplate;
@@ -212,6 +214,17 @@ class ProjectController extends Controller
                 ]),
             'designations' => ProjectDesignationRateController::optionsFor($project->company_id),
             'rateTypes' => array_map(fn (ProjectRateType $t) => $t->value, ProjectRateType::cases()),
+            // Client-side contacts for this project (supervisor / engineer / PM / other).
+            'projectContacts' => $project->contacts()->orderBy('name')->get()
+                ->map(fn (ProjectContact $c) => [
+                    'id' => $c->id,
+                    'name' => $c->name,
+                    'role' => $c->role->value,
+                    'phone' => $c->phone,
+                    'email' => $c->email,
+                    'notes' => $c->notes,
+                ]),
+            'contactRoles' => array_map(fn (ProjectContactRole $r) => $r->value, ProjectContactRole::cases()),
             // Attendance tab — this project's rows for the selected month + entry data.
             'projectAttendance' => Gate::allows('attendance.view') ? $this->projectAttendance($project, $attMonth, $canSeeWages) : null,
             'attendanceMonth' => $attMonth,

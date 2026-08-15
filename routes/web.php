@@ -42,6 +42,7 @@ use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\PayrollController;
 use App\Http\Controllers\ProductionTaskController;
+use App\Http\Controllers\ProjectContactController;
 use App\Http\Controllers\ProjectController;
 use App\Http\Controllers\ProjectDesignationRateController;
 use App\Http\Controllers\ProjectWorkerController;
@@ -275,6 +276,11 @@ Route::middleware(['auth', 'active', 'two_factor', 'not_worker'])->group(functio
     // Feature 2 — per-designation rates (client + worker) on a project.
     Route::post('/projects/{project}/designation-rates', [ProjectDesignationRateController::class, 'store'])->name('projects.designation-rates.store');
     Route::delete('/projects/{project}/designation-rates/{designationRate}', [ProjectDesignationRateController::class, 'destroy'])->name('projects.designation-rates.destroy');
+
+    // Client-side contacts for a project (supervisor / engineer / PM / other).
+    Route::post('/projects/{project}/contacts', [ProjectContactController::class, 'store'])->name('projects.contacts.store');
+    Route::put('/projects/{project}/contacts/{contact}', [ProjectContactController::class, 'update'])->name('projects.contacts.update');
+    Route::delete('/projects/{project}/contacts/{contact}', [ProjectContactController::class, 'destroy'])->name('projects.contacts.destroy');
 
     // Production tasks — standalone screen (all tasks across projects) + exports.
     Route::get('/tasks/export', [ProductionTaskController::class, 'export'])->name('tasks.export');

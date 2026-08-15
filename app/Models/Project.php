@@ -100,6 +100,16 @@ class Project extends Model
     }
 
     /**
+     * Client-side people who handle this specific project.
+     *
+     * @return HasMany<ProjectContact, $this>
+     */
+    public function contacts(): HasMany
+    {
+        return $this->hasMany(ProjectContact::class);
+    }
+
+    /**
      * @return HasMany<ProjectDesignationRate, $this>
      */
     public function designationRates(): HasMany

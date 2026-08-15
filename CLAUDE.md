@@ -4,6 +4,24 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Status: Phase 9 in progress — hardening (2026-08-01)
 
+### Project client contacts (2026-08-15, DONE)
+
+Per-project client-side contacts — the specific people on the CLIENT side who run
+THAT project (one client can have several projects, each with different reps).
+Simple CRUD on **Project Detail → Summary**. New `project_contacts` table
+(company-owned; id · project_id · company_id · name · role · phone? · email? ·
+notes? · timestamps; `App\Enums\ProjectContactRole`: supervisor/engineer/
+project_manager/other). `ProjectContact` (BelongsToCompany + Auditable,
+auditModule `projects`); `Project::contacts()`. `ProjectContactController`
+(store/update/destroy, `StoreProjectContactRequest` gated `projects.edit`,
+nested-ownership 404, company_id never from input). Routes
+`POST/PUT/DELETE /projects/{project}/contacts[/{contact}]`. `ProjectController::
+show` ships `projectContacts` + `contactRoles`. Detail.vue: a "Client contacts"
+card (table — name · role badge · clickable `tel:`/`mailto:` · notes · edit/delete)
++ an add/edit modal, gated by `can.edit`. Tests: `ProjectContactTest` (9 — CRUD,
+company_id-injection ignored, email/role/name validation, wrong-project 404,
+cross-company 404, permission gate, detail payload).
+
 ### Worker location verification — Phase 1 (2026-08-15, DONE)
 
 Check-in is now **project-aware** and measures how far the worker is from that

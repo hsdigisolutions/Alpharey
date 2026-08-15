@@ -50,6 +50,9 @@ const props = defineProps({
     designationRates: { type: Array, default: () => [] },
     designations: { type: Array, default: () => [] },
     rateTypes: { type: Array, default: () => [] },
+    // Client-side contacts for this project (supervisor / engineer / PM / other).
+    projectContacts: { type: Array, default: () => [] },
+    contactRoles: { type: Array, default: () => [] },
     // Attendance tab
     projectAttendance: { type: Object, default: null },
     attendanceMonth: { type: String, default: '' },
@@ -133,6 +136,32 @@ function removeRate(r) {
 }
 function rateTypeLabel(t) {
     return { per_hour: '€/h', per_day: '€/día', per_meter: '€/m²' }[t] ?? t;
+}
+
+// Client contacts — simple CRUD (add/edit in a modal, delete inline).
+const contactModalOpen = ref(false);
+const contactEditing = ref(null);
+const contactForm = useForm({ name: '', role: 'supervisor', phone: '', email: '', notes: '' });
+function openContact(c = null) {
+    contactEditing.value = c;
+    contactForm.clearErrors();
+    contactForm.name = c?.name ?? '';
+    contactForm.role = c?.role ?? 'supervisor';
+    contactForm.phone = c?.phone ?? '';
+    contactForm.email = c?.email ?? '';
+    contactForm.notes = c?.notes ?? '';
+    contactModalOpen.value = true;
+}
+function saveContact() {
+    const opts = { preserveScroll: true, onSuccess: () => { contactModalOpen.value = false; } };
+    if (contactEditing.value) {
+        contactForm.put(`/projects/${props.project.id}/contacts/${contactEditing.value.id}`, opts);
+    } else {
+        contactForm.post(`/projects/${props.project.id}/contacts`, opts);
+    }
+}
+function removeContact(c) {
+    askDelete(c.name ?? '', () => router.delete(`/projects/${props.project.id}/contacts/${c.id}`, { preserveScroll: true }));
 }
 
 // daily / monthly P&L (Feature 3)
@@ -490,6 +519,52 @@ function destroy() {
                             <p v-if="c.phone" class="text-xs text-muted">{{ c.phone }}</p>
                             <p v-if="c.email" class="text-xs text-muted">{{ c.email }}</p>
                         </div>
+                    </div>
+                </VCard>
+
+                <!-- Client-side people who handle THIS project (supervisor /
+                     engineer / PM / other). Simple CRUD, gated by projects.edit. -->
+                <VCard title-key="projects.section_client_contacts" class="lg:col-span-2" :padded="false">
+                    <template v-if="can.edit" #header>
+                        <VButton variant="secondary" size="sm" icon="plus" @click="openContact()">
+                            <Bilingual k="projects.contact_add" inline />
+                        </VButton>
+                    </template>
+                    <div class="overflow-x-auto">
+                        <table class="w-full min-w-max text-sm">
+                            <thead class="bg-surface-sunken text-[11px] uppercase tracking-wide text-muted">
+                                <tr>
+                                    <th class="px-4 py-2 text-start"><Bilingual k="projects.contact_name" inline /></th>
+                                    <th class="px-4 py-2 text-start"><Bilingual k="projects.contact_role" inline /></th>
+                                    <th class="px-4 py-2 text-start"><Bilingual k="projects.contact_phone" inline /></th>
+                                    <th class="px-4 py-2 text-start"><Bilingual k="projects.contact_email" inline /></th>
+                                    <th class="px-4 py-2 text-start"><Bilingual k="projects.contact_notes" inline /></th>
+                                    <th v-if="can.edit" class="px-4 py-2"></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr v-for="c in projectContacts" :key="c.id" class="border-b border-line">
+                                    <td class="px-4 py-2 font-medium">{{ c.name }}</td>
+                                    <td class="px-4 py-2"><VBadge status="info">{{ $t(`projects.contact_role_${c.role}`) }}</VBadge></td>
+                                    <td class="px-4 py-2">
+                                        <a v-if="c.phone" :href="`tel:${c.phone}`" class="text-accent hover:underline">{{ c.phone }}</a>
+                                        <span v-else class="text-muted">—</span>
+                                    </td>
+                                    <td class="px-4 py-2">
+                                        <a v-if="c.email" :href="`mailto:${c.email}`" class="text-accent hover:underline">{{ c.email }}</a>
+                                        <span v-else class="text-muted">—</span>
+                                    </td>
+                                    <td class="px-4 py-2 text-ink-soft">{{ c.notes || '—' }}</td>
+                                    <td v-if="can.edit" class="whitespace-nowrap px-4 py-2 text-end">
+                                        <VButton variant="ghost" size="sm" icon="edit" @click="openContact(c)" />
+                                        <VButton variant="ghost" size="sm" icon="trash" @click="removeContact(c)" />
+                                    </td>
+                                </tr>
+                                <tr v-if="projectContacts.length === 0">
+                                    <td :colspan="can.edit ? 6 : 5" class="px-4 py-6 text-center text-sm text-muted">{{ $t('projects.contacts_empty') }}</td>
+                                </tr>
+                            </tbody>
+                        </table>
                     </div>
                 </VCard>
 
@@ -1128,6 +1203,33 @@ function destroy() {
             :can-see-wage="canSeeWages" @close="showAttEntry = false; reloadAfterEntry()" />
 
         <!-- Add / edit measurement -->
+        <!-- Add / edit a client-side contact -->
+        <VModal :open="contactModalOpen" :title-key="contactEditing ? 'projects.contact_edit' : 'projects.contact_add'" @close="contactModalOpen = false">
+            <form id="contact-form" class="grid gap-4 sm:grid-cols-2" @submit.prevent="saveContact">
+                <FormField k="projects.contact_name" :error="contactForm.errors.name" required>
+                    <VInput v-model="contactForm.name" :invalid="Boolean(contactForm.errors.name)" />
+                </FormField>
+                <FormField k="projects.contact_role" :error="contactForm.errors.role" required>
+                    <VSelect v-model="contactForm.role">
+                        <option v-for="r in contactRoles" :key="r" :value="r">{{ $t(`projects.contact_role_${r}`) }}</option>
+                    </VSelect>
+                </FormField>
+                <FormField k="projects.contact_phone" :error="contactForm.errors.phone">
+                    <VInput v-model="contactForm.phone" type="tel" />
+                </FormField>
+                <FormField k="projects.contact_email" :error="contactForm.errors.email">
+                    <VInput v-model="contactForm.email" type="email" :invalid="Boolean(contactForm.errors.email)" />
+                </FormField>
+                <FormField k="projects.contact_notes" :error="contactForm.errors.notes" class="sm:col-span-2">
+                    <VTextarea v-model="contactForm.notes" :rows="2" />
+                </FormField>
+            </form>
+            <template #footer>
+                <VButton variant="ghost" @click="contactModalOpen = false"><Bilingual k="common.cancel" inline /></VButton>
+                <VButton type="submit" form="contact-form" :loading="contactForm.processing"><Bilingual k="common.save" inline /></VButton>
+            </template>
+        </VModal>
+
         <VModal :open="measModalOpen" :title-key="measEditing ? 'measurements.edit' : 'measurements.add'" @close="measModalOpen = false">
             <form id="meas-form" class="grid gap-4 sm:grid-cols-2" @submit.prevent="submitMeas">
                 <FormField k="measurements.employee" :error="measForm.errors.employee_id" class="sm:col-span-2">
