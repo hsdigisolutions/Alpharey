@@ -16,6 +16,7 @@ use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Auth\NewPasswordController;
 use App\Http\Controllers\Auth\PasswordResetLinkController;
 use App\Http\Controllers\Auth\TwoFactorController;
+use App\Http\Controllers\AutocompleteController;
 use App\Http\Controllers\CallPanelController;
 use App\Http\Controllers\ClientContactController;
 use App\Http\Controllers\ClientController;
@@ -199,6 +200,10 @@ Route::middleware(['auth', 'active', 'two_factor', 'not_worker'])->group(functio
     // Global search (Phase 8) — JSON for the header dropdown; permission- and
     // company-scoped in GlobalSearch. The only non-Inertia GET in the app.
     Route::get('/search', SearchController::class)->name('search');
+
+    // Autocomplete (JSON) — previous free-text values for a field, company
+    // scoped. Currently powers invoice/expense line-item descriptions.
+    Route::get('/autocomplete/descriptions', [AutocompleteController::class, 'descriptions'])->name('autocomplete.descriptions');
 
     // Screen 14 — Reports (Phase 8). Export routes before index so
     // /reports/export-* never resolve as a module param.

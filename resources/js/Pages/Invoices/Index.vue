@@ -19,6 +19,7 @@ import VButton from '@/Components/ui/VButton.vue';
 import VConfirmDialog from '@/Components/ui/VConfirmDialog.vue';
 import VDateInput from '@/Components/ui/VDateInput.vue';
 import VEmptyState from '@/Components/ui/VEmptyState.vue';
+import VAutocomplete from '@/Components/ui/VAutocomplete.vue';
 import VInput from '@/Components/ui/VInput.vue';
 import VPageHeader from '@/Components/ui/VPageHeader.vue';
 import VPagination from '@/Components/ui/VPagination.vue';
@@ -448,7 +449,7 @@ const columns = computed(() => [
                             <span class="col-span-1"></span>
                         </div>
                         <div v-for="(line, i) in form.lines" :key="i" class="grid grid-cols-12 items-center gap-2">
-                            <VInput v-model="line.description" class="col-span-6"
+                            <VAutocomplete v-model="line.description" class="col-span-6"
                                 :placeholder="$t('invoices.description')" />
                             <VInput v-model="line.quantity" type="number" step="0.01" min="0" class="col-span-2"
                                 :placeholder="$t('invoices.quantity')" />
