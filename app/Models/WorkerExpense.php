@@ -24,6 +24,8 @@ use Illuminate\Support\Carbon;
  * @property int $company_id
  * @property int|null $attendance_id
  * @property int|null $project_id
+ * @property int|null $vehicle_id
+ * @property int|null $auto_expense_id
  * @property Carbon $date
  * @property numeric-string $amount
  * @property string $category
@@ -83,5 +85,18 @@ class WorkerExpense extends Model
     public function approver(): BelongsTo
     {
         return $this->belongsTo(User::class, 'approved_by');
+    }
+
+    /** @return BelongsTo<Vehicle, $this> */
+    public function vehicle(): BelongsTo
+    {
+        return $this->belongsTo(Vehicle::class);
+    }
+
+    /** The company expense auto-created when a fuel expense is approved. */
+    /** @return BelongsTo<Expense, $this> */
+    public function autoExpense(): BelongsTo
+    {
+        return $this->belongsTo(Expense::class, 'auto_expense_id');
     }
 }

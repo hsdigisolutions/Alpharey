@@ -10,6 +10,7 @@ use App\Models\WorkerExpense;
 use App\Rules\OwnCompanyEmployee;
 use App\Services\Audit\AuditLogger;
 use App\Services\Notifications\NotificationDispatcher;
+use App\Services\Workers\WorkerFuelExpenseService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -106,6 +107,9 @@ class WorkerExpenseAdminController extends Controller
         $expense->approved_at = now();
         $expense->save();
 
+        // A fuel expense mirrors into the company expenses module on approval.
+        app(WorkerFuelExpenseService::class)->syncApproved($expense);
+
         return back()->with('success', __('ui.worker_expenses.created'));
     }
 
@@ -118,6 +122,9 @@ class WorkerExpenseAdminController extends Controller
         $workerExpense->approved_at = now();
         $workerExpense->rejection_reason = null;
         $workerExpense->save();
+
+        // Fuel expense → auto-create the matching company expense (idempotent).
+        app(WorkerFuelExpenseService::class)->syncApproved($workerExpense);
 
         $this->notifyWorker($workerExpense, true);
 

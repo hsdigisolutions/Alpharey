@@ -43,6 +43,8 @@ use Illuminate\Support\Carbon;
  * @property float|null $vat_custom_percent
  * @property numeric-string $vat_amount
  * @property numeric-string $total
+ * @property string|null $source
+ * @property int|null $source_id
  */
 class Expense extends Model
 {

@@ -2446,6 +2446,8 @@ return [
         'file_hint' => 'PDF or image, max 10 MB',
         'current_file' => 'Current file',
         'manage_categories' => 'Categories',
+        'auto_fuel_badge' => '⛽ Auto — vehicle fuel',
+        'auto_fuel_hint' => 'Auto-created when a worker fuel expense was approved',
         'categories_title' => 'Expense categories',
         'category_name' => 'Category name',
         'category_add' => 'Add category',

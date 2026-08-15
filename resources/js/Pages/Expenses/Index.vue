@@ -258,7 +258,12 @@ const columns = [
             <tr v-for="r in expenses.data" :key="r.id" class="cursor-pointer hover:bg-surface-hover"
                 @click="openEdit(r)">
                 <td class="tabular-nums px-3 py-2.5 text-sm">{{ r.date }}</td>
-                <td class="px-3 py-2.5 text-sm font-medium text-ink">{{ r.number ?? '—' }}</td>
+                <td class="px-3 py-2.5 text-sm font-medium text-ink">
+                    {{ r.number ?? '—' }}
+                    <VBadge v-if="r.source === 'worker_fuel'" status="info" class="ms-1" :title="$t('expenses.auto_fuel_hint')">
+                        {{ $t('expenses.auto_fuel_badge') }}
+                    </VBadge>
+                </td>
                 <td class="px-3 py-2.5 text-sm text-ink-soft">
                     <Bilingual :k="`expenses.type_${r.type}`" inline />
                 </td>

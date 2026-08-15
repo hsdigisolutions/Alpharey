@@ -349,6 +349,8 @@ class ExpenseController extends Controller
             'notes' => $e->notes,
             'has_file' => $e->file_path !== null,
             'original_name' => $e->original_name,
+            // Non-null when the row was auto-created (e.g. 'worker_fuel').
+            'source' => $e->source,
         ];
     }
 }

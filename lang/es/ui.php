@@ -2451,6 +2451,8 @@ return [
         'file_hint' => 'PDF o imagen, máx. 10 MB',
         'current_file' => 'Archivo actual',
         'manage_categories' => 'Categorías',
+        'auto_fuel_badge' => '⛽ Auto — combustible',
+        'auto_fuel_hint' => 'Creado automáticamente al aprobar un gasto de combustible del trabajador',
         'categories_title' => 'Categorías de gasto',
         'category_name' => 'Nombre de categoría',
         'category_add' => 'Añadir categoría',

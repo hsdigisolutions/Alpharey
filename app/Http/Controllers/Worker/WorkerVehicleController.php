@@ -170,6 +170,9 @@ class WorkerVehicleController extends Controller
             'description' => $validated['description'] ?? '',
         ]);
         $expense->company_id = $employee->company_id;
+        // Not fillable — the vehicle comes from the session, not worker input.
+        // It lets the auto-created company expense name the vehicle on approval.
+        $expense->vehicle_id = $session->vehicle_id;
 
         if ($request->hasFile('receipt')) {
             $path = $request->file('receipt')->store(
