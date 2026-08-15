@@ -5,6 +5,8 @@ use App\Models\Company;
 use App\Models\Employee;
 use App\Models\EmployeeCallLog;
 use App\Models\User;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 
 beforeEach(function (): void {
     $this->company = Company::factory()->create();
@@ -198,4 +200,20 @@ it('denies the call panel to a user without the permission', function (): void {
         'employee_id' => Employee::factory()->create(['company_id' => $this->company->id])->id,
         'remarks' => 'x',
     ])->assertForbidden();
+});
+
+it('accepts a browser webm voice note (sniffed as video/webm)', function () {
+    Storage::fake('local');
+    $employee = Employee::factory()->create(['company_id' => $this->company->id]);
+
+    // A MediaRecorder webm blob is content-sniffed as video/webm, not audio/webm.
+    $this->post('/calls', [
+        'employee_id' => $employee->id,
+        'remarks' => 'Voice note attached',
+        'voice_note' => UploadedFile::fake()->create('note.webm', 120, 'video/webm'),
+        'voice_note_label' => 'voice note',
+    ])->assertRedirect()->assertSessionHasNoErrors();
+
+    $call = EmployeeCallLog::withoutGlobalScopes()->where('employee_id', $employee->id)->firstOrFail();
+    expect($call->voice_note_path)->not->toBeNull();
 });

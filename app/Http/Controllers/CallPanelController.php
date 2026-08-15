@@ -66,7 +66,9 @@ class CallPanelController extends Controller
             'called_at' => ['nullable', 'date'],
             'remarks' => ['required', 'string', 'max:2000'],
             'follow_up_date' => ['nullable', 'date'],
-            'voice_note' => ['nullable', 'file', 'mimetypes:audio/webm,audio/ogg,audio/mp4,audio/mpeg,audio/wav,audio/x-m4a', 'max:10240'],
+            // video/webm is included because a browser MediaRecorder webm blob is
+            // sniffed by finfo as video/webm (the Matroska container), not audio/webm.
+            'voice_note' => ['nullable', 'file', 'mimetypes:audio/webm,video/webm,audio/ogg,audio/mp4,audio/mpeg,audio/wav,audio/x-m4a', 'max:10240'],
             'voice_note_label' => ['nullable', 'string', 'max:255'],
             'attachment' => ['nullable', 'file', 'mimetypes:audio/mpeg,audio/mp4,audio/ogg,audio/webm,video/mp4,image/jpeg,image/png,image/webp,application/pdf', 'max:102400'],
             'attachment_label' => ['nullable', 'string', 'max:255'],
