@@ -2,8 +2,10 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\AttendanceStatus;
 use App\Http\Controllers\Admin\Concerns\ResolvesCompanyContext;
 use App\Services\Dashboard\TodayService;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -18,11 +20,18 @@ class TodayController extends Controller
 
     public function __construct(private readonly TodayService $today) {}
 
-    public function index(): Response
+    public function index(Request $request): Response
     {
         $companyId = $this->contextCompanyId();
 
-        $data = $this->today->for($companyId);
+        $statuses = array_map(fn (AttendanceStatus $s): string => $s->value, AttendanceStatus::cases());
+        $filters = [
+            'search' => trim((string) $request->query('search', '')),
+            'project' => is_numeric($request->query('project')) ? (int) $request->query('project') : null,
+            'status' => in_array($request->query('status'), $statuses, true) ? (string) $request->query('status') : null,
+        ];
+
+        $data = $this->today->for($companyId, $filters);
 
         // Advance amounts are encrypted pay data — strip them for anyone
         // without the right to see pay (same rule as the payroll screen).

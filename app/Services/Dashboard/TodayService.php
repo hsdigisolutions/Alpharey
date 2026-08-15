@@ -31,18 +31,73 @@ class TodayService
     private const WORKED = [AttendanceStatus::Present->value, AttendanceStatus::Late->value, AttendanceStatus::EarlyLeave->value];
 
     /**
+     * @param  array{search?: string, project?: int|null, status?: string|null}  $filters
      * @return array<string, mixed>
      */
-    public function for(int $companyId): array
+    public function for(int $companyId, array $filters = []): array
     {
         $today = Carbon::now()->toDateString();
 
+        // Fetch today's attendance once, unfiltered — the filter dropdowns are
+        // built from this stable set, then the visible rows are the filtered
+        // subset. KPIs stay the day's headline totals (never filtered).
+        $allToday = collect($this->attendanceToday($companyId, $today));
+
+        $projectOptions = $allToday
+            ->filter(fn (array $r): bool => $r['project_id'] !== null)
+            ->unique('project_id')
+            ->map(fn (array $r): array => ['id' => $r['project_id'], 'name' => $r['project']])
+            ->sortBy('name')
+            ->values()
+            ->all();
+
+        $rows = $this->applyAttendanceFilters($allToday, $filters);
+
         return [
             'kpis' => $this->kpis($companyId, $today),
-            'attendance' => $this->attendanceToday($companyId, $today),
+            'attendance' => $rows->values()->all(),
+            'attendance_total' => $allToday->count(),
+            'filters' => [
+                'search' => (string) ($filters['search'] ?? ''),
+                'project' => $filters['project'] ?? null,
+                'status' => $filters['status'] ?? null,
+            ],
+            'filter_options' => [
+                'projects' => $projectOptions,
+                'statuses' => array_map(fn (AttendanceStatus $s): string => $s->value, AttendanceStatus::cases()),
+            ],
             'pending' => $this->pendingActions($companyId),
             'generated_at' => Carbon::now()->toDateTimeString(),
         ];
+    }
+
+    /**
+     * In-PHP filtering — today's set for one company is small (tens of rows),
+     * so a query rebuild is not worth it and keeps the options/rows in step.
+     *
+     * @param  Collection<int, array<string, mixed>>  $rows
+     * @param  array{search?: string, project?: int|null, status?: string|null}  $filters
+     * @return Collection<int, array<string, mixed>>
+     */
+    private function applyAttendanceFilters(Collection $rows, array $filters): Collection
+    {
+        $search = mb_strtolower(trim((string) ($filters['search'] ?? '')));
+        $project = $filters['project'] ?? null;
+        $status = $filters['status'] ?? null;
+
+        return $rows->filter(function (array $r) use ($search, $project, $status): bool {
+            if ($search !== '' && ! str_contains(mb_strtolower((string) ($r['employee'] ?? '')), $search)) {
+                return false;
+            }
+            if ($project !== null && $r['project_id'] !== $project) {
+                return false;
+            }
+            if ($status !== null && $r['status'] !== $status) {
+                return false;
+            }
+
+            return true;
+        });
     }
 
     /**
@@ -108,6 +163,7 @@ class TodayService
                 'employee' => $a->employee?->full_name,
                 'home_company' => $homeByEmployee[$a->employee_id] ?? null,
                 'project' => $a->project?->name,
+                'project_id' => $a->project_id,
                 'check_in' => $a->check_in,
                 'check_out' => $a->check_out,
                 'hours' => (float) $a->hours_worked,

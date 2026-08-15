@@ -4,14 +4,18 @@
  * (with a home-company column for workers deployed in), and the four
  * pending-action lists. Reloads itself every 5 minutes.
  */
-import { onMounted, onBeforeUnmount } from 'vue';
+import { onMounted, onBeforeUnmount, reactive, computed } from 'vue';
 import { Head, router } from '@inertiajs/vue3';
+import { t } from '@/translate';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import VPageHeader from '@/Components/ui/VPageHeader.vue';
 import VKpiCard from '@/Components/ui/VKpiCard.vue';
 import VCard from '@/Components/ui/VCard.vue';
 import VBadge from '@/Components/ui/VBadge.vue';
+import VButton from '@/Components/ui/VButton.vue';
 import VEmptyState from '@/Components/ui/VEmptyState.vue';
+import VSearchInput from '@/Components/ui/VSearchInput.vue';
+import VSelect from '@/Components/ui/VSelect.vue';
 
 const props = defineProps({
     data: { type: Object, required: true },
@@ -27,15 +31,53 @@ function eur(value) {
 
 const statusBadge = { present: 'ok', late: 'warn', early_leave: 'warn', absent: 'danger', leave: 'info' };
 
+function statusLabel(s) {
+    return t(`today.status_${s}`);
+}
+
+/* ── Attendance filters (server-side, preserved across auto-refresh) ── */
+const filters = reactive({
+    search: props.data.filters?.search ?? '',
+    project: props.data.filters?.project ?? '',
+    status: props.data.filters?.status ?? '',
+});
+
+const hasFilters = computed(() => filters.search !== '' || filters.project !== '' || filters.status !== '');
+
+let searchDebounce = null;
+
+function applyFilters() {
+    router.get('/today', {
+        search: filters.search || undefined,
+        project: filters.project || undefined,
+        status: filters.status || undefined,
+    }, { preserveState: true, preserveScroll: true, replace: true, only: ['data'] });
+}
+
+function onSearch(v) {
+    filters.search = v;
+    clearTimeout(searchDebounce);
+    searchDebounce = setTimeout(applyFilters, 350);
+}
+
+function clearFilters() {
+    filters.search = '';
+    filters.project = '';
+    filters.status = '';
+    applyFilters();
+}
+
 onMounted(() => {
     timer = setInterval(() => {
-        // Partial reload of just the data prop — keeps scroll and is cheap.
+        // Partial reload of just the data prop — keeps scroll + the active
+        // filters (they live in the URL query) and is cheap.
         router.reload({ only: ['data'] });
     }, REFRESH_MS);
 });
 
 onBeforeUnmount(() => {
     if (timer) clearInterval(timer);
+    clearTimeout(searchDebounce);
 });
 </script>
 
@@ -64,7 +106,28 @@ onBeforeUnmount(() => {
 
         <!-- Attendance table -->
         <VCard class="mt-6">
-            <h2 class="mb-3 text-sm font-semibold text-ink"><Bilingual k="today.attendance_table" inline /></h2>
+            <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <h2 class="text-sm font-semibold text-ink"><Bilingual k="today.attendance_table" inline /></h2>
+                <span class="text-xs text-muted">{{ t('today.showing', { shown: data.attendance.length, total: data.attendance_total }) }}</span>
+            </div>
+
+            <!-- Filters -->
+            <div class="mb-4 flex flex-wrap items-center gap-2">
+                <VSearchInput :model-value="filters.search" class="w-full sm:w-56"
+                    :placeholder="$t('today.filter_search')" @update:model-value="onSearch" />
+                <VSelect v-model="filters.project" class="w-full sm:w-52" @update:model-value="applyFilters">
+                    <option value="">{{ $t('today.all_projects') }}</option>
+                    <option v-for="p in data.filter_options.projects" :key="p.id" :value="p.id">{{ p.name }}</option>
+                </VSelect>
+                <VSelect v-model="filters.status" class="w-full sm:w-44" @update:model-value="applyFilters">
+                    <option value="">{{ $t('today.all_statuses') }}</option>
+                    <option v-for="s in data.filter_options.statuses" :key="s" :value="s">{{ statusLabel(s) }}</option>
+                </VSelect>
+                <VButton v-if="hasFilters" variant="ghost" size="sm" @click="clearFilters">
+                    <Bilingual k="today.clear_filters" inline />
+                </VButton>
+            </div>
+
             <VEmptyState v-if="data.attendance.length === 0" title-key="today.no_attendance" message-key="today.no_attendance" />
             <div v-else class="overflow-x-auto">
                 <table class="w-full text-sm">
@@ -90,7 +153,7 @@ onBeforeUnmount(() => {
                             <td class="tabular-nums px-2 py-2 text-ink-soft">{{ row.check_in ?? '—' }}</td>
                             <td class="tabular-nums px-2 py-2 text-ink-soft">{{ row.check_out ?? '—' }}</td>
                             <td class="tabular-nums px-2 py-2 text-end text-ink">{{ row.hours }}</td>
-                            <td class="px-2 py-2"><VBadge :status="statusBadge[row.status] ?? 'neutral'">{{ row.status }}</VBadge></td>
+                            <td class="px-2 py-2"><VBadge :status="statusBadge[row.status] ?? 'neutral'">{{ statusLabel(row.status) }}</VBadge></td>
                         </tr>
                     </tbody>
                 </table>

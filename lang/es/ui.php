@@ -1600,6 +1600,16 @@ return [
         'auto_refresh' => 'Actualización automática cada 5 minutos',
         'updated' => 'Actualizado',
         'payrolls_count' => 'nóminas',
+        'filter_search' => 'Buscar empleado…',
+        'all_projects' => 'Todos los proyectos',
+        'all_statuses' => 'Todos los estados',
+        'clear_filters' => 'Limpiar filtros',
+        'showing' => 'Mostrando :shown de :total',
+        'status_present' => 'Presente',
+        'status_late' => 'Tarde',
+        'status_early_leave' => 'Salida anticipada',
+        'status_absent' => 'Ausente',
+        'status_leave' => 'Baja',
     ],
 
     /*

@@ -1595,6 +1595,16 @@ return [
         'auto_refresh' => 'Auto-refreshes every 5 minutes',
         'updated' => 'Updated',
         'payrolls_count' => 'payrolls',
+        'filter_search' => 'Search employee…',
+        'all_projects' => 'All projects',
+        'all_statuses' => 'All statuses',
+        'clear_filters' => 'Clear filters',
+        'showing' => 'Showing :shown of :total',
+        'status_present' => 'Present',
+        'status_late' => 'Late',
+        'status_early_leave' => 'Early leave',
+        'status_absent' => 'Absent',
+        'status_leave' => 'Leave',
     ],
 
     /*

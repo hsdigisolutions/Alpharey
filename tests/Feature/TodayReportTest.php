@@ -124,6 +124,38 @@ it('strips the advance amount for a user without pay permission', function (): v
             ->where('data.pending.advances_pending', fn ($rows) => ! array_key_exists('amount', $rows[0])));
 });
 
+it('filters the attendance list by search, project and status', function (): void {
+    $today = now()->toDateString();
+    $alpha = Employee::factory()->create(['company_id' => $this->company->id, 'full_name' => 'Carlos García']);
+    $beta = Employee::factory()->create(['company_id' => $this->company->id, 'full_name' => 'Ana López']);
+    $projectA = Project::factory()->create(['company_id' => $this->company->id, 'name' => 'Obra Norte']);
+    $projectB = Project::factory()->create(['company_id' => $this->company->id, 'name' => 'Obra Sur']);
+
+    Attendance::factory()->create(['company_id' => $this->company->id, 'employee_id' => $alpha->id, 'project_id' => $projectA->id, 'date' => $today, 'status' => AttendanceStatus::Present]);
+    Attendance::factory()->create(['company_id' => $this->company->id, 'employee_id' => $beta->id, 'project_id' => $projectB->id, 'date' => $today, 'status' => AttendanceStatus::Absent]);
+
+    $this->actingAs($this->admin);
+    $service = app(TodayService::class);
+
+    // Unfiltered: both rows, total 2, both projects offered.
+    $all = $service->for($this->company->id);
+    expect($all['attendance'])->toHaveCount(2)
+        ->and($all['attendance_total'])->toBe(2)
+        ->and($all['filter_options']['projects'])->toHaveCount(2);
+
+    // Search by name.
+    expect($service->for($this->company->id, ['search' => 'carlos'])['attendance'])->toHaveCount(1);
+
+    // Filter by project.
+    $byProject = $service->for($this->company->id, ['project' => $projectA->id]);
+    expect($byProject['attendance'])->toHaveCount(1)
+        ->and($byProject['attendance'][0]['employee'])->toBe('Carlos García')
+        ->and($byProject['attendance_total'])->toBe(2); // total stays unfiltered
+
+    // Filter by status.
+    expect($service->for($this->company->id, ['status' => AttendanceStatus::Absent->value])['attendance'])->toHaveCount(1);
+});
+
 it('denies Today to a guest', function (): void {
     $this->get('/today')->assertRedirect(route('login'));
 });
