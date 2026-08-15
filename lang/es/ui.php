@@ -719,8 +719,8 @@ return [
         'recibo_rlc' => 'Recibo de Pago RLC',
         'justificante_salarios' => 'Justificante de Pago Salarios',
         // Trabajadores
-        'dni' => 'DNI Fotocopia',
-        'nie_fotocopia' => 'NIE Fotocopia',
+        'dni' => 'DNI/NIE',
+        'nie_fotocopia' => 'Pasaporte',
         'foto' => 'Foto',
         'contrato_trabajo' => 'Contrato de Trabajo',
         'documento_alta_ss' => 'Documento Alta SS',

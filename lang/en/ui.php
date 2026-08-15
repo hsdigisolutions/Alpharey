@@ -718,8 +718,8 @@ return [
         'recibo_rlc' => 'RLC — Payment Receipt',
         'justificante_salarios' => 'Proof of Salary Payment',
         // Workers
-        'dni' => 'DNI Copy',
-        'nie_fotocopia' => 'NIE Copy',
+        'dni' => 'DNI/NIE',
+        'nie_fotocopia' => 'Passport',
         'foto' => 'Photo',
         'contrato_trabajo' => 'Employment Contract',
         'documento_alta_ss' => 'Social Security Registration',

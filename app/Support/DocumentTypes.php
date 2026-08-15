@@ -395,9 +395,11 @@ class DocumentTypes
     {
         return [
             'personal' => [
-                // Spanish nationals carry a DNI, foreign residents an NIE — both
-                // slots exist and each worker fills the one that applies
-                // (client-confirmed 2026-07-16). Both carry a caducidad.
+                // Identity slots (client-relabelled 2026-08-15): the `dni` slot
+                // is the worker's national ID (labelled "DNI/NIE") and
+                // `nie_fotocopia` now holds the "Passport" — the type_keys are
+                // kept so existing uploads + the caducidad alert engine still
+                // work; only the labels changed. Both carry a caducidad.
                 'dni' => ['flag' => false, 'file' => true, 'expiry' => true],
                 'nie_fotocopia' => ['flag' => false, 'file' => true, 'expiry' => true],
                 'foto' => ['flag' => false, 'file' => true, 'expiry' => false],
