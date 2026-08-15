@@ -282,7 +282,74 @@ it('serves the check-out attachment to an admin and audits it', function (): voi
     $admin = User::where('role', 'admin')->where('company_id', $this->company->id)->firstOrFail();
     $this->actingAs($admin)->get("/attendance/{$row->id}/checkout-attachment")->assertOk();
 
-    expect(AuditLog::where('action', 'viewed')->where('description', 'Check-out attachment')->exists())->toBeTrue();
+    expect(AuditLog::where('action', 'viewed')->where('description', 'Check-out attachment 1')->exists())->toBeTrue();
+});
+
+it('saves a second and third check-out photo when supplied', function (): void {
+    $this->actingAs($this->worker)->post('/worker/check-in', ['denied' => true])->assertRedirect();
+    $this->travelTo('2026-08-10 17:00');
+
+    $this->actingAs($this->worker)->post('/worker/check-out', [
+        'denied' => true,
+        'work_attachment' => UploadedFile::fake()->image('one.jpg'),
+        'work_attachment_2' => UploadedFile::fake()->image('two.jpg'),
+        'work_attachment_3' => UploadedFile::fake()->image('three.jpg'),
+    ])->assertRedirect()->assertSessionHasNoErrors();
+
+    $row = Attendance::withoutGlobalScopes()->where('employee_id', $this->employee->id)->firstOrFail();
+    expect($row->check_out_attachment_name)->toBe('one.jpg')
+        ->and($row->check_out_attachment_2_name)->toBe('two.jpg')
+        ->and($row->check_out_attachment_3_name)->toBe('three.jpg');
+    Storage::disk('local')->assertExists($row->check_out_attachment_2_path);
+    Storage::disk('local')->assertExists($row->check_out_attachment_3_path);
+});
+
+it('allows check-out with only photo 1 — photos 2 and 3 are optional', function (): void {
+    $this->actingAs($this->worker)->post('/worker/check-in', ['denied' => true])->assertRedirect();
+    $this->travelTo('2026-08-10 17:00');
+
+    $this->actingAs($this->worker)->post('/worker/check-out', [
+        'denied' => true, 'work_attachment' => UploadedFile::fake()->image('one.jpg'),
+    ])->assertRedirect()->assertSessionHasNoErrors();
+
+    $row = Attendance::withoutGlobalScopes()->where('employee_id', $this->employee->id)->firstOrFail();
+    expect($row->check_out_attachment_path)->not->toBeNull()
+        ->and($row->check_out_attachment_2_path)->toBeNull()
+        ->and($row->check_out_attachment_3_path)->toBeNull();
+});
+
+it('serves the second check-out photo to the owning admin but 404s cross-company', function (): void {
+    $this->actingAs($this->worker)->post('/worker/check-in', ['denied' => true])->assertRedirect();
+    $this->travelTo('2026-08-10 17:00');
+    $this->actingAs($this->worker)->post('/worker/check-out', [
+        'denied' => true,
+        'work_attachment' => UploadedFile::fake()->image('one.jpg'),
+        'work_attachment_2' => UploadedFile::fake()->image('two.jpg'),
+    ])->assertRedirect();
+    $row = Attendance::withoutGlobalScopes()->where('employee_id', $this->employee->id)->firstOrFail();
+
+    $admin = User::where('role', 'admin')->where('company_id', $this->company->id)->firstOrFail();
+    $this->actingAs($admin)->get("/attendance/{$row->id}/checkout-attachment/2")->assertOk();
+
+    // An admin of another company cannot reach it (route binding scope → 404).
+    $otherAdmin = User::factory()->companyAdmin()->forCompany(Company::factory()->create())->create();
+    $this->actingAs($otherAdmin)->get("/attendance/{$row->id}/checkout-attachment/2")->assertNotFound();
+});
+
+it('never lets a client set the check-out photo paths directly', function (): void {
+    $this->actingAs($this->worker)->post('/worker/check-in', ['denied' => true])->assertRedirect();
+    $this->travelTo('2026-08-10 17:00');
+
+    $this->actingAs($this->worker)->post('/worker/check-out', [
+        'denied' => true,
+        'work_attachment' => UploadedFile::fake()->image('one.jpg'),
+        'check_out_attachment_2_path' => 'hacked/evil.jpg',
+        'check_out_attachment_3_path' => 'hacked/evil.jpg',
+    ])->assertRedirect();
+
+    $row = Attendance::withoutGlobalScopes()->where('employee_id', $this->employee->id)->firstOrFail();
+    expect($row->check_out_attachment_2_path)->toBeNull()
+        ->and($row->check_out_attachment_3_path)->toBeNull();
 });
 
 it('refuses check-out without a check-in', function (): void {

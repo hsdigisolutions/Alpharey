@@ -207,8 +207,9 @@ class WorkerAttendanceService
      * A proof-of-work attachment (site photo or document) is stored on the row.
      *
      * @param  array{lat: float|null, lng: float|null, accuracy: float|null, denied: bool}  $location
+     * @param  list<UploadedFile>  $extraAttachments  optional photos 2 and 3
      */
-    public function checkOut(Employee $employee, array $location, ?UploadedFile $attachment = null): Attendance
+    public function checkOut(Employee $employee, array $location, ?UploadedFile $attachment = null, array $extraAttachments = []): Attendance
     {
         $today = now()->toDateString();
         $attendance = $this->todayFor($employee, $today);
@@ -229,13 +230,25 @@ class WorkerAttendanceService
 
         // Store the proof-of-work file BEFORE the transaction (a file write is
         // not transactional). Private disk, per-employee folder, randomized name.
-        $attachmentPath = null;
-        if ($attachment !== null) {
-            $stored = $attachment->store("attendance-checkout/{$employee->company_id}/{$employee->id}", 'local');
-            $attachmentPath = $stored === false ? null : $stored;
-        }
+        $dir = "attendance-checkout/{$employee->company_id}/{$employee->id}";
+        $store = function (?UploadedFile $file) use ($dir): ?string {
+            if ($file === null) {
+                return null;
+            }
+            $stored = $file->store($dir, 'local');
 
-        $attendance = DB::transaction(function () use ($employee, $attendance, $location, $attachment, $attachmentPath): Attendance {
+            return $stored === false ? null : $stored;
+        };
+
+        $attachmentPath = $store($attachment);
+        // Photos 2 and 3 (optional) — the caller passes at most two (already
+        // null-filtered); take the first two defensively.
+        $attachment2 = $extraAttachments[0] ?? null;
+        $attachment3 = $extraAttachments[1] ?? null;
+        $attachment2Path = $store($attachment2);
+        $attachment3Path = $store($attachment3);
+
+        $attendance = DB::transaction(function () use ($employee, $attendance, $location, $attachment, $attachmentPath, $attachment2, $attachment2Path, $attachment3, $attachment3Path): Attendance {
             // update() recomputes hours_worked + total_amount from the snapshot.
             $attendance = $this->attendance->update($attendance, [
                 'check_out' => now()->format('H:i'),
@@ -251,6 +264,14 @@ class WorkerAttendanceService
                 // NOT fillable — set directly; keep the original name for display.
                 $attendance->check_out_attachment_path = $attachmentPath;
                 $attendance->check_out_attachment_name = $attachment?->getClientOriginalName();
+            }
+            if ($attachment2Path !== null) {
+                $attendance->check_out_attachment_2_path = $attachment2Path;
+                $attendance->check_out_attachment_2_name = $attachment2?->getClientOriginalName();
+            }
+            if ($attachment3Path !== null) {
+                $attendance->check_out_attachment_3_path = $attachment3Path;
+                $attendance->check_out_attachment_3_name = $attachment3?->getClientOriginalName();
             }
             $this->applyLocation($attendance, 'check_out', $location);
             $this->applyMismatch($attendance, $location);

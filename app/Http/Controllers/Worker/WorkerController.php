@@ -188,7 +188,12 @@ class WorkerController extends Controller
 
         $location = $employee->consentGps() ? $request->location() : self::NO_LOCATION;
 
-        $attendance = $this->attendance->checkOut($employee, $location, $request->file('work_attachment'));
+        $attendance = $this->attendance->checkOut(
+            $employee,
+            $location,
+            $request->file('work_attachment'),
+            array_filter([$request->file('work_attachment_2'), $request->file('work_attachment_3')]),
+        );
 
         $redirect = redirect()->route('worker.home')->with('success', __('ui.worker.checked_out'));
 

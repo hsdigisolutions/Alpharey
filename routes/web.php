@@ -322,7 +322,8 @@ Route::middleware(['auth', 'active', 'two_factor', 'not_worker'])->group(functio
     // Worker PWA: the gated, audited check-in selfie (Phase E)
     Route::get('/attendance/{attendance}/selfie', [AttendanceController::class, 'selfie'])->name('attendance.selfie');
     // Worker PWA: the gated, audited proof-of-work attachment (check-out)
-    Route::get('/attendance/{attendance}/checkout-attachment', [AttendanceController::class, 'checkOutAttachment'])->name('attendance.checkout-attachment');
+    Route::get('/attendance/{attendance}/checkout-attachment/{which?}', [AttendanceController::class, 'checkOutAttachment'])
+        ->whereIn('which', ['1', '2', '3'])->name('attendance.checkout-attachment');
 
     // Weekend Work Offers — an admin opens a specific weekend date for invited workers.
     Route::post('/weekend-offers', [WeekendWorkOfferController::class, 'store'])->name('weekend-offers.store');

@@ -43,14 +43,6 @@ const page = usePage();
 const flashError = computed(() => page.props.flash?.error);
 const flashWarning = computed(() => page.props.flash?.warning);
 
-// In-app consent management: the worker can turn the optional GPS / selfie
-// permissions on or off at any time (GDPR — revocation must be as easy to give).
-const consentOpen = ref(false);
-const consentForm = useForm({ consent_gps: props.consent.gps, consent_photo: props.consent.photo });
-function saveConsent() {
-    consentForm.post('/worker/consent', { preserveScroll: true, onSuccess: () => { consentOpen.value = false; } });
-}
-
 // ── PWA notification bell ────────────────────────────────────────────────────
 const notifOpen = ref(false);
 const notifItems = computed(() => props.notifications?.items ?? []);
@@ -298,7 +290,7 @@ async function submitCheckIn() {
 function openCheckOut() {
     noteTextForm.text_note = '';
     voiceNote.value = null;
-    attachmentFile.value = null;
+    resetCheckoutPhotos();
     checkOutOpen.value = true;
 }
 
@@ -329,6 +321,8 @@ async function submitCheckOut() {
     data.append('accuracy', loc.accuracy ?? '');
     data.append('denied', loc.denied ? '1' : '0');
     data.append('work_attachment', attachmentFile.value);
+    if (photo2File.value) data.append('work_attachment_2', photo2File.value);
+    if (photo3File.value) data.append('work_attachment_3', photo3File.value);
 
     router.post('/worker/check-out', data, {
         forceFormData: true,
@@ -370,11 +364,36 @@ const checkOutOpen = ref(false);
 // The voice note is now the shared <VoiceRecorder> component: { blob, duration } | null.
 const voiceNote = ref(null);
 
-// Required proof-of-work attachment at check-out: a site photo or a document.
-const attachmentFile = ref(null);
+// Proof-of-work photos at check-out: photo 1 required (site photo or document),
+// photos 2 & 3 optional extra site photos. Each can be retaken or deleted.
+const attachmentFile = ref(null); // photo 1
+const photo2File = ref(null);
+const photo3File = ref(null);
+const photoPreviews = ref({ 1: null, 2: null, 3: null });
 const attachmentName = computed(() => attachmentFile.value?.name ?? '');
-function onAttachmentChange(e) {
-    attachmentFile.value = e.target.files?.[0] ?? null;
+
+function photoSlot(slot) {
+    return slot === 1 ? attachmentFile : slot === 2 ? photo2File : photo3File;
+}
+function setPhoto(slot, file) {
+    if (photoPreviews.value[slot]) {
+        URL.revokeObjectURL(photoPreviews.value[slot]);
+        photoPreviews.value[slot] = null;
+    }
+    photoSlot(slot).value = file ?? null;
+    if (file && file.type?.startsWith('image/')) {
+        photoPreviews.value[slot] = URL.createObjectURL(file);
+    }
+}
+function onPhotoChange(slot, e) {
+    setPhoto(slot, e.target.files?.[0] ?? null);
+    e.target.value = ''; // allow re-picking the same file (retake)
+}
+function removePhoto(slot) {
+    setPhoto(slot, null);
+}
+function resetCheckoutPhotos() {
+    [1, 2, 3].forEach((s) => setPhoto(s, null));
 }
 
 const noteTextForm = useForm({ attendance_id: null, text_note: '', duration_seconds: null });
@@ -673,32 +692,8 @@ const noteTextForm = useForm({ attendance_id: null, text_note: '', duration_seco
             </div>
         </section>
 
-        <!-- Privacy & consent management (GDPR — revoke as easily as granted) -->
-        <section class="mt-4">
-            <div class="rounded-lg border border-line bg-surface-raised shadow-card">
-                <button type="button" class="flex w-full items-center justify-between px-4 py-3" @click="consentOpen = !consentOpen">
-                    <span class="flex items-center gap-2 text-sm font-medium text-ink">
-                        <AppIcon name="lock" class="h-4 w-4 text-ink-soft" />
-                        {{ $t('worker.privacy.manage_title') }}
-                    </span>
-                    <span class="text-xs text-muted">{{ consentOpen ? '▲' : '▼' }}</span>
-                </button>
-                <div v-if="consentOpen" class="border-t border-line px-4 py-3">
-                    <p class="mb-3 text-xs text-ink-soft">{{ $t('worker.privacy.manage_hint') }}</p>
-                    <label class="flex items-center justify-between py-2">
-                        <span class="text-sm text-ink">{{ $t('worker.privacy.manage_gps') }}</span>
-                        <input v-model="consentForm.consent_gps" type="checkbox" class="h-5 w-5 accent-accent" />
-                    </label>
-                    <label class="flex items-center justify-between py-2">
-                        <span class="text-sm text-ink">{{ $t('worker.privacy.manage_photo') }}</span>
-                        <input v-model="consentForm.consent_photo" type="checkbox" class="h-5 w-5 accent-accent" />
-                    </label>
-                    <VButton class="mt-3 w-full" :loading="consentForm.processing" @click="saveConsent">
-                        {{ $t('worker.privacy.manage_save') }}
-                    </VButton>
-                </div>
-            </div>
-        </section>
+        <!-- Branding -->
+        <p class="mt-6 mb-2 text-center text-xs text-muted">{{ $t('worker.powered_by') }}</p>
 
         <!-- Absence sheet -->
         <div v-if="absenceOpen" class="fixed inset-0 z-40 flex items-end bg-black/40" @click.self="absenceOpen = false">
@@ -742,16 +737,68 @@ const noteTextForm = useForm({ attendance_id: null, text_note: '', duration_seco
                     </div>
                 </dl>
 
-                <!-- Required proof-of-work: a site photo, or a document. -->
+                <!-- Proof-of-work photos: photo 1 required, 2 & 3 optional. -->
                 <p class="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">{{ $t('worker.work_attachment') }}</p>
-                <label class="mb-1 flex cursor-pointer flex-col items-center gap-1 rounded-lg border-2 border-dashed px-3 py-4 text-center transition-colors"
-                    :class="attachmentFile ? 'border-status-ok bg-status-ok-soft' : 'border-line-strong bg-surface-sunken'">
-                    <span class="text-2xl">{{ attachmentFile ? '✅' : '📷' }}</span>
-                    <span class="text-sm font-medium text-ink">{{ attachmentName || $t('worker.work_attachment_prompt') }}</span>
+
+                <!-- Photo 1 (required — a site photo or a document) -->
+                <p class="mb-1 text-xs font-medium text-ink-soft">{{ $t('worker.photo_1_required') }}</p>
+                <label v-if="!attachmentFile"
+                    class="mb-1 flex cursor-pointer flex-col items-center gap-1 rounded-lg border-2 border-dashed border-line-strong bg-surface-sunken px-3 py-4 text-center">
+                    <span class="text-2xl">📷</span>
+                    <span class="text-sm font-medium text-ink">{{ $t('worker.work_attachment_prompt') }}</span>
                     <span class="text-xs text-muted">{{ $t('worker.work_attachment_hint') }}</span>
-                    <input type="file" accept="image/*,.pdf,.doc,.docx" capture="environment" class="hidden" @change="onAttachmentChange" />
+                    <input type="file" accept="image/*,.pdf,.doc,.docx" capture="environment" class="hidden" @change="onPhotoChange(1, $event)" />
                 </label>
-                <p class="mb-4 text-xs" :class="attachmentFile ? 'text-status-ok' : 'text-status-warn'">
+                <div v-else class="mb-1 flex items-center gap-3 rounded-lg border border-status-ok bg-status-ok-soft p-2">
+                    <img v-if="photoPreviews[1]" :src="photoPreviews[1]" alt="" class="h-14 w-14 shrink-0 rounded object-cover" />
+                    <span v-else class="text-2xl">📄</span>
+                    <span class="min-w-0 flex-1 truncate text-sm font-medium text-ink">{{ attachmentName }}</span>
+                    <label class="shrink-0 cursor-pointer text-xs font-medium text-accent">
+                        {{ $t('worker.retake') }}
+                        <input type="file" accept="image/*,.pdf,.doc,.docx" capture="environment" class="hidden" @change="onPhotoChange(1, $event)" />
+                    </label>
+                    <button type="button" class="shrink-0 text-xs font-medium text-status-danger" @click="removePhoto(1)">{{ $t('worker.delete_photo') }}</button>
+                </div>
+
+                <!-- Photo 2 (optional — appears after photo 1) -->
+                <template v-if="attachmentFile">
+                    <p class="mb-1 mt-3 text-xs font-medium text-ink-soft">{{ $t('worker.photo_2_optional') }}</p>
+                    <label v-if="!photo2File"
+                        class="flex cursor-pointer items-center justify-center gap-2 rounded-lg border-2 border-dashed border-line-strong bg-surface-sunken px-3 py-2.5 text-sm text-ink-soft">
+                        <span>＋</span><span>{{ $t('worker.add_photo') }}</span>
+                        <input type="file" accept="image/*" capture="environment" class="hidden" @change="onPhotoChange(2, $event)" />
+                    </label>
+                    <div v-else class="flex items-center gap-3 rounded-lg border border-status-ok bg-status-ok-soft p-2">
+                        <img v-if="photoPreviews[2]" :src="photoPreviews[2]" alt="" class="h-14 w-14 shrink-0 rounded object-cover" />
+                        <span class="min-w-0 flex-1 truncate text-sm font-medium text-ink">{{ photo2File.name }}</span>
+                        <label class="shrink-0 cursor-pointer text-xs font-medium text-accent">
+                            {{ $t('worker.retake') }}
+                            <input type="file" accept="image/*" capture="environment" class="hidden" @change="onPhotoChange(2, $event)" />
+                        </label>
+                        <button type="button" class="shrink-0 text-xs font-medium text-status-danger" @click="removePhoto(2)">{{ $t('worker.delete_photo') }}</button>
+                    </div>
+                </template>
+
+                <!-- Photo 3 (optional — appears after photo 2) -->
+                <template v-if="photo2File">
+                    <p class="mb-1 mt-3 text-xs font-medium text-ink-soft">{{ $t('worker.photo_3_optional') }}</p>
+                    <label v-if="!photo3File"
+                        class="flex cursor-pointer items-center justify-center gap-2 rounded-lg border-2 border-dashed border-line-strong bg-surface-sunken px-3 py-2.5 text-sm text-ink-soft">
+                        <span>＋</span><span>{{ $t('worker.add_photo') }}</span>
+                        <input type="file" accept="image/*" capture="environment" class="hidden" @change="onPhotoChange(3, $event)" />
+                    </label>
+                    <div v-else class="flex items-center gap-3 rounded-lg border border-status-ok bg-status-ok-soft p-2">
+                        <img v-if="photoPreviews[3]" :src="photoPreviews[3]" alt="" class="h-14 w-14 shrink-0 rounded object-cover" />
+                        <span class="min-w-0 flex-1 truncate text-sm font-medium text-ink">{{ photo3File.name }}</span>
+                        <label class="shrink-0 cursor-pointer text-xs font-medium text-accent">
+                            {{ $t('worker.retake') }}
+                            <input type="file" accept="image/*" capture="environment" class="hidden" @change="onPhotoChange(3, $event)" />
+                        </label>
+                        <button type="button" class="shrink-0 text-xs font-medium text-status-danger" @click="removePhoto(3)">{{ $t('worker.delete_photo') }}</button>
+                    </div>
+                </template>
+
+                <p class="mb-4 mt-2 text-xs" :class="attachmentFile ? 'text-status-ok' : 'text-status-warn'">
                     {{ attachmentFile ? $t('worker.work_attachment_added') : $t('worker.work_attachment_required') }}
                 </p>
 

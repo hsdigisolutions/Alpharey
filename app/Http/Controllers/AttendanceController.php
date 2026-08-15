@@ -359,19 +359,53 @@ class AttendanceController extends Controller
      * The worker's proof-of-work attachment (site photo / document) captured at
      * check-out. Same gated + audited private-file rules as the selfie.
      */
-    public function checkOutAttachment(Attendance $attendance, AuditLogger $audit): StreamedResponse
+    public function checkOutAttachment(Attendance $attendance, AuditLogger $audit, int $which = 1): StreamedResponse
     {
         Gate::authorize('attendance.view');
 
-        $path = $attendance->check_out_attachment_path;
+        // which = 1 (the required photo) | 2 | 3 (optional extras).
+        [$path, $name] = match ($which) {
+            2 => [$attendance->check_out_attachment_2_path, $attendance->check_out_attachment_2_name],
+            3 => [$attendance->check_out_attachment_3_path, $attendance->check_out_attachment_3_name],
+            default => [$attendance->check_out_attachment_path, $attendance->check_out_attachment_name],
+        };
 
         abort_if($path === null || ! Storage::disk('local')->exists($path), 404);
 
-        $audit->log('viewed', $attendance, null, null, 'Check-out attachment', 'attendance');
+        $audit->log('viewed', $attendance, null, null, "Check-out attachment {$which}", 'attendance');
 
         // Served INLINE so an image renders in an <img>/tab and a PDF opens in
         // the tab; a doc/docx the browser can't display simply downloads.
-        return Storage::disk('local')->response($path, $attendance->check_out_attachment_name);
+        return Storage::disk('local')->response($path, $name);
+    }
+
+    /**
+     * The present check-out photos (1 required + up to 2 optional) as
+     * {which, name, is_image} rows for the admin modal.
+     *
+     * @return list<array{which: int, name: string|null, is_image: bool}>
+     */
+    private function checkoutPhotos(Attendance $attendance): array
+    {
+        $slots = [
+            1 => [$attendance->check_out_attachment_path, $attendance->check_out_attachment_name],
+            2 => [$attendance->check_out_attachment_2_path, $attendance->check_out_attachment_2_name],
+            3 => [$attendance->check_out_attachment_3_path, $attendance->check_out_attachment_3_name],
+        ];
+
+        $photos = [];
+        foreach ($slots as $which => [$path, $name]) {
+            if ($path === null) {
+                continue;
+            }
+            $photos[] = [
+                'which' => $which,
+                'name' => $name,
+                'is_image' => $name !== null && preg_match('/\.(jpg|jpeg|png|webp|gif)$/i', $name) === 1,
+            ];
+        }
+
+        return $photos;
     }
 
     /**
@@ -433,6 +467,9 @@ class AttendanceController extends Controller
                 'checkout_attachment_name' => $attendance->check_out_attachment_name,
                 'checkout_attachment_is_image' => $attendance->check_out_attachment_name !== null
                     && preg_match('/\.(jpg|jpeg|png|webp|gif)$/i', $attendance->check_out_attachment_name) === 1,
+                // All present check-out photos (1 required + up to 2 optional),
+                // each fetched through the gated download route by its `which`.
+                'checkout_photos' => $this->checkoutPhotos($attendance),
             ] : null,
             // Voice/text note captured at check-out. Independent of the worker
             // capture block above (a note can exist without GPS/selfie data).

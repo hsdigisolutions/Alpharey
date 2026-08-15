@@ -1755,6 +1755,7 @@ return [
     // Worker PWA — the mobile app used on site.
     'worker' => [
         'title' => 'My Workday',
+        'powered_by' => 'Powered by AlphaRey',
         'coming_soon' => 'Check-in will be available shortly',
         // Check in / out
         'check_in' => 'Check in',
@@ -1898,6 +1899,12 @@ return [
         'work_attachment_hint' => 'A photo of the site you worked on, or a document',
         'work_attachment_required' => 'Required to check out',
         'work_attachment_added' => 'Attachment added',
+        'photo_1_required' => 'Photo 1 (required)',
+        'photo_2_optional' => 'Photo 2 (optional)',
+        'photo_3_optional' => 'Photo 3 (optional)',
+        'add_photo' => 'Add another photo',
+        'retake' => 'Retake',
+        'delete_photo' => 'Delete',
         'privacy' => [
             'title' => 'Data protection',
             'subtitle' => 'Before you clock in, please read this',

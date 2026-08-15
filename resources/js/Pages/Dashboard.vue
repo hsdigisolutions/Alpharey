@@ -163,7 +163,9 @@ function go(routeName) {
             <VCard>
                 <h2 class="mb-3 text-sm font-semibold text-ink"><Bilingual k="dashboard.recent_activity" inline /></h2>
                 <VEmptyState v-if="data.activity.length === 0" title-key="dashboard.no_activity" message-key="dashboard.no_activity" />
-                <ul v-else class="divide-y divide-line">
+                <!-- Fixed height: ~10 rows visible, older items scroll inside the box
+                     so the feed never pushes the rest of the dashboard down. -->
+                <ul v-else class="max-h-[28rem] divide-y divide-line overflow-y-auto">
                     <li v-for="log in data.activity" :key="log.id" class="flex items-center justify-between gap-2 py-2">
                         <div class="min-w-0">
                             <p class="truncate text-sm text-ink">

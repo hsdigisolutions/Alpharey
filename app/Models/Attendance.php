@@ -49,6 +49,10 @@ use Illuminate\Support\Carbon;
  * @property string|null $check_in_photo_path
  * @property string|null $check_out_attachment_path
  * @property string|null $check_out_attachment_name
+ * @property string|null $check_out_attachment_2_path
+ * @property string|null $check_out_attachment_2_name
+ * @property string|null $check_out_attachment_3_path
+ * @property string|null $check_out_attachment_3_name
  * @property bool $location_denied
  * @property bool|null $location_mismatch
  * @property numeric-string|null $distance_from_project

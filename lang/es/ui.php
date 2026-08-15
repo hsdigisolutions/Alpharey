@@ -1760,6 +1760,7 @@ return [
     // Worker PWA — the mobile app used on site.
     'worker' => [
         'title' => 'Mi Jornada',
+        'powered_by' => 'Powered by AlphaRey',
         'coming_soon' => 'El fichaje estará disponible en breve',
         // Check in / out
         'check_in' => 'Fichar entrada',
@@ -1903,6 +1904,12 @@ return [
         'work_attachment_hint' => 'Foto del sitio donde trabajaste, o un documento',
         'work_attachment_required' => 'Obligatorio para fichar la salida',
         'work_attachment_added' => 'Adjunto añadido',
+        'photo_1_required' => 'Foto 1 (obligatoria)',
+        'photo_2_optional' => 'Foto 2 (opcional)',
+        'photo_3_optional' => 'Foto 3 (opcional)',
+        'add_photo' => 'Añadir otra foto',
+        'retake' => 'Repetir',
+        'delete_photo' => 'Eliminar',
         'privacy' => [
             'title' => 'Protección de datos',
             'subtitle' => 'Antes de fichar, lea esta información',
