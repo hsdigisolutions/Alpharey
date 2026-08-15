@@ -872,6 +872,7 @@ return [
         'budget' => 'Presupuesto',
         'outsourced' => 'Subcontratado',
         'section_location' => 'Ubicación de la obra',
+        'location_not_set' => 'Sin ubicación',
         'open_google_maps' => 'Abrir Google Maps',
         'location_hint' => 'Coordenadas: abre Google Maps, haz clic derecho sobre la obra y copia las coordenadas.',
         'latitude' => 'Latitud',

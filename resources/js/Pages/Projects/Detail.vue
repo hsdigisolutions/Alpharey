@@ -468,6 +468,17 @@ function destroy() {
                         <div class="flex justify-between py-2"><dt><Bilingual k="projects.billing_type" class="text-xs text-muted" /></dt><dd class="text-sm">{{ project.billing_type ? $t(`projects.billing_${project.billing_type}`) : '—' }}</dd></div>
                         <div class="flex justify-between py-2"><dt><Bilingual k="projects.vat" class="text-xs text-muted" /></dt><dd class="text-sm">{{ project.vat_rate ? $t(`vat.${project.vat_rate}`) : $t('vat.not_applicable') }}</dd></div>
                         <div class="flex justify-between py-2"><dt><Bilingual k="projects.start" class="text-xs text-muted" /></dt><dd class="tabular-nums text-sm">{{ project.start_date ?? '—' }} → {{ project.end_date ?? '—' }}</dd></div>
+                        <div class="flex justify-between gap-3 py-2">
+                            <dt><span class="text-xs text-muted">{{ $t('projects.section_location') }}</span></dt>
+                            <dd class="text-end text-sm">
+                                <a v-if="project.latitude != null && project.longitude != null"
+                                    :href="`https://www.google.com/maps?q=${project.latitude},${project.longitude}`"
+                                    target="_blank" rel="noopener" class="text-accent hover:underline">
+                                    {{ project.latitude }}, {{ project.longitude }} · {{ project.geofence_radius }} m
+                                </a>
+                                <span v-else class="text-muted">{{ $t('projects.location_not_set') }}</span>
+                            </dd>
+                        </div>
                     </dl>
                     <p v-if="project.description" class="mt-3 text-sm text-ink-soft">{{ project.description }}</p>
                 </VCard>

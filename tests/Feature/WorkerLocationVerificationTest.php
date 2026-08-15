@@ -147,6 +147,20 @@ it('rejects a check-in into a project the worker is not assigned to', function (
     expect(Attendance::withoutGlobalScopes()->where('employee_id', $this->employee->id)->exists())->toBeFalse();
 });
 
+it('accepts a project_id sent as a string (the picker emits strings)', function (): void {
+    // The worker PWA's VSelect emits the chosen option value as a STRING; the
+    // server must still resolve it to the integer project and price the row.
+    $project = assignedProject($this->company, $this->employee, $this->siteLat, $this->siteLng);
+
+    $this->actingAs($this->worker)->post('/worker/check-in', [
+        'lat' => $this->siteLat, 'lng' => $this->siteLng, 'accuracy' => 15, 'denied' => false,
+        'project_id' => (string) $project->id,
+    ])->assertRedirect()->assertSessionHasNoErrors();
+
+    $row = Attendance::withoutGlobalScopes()->where('employee_id', $this->employee->id)->firstOrFail();
+    expect($row->project_id)->toBe($project->id);
+});
+
 it('allows a project-less check-in with a null distance', function (): void {
     $this->actingAs($this->worker)->post('/worker/check-in', [
         'lat' => $this->siteLat, 'lng' => $this->siteLng, 'accuracy' => 15, 'denied' => false,

@@ -119,7 +119,13 @@ const sortedProjects = computed(() => {
 });
 
 const selectedProjectId = ref(assignedProjects.value.length === 1 ? assignedProjects.value[0].id : null);
-const selectedProject = computed(() => assignedProjects.value.find((p) => p.id === selectedProjectId.value) ?? null);
+// VSelect emits the option value as a STRING (DOM option values always are), so
+// compare loosely — otherwise a picked project (string id) never matches the
+// numeric p.id and the distance hint / Navigate link silently disappear.
+const selectedProject = computed(() => {
+    if (selectedProjectId.value == null || selectedProjectId.value === '') return null;
+    return assignedProjects.value.find((p) => String(p.id) === String(selectedProjectId.value)) ?? null;
+});
 const selectedDistance = computed(() => (selectedProject.value ? projectDistance(selectedProject.value) : null));
 
 function fmtDistance(m) {
@@ -145,6 +151,9 @@ function mapsUrl(p) {
 // evidence, not a gate). Skipped when no project carries coordinates.
 onMounted(async () => {
     if (!props.consent.gps) return;
+    // Only when a check-in is actually possible — don't prompt for GPS on a day
+    // that's already checked in / out, or on a weekend rest day.
+    if (props.today.state !== 'none' || props.weekend.rest_day) return;
     if (!assignedProjects.value.some((p) => p.latitude != null && p.longitude != null)) return;
     try {
         const loc = await getLocation();
@@ -266,7 +275,9 @@ async function submitCheckIn() {
     data.append('denied', loc.denied ? '1' : '0');
     // The chosen site (weekday only; a weekend offer locks it server-side). A
     // project-less punch is allowed, so send nothing when none is selected.
-    if (selectedProjectId.value != null) data.append('project_id', String(selectedProjectId.value));
+    if (selectedProjectId.value != null && selectedProjectId.value !== '') {
+        data.append('project_id', String(selectedProjectId.value));
+    }
     if (props.consent.photo && photoBlob.value) data.append('photo', photoBlob.value, 'selfie.jpg');
 
     router.post('/worker/check-in', data, {

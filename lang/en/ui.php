@@ -871,6 +871,7 @@ return [
         'budget' => 'Budget',
         'outsourced' => 'Outsourced',
         'section_location' => 'Site location',
+        'location_not_set' => 'Not set',
         'open_google_maps' => 'Open Google Maps',
         'location_hint' => 'Coordinates: open Google Maps, right-click your project location and copy the coordinates.',
         'latitude' => 'Latitude',
