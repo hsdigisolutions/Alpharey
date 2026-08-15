@@ -29,6 +29,7 @@ const blank = {
     coordinator: '', start_date: null, end_date: null, budget: null,
     estimated_hours: null, estimated_meters: null, description: '',
     client_hour_rate: null, client_meter_rate: null, outsource_cost: null,
+    latitude: null, longitude: null, geofence_radius: 500,
 };
 const form = useForm({ ...blank });
 
@@ -39,7 +40,14 @@ watch(() => props.open, (open) => {
 });
 
 function submit() {
-    const payload = form.transform((d) => ({ ...d, client_id: d.client_id || null, billing_type: d.billing_type || null }));
+    const payload = form.transform((d) => ({
+        ...d,
+        client_id: d.client_id || null,
+        billing_type: d.billing_type || null,
+        latitude: d.latitude === '' ? null : d.latitude,
+        longitude: d.longitude === '' ? null : d.longitude,
+        geofence_radius: d.geofence_radius === '' || d.geofence_radius === null ? 500 : d.geofence_radius,
+    }));
     const opts = { preserveScroll: true, onSuccess: () => emit('close') };
     props.project ? payload.put(`/projects/${props.project.id}`, opts) : payload.post('/projects', opts);
 }
@@ -85,6 +93,25 @@ const billingTypes = ['fixed', 'hourly', 'per_meter', 'milestone'];
                 <FormField k="projects.vat"><VVatSelect v-model="form.vat_rate" :options="vatOptions" /></FormField>
                 <FormField k="projects.jefe_de_obra"><VInput v-model="form.jefe_de_obra" /></FormField>
                 <FormField k="projects.encargado"><VInput v-model="form.encargado" /></FormField>
+            </div>
+
+            <!-- Site location — worker check-in distance verification -->
+            <div class="mt-4 mb-2 flex flex-wrap items-center justify-between gap-2">
+                <p class="text-xs font-semibold uppercase tracking-wide text-muted">{{ $t('projects.section_location') }}</p>
+                <a href="https://www.google.com/maps" target="_blank" rel="noopener"
+                    class="text-xs font-medium text-accent hover:underline">{{ $t('projects.open_google_maps') }} →</a>
+            </div>
+            <p class="mb-2 text-xs text-muted">{{ $t('projects.location_hint') }}</p>
+            <div class="grid gap-4 sm:grid-cols-3">
+                <FormField k="projects.latitude" :error="form.errors.latitude">
+                    <VInput v-model="form.latitude" type="number" step="0.0000001" placeholder="40.4168" :invalid="Boolean(form.errors.latitude)" />
+                </FormField>
+                <FormField k="projects.longitude" :error="form.errors.longitude">
+                    <VInput v-model="form.longitude" type="number" step="0.0000001" placeholder="-3.7038" :invalid="Boolean(form.errors.longitude)" />
+                </FormField>
+                <FormField k="projects.geofence_radius" :error="form.errors.geofence_radius">
+                    <VInput v-model="form.geofence_radius" type="number" min="50" max="2000" step="50" :invalid="Boolean(form.errors.geofence_radius)" />
+                </FormField>
             </div>
 
             <!-- Rentabilidad: what we bill the client + outsourcing cost -->

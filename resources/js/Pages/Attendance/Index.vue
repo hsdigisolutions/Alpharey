@@ -60,6 +60,18 @@ function cellClass(cell) {
     return dayTypeStyle[cell.day_type] ?? cellStyle.present;
 }
 
+// Distance-from-project dot: green on site, amber near, red off site.
+const distanceDotStyle = { on_site: 'bg-status-ok', near_site: 'bg-status-warn', off_site: 'bg-status-danger' };
+function distanceDotClass(band) {
+    return distanceDotStyle[band] ?? '';
+}
+function distanceDotTitle(cell) {
+    const label = { on_site: t('attendance.on_site'), near_site: t('attendance.near_site'), off_site: t('attendance.off_site') }[cell.distance_band] ?? '';
+    if (cell.distance == null) return label;
+    const d = cell.distance >= 1000 ? `${(cell.distance / 1000).toFixed(1)} km` : `${Math.round(cell.distance)} m`;
+    return `${label} · ${d}`;
+}
+
 // Marker uses the SAME codes as the worker PWA (single source, client request):
 // WE weekend · PF full · PH half · A absent · L leave · hours/metres otherwise.
 function cellContent(cell) {
@@ -245,6 +257,11 @@ const monthLabel = computed(() => {
                             <span v-else-if="grid[emp.id]?.[day]?.is_overridden"
                                 class="pointer-events-none absolute bottom-0 start-0.5 text-[8px] leading-none text-ink-soft"
                                 :title="$t('attendance.overridden')">✎</span>
+                            <!-- Distance-from-project band: on-site (green) / near (amber) / off-site (red) -->
+                            <span v-if="grid[emp.id]?.[day]?.distance_band"
+                                class="pointer-events-none absolute bottom-0.5 end-0.5 h-1.5 w-1.5 rounded-full"
+                                :class="distanceDotClass(grid[emp.id][day].distance_band)"
+                                :title="distanceDotTitle(grid[emp.id][day])" />
                         </td>
                     </tr>
                 </tbody>

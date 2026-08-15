@@ -37,9 +37,19 @@ class PunchRequest extends FormRequest
             // the admin accuracy badge). Only a negative value is nonsense.
             'accuracy' => ['nullable', 'numeric', 'min:0'],
             'denied' => ['nullable', 'boolean'],
+            // Check-in only: the project the worker is punching into. Nullable —
+            // a project-less punch is allowed. The service re-checks the id is
+            // one the worker is actually assigned/deployed to (422 otherwise);
+            // this rule only asserts the shape.
+            'project_id' => ['nullable', 'integer'],
             // Check-in only; the selfie. Same cap and mimes as other uploads.
             'photo' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:8192'],
         ];
+    }
+
+    public function projectId(): ?int
+    {
+        return $this->filled('project_id') ? (int) $this->input('project_id') : null;
     }
 
     /**

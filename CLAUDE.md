@@ -4,6 +4,54 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Status: Phase 9 in progress — hardening (2026-08-01)
 
+### Worker location verification — Phase 1 (2026-08-15, DONE)
+
+Check-in is now **project-aware** and measures how far the worker is from that
+project's site. GPS stays **evidence, never a gate** — a punch always stands;
+distance is only recorded and (when far) flagged. **952 Pest tests.**
+
+**Schema.** `projects` gained `latitude`/`longitude` (decimal 10,7) +
+`geofence_radius` (metres, default 500, admin-editable 50–2000); `attendance`
+gained `distance_from_project` (decimal 8,2, **server-set, not fillable**).
+`App\Support\Geo` is the single geo authority — `haversine()` (metres) +
+`band($distance, $radius, $offSiteThreshold)` → `on_site` (< radius) /
+`near_site` (radius–threshold) / `off_site` (≥ threshold). Pinned by `GeoTest`.
+
+**Project form** (Screens 08/09) gained a **Site location** section — lat / lng
+/ radius inputs + an Open-Google-Maps link (manual coords in Phase 1; a Leaflet
+map-picker is deferred to Phase 2, blocked by the CSP on external tiles).
+`StoreProjectRequest` validates the ranges; `show` prefills them.
+
+**Worker PWA.** `WorkerAttendanceService::assignedProjects()` returns the active
+projects a worker may punch into — their own `project_employee_rates` **plus**
+active `EmployeeDeployment` host sites (both tenant-scope dropped — a worker has
+no CRM session). `Home.vue` auto-selects a lone project or shows a nearest-first
+picker (a silent on-load fix orders it) with a Maps-directions link + an
+advisory distance hint. `PunchRequest` gained a nullable `project_id`;
+`checkIn()` validates it is one of the worker's own (else 422), a **weekend
+offer locks** the project, and a **project-less punch is always allowed**.
+Workers may see the project NAME + their own tasks (Phase 2), **never** any
+money/client/budget figure.
+
+**Distance + alert.** On check-in, when a trustworthy fix (accuracy ≤ the 1000 m
+`LOCATION_ACCURACY_LIMIT`) AND project coords both exist, the haversine distance
+is stored; otherwise it stays null ("not verified"). Beyond the company's
+`attendance.off_site_alert_distance` (Settings, default **2000 m**, Screen 26)
+→ new `NotificationType::WorkerOffSite` (→ Admin+Manager, category `workers`),
+fired once on check-in (once/day by the unique index). `AttendanceService::
+offSiteAlertDistance()` reads the per-company setting.
+
+**Admin surface.** The attendance grid cell shows a small traffic-light **dot**
+(green on-site / amber near / red off-site); the edit modal shows a full line
+(distance · band badge · project name, or "Location not verified"). Tests:
+`WorkerLocationVerificationTest` (11 — distance saved/null cases, off-site alert
+fires/silent/threshold-honoured, unassigned + cross-company 422, project-less
+allowed, home ships assigned+deployed, grid band) + `GeoTest` (3).
+
+**Follow-up (next):** the GPS popup + production-logging feature — a worker
+within 150 m sees "Are you at [Project]?", then their own tasks (progress, NO
+prices) and logs production → admin pending approval → approve/edit/reject.
+
 ### Global Document Command Center + Client/Vendor docs (2026-08-14, DONE)
 
 Client + Vendor detail pages gained the smart document panel (shared records,

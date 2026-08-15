@@ -54,6 +54,8 @@ class SettingsController extends Controller
                 ->dayTypeThresholds(app(CurrentCompany::class)->id() ?? 0),
             'maxLocationDistance' => app(AttendanceService::class)
                 ->maxLocationDistance(app(CurrentCompany::class)->id() ?? 0),
+            'offSiteAlertDistance' => app(AttendanceService::class)
+                ->offSiteAlertDistance(app(CurrentCompany::class)->id() ?? 0),
             // Legal → the current worker-consent notice version (brand-wide).
             'consentVersion' => WorkerPrivacyNotice::currentVersion(),
             // Notification matrix + system health are brand-level → Super Admin only
@@ -96,11 +98,14 @@ class SettingsController extends Controller
             'half_day_threshold' => ['required', 'numeric', 'min:0', 'max:24', 'lte:full_day_threshold'],
             // Max check-out distance from check-in (metres) before a mismatch alert.
             'max_location_distance' => ['required', 'numeric', 'min:50', 'max:100000'],
+            // Distance from the PROJECT site (metres) above which a check-in is off site.
+            'off_site_alert_distance' => ['required', 'integer', 'min:100', 'max:100000'],
         ]);
 
         $settings->set("attendance.full_day_threshold.{$companyId}", (float) $validated['full_day_threshold']);
         $settings->set("attendance.half_day_threshold.{$companyId}", (float) $validated['half_day_threshold']);
         $settings->set("attendance.max_location_distance.{$companyId}", (float) $validated['max_location_distance']);
+        $settings->set("attendance.off_site_alert_distance.{$companyId}", (int) $validated['off_site_alert_distance']);
 
         return back()->with('success', __('ui.settings.saved'));
     }

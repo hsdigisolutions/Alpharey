@@ -41,6 +41,11 @@ class StoreProjectRequest extends FormRequest
             'coordinator' => ['nullable', 'string', 'max:255'],
             'start_date' => ['nullable', 'date'],
             'end_date' => ['nullable', 'date', 'after_or_equal:start_date'],
+            // Site location — for worker check-in distance verification. Radius
+            // is the on-site geofence (metres), capped at 2 km for a large site.
+            'latitude' => ['nullable', 'numeric', 'between:-90,90'],
+            'longitude' => ['nullable', 'numeric', 'between:-180,180'],
+            'geofence_radius' => ['nullable', 'integer', 'min:50', 'max:2000'],
             'budget' => ['nullable', 'numeric', 'min:0', 'max:99999999'],
             'estimated_hours' => ['nullable', 'numeric', 'min:0'],
             'estimated_meters' => ['nullable', 'numeric', 'min:0'],

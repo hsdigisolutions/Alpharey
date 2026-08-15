@@ -234,6 +234,22 @@ function accuracyClass(accuracy) {
     if (a <= 500) return 'bg-status-warn-soft text-status-warn';
     return 'bg-status-danger-soft text-status-danger';
 }
+
+// Distance from the project site + its traffic-light band.
+function fmtDistance(m) {
+    const n = Number(m);
+    return n >= 1000 ? `${(n / 1000).toFixed(1)} km` : `${Math.round(n)} m`;
+}
+function distanceBandTextClass(band) {
+    return { on_site: 'text-status-ok', near_site: 'text-status-warn', off_site: 'text-status-danger' }[band] ?? 'text-ink';
+}
+function distanceBandBadgeClass(band) {
+    return {
+        on_site: 'bg-status-ok-soft text-status-ok',
+        near_site: 'bg-status-warn-soft text-status-warn',
+        off_site: 'bg-status-danger-soft text-status-danger',
+    }[band] ?? 'bg-surface-sunken text-ink-soft';
+}
 </script>
 
 <template>
@@ -375,6 +391,20 @@ function accuracyClass(accuracy) {
                                 class="tabular-nums ms-1 inline-block rounded px-1.5 py-0.5 text-[11px] font-medium"
                                 :class="accuracyClass(record.worker.check_in.accuracy)">±{{ Math.round(record.worker.check_in.accuracy) }}m</span>
                             <p class="mt-0.5 font-mono text-[11px] text-muted">{{ formatCoords(record.worker.check_in) }}</p>
+                        </dd>
+                    </div>
+                    <div class="flex items-start justify-between gap-3">
+                        <dt class="text-ink-soft"><Bilingual k="attendance.distance_from_project" inline /></dt>
+                        <dd class="text-right">
+                            <template v-if="record.worker.distance_from_project != null">
+                                <span class="tabular-nums font-semibold" :class="distanceBandTextClass(record.worker.distance_band)">
+                                    {{ fmtDistance(record.worker.distance_from_project) }}
+                                </span>
+                                <span class="ms-1 inline-block rounded px-1.5 py-0.5 text-[11px] font-medium"
+                                    :class="distanceBandBadgeClass(record.worker.distance_band)">{{ $t('attendance.' + record.worker.distance_band) }}</span>
+                                <p v-if="record.worker.project_name" class="mt-0.5 text-[11px] text-muted">{{ record.worker.project_name }}</p>
+                            </template>
+                            <span v-else class="text-[11px] text-muted">{{ $t('attendance.distance_not_verified') }}</span>
                         </dd>
                     </div>
                     <div v-if="record.worker.check_out" class="flex items-start justify-between gap-3">

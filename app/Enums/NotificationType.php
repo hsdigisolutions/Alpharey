@@ -31,6 +31,7 @@ enum NotificationType: string
     // Attendance / vehicles
     case WorkerGpsMissing = 'worker_gps_missing';
     case WorkerLocationMismatch = 'worker_location_mismatch';
+    case WorkerOffSite = 'worker_off_site';
     case ShortHours = 'short_hours';
     case AutoAbsent = 'auto_absent';
     case VehicleExpiry = 'vehicle_expiry';
@@ -83,7 +84,8 @@ enum NotificationType: string
             self::ExpensePending,
             self::LeavePending,
             self::ShortHours,
-            self::WorkerLocationMismatch => [UserRole::Admin, UserRole::Manager],
+            self::WorkerLocationMismatch,
+            self::WorkerOffSite => [UserRole::Admin, UserRole::Manager],
             // Worker-direct types go to one specific user, never a role.
             self::AdvanceDecided, self::ExpenseDecided, self::LeaveDecided,
             self::WeekendOffer, self::CallFollowUp => [],
@@ -109,6 +111,7 @@ enum NotificationType: string
             self::LeavePending, self::LeaveDecided => 'leave',
             self::WorkerGpsMissing => 'alert',
             self::WorkerLocationMismatch => 'alert',
+            self::WorkerOffSite => 'alert',
             self::ShortHours => 'attendance',
             self::AutoAbsent => 'attendance',
             self::VehicleExpiry, self::VehicleNotReturned => 'vehicles',
@@ -136,8 +139,8 @@ enum NotificationType: string
             self::AdvancePending, self::AdvanceDecided,
             self::ExpensePending, self::ExpenseDecided,
             self::LeavePending, self::LeaveDecided,
-            self::WorkerGpsMissing, self::WorkerLocationMismatch, self::ShortHours,
-            self::AutoAbsent, self::WeekendOffer => 'workers',
+            self::WorkerGpsMissing, self::WorkerLocationMismatch, self::WorkerOffSite,
+            self::ShortHours, self::AutoAbsent, self::WeekendOffer => 'workers',
             default => 'other',
         };
     }

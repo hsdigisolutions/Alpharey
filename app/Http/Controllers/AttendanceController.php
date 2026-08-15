@@ -18,6 +18,7 @@ use App\Services\Attendance\AttendanceService;
 use App\Services\Audit\AuditLogger;
 use App\Support\AttendanceAbsence;
 use App\Support\CurrentCompany;
+use App\Support\Geo;
 use App\Support\PeriodLock;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -71,8 +72,12 @@ class AttendanceController extends Controller
             ->where('company_id', app(CurrentCompany::class)->id())
             ->whereIn('employee_id', $employeeIds)
             ->whereBetween('date', [$start->toDateString(), $end->toDateString()])
-            ->with('project:id,name')
+            ->with('project:id,name,latitude,longitude,geofence_radius')
             ->get();
+
+        // Off-site threshold for this company — the grid classifies each cell's
+        // check-in distance into a traffic-light band with it (computed once).
+        $offSiteThreshold = app(AttendanceService::class)->offSiteAlertDistance(app(CurrentCompany::class)->id());
 
         // Which of these attendance rows carry a worker note — one query, keyed
         // by attendance_id so the grid can mark it without an N+1. We also track
@@ -103,6 +108,10 @@ class AttendanceController extends Controller
                 'has_voice_note' => $noteHasAudio->has($record->id),
                 'voice_note_has_audio' => (bool) $noteHasAudio->get($record->id, false),
                 'location_mismatch' => (bool) $record->location_mismatch,
+                // Distance from the project site + its traffic-light band, for the
+                // small dot on the cell. Null when unverified (no fix / no coords).
+                'distance' => $record->distance_from_project !== null ? (float) $record->distance_from_project : null,
+                'distance_band' => $this->distanceBand($record, $offSiteThreshold),
             ];
         }
 
@@ -132,6 +141,8 @@ class AttendanceController extends Controller
                         'project' => null,
                         'has_voice_note' => false,
                         'location_mismatch' => false,
+                        'distance' => null,
+                        'distance_band' => null,
                     ];
                     $virtualAbsences[$emp->id] = ($virtualAbsences[$emp->id] ?? 0) + 1;
                 }
@@ -410,6 +421,11 @@ class AttendanceController extends Controller
                 'check_out_at' => $attendance->check_out_at?->toDateTimeString(),
                 'check_in' => $this->coords($attendance->check_in_lat, $attendance->check_in_lng, $attendance->check_in_accuracy),
                 'check_out' => $this->coords($attendance->check_out_lat, $attendance->check_out_lng, $attendance->check_out_accuracy),
+                // Distance from the project site at check-in + its traffic-light
+                // band; null when it could not be verified (no fix / no coords).
+                'project_name' => $attendance->project?->name,
+                'distance_from_project' => $attendance->distance_from_project !== null ? (float) $attendance->distance_from_project : null,
+                'distance_band' => $this->distanceBand($attendance, app(AttendanceService::class)->offSiteAlertDistance($attendance->company_id)),
                 'has_photo' => $attendance->check_in_photo_path !== null,
                 // Proof-of-work file captured at check-out (site photo / doc).
                 // is_image lets the modal render a photo inline vs a doc download.
@@ -427,6 +443,21 @@ class AttendanceController extends Controller
                 'duration_seconds' => $voiceNote->duration_seconds,
             ] : null,
         ];
+    }
+
+    /**
+     * The traffic-light band for a row's check-in distance from its project —
+     * on_site / near_site / off_site — or null when unverified (no stored
+     * distance or the project has no coordinates). Grades against the project's
+     * own geofence radius and the company's off-site threshold.
+     */
+    private function distanceBand(Attendance $record, int $offSiteThreshold): ?string
+    {
+        if ($record->distance_from_project === null || $record->project === null) {
+            return null;
+        }
+
+        return Geo::band((float) $record->distance_from_project, $record->project->geofence_radius, $offSiteThreshold);
     }
 
     /**

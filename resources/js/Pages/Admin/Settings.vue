@@ -27,6 +27,7 @@ const props = defineProps({
     overtimeTypes: { type: Array, default: () => [] },
     dayTypeThresholds: { type: Object, default: () => ({ full: 6, half: 3 }) },
     maxLocationDistance: { type: Number, default: 500 },
+    offSiteAlertDistance: { type: Number, default: 2000 },
     consentVersion: { type: String, default: '' },
     notificationMatrix: { type: Array, default: null },
     systemHealth: { type: Object, default: null },
@@ -84,6 +85,7 @@ const thresholdForm = useForm({
     full_day_threshold: props.dayTypeThresholds.full,
     half_day_threshold: props.dayTypeThresholds.half,
     max_location_distance: props.maxLocationDistance,
+    off_site_alert_distance: props.offSiteAlertDistance,
 });
 
 const legalForm = useForm({ consent_version: props.consentVersion });
@@ -282,6 +284,13 @@ function deletePolicy(p) {
                         <input v-model="thresholdForm.max_location_distance" type="number" step="10" min="50" max="100000"
                             class="w-40 rounded-md border border-line-strong bg-surface-sunken px-3 py-1.5 text-sm text-ink focus:border-accent focus:outline-none" />
                         <span v-if="thresholdForm.errors.max_location_distance" class="text-xs text-status-danger">{{ thresholdForm.errors.max_location_distance }}</span>
+                    </label>
+                    <label class="flex flex-col gap-1">
+                        <span class="text-xs font-medium text-ink-soft">{{ $t('settings.off_site_alert_distance') }}</span>
+                        <input v-model="thresholdForm.off_site_alert_distance" type="number" step="100" min="100" max="100000"
+                            class="w-40 rounded-md border border-line-strong bg-surface-sunken px-3 py-1.5 text-sm text-ink focus:border-accent focus:outline-none" />
+                        <span class="text-xs text-muted">{{ $t('settings.off_site_alert_hint') }}</span>
+                        <span v-if="thresholdForm.errors.off_site_alert_distance" class="text-xs text-status-danger">{{ thresholdForm.errors.off_site_alert_distance }}</span>
                     </label>
                     <VButton type="submit" :loading="thresholdForm.processing"><Bilingual k="common.save" inline /></VButton>
                 </form>

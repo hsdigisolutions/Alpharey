@@ -7,7 +7,7 @@
  * out, or report an absence. The screen shows exactly one primary action at a
  * time based on today's state from the server.
  */
-import { computed, nextTick, onUnmounted, ref } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue';
 import { Head, router, useForm, usePage } from '@inertiajs/vue3';
 import { t } from '@/translate';
 import { getLocation } from '@/composables/useGeolocation';
@@ -17,6 +17,7 @@ import SelfieCapture from '@/Components/Worker/SelfieCapture.vue';
 import MonthCalendar from '@/Components/Worker/MonthCalendar.vue';
 import PrivacyNotice from '@/Components/Worker/PrivacyNotice.vue';
 import VButton from '@/Components/ui/VButton.vue';
+import VSelect from '@/Components/ui/VSelect.vue';
 import VTextarea from '@/Components/ui/VTextarea.vue';
 
 const props = defineProps({
@@ -32,6 +33,9 @@ const props = defineProps({
     // Worker-direct notifications (PWA bell): { unread, items[] }
     notifications: { type: Object, default: () => ({ unread: 0, items: [] }) },
     equipment: { type: Array, default: () => [] },
+    // Active projects this worker may punch into (own + deployed). Coords only —
+    // no money. Drives the check-in project picker + on-device distance hint.
+    assignedProjects: { type: Array, default: () => [] },
 });
 
 const page = usePage();
@@ -78,6 +82,80 @@ const weekendRateLabel = computed(() => ({
     'x2': t('attendance.offer_rate_x2'),
     custom: t('attendance.offer_rate_custom'),
 }[props.weekend.offer?.rate_type] ?? ''));
+
+// --- Project selection for check-in --------------------------------------
+// The worker picks which site they're punching into. One project → locked and
+// auto-selected; several → a picker, nearest-first once a fix lands. GPS is a
+// hint here (distance + ordering), NEVER a gate — the punch always stands.
+const assignedProjects = computed(() => props.assignedProjects ?? []);
+const deviceLoc = ref(null); // best-effort fix for nearest-first + distance hint
+
+function haversineM(lat1, lng1, lat2, lng2) {
+    const R = 6371000;
+    const toRad = (d) => (d * Math.PI) / 180;
+    const dLat = toRad(lat2 - lat1);
+    const dLng = toRad(lng2 - lng1);
+    const a = Math.sin(dLat / 2) ** 2
+        + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+    return 2 * R * Math.asin(Math.sqrt(a));
+}
+
+function projectDistance(p) {
+    if (!deviceLoc.value || p?.latitude == null || p?.longitude == null) return null;
+    return haversineM(deviceLoc.value.lat, deviceLoc.value.lng, p.latitude, p.longitude);
+}
+
+// Nearest-first when a device fix is available; else the server (name) order.
+const sortedProjects = computed(() => {
+    const list = [...assignedProjects.value];
+    if (!deviceLoc.value) return list;
+    return list.sort((a, b) => {
+        const da = projectDistance(a);
+        const db = projectDistance(b);
+        if (da == null) return 1;
+        if (db == null) return -1;
+        return da - db;
+    });
+});
+
+const selectedProjectId = ref(assignedProjects.value.length === 1 ? assignedProjects.value[0].id : null);
+const selectedProject = computed(() => assignedProjects.value.find((p) => p.id === selectedProjectId.value) ?? null);
+const selectedDistance = computed(() => (selectedProject.value ? projectDistance(selectedProject.value) : null));
+
+function fmtDistance(m) {
+    if (m == null) return '';
+    return m >= 1000 ? `${(m / 1000).toFixed(1)} km` : `${Math.round(m)} m`;
+}
+
+// Beyond the site's own radius (default 500 m) → a soft "confirm you're here"
+// hint. Advisory only; it never blocks the punch.
+const distanceWarn = computed(() => {
+    const p = selectedProject.value;
+    const d = selectedDistance.value;
+    return Boolean(p && d != null && d >= (p.geofence_radius ?? 500));
+});
+
+function mapsUrl(p) {
+    if (!p || p.latitude == null || p.longitude == null) return null;
+    return `https://www.google.com/maps/dir/?api=1&destination=${p.latitude},${p.longitude}`;
+}
+
+// Best-effort silent fix on load — only to order the picker and show a distance
+// hint; the punch fetches its own fix. A refusal just leaves name order (GPS is
+// evidence, not a gate). Skipped when no project carries coordinates.
+onMounted(async () => {
+    if (!props.consent.gps) return;
+    if (!assignedProjects.value.some((p) => p.latitude != null && p.longitude != null)) return;
+    try {
+        const loc = await getLocation();
+        if (loc && loc.lat != null && loc.lng != null) {
+            deviceLoc.value = { lat: loc.lat, lng: loc.lng };
+            if (selectedProjectId.value == null && sortedProjects.value.length) {
+                selectedProjectId.value = sortedProjects.value[0].id;
+            }
+        }
+    } catch { /* GPS optional — evidence, not a gate */ }
+});
 
 // Hours as "28h 57m" rather than a raw decimal (28.95).
 function hoursHM(h) {
@@ -186,6 +264,9 @@ async function submitCheckIn() {
     data.append('lng', loc.lng ?? '');
     data.append('accuracy', loc.accuracy ?? '');
     data.append('denied', loc.denied ? '1' : '0');
+    // The chosen site (weekday only; a weekend offer locks it server-side). A
+    // project-less punch is allowed, so send nothing when none is selected.
+    if (selectedProjectId.value != null) data.append('project_id', String(selectedProjectId.value));
     if (props.consent.photo && photoBlob.value) data.append('photo', photoBlob.value, 'selfie.jpg');
 
     router.post('/worker/check-in', data, {
@@ -423,6 +504,38 @@ const noteTextForm = useForm({ attendance_id: null, text_note: '', duration_seco
                         {{ $t('worker.detail_project') }}: {{ weekend.offer.project }}
                     </p>
                     <p class="mt-0.5 text-xs text-ink-soft">{{ weekendRateLabel }}</p>
+                </div>
+
+                <!-- Which site am I on? Weekday project picker; a weekend offer
+                     locks the project (shown in the offer card above). -->
+                <div v-if="!weekend.is_weekend && assignedProjects.length"
+                    class="mb-3 rounded-lg border border-line bg-surface-raised p-4 shadow-card">
+                    <p class="text-xs font-semibold uppercase tracking-wide text-muted">{{ $t('worker.your_project') }}</p>
+
+                    <p v-if="assignedProjects.length === 1" class="mt-1 text-base font-semibold text-ink">
+                        {{ selectedProject?.name }}
+                    </p>
+                    <VSelect v-else v-model="selectedProjectId" class="mt-2">
+                        <option :value="null">{{ $t('worker.choose_project') }}</option>
+                        <option v-for="p in sortedProjects" :key="p.id" :value="p.id">
+                            {{ p.name }}<template v-if="projectDistance(p) != null"> · {{ fmtDistance(projectDistance(p)) }}</template>
+                        </option>
+                    </VSelect>
+
+                    <p v-if="selectedProject?.address" class="mt-1 text-sm text-ink-soft">{{ selectedProject.address }}</p>
+
+                    <div class="mt-2 flex items-center gap-2">
+                        <span v-if="selectedDistance != null" class="text-sm"
+                            :class="distanceWarn ? 'text-status-warn' : 'text-status-ok'">
+                            {{ $t('worker.distance_from_site') }}: {{ fmtDistance(selectedDistance) }}
+                        </span>
+                        <a v-if="mapsUrl(selectedProject)" :href="mapsUrl(selectedProject)" target="_blank" rel="noopener"
+                            class="ml-auto text-sm font-medium text-accent hover:underline">{{ $t('worker.navigate') }} →</a>
+                    </div>
+
+                    <p v-if="distanceWarn" class="mt-2 rounded-md bg-status-warn-soft px-3 py-2 text-xs text-status-warn">
+                        {{ $t('worker.distance_warning') }}
+                    </p>
                 </div>
 
                 <div v-if="!cameraOpen" class="space-y-3">

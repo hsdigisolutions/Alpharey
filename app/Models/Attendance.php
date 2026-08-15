@@ -51,6 +51,7 @@ use Illuminate\Support\Carbon;
  * @property string|null $check_out_attachment_name
  * @property bool $location_denied
  * @property bool|null $location_mismatch
+ * @property numeric-string|null $distance_from_project
  * @property string|null $worker_note
  * @property string $source
  */
@@ -116,6 +117,7 @@ class Attendance extends Model
             'check_out_accuracy' => 'decimal:2',
             'location_denied' => 'boolean',
             'location_mismatch' => 'boolean',
+            'distance_from_project' => 'decimal:2',
         ];
     }
 

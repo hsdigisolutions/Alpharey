@@ -24,6 +24,7 @@ use Illuminate\Support\Carbon;
  * @property int $company_id
  * @property string $code
  * @property string $name
+ * @property string|null $address
  * @property ProjectStatus $status
  * @property ProjectPriority $priority
  * @property BillingType|null $billing_type
@@ -34,6 +35,9 @@ use Illuminate\Support\Carbon;
  * @property numeric-string|null $client_hour_rate
  * @property numeric-string|null $client_meter_rate
  * @property numeric-string|null $outsource_cost
+ * @property numeric-string|null $latitude
+ * @property numeric-string|null $longitude
+ * @property int $geofence_radius
  */
 class Project extends Model
 {
@@ -48,6 +52,7 @@ class Project extends Model
     /** @var list<string> */
     protected $fillable = [
         'client_id', 'name', 'project_type', 'status', 'priority',
+        'latitude', 'longitude', 'geofence_radius',
         'billing_type', 'vat_rate', 'jefe_de_obra', 'jefe_phone', 'jefe_email',
         'encargado', 'seguridad', 'coordinator', 'start_date', 'end_date',
         'budget', 'estimated_hours', 'estimated_meters', 'outsourced',
@@ -72,6 +77,9 @@ class Project extends Model
             'client_hour_rate' => 'decimal:2',
             'client_meter_rate' => 'decimal:2',
             'outsource_cost' => 'decimal:2',
+            'latitude' => 'decimal:7',
+            'longitude' => 'decimal:7',
+            'geofence_radius' => 'integer',
             'outsourced' => 'boolean',
         ];
     }

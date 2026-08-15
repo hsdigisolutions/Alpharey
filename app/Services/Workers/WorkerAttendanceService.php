@@ -4,16 +4,23 @@ namespace App\Services\Workers;
 
 use App\Enums\AttendanceMode;
 use App\Enums\AttendanceStatus;
+use App\Enums\DeploymentStatus;
 use App\Enums\NotificationType;
+use App\Enums\ProjectStatus;
 use App\Models\Attendance;
 use App\Models\Employee;
+use App\Models\EmployeeDeployment;
+use App\Models\Project;
+use App\Models\ProjectEmployeeRate;
 use App\Models\Scopes\CompanyScope;
 use App\Models\WeekendWorkOffer;
 use App\Services\Attendance\AttendanceService;
 use App\Services\Notifications\NotificationDispatcher;
+use App\Support\Geo;
 use App\Support\PeriodLock;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -55,7 +62,7 @@ class WorkerAttendanceService
      *
      * @param  array{lat: float|null, lng: float|null, accuracy: float|null, denied: bool}  $location
      */
-    public function checkIn(Employee $employee, array $location, ?UploadedFile $photo, bool $gpsConsent = true): Attendance
+    public function checkIn(Employee $employee, array $location, ?UploadedFile $photo, bool $gpsConsent = true, ?int $projectId = null): Attendance
     {
         $today = now()->toDateString();
         $existing = $this->todayFor($employee, $today);
@@ -80,6 +87,18 @@ class WorkerAttendanceService
             }
         }
 
+        // Resolve the project the worker is punching into. A weekend offer LOCKS
+        // the project to the offer's site; otherwise the worker may pick one of
+        // their own assigned or deployed projects — or none at all (a
+        // project-less punch is always allowed; GPS never gates a punch).
+        if ($offer !== null) {
+            $projectId = $offer->project_id;
+        } elseif ($projectId !== null && ! $this->assignedProjects($employee)->contains('id', $projectId)) {
+            throw ValidationException::withMessages([
+                'project_id' => __('ui.worker.project_not_assigned'),
+            ]);
+        }
+
         // Reject a punch into a month payroll has closed (system-wide lock).
         $this->lock->assertOpen($employee->company_id, $today, 'check_in');
 
@@ -88,7 +107,12 @@ class WorkerAttendanceService
         // is harmless; a row referencing a missing file is not.
         $photoPath = $this->storePhoto($employee, $photo);
 
-        $attendance = DB::transaction(function () use ($employee, $today, $location, $photoPath, $offer): Attendance {
+        // How far is the worker from the project site? Evidence for the admin,
+        // NEVER a gate — computed only when a trustworthy fix AND project coords
+        // exist; otherwise the row's distance stays null ("not verified").
+        $distanceInfo = $this->projectDistanceInfo($projectId, $location, $employee->company_id);
+
+        $attendance = DB::transaction(function () use ($employee, $today, $location, $photoPath, $offer, $projectId, $distanceInfo): Attendance {
             // createForWorker() bypasses resolveEmployee() which requires a CRM
             // session (CurrentCompany) that workers never have. The employee is
             // already verified by WorkerController — pass it directly.
@@ -101,7 +125,11 @@ class WorkerAttendanceService
             ]);
 
             $attendance->check_in_at = now();
+            $attendance->project_id = $projectId;
             $this->applyLocation($attendance, 'check_in', $location);
+            $attendance->distance_from_project = $distanceInfo['distance'] === null
+                ? null
+                : (string) $distanceInfo['distance'];
             $attendance->check_in_photo_path = $photoPath;
             $attendance->source = 'worker';
             $attendance->save();
@@ -126,7 +154,35 @@ class WorkerAttendanceService
             $this->notifyGpsMissing($employee);
         }
 
+        // Off-site check-in: the worker punched in beyond the company's off-site
+        // threshold from the project. Fired on check-in (which happens once per
+        // day per worker — the unique index guarantees once-per-day). The punch
+        // already stood; this only tells the admins where it happened.
+        if ($distanceInfo['off_site'] && $distanceInfo['project'] !== null) {
+            $this->notifyOffSite($employee, $distanceInfo['project'], (float) $distanceInfo['distance']);
+        }
+
         return $attendance;
+    }
+
+    /**
+     * Alert the company's admins/managers that a worker checked in off site.
+     * Routed through the dispatcher so the Settings matrix (Screen 26) governs
+     * who receives it. The distance is rendered in the body; the punch stands.
+     */
+    private function notifyOffSite(Employee $employee, Project $project, float $distance): void
+    {
+        $human = $distance >= 1000
+            ? number_format($distance / 1000, 1).' km'
+            : round($distance).' m';
+
+        $this->notifications->dispatch(NotificationType::WorkerOffSite, $employee->company_id, [
+            'title_es' => "{$employee->full_name} fichó a {$human} de {$project->name}",
+            'title_en' => "{$employee->full_name} checked in {$human} from {$project->name}",
+            'entity' => $employee->full_name,
+            'company' => $employee->company?->name,
+            'url' => '/attendance',
+        ]);
     }
 
     /**
@@ -309,6 +365,89 @@ class WorkerAttendanceService
     }
 
     /**
+     * The active projects this worker may punch into — their own assignments
+     * (project_employee_rates) PLUS any project they are actively deployed to
+     * (a host-company site). Tenant scope dropped: a worker has no CRM session.
+     * Only Active projects are offered.
+     *
+     * @return Collection<int, Project>
+     */
+    public function assignedProjects(Employee $employee): Collection
+    {
+        // Tenant scope dropped on the rate rows too — a worker has no CRM
+        // session, so a scoped read would default-deny to zero.
+        $rateIds = ProjectEmployeeRate::query()
+            ->withoutGlobalScope(CompanyScope::class)
+            ->where('employee_id', $employee->id)
+            ->pluck('project_id');
+
+        $deployedIds = EmployeeDeployment::query()
+            ->where('employee_id', $employee->id)
+            ->where('status', DeploymentStatus::Active)
+            ->pluck('project_id');
+
+        $ids = $rateIds->merge($deployedIds)->filter()->unique()->values();
+
+        if ($ids->isEmpty()) {
+            return collect();
+        }
+
+        return Project::query()->withoutGlobalScope(CompanyScope::class)
+            ->whereIn('id', $ids)
+            ->where('status', ProjectStatus::Active)
+            ->orderBy('name')
+            ->get(['id', 'name', 'address', 'latitude', 'longitude', 'geofence_radius']);
+    }
+
+    /**
+     * The check-in's distance from the project site, and whether that reads as
+     * "off site". GPS is EVIDENCE, not a gate: this only measures — it never
+     * blocks a punch. Returns a null distance (and no alert) unless BOTH a
+     * trustworthy fix and project coordinates exist, so a withheld/weak fix or a
+     * project without coordinates simply reads "not verified" on the admin side.
+     *
+     * @param  array{lat: float|null, lng: float|null, accuracy: float|null, denied: bool}  $location
+     * @return array{distance: float|null, off_site: bool, project: Project|null}
+     */
+    private function projectDistanceInfo(?int $projectId, array $location, int $companyId): array
+    {
+        $none = ['distance' => null, 'off_site' => false, 'project' => null];
+
+        if ($projectId === null || $location['lat'] === null || $location['lng'] === null) {
+            return $none;
+        }
+
+        // A coarse IP/network fix (±tens of km) cannot claim the worker is 3 km
+        // from site — never anchor a distance on an untrustworthy accuracy.
+        if ($location['accuracy'] !== null && $location['accuracy'] > self::LOCATION_ACCURACY_LIMIT) {
+            return $none;
+        }
+
+        $project = Project::query()->withoutGlobalScope(CompanyScope::class)
+            ->where('id', $projectId)
+            ->first(['id', 'name', 'latitude', 'longitude', 'geofence_radius']);
+
+        if ($project === null || $project->latitude === null || $project->longitude === null) {
+            return $none;
+        }
+
+        $distance = Geo::haversine(
+            (float) $location['lat'],
+            (float) $location['lng'],
+            (float) $project->latitude,
+            (float) $project->longitude,
+        );
+
+        $band = Geo::band($distance, $project->geofence_radius, $this->attendance->offSiteAlertDistance($companyId));
+
+        return [
+            'distance' => round($distance, 2),
+            'off_site' => $band === Geo::OFF_SITE,
+            'project' => $project,
+        ];
+    }
+
+    /**
      * The weekend work offer that lets THIS employee punch on the given date, or
      * null. An offer exists per company per date; it only unlocks the day for the
      * workers on its invited list. Tenant scope dropped (workers have no CRM
@@ -388,7 +527,7 @@ class WorkerAttendanceService
             return;
         }
 
-        $metres = $this->haversine(
+        $metres = Geo::haversine(
             (float) $attendance->check_in_lat,
             (float) $attendance->check_in_lng,
             $location['lat'],
@@ -397,19 +536,6 @@ class WorkerAttendanceService
 
         $limit = $this->attendance->maxLocationDistance((int) $attendance->company_id);
         $attendance->location_mismatch = $metres > $limit;
-    }
-
-    /** Haversine great-circle distance in metres. */
-    private function haversine(float $lat1, float $lng1, float $lat2, float $lng2): float
-    {
-        $r = 6371000.0;
-        $phi1 = deg2rad($lat1);
-        $phi2 = deg2rad($lat2);
-        $dPhi = deg2rad($lat2 - $lat1);
-        $dLambda = deg2rad($lng2 - $lng1);
-        $a = sin($dPhi / 2) ** 2 + cos($phi1) * cos($phi2) * sin($dLambda / 2) ** 2;
-
-        return 2.0 * $r * asin(sqrt($a));
     }
 
     private function storePhoto(Employee $employee, ?UploadedFile $photo): ?string

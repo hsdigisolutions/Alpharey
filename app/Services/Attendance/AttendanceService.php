@@ -47,6 +47,9 @@ class AttendanceService
     /** Max check-out distance (metres) from check-in before an alert — per company. */
     public const DEFAULT_MAX_LOCATION_DISTANCE = 500.0;
 
+    /** Distance (metres) from the PROJECT site above which a check-in is "off site" — per company. */
+    public const DEFAULT_OFF_SITE_ALERT_DISTANCE = 2000;
+
     public function __construct(
         private readonly PeriodLock $lock,
         private readonly WageRateService $wageRates,
@@ -269,6 +272,18 @@ class AttendanceService
         return (float) $this->settings->get(
             "attendance.max_location_distance.{$companyId}",
             $this->settings->get('attendance.max_location_distance', self::DEFAULT_MAX_LOCATION_DISTANCE),
+        );
+    }
+
+    /**
+     * Distance (metres) from the project site above which a check-in counts as
+     * "off site" and raises an alert — per company, Settings-driven (Screen 26).
+     */
+    public function offSiteAlertDistance(int $companyId): int
+    {
+        return (int) $this->settings->get(
+            "attendance.off_site_alert_distance.{$companyId}",
+            $this->settings->get('attendance.off_site_alert_distance', self::DEFAULT_OFF_SITE_ALERT_DISTANCE),
         );
     }
 

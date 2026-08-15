@@ -54,6 +54,11 @@ class WorkerController extends Controller
                 'can_use_vehicles' => $employee->can_use_vehicles,
             ],
             'today' => $this->todayPayload($today, $this->fullDayThreshold($employee)),
+            // The active projects this worker may punch into (own assignments +
+            // deployments). One → the app auto-selects it; several → a picker,
+            // nearest-first (the browser sorts by distance once it has a fix).
+            // Coords drive the on-device distance hint; NO money is shipped.
+            'assignedProjects' => $this->assignedProjectsPayload($employee),
             // Weekend gating: a Sat/Sun is a rest day unless an admin offer
             // invites this worker (then the offer's project is shown + check-in
             // is allowed). Weekdays are always workable.
@@ -80,6 +85,28 @@ class WorkerController extends Controller
             // items + serials only; NO cost figure ever reaches a worker).
             'equipment' => $this->equipmentPayload($employee),
         ]);
+    }
+
+    /**
+     * The active projects this worker may punch into, for the check-in screen.
+     * Coordinates are shipped so the device can compute a distance hint and sort
+     * nearest-first; never any financial figure.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function assignedProjectsPayload(Employee $employee): array
+    {
+        return $this->attendance->assignedProjects($employee)
+            ->map(fn (Project $p): array => [
+                'id' => $p->id,
+                'name' => $p->name,
+                'address' => $p->address,
+                'latitude' => $p->latitude !== null ? (float) $p->latitude : null,
+                'longitude' => $p->longitude !== null ? (float) $p->longitude : null,
+                'geofence_radius' => $p->geofence_radius,
+            ])
+            ->values()
+            ->all();
     }
 
     /**
@@ -141,7 +168,7 @@ class WorkerController extends Controller
         $location = $gpsConsent ? $request->location() : self::NO_LOCATION;
         $photo = $employee->consentPhoto() ? $request->file('photo') : null;
 
-        $attendance = $this->attendance->checkIn($employee, $location, $photo, $gpsConsent);
+        $attendance = $this->attendance->checkIn($employee, $location, $photo, $gpsConsent, $request->projectId());
 
         $redirect = redirect()->route('worker.home')->with('success', __('ui.worker.checked_in'));
 

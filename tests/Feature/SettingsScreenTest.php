@@ -47,6 +47,7 @@ it('saves the per-company auto day-type thresholds + max location distance', fun
         'full_day_threshold' => 7,
         'half_day_threshold' => 4,
         'max_location_distance' => 750,
+        'off_site_alert_distance' => 3000,
     ])->assertRedirect()->assertSessionHasNoErrors();
 
     $service = app(AttendanceService::class);
@@ -54,7 +55,8 @@ it('saves the per-company auto day-type thresholds + max location distance', fun
 
     expect($thresholds['full'])->toBe(7.0)
         ->and($thresholds['half'])->toBe(4.0)
-        ->and($service->maxLocationDistance($this->company->id))->toBe(750.0);
+        ->and($service->maxLocationDistance($this->company->id))->toBe(750.0)
+        ->and($service->offSiteAlertDistance($this->company->id))->toBe(3000);
 });
 
 it('rejects a half-day threshold above the full-day threshold', function (): void {
@@ -62,6 +64,7 @@ it('rejects a half-day threshold above the full-day threshold', function (): voi
         'full_day_threshold' => 6,
         'half_day_threshold' => 8,
         'max_location_distance' => 500,
+        'off_site_alert_distance' => 2000,
     ])->assertSessionHasErrors('half_day_threshold');
 });
 
