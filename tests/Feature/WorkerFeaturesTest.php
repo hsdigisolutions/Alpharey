@@ -436,6 +436,7 @@ describe('Feature 4 – vehicle sessions', function () {
         $this->actingAs($user)
             ->post("/worker/vehicles/{$vehicle->id}/take", [
                 'starting_mileage' => 12500,
+                'photo' => UploadedFile::fake()->image('cond.jpg'),
             ])
             ->assertRedirect();
 
@@ -455,7 +456,10 @@ describe('Feature 4 – vehicle sessions', function () {
         $vehicle = Vehicle::factory()->for($company)->create(['active' => true, 'is_available' => false]);
 
         $this->actingAs($user)
-            ->post("/worker/vehicles/{$vehicle->id}/take", ['starting_mileage' => 5000])
+            ->post("/worker/vehicles/{$vehicle->id}/take", [
+                'starting_mileage' => 5000,
+                'photo' => UploadedFile::fake()->image('cond.jpg'),
+            ])
             ->assertSessionHasErrors();
     });
 
@@ -522,6 +526,7 @@ describe('Feature 4 – vehicle sessions', function () {
                 'ending_mileage' => 12650,
                 'ending_fuel_level' => 70,
                 'return_notes' => 'All good',
+                'photo' => UploadedFile::fake()->image('ret.jpg'),
             ])
             ->assertRedirect();
 
@@ -554,6 +559,7 @@ describe('Feature 4 – vehicle sessions', function () {
         $this->actingAs($user)
             ->post("/worker/vehicle-sessions/{$session->id}/return", [
                 'ending_mileage' => 4999, // backwards
+                'photo' => UploadedFile::fake()->image('ret.jpg'),
             ])
             ->assertSessionHasErrors('ending_mileage');
     });

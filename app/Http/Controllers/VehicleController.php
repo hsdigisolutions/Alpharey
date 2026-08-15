@@ -11,21 +11,26 @@ use App\Http\Requests\StoreFineRequest;
 use App\Http\Requests\StoreFuelRequest;
 use App\Http\Requests\StoreVehicleRequest;
 use App\Models\Employee;
+use App\Models\Scopes\CompanyScope;
 use App\Models\Vehicle;
 use App\Models\VehicleDailyAssignment;
 use App\Models\VehicleFine;
 use App\Models\VehicleFuelRecord;
 use App\Models\VehicleMaintenanceHistory;
 use App\Models\VehicleSession;
+use App\Models\WorkerExpense;
 use App\Rules\OwnCompanyEmployee;
+use App\Services\Audit\AuditLogger;
 use App\Services\Vehicles\VehicleCompliance;
 use App\Services\Vehicles\VehicleService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 use Inertia\Response;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 /**
  * Screen 21 — Vehicles, all 4 tabs. Company-owned.
@@ -134,6 +139,17 @@ class VehicleController extends Controller
             'sessions.employee:id,full_name',
         ]);
 
+        // Worker fuel expenses (category 'fuel') for everyone who has driven this
+        // vehicle — ONE query, matched per session in PHP for the detail card.
+        $fuelByEmployee = WorkerExpense::query()
+            ->withoutGlobalScope(CompanyScope::class)
+            ->where('company_id', $vehicle->company_id)
+            ->whereIn('employee_id', $vehicle->sessions->pluck('employee_id')->unique()->filter()->all())
+            ->where('category', 'fuel')
+            ->orderByDesc('date')
+            ->get(['id', 'employee_id', 'date', 'amount', 'receipt_path', 'description'])
+            ->groupBy('employee_id');
+
         return Inertia::render('Vehicles/Show', [
             'vehicle' => array_merge($this->row($vehicle), [
                 'color' => $vehicle->color,
@@ -210,17 +226,57 @@ class VehicleController extends Controller
                 'employee' => $r->employee?->full_name,
                 'notes' => $r->notes,
             ])->values(),
-            'sessions' => $vehicle->sessions->map(fn ($s): array => [
-                'id' => $s->id,
-                'employee' => $s->employee?->full_name,
-                'taken_at' => $s->taken_at->toDateTimeString(),
-                'returned_at' => $s->returned_at?->toDateTimeString(),
-                'starting_mileage' => $s->starting_mileage,
-                'ending_mileage' => $s->ending_mileage,
-                'km_driven' => $s->km_driven,
-                'return_notes' => $s->return_notes,
-                'open' => $s->isOpen(),
-            ])->values(),
+            'sessions' => $vehicle->sessions->map(function ($s) use ($vehicle, $fuelByEmployee): array {
+                $from = $s->taken_at->toDateString();
+                $to = ($s->returned_at ?? now())->toDateString();
+
+                // Worker fuel added during the session window (€ + receipt only).
+                $fuel = ($fuelByEmployee[$s->employee_id] ?? collect())
+                    ->filter(fn ($e) => $e->date->toDateString() >= $from && $e->date->toDateString() <= $to)
+                    ->map(fn ($e): array => [
+                        'amount' => (float) $e->amount,
+                        'description' => $e->description,
+                        'date' => $e->date->toDateString(),
+                        'receipt_url' => $e->receipt_path !== null ? route('worker-expenses.receipt', $e->id) : null,
+                    ])->values()->all();
+
+                // Fines recorded against this vehicle within the session window.
+                $fines = $vehicle->fines
+                    ->filter(fn ($f) => $f->fine_date->toDateString() >= $from && $f->fine_date->toDateString() <= $to)
+                    ->map(fn ($f): array => [
+                        'amount' => (float) $f->amount,
+                        'description' => $f->description,
+                        'paid' => (bool) $f->paid,
+                        'fine_date' => $f->fine_date->toDateString(),
+                    ])->values()->all();
+
+                $mediaUrl = fn (string $kind, string $which, ?string $path): ?string => $path !== null
+                    ? route("vehicles.sessions.{$kind}", ['vehicle' => $vehicle->id, 'session' => $s->id, 'which' => $which])
+                    : null;
+
+                return [
+                    'id' => $s->id,
+                    'employee' => $s->employee?->full_name,
+                    'employee_id' => $s->employee_id,
+                    'vehicle_name' => trim("{$vehicle->plate_number} · {$vehicle->brand} {$vehicle->model}"),
+                    'taken_at' => $s->taken_at->toDateTimeString(),
+                    'returned_at' => $s->returned_at?->toDateTimeString(),
+                    'duration_minutes' => $s->returned_at !== null ? (int) $s->taken_at->diffInMinutes($s->returned_at) : null,
+                    'starting_mileage' => $s->starting_mileage,
+                    'ending_mileage' => $s->ending_mileage,
+                    'km_driven' => $s->km_driven,
+                    'return_notes' => $s->return_notes,
+                    'open' => $s->isOpen(),
+                    'take_photo_url' => $mediaUrl('photo', 'take', $s->take_photo_path),
+                    'return_photo_url' => $mediaUrl('photo', 'return', $s->return_photo_path),
+                    'take_voice_url' => $mediaUrl('voice', 'take', $s->take_voice_note_path),
+                    'return_voice_url' => $mediaUrl('voice', 'return', $s->return_voice_note_path),
+                    'take_voice_duration' => $s->take_voice_duration,
+                    'return_voice_duration' => $s->return_voice_duration,
+                    'fuel' => $fuel,
+                    'fines' => $fines,
+                ];
+            })->values(),
             'employees' => Employee::query()->orderBy('full_name')->get(['id', 'full_name']),
             'can' => [
                 'edit' => Gate::allows('vehicles.edit'),
@@ -351,6 +407,45 @@ class VehicleController extends Controller
         $this->vehicles->deleteFine($fine);
 
         return back()->with('success', __('ui.vehicles.fine_deleted'));
+    }
+
+    /** A worker session's condition photo (which = take|return). */
+    public function sessionPhoto(Vehicle $vehicle, VehicleSession $session, string $which): BinaryFileResponse
+    {
+        return $this->streamSessionMedia($vehicle, $session, 'photo', $which);
+    }
+
+    /** A worker session's voice note (which = take|return). */
+    public function sessionVoice(Vehicle $vehicle, VehicleSession $session, string $which): BinaryFileResponse
+    {
+        return $this->streamSessionMedia($vehicle, $session, 'voice', $which);
+    }
+
+    /**
+     * Stream a session media file, gated + audited. Tenancy: the vehicle is
+     * company-scoped by its route binding, and the session must belong to it —
+     * VehicleSession's own binding drops the scope (for workers), so this check
+     * is what confines an admin to their own company's sessions.
+     */
+    private function streamSessionMedia(Vehicle $vehicle, VehicleSession $session, string $kind, string $which): BinaryFileResponse
+    {
+        Gate::authorize('vehicles.view');
+        abort_unless($session->vehicle_id === $vehicle->id, 404);
+        abort_unless(in_array($which, ['take', 'return'], true), 404);
+
+        $column = match ("{$kind}.{$which}") {
+            'photo.take' => 'take_photo_path',
+            'photo.return' => 'return_photo_path',
+            'voice.take' => 'take_voice_note_path',
+            'voice.return' => 'return_voice_note_path',
+            default => null,
+        };
+        $path = $column !== null ? $session->{$column} : null;
+        abort_unless($path !== null && Storage::disk('local')->exists($path), 404);
+
+        app(AuditLogger::class)->log('viewed', $session, null, null, "Vehicle session {$kind} ({$which})", 'vehicles');
+
+        return response()->file(Storage::disk('local')->path($path));
     }
 
     /**

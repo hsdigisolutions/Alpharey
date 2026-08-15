@@ -4,6 +4,31 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Status: Phase 9 in progress — hardening (2026-08-01)
 
+### Vehicle session media + auto-mileage + luxury card (2026-08-15, DONE)
+
+Worker vehicle **take/return** now capture a **condition photo (required)** + an
+**optional voice note**; the admin gets a **premium session detail card**; and a
+return **auto-creates an odometer row** (the Mileage tab was blank before).
+Migration `2026_08_15_000005`: `vehicle_sessions` gains take/return photo + voice
+paths + voice durations (server-set, NOT fillable); `vehicle_mileage_histories`
+gains `source` / `session_id` (FK) / `km_driven` and `recorded_at` widens to
+**datetime**. `VehicleSessionService::take/returnVehicle` store the media on the
+private disk and `returnVehicle` inserts a `VehicleMileageHistory`
+(source `worker_session`, linked). Worker controller **requires** the photo on
+take + return (voice optional, ≤120 s); admin downloads via gated + audited
+`GET /vehicles/{vehicle}/sessions/{session}/photo|voice/{which}` (company-scoped
+through the vehicle binding → cross-company 404). New reusable
+`Components/Worker/VoiceRecorder.vue` (MediaRecorder audio/webm, 2-min cap, live
+timer, playback, delete) — used by the vehicle sheets **and** the Home check-out
+(refactored). Admin `Vehicles/Show` sessions rows are clickable →
+`Components/Vehicles/VehicleSessionPanel.vue` (dark hero + coral avatar,
+connected mileage boxes, before/after photos → full-screen lightbox, take/return
+audio players, fuel [worker expense €+receipt] / fines / notes sections that hide
+when empty). `VehicleController::show` enriches the sessions payload (media URLs,
+duration, fuel matched to the session window, fines by date) in one extra query.
+Tests: `VehicleSessionMediaTest` (10 — media stored, auto-mileage, photo-required
+422s, gated download + cross-company 404, enriched payload). **982 Pest tests.**
+
 ### Project people → employee dropdowns (2026-08-15, DONE)
 
 The project's four people — **site manager / foreman / safety / coordinator** —

@@ -131,6 +131,10 @@ class WorkerVehicleController extends Controller
         $minMileage = (int) ($vehicle->current_mileage ?? 0);
         $validated = $request->validate([
             'starting_mileage' => ['required', 'integer', "min:{$minMileage}"],
+            // Worker PWA REQUIRES a condition photo; the voice note is optional.
+            'photo' => ['required', 'image', 'mimes:jpg,jpeg,png,webp', 'max:8192'],
+            'voice' => ['nullable', 'file', 'mimetypes:audio/webm,audio/ogg,video/webm,audio/mp4,audio/m4a,audio/mpeg', 'max:5120'],
+            'voice_duration' => ['nullable', 'integer', 'min:1', 'max:120'],
         ]);
 
         $this->service->take(
@@ -138,6 +142,9 @@ class WorkerVehicleController extends Controller
             $employee,
             (int) $validated['starting_mileage'],
             null,
+            $request->file('photo'),
+            $request->file('voice'),
+            isset($validated['voice_duration']) ? (int) $validated['voice_duration'] : null,
         );
 
         return back()->with('success', __('ui.worker_vehicles.taken'));
@@ -197,6 +204,10 @@ class WorkerVehicleController extends Controller
         $validated = $request->validate([
             'ending_mileage' => ['required', 'integer', 'min:0'],
             'return_notes' => ['nullable', 'string', 'max:500'],
+            // Worker PWA REQUIRES a return condition photo; voice note optional.
+            'photo' => ['required', 'image', 'mimes:jpg,jpeg,png,webp', 'max:8192'],
+            'voice' => ['nullable', 'file', 'mimetypes:audio/webm,audio/ogg,video/webm,audio/mp4,audio/m4a,audio/mpeg', 'max:5120'],
+            'voice_duration' => ['nullable', 'integer', 'min:1', 'max:120'],
         ]);
 
         $this->service->returnVehicle(
@@ -204,6 +215,9 @@ class WorkerVehicleController extends Controller
             (int) $validated['ending_mileage'],
             null,
             $validated['return_notes'] ?? null,
+            $request->file('photo'),
+            $request->file('voice'),
+            isset($validated['voice_duration']) ? (int) $validated['voice_duration'] : null,
         );
 
         return back()->with('success', __('ui.worker_vehicles.returned'));

@@ -16,6 +16,9 @@ use Illuminate\Support\Carbon;
  * @property int $vehicle_id
  * @property int $mileage_value
  * @property Carbon $recorded_at
+ * @property string|null $source
+ * @property int|null $session_id
+ * @property int|null $km_driven
  */
 class VehicleMileageHistory extends Model
 {
@@ -27,13 +30,14 @@ class VehicleMileageHistory extends Model
     public string $auditModule = 'vehicles';
 
     /** @var list<string> */
-    protected $fillable = ['vehicle_id', 'mileage_value', 'recorded_at'];
+    protected $fillable = ['vehicle_id', 'mileage_value', 'recorded_at', 'source', 'session_id', 'km_driven'];
 
     protected function casts(): array
     {
         return [
             'mileage_value' => 'integer',
-            'recorded_at' => 'date:Y-m-d',
+            'recorded_at' => 'datetime',
+            'km_driven' => 'integer',
         ];
     }
 
@@ -51,5 +55,16 @@ class VehicleMileageHistory extends Model
     public function updatedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'updated_by');
+    }
+
+    /**
+     * The worker session this odometer row was auto-created from (null for a
+     * manually logged reading).
+     *
+     * @return BelongsTo<VehicleSession, $this>
+     */
+    public function session(): BelongsTo
+    {
+        return $this->belongsTo(VehicleSession::class, 'session_id');
     }
 }

@@ -7,6 +7,7 @@ import { computed, ref } from 'vue';
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
 import { t } from '@/translate';
 import AppLayout from '@/Layouts/AppLayout.vue';
+import VehicleSessionPanel from '@/Components/Vehicles/VehicleSessionPanel.vue';
 import FormField from '@/Components/ui/FormField.vue';
 import VBadge from '@/Components/ui/VBadge.vue';
 import VButton from '@/Components/ui/VButton.vue';
@@ -53,6 +54,7 @@ const tabs = computed(() => [
 
 /* ──────────────────────────── Assign (long-term) ───────────────────────── */
 const showAssign = ref(false);
+const activeSession = ref(null); // worker session shown in the luxury detail panel
 const assignForm = useForm({ employee_id: props.vehicle.assigned_employee_id ?? '', notes: '' });
 function saveAssign() {
     assignForm.transform((d) => ({ ...d, employee_id: d.employee_id || null }))
@@ -526,7 +528,7 @@ const sessionColumns = [
         <!-- ══════════ Tab: Sesiones de empleado ══════════ -->
         <template v-else>
             <VTable :columns="sessionColumns">
-                <tr v-for="s in sessions" :key="s.id" class="hover:bg-surface-hover">
+                <tr v-for="s in sessions" :key="s.id" class="cursor-pointer hover:bg-surface-hover" @click="activeSession = s">
                     <td class="px-3 py-2.5 text-sm font-medium">{{ s.employee ?? '—' }}</td>
                     <td class="tabular-nums px-3 py-2.5 text-sm">{{ s.taken_at }}</td>
                     <td class="tabular-nums px-3 py-2.5 text-sm text-ink-soft">{{ s.returned_at ?? '—' }}</td>
@@ -724,5 +726,8 @@ const sessionColumns = [
         </VModal>
 
         <VConfirmDialog :open="confirm.open" :message="confirm.message" @confirm="runDelete" @cancel="confirm.open = false" />
+
+        <!-- Luxury worker-session detail card -->
+        <VehicleSessionPanel :session="activeSession" @close="activeSession = null" />
     </AppLayout>
 </template>

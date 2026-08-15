@@ -17,6 +17,7 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { Head, router } from '@inertiajs/vue3';
 import WorkerLayout from '@/Layouts/WorkerLayout.vue';
+import VoiceRecorder from '@/Components/Worker/VoiceRecorder.vue';
 import VButton from '@/Components/ui/VButton.vue';
 import VInput from '@/Components/ui/VInput.vue';
 import VTextarea from '@/Components/ui/VTextarea.vue';
@@ -87,29 +88,87 @@ watch(() => props.my_session, (session) => {
 // ── Take sheet ───────────────────────────────────────────────────────────────
 const takeTarget = ref(null);  // { id, plate }
 const takeForm = ref({ starting_mileage: '' });
+const takePhoto = ref(null);     // File
+const takePhotoUrl = ref(null);  // preview object URL
+const takeVoice = ref(null);     // { blob, duration } | null
 const takeBusy = ref(false);
+const takeError = ref('');
+
+function setTakePhoto(e) {
+    const f = e.target.files?.[0] ?? null;
+    if (takePhotoUrl.value) URL.revokeObjectURL(takePhotoUrl.value);
+    takePhotoUrl.value = f ? URL.createObjectURL(f) : null;
+    takePhoto.value = f;
+}
 
 function openTake(vehicle) {
     takeTarget.value = vehicle;
     takeForm.value = { starting_mileage: vehicle.current_mileage ?? '' };
+    if (takePhotoUrl.value) URL.revokeObjectURL(takePhotoUrl.value);
+    takePhoto.value = null; takePhotoUrl.value = null;
+    takeVoice.value = null;
+    takeError.value = '';
 }
 
 function submitTake() {
+    if (!takePhoto.value) return; // photo required (server enforces too)
     takeBusy.value = true;
-    router.post(`/worker/vehicles/${takeTarget.value.id}/take`, takeForm.value, {
-        onFinish: () => { takeBusy.value = false; takeTarget.value = null; },
+    const data = new FormData();
+    data.append('starting_mileage', takeForm.value.starting_mileage);
+    data.append('photo', takePhoto.value);
+    if (takeVoice.value?.blob) {
+        data.append('voice', takeVoice.value.blob, 'take-note.webm');
+        data.append('voice_duration', String(takeVoice.value.duration ?? 0));
+    }
+    router.post(`/worker/vehicles/${takeTarget.value.id}/take`, data, {
+        forceFormData: true,
+        onError: (errors) => { takeError.value = Object.values(errors)[0] ?? ''; },
+        onSuccess: () => { takeTarget.value = null; },
+        onFinish: () => { takeBusy.value = false; },
     });
 }
 
 // ── Return sheet ─────────────────────────────────────────────────────────────
 const returnOpen = ref(false);
 const returnForm = ref({ ending_mileage: '', return_notes: '' });
+const returnPhoto = ref(null);
+const returnPhotoUrl = ref(null);
+const returnVoice = ref(null);
 const returnBusy = ref(false);
+const returnError = ref('');
+
+function setReturnPhoto(e) {
+    const f = e.target.files?.[0] ?? null;
+    if (returnPhotoUrl.value) URL.revokeObjectURL(returnPhotoUrl.value);
+    returnPhotoUrl.value = f ? URL.createObjectURL(f) : null;
+    returnPhoto.value = f;
+}
+
+function openReturn() {
+    returnForm.value = { ending_mileage: '', return_notes: '' };
+    if (returnPhotoUrl.value) URL.revokeObjectURL(returnPhotoUrl.value);
+    returnPhoto.value = null; returnPhotoUrl.value = null;
+    returnVoice.value = null;
+    returnError.value = '';
+    returnOpen.value = true;
+}
 
 function submitReturn() {
+    if (!returnPhoto.value) return; // photo required (server enforces too)
     returnBusy.value = true;
-    router.post(`/worker/vehicle-sessions/${props.my_session?.id}/return`, returnForm.value, {
-        onFinish: () => { returnBusy.value = false; returnOpen.value = false; },
+    const data = new FormData();
+    data.append('ending_mileage', returnForm.value.ending_mileage);
+    data.append('return_notes', returnForm.value.return_notes ?? '');
+    data.append('photo', returnPhoto.value);
+    if (returnVoice.value?.blob) {
+        data.append('voice', returnVoice.value.blob, 'return-note.webm');
+        data.append('voice_duration', String(returnVoice.value.duration ?? 0));
+    }
+    router.post(`/worker/vehicle-sessions/${props.my_session?.id}/return`, data, {
+        forceFormData: true,
+        onError: (errors) => { returnError.value = Object.values(errors)[0] ?? ''; },
+        onSuccess: () => { returnOpen.value = false; },
+        onFinish: () => { returnBusy.value = false; },
     });
 }
 
@@ -186,7 +245,7 @@ function submitFuel() {
                 <VButton variant="secondary" class="flex-1" @click="fuelOpen = true">
                     {{ $t('worker_vehicles.log_fuel') }}
                 </VButton>
-                <VButton class="flex-1" @click="returnOpen = true">
+                <VButton class="flex-1" @click="openReturn">
                     {{ $t('worker_vehicles.return') }}
                 </VButton>
             </div>
@@ -238,11 +297,30 @@ function submitFuel() {
                             {{ $t('worker_vehicles.current_mileage') }}: {{ takeTarget.current_mileage }} km
                         </p>
                     </div>
+                    <!-- Vehicle condition photo (required) -->
+                    <div>
+                        <label class="mb-1 block text-xs text-ink-soft">{{ $t('worker_vehicles.condition_photo') }} *</label>
+                        <label class="flex cursor-pointer items-center gap-3 rounded-md border border-line-strong bg-surface-sunken px-3 py-2.5 text-sm hover:bg-surface-hover"
+                            :class="takePhoto ? 'text-status-ok' : 'text-ink-soft'">
+                            <img v-if="takePhotoUrl" :src="takePhotoUrl" alt="" class="h-12 w-12 shrink-0 rounded object-cover" />
+                            <svg v-else class="h-5 w-5 shrink-0" fill="none" stroke="currentColor" stroke-width="1.6" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" /><circle cx="12" cy="13" r="4" />
+                            </svg>
+                            <span class="truncate">{{ takePhoto ? $t('worker_vehicles.photo_retake') : $t('worker_vehicles.take_photo') }}</span>
+                            <input type="file" class="sr-only" accept="image/*" capture="environment" @change="setTakePhoto" />
+                        </label>
+                    </div>
+                    <!-- Voice note (optional) -->
+                    <div>
+                        <label class="mb-1 block text-xs text-ink-soft">{{ $t('worker_vehicles.voice_note_optional') }}</label>
+                        <VoiceRecorder v-model="takeVoice" :max-seconds="120" />
+                    </div>
+                    <p v-if="takeError" class="text-xs text-status-danger">{{ takeError }}</p>
                     <div class="flex gap-2 pt-1">
                         <VButton variant="ghost" class="flex-1" type="button" @click="takeTarget = null">
                             {{ $t('common.cancel') }}
                         </VButton>
-                        <VButton class="flex-1" type="submit" :loading="takeBusy">
+                        <VButton class="flex-1" type="submit" :loading="takeBusy" :disabled="!takePhoto">
                             {{ $t('worker_vehicles.confirm_take') }}
                         </VButton>
                     </div>
@@ -264,16 +342,35 @@ function submitFuel() {
                             {{ $t('worker_vehicles.starting_mileage') }}: {{ my_session.starting_mileage }} km
                         </p>
                     </div>
+                    <!-- Return condition photo (required) -->
+                    <div>
+                        <label class="mb-1 block text-xs text-ink-soft">{{ $t('worker_vehicles.condition_photo') }} *</label>
+                        <label class="flex cursor-pointer items-center gap-3 rounded-md border border-line-strong bg-surface-sunken px-3 py-2.5 text-sm hover:bg-surface-hover"
+                            :class="returnPhoto ? 'text-status-ok' : 'text-ink-soft'">
+                            <img v-if="returnPhotoUrl" :src="returnPhotoUrl" alt="" class="h-12 w-12 shrink-0 rounded object-cover" />
+                            <svg v-else class="h-5 w-5 shrink-0" fill="none" stroke="currentColor" stroke-width="1.6" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" /><circle cx="12" cy="13" r="4" />
+                            </svg>
+                            <span class="truncate">{{ returnPhoto ? $t('worker_vehicles.photo_retake') : $t('worker_vehicles.take_photo') }}</span>
+                            <input type="file" class="sr-only" accept="image/*" capture="environment" @change="setReturnPhoto" />
+                        </label>
+                    </div>
                     <div>
                         <label class="mb-1 block text-xs text-ink-soft">{{ $t('worker_vehicles.return_notes') }}</label>
                         <VTextarea v-model="returnForm.return_notes" :rows="2"
                             :placeholder="$t('worker_vehicles.optional')" />
                     </div>
+                    <!-- Voice note (optional) -->
+                    <div>
+                        <label class="mb-1 block text-xs text-ink-soft">{{ $t('worker_vehicles.voice_note_optional') }}</label>
+                        <VoiceRecorder v-model="returnVoice" :max-seconds="120" />
+                    </div>
+                    <p v-if="returnError" class="text-xs text-status-danger">{{ returnError }}</p>
                     <div class="flex gap-2 pt-1">
                         <VButton variant="ghost" class="flex-1" type="button" @click="returnOpen = false">
                             {{ $t('common.cancel') }}
                         </VButton>
-                        <VButton class="flex-1" type="submit" :loading="returnBusy">
+                        <VButton class="flex-1" type="submit" :loading="returnBusy" :disabled="!returnPhoto">
                             {{ $t('worker_vehicles.confirm_return') }}
                         </VButton>
                     </div>

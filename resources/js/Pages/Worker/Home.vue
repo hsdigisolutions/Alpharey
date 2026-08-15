@@ -14,6 +14,7 @@ import { getLocation } from '@/composables/useGeolocation';
 import WorkerLayout from '@/Layouts/WorkerLayout.vue';
 import AppIcon from '@/Components/AppIcon.vue';
 import SelfieCapture from '@/Components/Worker/SelfieCapture.vue';
+import VoiceRecorder from '@/Components/Worker/VoiceRecorder.vue';
 import MonthCalendar from '@/Components/Worker/MonthCalendar.vue';
 import PrivacyNotice from '@/Components/Worker/PrivacyNotice.vue';
 import VButton from '@/Components/ui/VButton.vue';
@@ -296,10 +297,8 @@ async function submitCheckIn() {
 
 function openCheckOut() {
     noteTextForm.text_note = '';
-    audioBlob.value = null;
-    audioDuration.value = null;
+    voiceNote.value = null;
     attachmentFile.value = null;
-    isRecording.value = false;
     checkOutOpen.value = true;
 }
 
@@ -319,10 +318,10 @@ async function submitCheckOut() {
 
     // Capture note data now — page reloads on success and the refs
     // may update; local consts survive the closure.
-    const hasNote = !!(noteTextForm.text_note || audioBlob.value);
+    const hasNote = !!(noteTextForm.text_note || voiceNote.value?.blob);
     const capturedNoteText = noteTextForm.text_note;
-    const capturedAudio = audioBlob.value;
-    const capturedAudioDuration = audioDuration.value;
+    const capturedAudio = voiceNote.value?.blob ?? null;
+    const capturedAudioDuration = voiceNote.value?.duration ?? null;
 
     const data = new FormData();
     data.append('lat', loc.lat ?? '');
@@ -368,55 +367,14 @@ function submitAbsence() {
 
 // --- Checkout sheet (ask for optional note + expense before submitting) ---
 const checkOutOpen = ref(false);
-const isRecording = ref(false);
-const audioBlob = ref(null);
-const audioDuration = ref(null);
+// The voice note is now the shared <VoiceRecorder> component: { blob, duration } | null.
+const voiceNote = ref(null);
 
 // Required proof-of-work attachment at check-out: a site photo or a document.
 const attachmentFile = ref(null);
 const attachmentName = computed(() => attachmentFile.value?.name ?? '');
 function onAttachmentChange(e) {
     attachmentFile.value = e.target.files?.[0] ?? null;
-}
-let mediaRecorder = null;
-let audioChunks = [];
-let recordingStart = null;
-
-// Live elapsed seconds while recording, so the sheet can show a running timer.
-const recordingElapsed = ref(0);
-let recordingTimer = null;
-const recordingLabel = computed(() => {
-    const s = recordingElapsed.value;
-    return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
-});
-
-async function startRecording() {
-    audioChunks = [];
-    try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        mediaRecorder = new MediaRecorder(stream);
-        mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) audioChunks.push(e.data); };
-        mediaRecorder.onstop = () => {
-            audioBlob.value = new Blob(audioChunks, { type: 'audio/webm' });
-            audioDuration.value = Math.round((Date.now() - recordingStart) / 1000);
-            stream.getTracks().forEach(t => t.stop());
-        };
-        recordingStart = Date.now();
-        recordingElapsed.value = 0;
-        recordingTimer = setInterval(() => {
-            recordingElapsed.value = Math.round((Date.now() - recordingStart) / 1000);
-        }, 500);
-        mediaRecorder.start();
-        isRecording.value = true;
-    } catch (_) {
-        // Microphone denied — fall back to text-only.
-    }
-}
-
-function stopRecording() {
-    mediaRecorder?.stop();
-    isRecording.value = false;
-    if (recordingTimer) { clearInterval(recordingTimer); recordingTimer = null; }
 }
 
 const noteTextForm = useForm({ attendance_id: null, text_note: '', duration_seconds: null });
@@ -800,39 +758,7 @@ const noteTextForm = useForm({ attendance_id: null, text_note: '', duration_seco
                 <!-- Note section (optional) -->
                 <p class="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">{{ $t('worker.voice_note') }}</p>
                 <div class="mb-3">
-                    <!-- Recorded: show the length. -->
-                    <div v-if="audioBlob" class="w-full rounded-md bg-status-ok-soft px-3 py-2 text-sm text-status-ok">
-                        {{ $t('worker.note_recorded').replace(':s', audioDuration ?? 0) }}
-                    </div>
-
-                    <!-- Recording: a live pulsing indicator, running timer, and a
-                         clear "Stop recording" action. -->
-                    <button v-else-if="isRecording" type="button" @click="stopRecording"
-                        class="flex w-full items-center gap-3 rounded-lg border border-status-danger bg-status-danger-soft px-3 py-3 text-start">
-                        <span class="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-status-danger text-white">
-                            <span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-status-danger opacity-60" />
-                            <span class="relative h-3 w-3 rounded-sm bg-white" />
-                        </span>
-                        <span class="min-w-0 flex-1">
-                            <span class="block text-sm font-semibold text-status-danger">{{ $t('worker.note_stop_record') }}</span>
-                            <span class="tabular-nums block text-xs text-status-danger/80">{{ recordingLabel }}</span>
-                        </span>
-                        <span class="flex items-center gap-0.5" aria-hidden="true">
-                            <span class="w-1 animate-pulse rounded-full bg-status-danger" style="height:8px;animation-delay:0ms" />
-                            <span class="w-1 animate-pulse rounded-full bg-status-danger" style="height:16px;animation-delay:150ms" />
-                            <span class="w-1 animate-pulse rounded-full bg-status-danger" style="height:11px;animation-delay:300ms" />
-                            <span class="w-1 animate-pulse rounded-full bg-status-danger" style="height:18px;animation-delay:450ms" />
-                        </span>
-                    </button>
-
-                    <!-- Idle: a mic icon + a clear prompt. -->
-                    <button v-else type="button" @click="startRecording"
-                        class="flex w-full items-center gap-3 rounded-lg border border-line bg-surface-sunken px-3 py-3 text-start hover:bg-surface-hover">
-                        <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-status-danger text-white">
-                            <AppIcon name="mic" class="h-5 w-5" />
-                        </span>
-                        <span class="text-sm font-medium text-ink">{{ $t('worker.note_tap_record') }}</span>
-                    </button>
+                    <VoiceRecorder v-model="voiceNote" :max-seconds="120" />
                 </div>
                 <VTextarea v-model="noteTextForm.text_note" :rows="2" :placeholder="$t('worker.note_text_placeholder')" class="mb-4" />
 

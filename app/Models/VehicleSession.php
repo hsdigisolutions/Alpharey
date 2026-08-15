@@ -33,6 +33,12 @@ use Illuminate\Support\Carbon;
  * @property int|null $ending_fuel_level
  * @property numeric-string|null $fuel_added_litres
  * @property string|null $return_notes
+ * @property string|null $take_photo_path
+ * @property string|null $take_voice_note_path
+ * @property int|null $take_voice_duration
+ * @property string|null $return_photo_path
+ * @property string|null $return_voice_note_path
+ * @property int|null $return_voice_duration
  * @property bool $overdue_alerted
  */
 class VehicleSession extends Model
@@ -62,6 +68,8 @@ class VehicleSession extends Model
             'starting_fuel_level' => 'integer',
             'ending_fuel_level' => 'integer',
             'fuel_added_litres' => 'decimal:2',
+            'take_voice_duration' => 'integer',
+            'return_voice_duration' => 'integer',
             'overdue_alerted' => 'boolean',
         ];
     }

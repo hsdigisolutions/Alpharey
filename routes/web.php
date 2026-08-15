@@ -448,6 +448,9 @@ Route::middleware(['auth', 'active', 'two_factor', 'not_worker'])->group(functio
     Route::put('/vehicles/{vehicle}/fines/{fine}/deduct-salary', [VehicleController::class, 'deductFine'])->name('vehicles.fines.deduct');
     Route::post('/vehicles/{vehicle}/fuel', [VehicleController::class, 'storeFuel'])->name('vehicles.fuel.store');
     Route::delete('/vehicles/{vehicle}/fuel/{fuelRecord}', [VehicleController::class, 'destroyFuel'])->name('vehicles.fuel.destroy');
+    // Worker session condition media — gated + audited, company-scoped via the vehicle.
+    Route::get('/vehicles/{vehicle}/sessions/{session}/photo/{which}', [VehicleController::class, 'sessionPhoto'])->name('vehicles.sessions.photo');
+    Route::get('/vehicles/{vehicle}/sessions/{session}/voice/{which}', [VehicleController::class, 'sessionVoice'])->name('vehicles.sessions.voice');
 
     // Subcontratistas (thaekedar). Marking a payment paid posts a Gasto on the
     // subcontractor's own company + project — see SubcontractorService.
