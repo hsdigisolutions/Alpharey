@@ -6,7 +6,6 @@
  * fuel / fines / notes sections that hide themselves when there is no data.
  */
 import { computed, onUnmounted, ref, watch } from 'vue';
-import { fixAudioDuration } from '@/utils/audioDuration';
 
 const props = defineProps({
     session: { type: Object, default: null }, // null = closed
@@ -131,12 +130,12 @@ onUnmounted(() => {
                             <div class="mt-3 space-y-2">
                                 <div>
                                     <p class="mb-1 text-xs text-ink-soft">{{ $t('vehicles.session_take_note') }} <span v-if="session.take_voice_duration" class="tabular-nums text-muted">· {{ fmtVoice(session.take_voice_duration) }}</span></p>
-                                    <audio v-if="session.take_voice_url" :src="session.take_voice_url" controls preload="metadata" class="h-9 w-full" @loadedmetadata="fixAudioDuration($event.target)"></audio>
+                                    <audio v-if="session.take_voice_url" :src="session.take_voice_url" controls preload="metadata" class="h-9 w-full"></audio>
                                     <p v-else class="text-xs text-muted">{{ $t('vehicles.session_not_recorded') }}</p>
                                 </div>
                                 <div>
                                     <p class="mb-1 text-xs text-ink-soft">{{ $t('vehicles.session_return_note') }} <span v-if="session.return_voice_duration" class="tabular-nums text-muted">· {{ fmtVoice(session.return_voice_duration) }}</span></p>
-                                    <audio v-if="session.return_voice_url" :src="session.return_voice_url" controls preload="metadata" class="h-9 w-full" @loadedmetadata="fixAudioDuration($event.target)"></audio>
+                                    <audio v-if="session.return_voice_url" :src="session.return_voice_url" controls preload="metadata" class="h-9 w-full"></audio>
                                     <p v-else class="text-xs text-muted">{{ $t('vehicles.session_not_recorded') }}</p>
                                 </div>
                             </div>
