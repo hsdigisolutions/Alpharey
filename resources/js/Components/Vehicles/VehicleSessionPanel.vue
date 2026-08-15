@@ -6,6 +6,7 @@
  * fuel / fines / notes sections that hide themselves when there is no data.
  */
 import { computed, onUnmounted, ref, watch } from 'vue';
+import { fixAudioDuration } from '@/utils/audioDuration';
 
 const props = defineProps({
     session: { type: Object, default: null }, // null = closed
@@ -56,12 +57,12 @@ onUnmounted(() => {
     <Transition
         enter-active-class="transition-opacity duration-200" enter-from-class="opacity-0" enter-to-class="opacity-100"
         leave-active-class="transition-opacity duration-150" leave-from-class="opacity-100" leave-to-class="opacity-0">
-        <div v-if="session" class="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm" @click.self="emit('close')">
+        <div v-if="session" class="fixed inset-0 z-40 overflow-hidden bg-black/40 backdrop-blur-sm" @click.self="emit('close')">
             <Transition
                 enter-active-class="transition-transform duration-300 ease-out" enter-from-class="translate-x-full" enter-to-class="translate-x-0"
                 leave-active-class="transition-transform duration-200 ease-in" leave-from-class="translate-x-0" leave-to-class="translate-x-full">
                 <aside v-if="session"
-                    class="absolute inset-y-0 end-0 flex w-full max-w-md flex-col overflow-y-auto bg-surface-raised shadow-overlay">
+                    class="absolute inset-y-0 end-0 flex w-full max-w-md flex-col overflow-y-auto overflow-x-hidden bg-surface-raised shadow-overlay">
                     <!-- Dark hero header -->
                     <header class="bg-sidebar px-5 py-5 text-white">
                         <div class="flex items-start justify-between gap-3">
@@ -79,8 +80,8 @@ onUnmounted(() => {
                             </button>
                         </div>
                         <div class="mt-3 flex items-center justify-between gap-2">
-                            <p class="tabular-nums text-xs text-white/60">{{ session.taken_at }} → {{ session.returned_at ?? '—' }}</p>
-                            <span class="rounded-full px-2.5 py-0.5 text-xs font-semibold"
+                            <p class="tabular-nums min-w-0 truncate text-xs text-white/60">{{ session.taken_at }} → {{ session.returned_at ?? '—' }}</p>
+                            <span class="shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold"
                                 :class="session.open ? 'bg-status-warn-soft text-status-warn' : 'bg-status-ok-soft text-status-ok'">
                                 {{ session.open ? $t('vehicles.session_open') : $t('vehicles.session_closed') }}
                             </span>
@@ -130,12 +131,12 @@ onUnmounted(() => {
                             <div class="mt-3 space-y-2">
                                 <div>
                                     <p class="mb-1 text-xs text-ink-soft">{{ $t('vehicles.session_take_note') }} <span v-if="session.take_voice_duration" class="tabular-nums text-muted">· {{ fmtVoice(session.take_voice_duration) }}</span></p>
-                                    <audio v-if="session.take_voice_url" :src="session.take_voice_url" controls preload="none" class="h-9 w-full"></audio>
+                                    <audio v-if="session.take_voice_url" :src="session.take_voice_url" controls preload="metadata" class="h-9 w-full" @loadedmetadata="fixAudioDuration($event.target)"></audio>
                                     <p v-else class="text-xs text-muted">{{ $t('vehicles.session_not_recorded') }}</p>
                                 </div>
                                 <div>
                                     <p class="mb-1 text-xs text-ink-soft">{{ $t('vehicles.session_return_note') }} <span v-if="session.return_voice_duration" class="tabular-nums text-muted">· {{ fmtVoice(session.return_voice_duration) }}</span></p>
-                                    <audio v-if="session.return_voice_url" :src="session.return_voice_url" controls preload="none" class="h-9 w-full"></audio>
+                                    <audio v-if="session.return_voice_url" :src="session.return_voice_url" controls preload="metadata" class="h-9 w-full" @loadedmetadata="fixAudioDuration($event.target)"></audio>
                                     <p v-else class="text-xs text-muted">{{ $t('vehicles.session_not_recorded') }}</p>
                                 </div>
                             </div>

@@ -8,6 +8,7 @@
  * A denied microphone simply leaves it idle — the voice note is always optional.
  */
 import { computed, onUnmounted, ref } from 'vue';
+import { fixAudioDuration } from '@/utils/audioDuration';
 import AppIcon from '@/Components/AppIcon.vue';
 
 const props = defineProps({
@@ -91,7 +92,7 @@ onUnmounted(() => {
     <!-- Recorded: playback + delete -->
     <div v-else-if="modelValue"
         class="flex items-center gap-2 rounded-lg border border-status-ok/40 bg-status-ok-soft px-3 py-2">
-        <audio :src="audioUrl" controls preload="metadata" class="h-9 min-w-0 flex-1"></audio>
+        <audio :src="audioUrl" controls preload="metadata" class="h-9 min-w-0 flex-1" @loadedmetadata="fixAudioDuration($event.target)"></audio>
         <button type="button" class="shrink-0 px-1 text-sm font-medium text-status-danger hover:underline" @click="remove">
             {{ $t('voice.delete') }}
         </button>

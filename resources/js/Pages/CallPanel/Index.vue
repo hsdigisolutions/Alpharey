@@ -7,6 +7,7 @@
  */
 import { reactive, ref, watch } from 'vue';
 import { Head, router, useForm } from '@inertiajs/vue3';
+import { fixAudioDuration } from '@/utils/audioDuration';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import AppIcon from '@/Components/AppIcon.vue';
 import FormField from '@/Components/ui/FormField.vue';
@@ -370,7 +371,7 @@ const dotStatus = { red: 'danger', amber: 'warn', green: 'ok' };
 
                             <!-- Recording done — playback + label -->
                             <div v-else-if="recordingState === 'done'" class="space-y-2">
-                                <audio :src="audioUrl" controls preload="metadata" class="w-full" />
+                                <audio :src="audioUrl" controls preload="metadata" class="w-full" @loadedmetadata="fixAudioDuration($event.target)" />
                                 <div class="flex items-center gap-2">
                                     <VInput v-model="form.voice_note_label" class="flex-1" :placeholder="$t('calls.label_placeholder')" />
                                     <button type="button"
