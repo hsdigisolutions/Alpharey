@@ -8,7 +8,7 @@
  * arithmetic so the user sees it before saving — the server remains the
  * authority.
  */
-import { computed, reactive, ref, watch } from 'vue';
+import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { Head, router, useForm } from '@inertiajs/vue3';
 import { ensureCompanySelected } from '@/composables/useCompanyGate';
 import AppIcon from '@/Components/AppIcon.vue';
@@ -42,6 +42,9 @@ const props = defineProps({
     paymentStatuses: { type: Array, required: true },
     statuses: { type: Array, required: true },
     editing: { type: Object, default: null },
+    // Opened from a project's Invoices tab: { project_id, client_id } to preset
+    // + lock the new sale invoice's project and client.
+    preset: { type: Object, default: null },
     can: { type: Object, required: true },
 });
 
@@ -112,6 +115,33 @@ function openCreate() {
     form.clearErrors();
     panelOpen.value = true;
 }
+
+// When opened from a project (preset), lock the project (and its client) so the
+// new sale invoice is scoped to that project and cannot be re-pointed.
+const lockedProject = ref(false);
+const lockedClient = ref(false);
+
+function openCreateForProject(preset) {
+    if (!ensureCompanySelected()) return;
+    editingId.value = null;
+    Object.assign(form, structuredClone(blank));
+    form.type = 'sale';
+    form.project_id = preset.project_id;
+    form.client_id = preset.client_id ?? '';
+    form.clearErrors();
+    lockedProject.value = true;
+    lockedClient.value = Boolean(preset.client_id);
+    panelOpen.value = true;
+}
+
+// Reset the locks whenever the panel closes.
+watch(panelOpen, (open) => {
+    if (!open) { lockedProject.value = false; lockedClient.value = false; }
+});
+
+onMounted(() => {
+    if (props.preset) openCreateForProject(props.preset);
+});
 
 /* ---------- auto-calc from a project (legacy "Method 2") ---------- */
 const calc = reactive({ method: 'costs', margin: 0 });
@@ -383,7 +413,7 @@ const columns = computed(() => [
                     </FormField>
 
                     <FormField v-if="form.type === 'sale'" k="invoices.client" :error="form.errors.client_id" required>
-                        <VSelect v-model="form.client_id">
+                        <VSelect v-model="form.client_id" :disabled="lockedClient">
                             <option value="">—</option>
                             <option v-for="c in clients" :key="c.id" :value="c.id">{{ c.name }}</option>
                         </VSelect>
@@ -396,7 +426,7 @@ const columns = computed(() => [
                     </FormField>
 
                     <FormField k="invoices.project" :error="form.errors.project_id">
-                        <VSelect v-model="form.project_id">
+                        <VSelect v-model="form.project_id" :disabled="lockedProject">
                             <option value="">—</option>
                             <option v-for="p in availableProjects" :key="p.id" :value="p.id">{{ p.name }}</option>
                         </VSelect>

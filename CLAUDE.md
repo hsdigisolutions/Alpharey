@@ -4,6 +4,47 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Status: Phase 9 in progress — hardening (2026-08-01)
 
+### Client feature batch — 7 steps (2026-08-15, DONE)
+
+Seven client-requested changes, all deployed. **1015 Pest tests.**
+1. **Dashboard recent activity** is a fixed-height (`max-h-[28rem]`, ~10 rows)
+   scroll box so the feed never pushes the rest of the dashboard down (UI only).
+2. **Worker PWA branding** — removed the bottom privacy-consent *management*
+   panel, replaced with a centered muted "Powered by AlphaRey" (`worker.powered_by`);
+   the pre-punch consent gate + `/worker/consent` backend are untouched.
+3. **Worker check-out multi-photo** — up to 3 proof-of-work photos (photo 1
+   required, 2 & 3 optional, revealed sequentially, thumbnail + retake + delete).
+   Migration `2026_08_15_000009` adds `check_out_attachment_2/3_path|name`
+   (server-set, never fillable); the download route is parametrised
+   `/attendance/{a}/checkout-attachment/{which}` (gated+audited); the admin modal
+   shows every present photo via a `checkout_photos` payload. +5
+   `WorkerAttendanceTest`.
+4. **Production-task form order** — Category · Unit · Description · Price/unit
+   (€ + internal-cost hint) · Planned qty · Weightage % (advisory hint) · House,
+   with placeholders. Applied to the single modal (project tab + standalone) and
+   the bulk grid (ordered headers + Price column). UI only.
+5. **Production sub-tasks (one level)** — migration `2026_08_15_000010` adds
+   `parent_task_id` (cascade delete, server-set). A parent's planned+completed
+   roll up from children (`TaskProgressService::recomputeParent`), progress logged
+   on sub-tasks only; store validates parent is top-level (422 on depth) +
+   belongs to the project (404); project overall progress counts top-level
+   weightage only. Tareas tab: parents expand to indented child rows with their
+   own progress/traffic-light/log-work + `[+ Add sub-task]`; Log Work hidden on a
+   parent with children. +6 `ProductionSubtaskTest`.
+6. **Invoice from project tab** — Invoices tab gains a Total invoiced / paid /
+   pending summary (`ProjectController::invoiceSummary`) + a "New Invoice" button
+   that opens `/invoices?preset_project=` which auto-opens the real create modal
+   with the project + its client **preset and locked**
+   (`InvoiceController` ships a `preset` prop; the selects `:disabled` when
+   locked). +2 `InvoiceTest`.
+7. **Worker PWA Urdu (RTL)** — a THIRD language on the worker PWA only (not the
+   CRM). `SetLocale` + `HandleInertiaRequests` allow `ur` (the `ur` dict ships
+   only when active — no CRM bloat); `LocaleController` accepts `ur` **only for
+   worker users**; `translate.js` falls back to English for any key the Urdu
+   dict is missing; `WorkerLayout` gains a UR toggle + `dir="rtl"`. New partial
+   `lang/ur/ui.php` (worker + worker_vehicles + voice + weekdays + common; the
+   legal privacy block deliberately falls back to English). +3 `WorkerUrduTest`.
+
 ### Vehicle session media + auto-mileage + luxury card (2026-08-15, DONE)
 
 Worker vehicle **take/return** now capture a **condition photo (required)** + an

@@ -30,7 +30,8 @@ class SetLocale
             ? $user->locale
             : $request->session()->get('locale', is_string($default) ? $default : config('app.locale'));
 
-        if (in_array($locale, ['es', 'en'], true)) {
+        // 'ur' (Urdu) is a worker-PWA-only third language; es/en drive the CRM.
+        if (in_array($locale, ['es', 'en', 'ur'], true)) {
             app()->setLocale($locale);
         }
 

@@ -80,10 +80,13 @@ class HandleInertiaRequests extends Middleware
                 : [],
             // Full bilingual UI dictionary — both languages always ship because
             // every label renders Spanish + English (REQUIREMENTS.md §9).
-            'lang' => [
+            'lang' => array_filter([
                 'es' => trans('ui', [], 'es'),
                 'en' => trans('ui', [], 'en'),
-            ],
+                // Urdu ships only when it's the active language (worker PWA) — it
+                // never bloats an es/en CRM payload.
+                'ur' => app()->getLocale() === 'ur' ? trans('ui', [], 'ur') : null,
+            ]),
             'flash' => [
                 'success' => $request->session()->get('success'),
                 'error' => $request->session()->get('error'),

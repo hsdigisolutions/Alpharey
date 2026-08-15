@@ -25,7 +25,11 @@ export function t(key, params) {
     const page = usePage();
     const primary = page.props.locale?.primary ?? 'es';
 
-    let str = lookup(page.props.lang?.[primary], key) ?? key;
+    // Fall back to English for any key the primary dictionary is missing (the
+    // Urdu worker dictionary is intentionally partial), then the key itself.
+    let str = lookup(page.props.lang?.[primary], key)
+        ?? lookup(page.props.lang?.en, key)
+        ?? key;
 
     if (params && typeof str === 'string') {
         for (const [name, value] of Object.entries(params)) {

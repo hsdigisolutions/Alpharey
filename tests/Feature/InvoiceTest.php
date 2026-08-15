@@ -399,3 +399,23 @@ it('refuses to delete an invoice that has payments', function (): void {
 
     expect(Invoice::query()->whereKey($invoice->id)->exists())->toBeFalse();
 });
+
+it('presets and locks the project + client when opened from a project', function (): void {
+    $project = Project::factory()->forCompany($this->company)->create(['client_id' => $this->client->id]);
+
+    $this->actingAs($this->admin)
+        ->get("/invoices?preset_project={$project->id}")
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('preset.project_id', $project->id)
+            ->where('preset.client_id', $this->client->id));
+});
+
+it('ignores a preset for another company project (no preset shipped)', function (): void {
+    $otherProject = Project::factory()->forCompany(Company::factory()->create())->create();
+
+    $this->actingAs($this->admin)
+        ->get("/invoices?preset_project={$otherProject->id}")
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page->missing('preset'));
+});

@@ -14,11 +14,14 @@ class LocaleController extends Controller
      */
     public function update(Request $request): RedirectResponse
     {
-        $validated = $request->validate([
-            'locale' => ['required', 'in:es,en'],
-        ]);
-
         $user = $request->user();
+
+        // Urdu is offered ONLY on the worker PWA; the CRM stays es/en.
+        $allowed = $user !== null && $user->isWorker() ? 'es,en,ur' : 'es,en';
+
+        $validated = $request->validate([
+            'locale' => ['required', 'in:'.$allowed],
+        ]);
 
         if ($user !== null) {
             $user->forceFill(['locale' => $validated['locale']])->save();

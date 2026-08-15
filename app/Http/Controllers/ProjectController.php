@@ -247,6 +247,8 @@ class ProjectController extends Controller
             // these are a read-only view of the same rows scoped to the project,
             // gated by the finance modules' own view rights.
             'invoices' => Gate::allows('invoices.view') ? $this->projectInvoices($project) : [],
+            'invoiceSummary' => Gate::allows('invoices.view') ? $this->invoiceSummary($project) : null,
+            'canCreateInvoice' => Gate::allows('invoices.create'),
             'expenses' => Gate::allows('expenses.view') ? $this->projectExpenses($project) : [],
             'canViewInvoices' => Gate::allows('invoices.view'),
             'canViewExpenses' => Gate::allows('expenses.view'),
@@ -346,6 +348,20 @@ class ProjectController extends Controller
                 'status' => $i->payment_status->value,
             ])
             ->all();
+    }
+
+    /**
+     * Invoiced / paid / pending totals for this project's invoices.
+     *
+     * @return array{invoiced: float, paid: float, pending: float}
+     */
+    private function invoiceSummary(Project $project): array
+    {
+        $invoices = Invoice::query()->where('project_id', $project->id)->get(['total', 'paid_amount']);
+        $invoiced = round((float) $invoices->sum(fn (Invoice $i): float => (float) $i->total), 2);
+        $paid = round((float) $invoices->sum(fn (Invoice $i): float => (float) $i->paid_amount), 2);
+
+        return ['invoiced' => $invoiced, 'paid' => $paid, 'pending' => round($invoiced - $paid, 2)];
     }
 
     /**

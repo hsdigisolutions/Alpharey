@@ -99,7 +99,7 @@ function logout() {
 </script>
 
 <template>
-    <div class="min-h-screen bg-surface text-ink"
+    <div class="min-h-screen bg-surface text-ink" :dir="primary === 'ur' ? 'rtl' : 'ltr'"
         style="padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom)">
         <div class="mx-auto my-4 w-full max-w-md rounded-2xl border border-line bg-surface px-4 py-5 shadow-card sm:my-6">
             <!-- Identity + logout -->
@@ -111,7 +111,7 @@ function logout() {
                         {{ worker.code }}<template v-if="worker.company"> · {{ worker.company }}</template>
                     </p>
                 </div>
-                <!-- Language switch: whole app flips ES ↔ EN -->
+                <!-- Language switch: ES · EN · UR (Urdu, worker PWA only) -->
                 <div class="flex shrink-0 overflow-hidden rounded-lg border border-line text-xs font-semibold">
                     <button type="button" class="px-2.5 py-1.5 transition"
                         :class="primary === 'es' ? 'bg-accent text-on-accent' : 'text-ink-soft active:bg-surface-hover'"
@@ -119,6 +119,9 @@ function logout() {
                     <button type="button" class="px-2.5 py-1.5 transition"
                         :class="primary === 'en' ? 'bg-accent text-on-accent' : 'text-ink-soft active:bg-surface-hover'"
                         @click="setLang('en')">EN</button>
+                    <button type="button" class="px-2.5 py-1.5 transition"
+                        :class="primary === 'ur' ? 'bg-accent text-on-accent' : 'text-ink-soft active:bg-surface-hover'"
+                        @click="setLang('ur')">UR</button>
                 </div>
                 <button type="button"
                     class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-line bg-surface-raised text-ink-soft transition active:scale-95 active:bg-surface-hover"

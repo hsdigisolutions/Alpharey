@@ -129,7 +129,18 @@ class InvoiceController extends Controller
     {
         Gate::authorize('invoices.view');
 
-        return Inertia::render('Invoices/Index', $this->pageProps($request, $this->resolveTab($request)));
+        $props = $this->pageProps($request, $this->resolveTab($request));
+
+        // Opened from a project's Invoices tab: preset (and lock) the project +
+        // its client so the new sale invoice is scoped to that project.
+        if ($request->integer('preset_project') > 0) {
+            $project = Project::query()->find($request->integer('preset_project'));
+            if ($project !== null) {
+                $props['preset'] = ['project_id' => $project->id, 'client_id' => $project->client_id];
+            }
+        }
+
+        return Inertia::render('Invoices/Index', $props);
     }
 
     /**

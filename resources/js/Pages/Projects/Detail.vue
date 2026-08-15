@@ -41,6 +41,8 @@ const props = defineProps({
     clients: { type: Array, required: true },
     vatOptions: { type: Array, required: true },
     invoices: { type: Array, default: () => [] },
+    invoiceSummary: { type: Object, default: null },
+    canCreateInvoice: { type: Boolean, default: false },
     expenses: { type: Array, default: () => [] },
     canViewInvoices: { type: Boolean, default: false },
     canViewExpenses: { type: Boolean, default: false },
@@ -856,8 +858,29 @@ function destroy() {
             </div>
 
             <!-- Facturas — invoices raised against this project -->
-            <VFinanceRows v-else-if="tab === 'invoices'"
-                :rows="invoices" :can-view="canViewInvoices" empty-key="finance.no_invoices" />
+            <div v-else-if="tab === 'invoices'" class="space-y-4">
+                <div class="flex flex-wrap items-start justify-between gap-3">
+                    <div v-if="invoiceSummary" class="grid grid-cols-3 gap-3">
+                        <div class="rounded-lg border border-line bg-surface-raised px-4 py-3">
+                            <p class="text-[11px] uppercase tracking-wide text-muted">{{ $t('projects.total_invoiced') }}</p>
+                            <p class="tabular-nums mt-0.5 text-lg font-semibold text-ink">{{ eur(invoiceSummary.invoiced) }}</p>
+                        </div>
+                        <div class="rounded-lg border border-line bg-surface-raised px-4 py-3">
+                            <p class="text-[11px] uppercase tracking-wide text-muted">{{ $t('projects.total_paid') }}</p>
+                            <p class="tabular-nums mt-0.5 text-lg font-semibold text-status-ok">{{ eur(invoiceSummary.paid) }}</p>
+                        </div>
+                        <div class="rounded-lg border border-line bg-surface-raised px-4 py-3">
+                            <p class="text-[11px] uppercase tracking-wide text-muted">{{ $t('projects.pending_payment') }}</p>
+                            <p class="tabular-nums mt-0.5 text-lg font-semibold" :class="invoiceSummary.pending > 0 ? 'text-status-warn' : 'text-ink'">{{ eur(invoiceSummary.pending) }}</p>
+                        </div>
+                    </div>
+                    <VButton v-if="canCreateInvoice" icon="plus" class="ms-auto"
+                        @click="router.get('/invoices', { preset_project: project.id })">
+                        <Bilingual k="invoices.new" inline />
+                    </VButton>
+                </div>
+                <VFinanceRows :rows="invoices" :can-view="canViewInvoices" empty-key="finance.no_invoices" />
+            </div>
 
             <!-- Gastos — expenses booked against this project -->
             <VFinanceRows v-else-if="tab === 'expenses'"
