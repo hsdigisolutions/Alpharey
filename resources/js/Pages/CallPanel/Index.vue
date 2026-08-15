@@ -101,24 +101,83 @@ function submit() {
 }
 
 /* ── Voice recording (MediaRecorder) ────────────────────── */
-
+/*
+ * Two modes:
+ *  - Mic only (default): records the admin's microphone.
+ *  - Both sides: also captures SYSTEM audio (via getDisplayMedia "share
+ *    system audio") — the other party coming out of WhatsApp Desktop / Web on
+ *    the same PC — and MIXES it with the mic through the Web Audio API into one
+ *    note. Windows + Chrome/Edge only; if the admin declines the system-audio
+ *    share we fall back to mic-only and SAY SO (never silently record one side
+ *    while implying both).
+ */
 const recordingState = ref('idle'); // idle | requesting | recording | done | denied
+const recordBothSides = ref(false);
+const captureNotice = ref(''); // '' | 'both' | 'mic_only'
 const audioUrl = ref(null);
 const recordingDuration = ref(0);
 let mediaRecorder = null;
 let audioChunks = [];
 let durationTimer = null;
+let micStream = null;
+let systemStream = null;
+let audioContext = null;
+
+function stopStreams() {
+    micStream?.getTracks().forEach((t) => t.stop());
+    systemStream?.getTracks().forEach((t) => t.stop());
+    micStream = null;
+    systemStream = null;
+    if (audioContext) {
+        audioContext.close().catch(() => {});
+        audioContext = null;
+    }
+}
 
 async function startRecording() {
     recordingState.value = 'requesting';
+    captureNotice.value = '';
     try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+        // Decide which stream MediaRecorder listens to.
+        let recordStream = micStream;
+
+        if (recordBothSides.value) {
+            let systemAudioTrack = null;
+            try {
+                // video:true is required to surface the picker; we keep only the
+                // audio. The admin must tick "Also share system/tab audio".
+                systemStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+                systemStream.getVideoTracks().forEach((t) => t.stop()); // drop video, keep audio
+                systemAudioTrack = systemStream.getAudioTracks()[0] ?? null;
+            } catch { /* user cancelled the share — handled below */ }
+
+            if (systemAudioTrack) {
+                // Mix mic + system audio into one output stream.
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                const dest = audioContext.createMediaStreamDestination();
+                audioContext.createMediaStreamSource(micStream).connect(dest);
+                audioContext.createMediaStreamSource(new MediaStream([systemAudioTrack])).connect(dest);
+                recordStream = dest.stream;
+                captureNotice.value = 'both';
+                // If the admin clicks the browser's "Stop sharing" bar, finalise.
+                systemAudioTrack.addEventListener('ended', () => {
+                    if (recordingState.value === 'recording') stopRecording();
+                });
+            } else {
+                // No system audio was shared — record mic only, and say so.
+                systemStream?.getTracks().forEach((t) => t.stop());
+                systemStream = null;
+                captureNotice.value = 'mic_only';
+            }
+        }
 
         const mimeType = ['audio/webm', 'audio/ogg', 'audio/mp4'].find(
             (t) => MediaRecorder.isTypeSupported(t),
         ) ?? '';
 
-        mediaRecorder = new MediaRecorder(stream, mimeType ? { mimeType } : {});
+        mediaRecorder = new MediaRecorder(recordStream, mimeType ? { mimeType } : {});
         audioChunks = [];
 
         mediaRecorder.ondataavailable = (e) => {
@@ -135,7 +194,7 @@ async function startRecording() {
             if (!form.voice_note_label) form.voice_note_label = `Voice Note ${new Date().toLocaleTimeString()}`;
             audioUrl.value = URL.createObjectURL(blob);
             recordingState.value = 'done';
-            stream.getTracks().forEach((t) => t.stop());
+            stopStreams();
         };
 
         mediaRecorder.start();
@@ -143,6 +202,7 @@ async function startRecording() {
         recordingDuration.value = 0;
         durationTimer = setInterval(() => recordingDuration.value++, 1000);
     } catch {
+        stopStreams();
         recordingState.value = 'denied';
     }
 }
@@ -159,7 +219,9 @@ function clearRecording() {
     form.voice_note_label = '';
     recordingState.value = 'idle';
     recordingDuration.value = 0;
+    captureNotice.value = '';
     clearInterval(durationTimer);
+    stopStreams();
     mediaRecorder = null;
 }
 
@@ -339,37 +401,52 @@ const dotStatus = { red: 'danger', amber: 'warn', green: 'ok' };
                                 <Bilingual k="calls.voice_note_optional" inline />
                             </p>
 
-                            <!-- Idle: show record button -->
-                            <div v-if="recordingState === 'idle'" class="flex items-center gap-2">
+                            <!-- Idle: record button + both-sides option -->
+                            <div v-if="recordingState === 'idle'" class="space-y-2">
                                 <button type="button"
                                     class="inline-flex items-center gap-2 rounded-full border border-line-strong bg-surface-raised px-4 py-2 text-sm font-medium text-ink hover:bg-surface-hover"
                                     @click="startRecording">
                                     <AppIcon name="mic" class="h-4 w-4 text-accent" />
                                     <Bilingual k="calls.record" inline />
                                 </button>
+
+                                <label class="flex cursor-pointer items-start gap-2 text-xs text-ink-soft">
+                                    <input v-model="recordBothSides" type="checkbox"
+                                        class="mt-0.5 h-3.5 w-3.5 shrink-0 accent-[var(--color-accent)]" />
+                                    <span>
+                                        <span class="font-medium text-ink"><Bilingual k="calls.record_both" inline /></span>
+                                        <span class="mt-0.5 block text-muted">{{ $t('calls.record_both_hint') }}</span>
+                                    </span>
+                                </label>
                             </div>
 
-                            <!-- Requesting mic permission -->
+                            <!-- Requesting mic / system-audio permission -->
                             <p v-else-if="recordingState === 'requesting'" class="text-sm text-muted">
                                 <Bilingual k="calls.record" inline />…
                             </p>
 
                             <!-- Recording in progress -->
-                            <div v-else-if="recordingState === 'recording'" class="flex items-center gap-3">
-                                <span class="flex items-center gap-1.5">
-                                    <span class="h-2.5 w-2.5 animate-pulse rounded-full bg-status-danger" />
-                                    <span class="tabular-nums text-sm font-semibold text-status-danger">{{ fmtDuration(recordingDuration) }}</span>
-                                </span>
-                                <button type="button"
-                                    class="inline-flex items-center gap-2 rounded-full border border-status-danger bg-status-danger-soft px-4 py-2 text-sm font-medium text-status-danger hover:bg-status-danger hover:text-white"
-                                    @click="stopRecording">
-                                    <AppIcon name="stop" class="h-4 w-4" />
-                                    <Bilingual k="calls.stop_recording" inline />
-                                </button>
+                            <div v-else-if="recordingState === 'recording'" class="space-y-2">
+                                <div class="flex items-center gap-3">
+                                    <span class="flex items-center gap-1.5">
+                                        <span class="h-2.5 w-2.5 animate-pulse rounded-full bg-status-danger" />
+                                        <span class="tabular-nums text-sm font-semibold text-status-danger">{{ fmtDuration(recordingDuration) }}</span>
+                                    </span>
+                                    <button type="button"
+                                        class="inline-flex items-center gap-2 rounded-full border border-status-danger bg-status-danger-soft px-4 py-2 text-sm font-medium text-status-danger hover:bg-status-danger hover:text-white"
+                                        @click="stopRecording">
+                                        <AppIcon name="stop" class="h-4 w-4" />
+                                        <Bilingual k="calls.stop_recording" inline />
+                                    </button>
+                                </div>
+                                <p v-if="captureNotice === 'both'" class="text-xs font-medium text-status-ok">{{ $t('calls.both_sides_active') }}</p>
+                                <p v-else-if="captureNotice === 'mic_only'" class="text-xs font-medium text-status-warn">{{ $t('calls.mic_only_fallback') }}</p>
+                                <p class="text-xs text-muted">{{ $t('calls.record_notice') }}</p>
                             </div>
 
                             <!-- Recording done — playback + label -->
                             <div v-else-if="recordingState === 'done'" class="space-y-2">
+                                <p v-if="captureNotice === 'both'" class="text-xs font-medium text-status-ok">✓ {{ $t('calls.both_sides_active') }}</p>
                                 <audio :src="audioUrl" controls preload="metadata" class="w-full" />
                                 <div class="flex items-center gap-2">
                                     <VInput v-model="form.voice_note_label" class="flex-1" :placeholder="$t('calls.label_placeholder')" />
