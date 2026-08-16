@@ -72,10 +72,43 @@ class InvoiceController extends Controller
                     ->orWhereHas('vendor', fn ($v) => $v->where('name', 'like', $term)));
             })
             ->when($request->filled('payment_status'), fn ($q) => $q->where('payment_status', $request->string('payment_status')))
+            // Summary-card filter: invoice status (draft / sent / paid).
+            ->when($request->filled('status'), fn ($q) => $q->where('status', $request->string('status')))
             ->when($request->filled('project_id'), fn ($q) => $q->where('project_id', $request->integer('project_id')))
             ->when($request->filled('from'), fn ($q) => $q->whereDate('invoice_date', '>=', $request->string('from')))
             ->when($request->filled('to'), fn ($q) => $q->whereDate('invoice_date', '<=', $request->string('to')))
             ->orderByDesc('invoice_date')->orderByDesc('id');
+    }
+
+    /**
+     * Summary-card counts + € totals for the current tab, in ONE query.
+     *
+     * @return array{
+     *   total: array{count: int, amount: float},
+     *   draft: array{count: int, amount: float},
+     *   sent: array{count: int, amount: float},
+     *   paid: array{count: int, amount: float},
+     * }
+     */
+    private function invoiceStats(InvoiceType $tab): array
+    {
+        $r = Invoice::query()->where('type', $tab->value)
+            ->selectRaw('COUNT(*) as total_count')
+            ->selectRaw('COALESCE(SUM(total), 0) as total_sum')
+            ->selectRaw("COALESCE(SUM(CASE WHEN status = 'draft' THEN 1 ELSE 0 END), 0) as draft_count")
+            ->selectRaw("COALESCE(SUM(CASE WHEN status = 'draft' THEN total ELSE 0 END), 0) as draft_sum")
+            ->selectRaw("COALESCE(SUM(CASE WHEN status = 'sent' THEN 1 ELSE 0 END), 0) as sent_count")
+            ->selectRaw("COALESCE(SUM(CASE WHEN status = 'sent' THEN total ELSE 0 END), 0) as sent_sum")
+            ->selectRaw("COALESCE(SUM(CASE WHEN status = 'paid' THEN 1 ELSE 0 END), 0) as paid_count")
+            ->selectRaw("COALESCE(SUM(CASE WHEN status = 'paid' THEN total ELSE 0 END), 0) as paid_sum")
+            ->first();
+
+        return [
+            'total' => ['count' => (int) ($r->total_count ?? 0), 'amount' => (float) ($r->total_sum ?? 0)],
+            'draft' => ['count' => (int) ($r->draft_count ?? 0), 'amount' => (float) ($r->draft_sum ?? 0)],
+            'sent' => ['count' => (int) ($r->sent_count ?? 0), 'amount' => (float) ($r->sent_sum ?? 0)],
+            'paid' => ['count' => (int) ($r->paid_count ?? 0), 'amount' => (float) ($r->paid_sum ?? 0)],
+        ];
     }
 
     private function resolveTab(Request $request): InvoiceType
@@ -103,7 +136,8 @@ class InvoiceController extends Controller
         return [
             'tab' => $tab->value,
             'invoices' => $invoices,
-            'filters' => (object) $request->only(['search', 'payment_status', 'project_id', 'from', 'to']),
+            'stats' => $this->invoiceStats($tab),
+            'filters' => (object) $request->only(['search', 'payment_status', 'status', 'project_id', 'from', 'to']),
             'clients' => Client::query()->orderBy('name')->get(['id', 'name']),
             'vendors' => Vendor::query()->orderBy('name')->get(['id', 'name']),
             // client_id lets the form show only the selected client's projects.

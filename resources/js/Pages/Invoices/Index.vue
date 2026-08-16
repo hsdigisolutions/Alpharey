@@ -21,6 +21,7 @@ import VDateInput from '@/Components/ui/VDateInput.vue';
 import VEmptyState from '@/Components/ui/VEmptyState.vue';
 import VAutocomplete from '@/Components/ui/VAutocomplete.vue';
 import VInput from '@/Components/ui/VInput.vue';
+import VKpiCard from '@/Components/ui/VKpiCard.vue';
 import VPageHeader from '@/Components/ui/VPageHeader.vue';
 import VPagination from '@/Components/ui/VPagination.vue';
 import VSelect from '@/Components/ui/VSelect.vue';
@@ -33,6 +34,7 @@ import VVatSelect from '@/Components/ui/VVatSelect.vue';
 const props = defineProps({
     tab: { type: String, required: true },
     invoices: { type: Object, required: true },
+    stats: { type: Object, default: () => ({ total: { count: 0, amount: 0 }, draft: { count: 0, amount: 0 }, sent: { count: 0, amount: 0 }, paid: { count: 0, amount: 0 } }) },
     filters: { type: Object, required: true },
     clients: { type: Array, required: true },
     vendors: { type: Array, required: true },
@@ -56,6 +58,7 @@ const tabs = [
 const filters = reactive({
     search: props.filters.search ?? '',
     payment_status: props.filters.payment_status ?? '',
+    status: props.filters.status ?? '',
     project_id: props.filters.project_id ?? '',
     from: props.filters.from ?? '',
     to: props.filters.to ?? '',
@@ -70,6 +73,7 @@ const exportUrl = computed(
 function apply(extra = {}) {
     router.get('/invoices', { tab: props.tab, ...filters, ...extra }, { preserveScroll: true, preserveState: true });
 }
+function setStatus(val) { filters.status = val; apply(); }
 
 function switchTab(tab) {
     router.get('/invoices', { tab }, { preserveScroll: true });
@@ -327,6 +331,14 @@ const columns = computed(() => [
         </VPageHeader>
 
         <VTabs :tabs="tabs" :model-value="tab" class="mb-4" @update:model-value="switchTab" />
+
+        <!-- Summary cards — count + € per invoice status (current tab). Clickable. -->
+        <div class="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <VKpiCard k="stats.total" :value="stats.total.count" :sub="eur(stats.total.amount)" clickable :active="filters.status === ''" @click="setStatus('')" />
+            <VKpiCard k="stats.draft" :value="stats.draft.count" :sub="eur(stats.draft.amount)" clickable :active="filters.status === 'draft'" @click="setStatus('draft')" />
+            <VKpiCard k="stats.unpaid" :value="stats.sent.count" :sub="eur(stats.sent.amount)" status="warn" clickable :active="filters.status === 'sent'" @click="setStatus('sent')" />
+            <VKpiCard k="stats.paid" :value="stats.paid.count" :sub="eur(stats.paid.amount)" status="ok" clickable :active="filters.status === 'paid'" @click="setStatus('paid')" />
+        </div>
 
         <div class="space-y-2 py-3">
             <div class="grid grid-cols-2 gap-2 lg:grid-cols-4">

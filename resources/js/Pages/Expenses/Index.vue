@@ -22,6 +22,7 @@ import VConfirmDialog from '@/Components/ui/VConfirmDialog.vue';
 import VDateInput from '@/Components/ui/VDateInput.vue';
 import VEmptyState from '@/Components/ui/VEmptyState.vue';
 import VInput from '@/Components/ui/VInput.vue';
+import VKpiCard from '@/Components/ui/VKpiCard.vue';
 import VModal from '@/Components/ui/VModal.vue';
 import VPageHeader from '@/Components/ui/VPageHeader.vue';
 import VPagination from '@/Components/ui/VPagination.vue';
@@ -32,6 +33,7 @@ import VVatSelect from '@/Components/ui/VVatSelect.vue';
 
 const props = defineProps({
     expenses: { type: Object, required: true },
+    stats: { type: Object, default: () => ({ total: { count: 0, amount: 0 }, approved: { count: 0, amount: 0 }, pending: { count: 0, amount: 0 } }) },
     filters: { type: Object, required: true },
     vendors: { type: Array, required: true },
     projects: { type: Array, required: true },
@@ -61,6 +63,7 @@ const filters = reactive({
 function apply(extra = {}) {
     router.get('/expenses', { ...filters, ...extra }, { preserveScroll: true, preserveState: true });
 }
+function setApproval(val) { filters.approval = val; apply(); }
 
 // Export the current filtered view (built as a computed so the query string is
 // never assembled inline in the template).
@@ -219,6 +222,13 @@ const columns = [
                 <Bilingual k="expenses.new" inline />
             </VButton>
         </VPageHeader>
+
+        <!-- Summary cards — count + € per approval state. Clickable. -->
+        <div class="mb-4 grid grid-cols-3 gap-3">
+            <VKpiCard k="stats.total" :value="stats.total.count" :sub="eur(stats.total.amount)" clickable :active="filters.approval === ''" @click="setApproval('')" />
+            <VKpiCard k="stats.approved" :value="stats.approved.count" :sub="eur(stats.approved.amount)" status="ok" clickable :active="filters.approval === 'approved'" @click="setApproval('approved')" />
+            <VKpiCard k="stats.pending" :value="stats.pending.count" :sub="eur(stats.pending.amount)" status="warn" clickable :active="filters.approval === 'pending'" @click="setApproval('pending')" />
+        </div>
 
         <div class="grid grid-cols-2 gap-2 pb-3 lg:grid-cols-4">
             <VInput v-model="filters.search" :placeholder="$t('expenses.search')"

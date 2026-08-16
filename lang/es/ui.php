@@ -260,6 +260,19 @@ return [
         'ip' => 'Dirección IP',
     ],
 
+    'stats' => [
+        'total' => 'Total',
+        'active' => 'Activos',
+        'inactive' => 'Inactivos',
+        'completed' => 'Completados',
+        'on_hold' => 'En espera',
+        'draft' => 'Borrador',
+        'unpaid' => 'Sin pagar',
+        'paid' => 'Pagadas',
+        'approved' => 'Aprobados',
+        'pending' => 'Pendientes',
+    ],
+
     'settings' => [
         'title' => 'Configuración',
         'general' => 'General',

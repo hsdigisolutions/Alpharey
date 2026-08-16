@@ -12,6 +12,7 @@ import VButton from '@/Components/ui/VButton.vue';
 import VCheckbox from '@/Components/ui/VCheckbox.vue';
 import VEmptyState from '@/Components/ui/VEmptyState.vue';
 import VInput from '@/Components/ui/VInput.vue';
+import VKpiCard from '@/Components/ui/VKpiCard.vue';
 import VModal from '@/Components/ui/VModal.vue';
 import VPageHeader from '@/Components/ui/VPageHeader.vue';
 import VPagination from '@/Components/ui/VPagination.vue';
@@ -20,6 +21,7 @@ import VTable from '@/Components/ui/VTable.vue';
 
 const props = defineProps({
     vendors: { type: Object, required: true },
+    stats: { type: Object, default: () => ({ total: 0, active: 0, inactive: 0 }) },
     filters: { type: Object, required: true },
     can: { type: Object, required: true },
 });
@@ -32,6 +34,7 @@ const filters = reactive({
 let timer = null;
 watch(() => filters.search, () => { clearTimeout(timer); timer = setTimeout(() => apply(), 350); });
 function apply(extra = {}) { router.get('/vendors', { ...filters, ...extra }, { preserveScroll: true, preserveState: true }); }
+function setStatus(val) { filters.status = val; apply(); }
 
 const showForm = ref(false);
 const blank = { name: '', company_name: '', nif: '', phone: '', email: '', city: '', address: '', payment_terms: '', active: true, notes: '' };
@@ -57,6 +60,13 @@ const columns = [
         <VPageHeader k="vendors.title">
             <VButton v-if="can.create" icon="plus" @click="showForm = true"><Bilingual k="vendors.new" inline /></VButton>
         </VPageHeader>
+
+        <!-- Summary cards — server counts; each filters the list by status. -->
+        <div class="mb-4 grid grid-cols-3 gap-3">
+            <VKpiCard k="stats.total" :value="stats.total" clickable :active="filters.status === ''" @click="setStatus('')" />
+            <VKpiCard k="stats.active" :value="stats.active" status="ok" clickable :active="filters.status === 'active'" @click="setStatus('active')" />
+            <VKpiCard k="stats.inactive" :value="stats.inactive" status="warn" clickable :active="filters.status === 'inactive'" @click="setStatus('inactive')" />
+        </div>
 
         <div class="w-full pb-3 sm:w-60"><VSearchInput v-model="filters.search" /></div>
 

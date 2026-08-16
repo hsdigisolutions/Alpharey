@@ -51,8 +51,19 @@ class VendorController extends Controller
                 'active' => $vendor->active,
             ]);
 
+        $statsRow = Vendor::query()
+            ->selectRaw('COUNT(*) as total_count')
+            ->selectRaw('COALESCE(SUM(CASE WHEN active = 1 THEN 1 ELSE 0 END), 0) as active_count')
+            ->selectRaw('COALESCE(SUM(CASE WHEN active = 0 THEN 1 ELSE 0 END), 0) as inactive_count')
+            ->first();
+
         return Inertia::render('Vendors/Index', [
             'vendors' => $vendors,
+            'stats' => [
+                'total' => (int) ($statsRow->total_count ?? 0),
+                'active' => (int) ($statsRow->active_count ?? 0),
+                'inactive' => (int) ($statsRow->inactive_count ?? 0),
+            ],
             'filters' => (object) $request->only(['search', 'status', 'per_page']),
             'can' => [
                 'create' => Gate::allows('vendors.create'),

@@ -11,6 +11,7 @@ import ProjectFormModal from '@/Components/Projects/ProjectFormModal.vue';
 import VBadge from '@/Components/ui/VBadge.vue';
 import VButton from '@/Components/ui/VButton.vue';
 import VEmptyState from '@/Components/ui/VEmptyState.vue';
+import VKpiCard from '@/Components/ui/VKpiCard.vue';
 import VPageHeader from '@/Components/ui/VPageHeader.vue';
 import VPagination from '@/Components/ui/VPagination.vue';
 import VSearchInput from '@/Components/ui/VSearchInput.vue';
@@ -20,6 +21,7 @@ import VTable from '@/Components/ui/VTable.vue';
 const props = defineProps({
     projects: { type: Object, default: null },
     kanban: { type: Object, default: null },
+    stats: { type: Object, default: () => ({ total: 0, active: 0, completed: 0, on_hold: 0 }) },
     view: { type: String, required: true },
     filters: { type: Object, required: true },
     filterOptions: { type: Object, required: true },
@@ -41,6 +43,7 @@ const filters = reactive({
 let timer = null;
 watch(() => filters.search, () => { clearTimeout(timer); timer = setTimeout(() => apply(), 350); });
 function apply(extra = {}) { router.get('/projects', { ...filters, ...extra }, { preserveScroll: true, preserveState: true }); }
+function setStatus(val) { filters.status = val; apply(); }
 function setView(v) { filters.view = v; apply(); }
 function sortBy(key) { filters.dir = filters.sort === key && filters.dir === 'asc' ? 'desc' : 'asc'; filters.sort = key; apply(); }
 
@@ -81,6 +84,14 @@ const columns = [
             </div>
             <VButton v-if="can.create" icon="plus" @click="openCreate"><Bilingual k="projects.new" inline /></VButton>
         </VPageHeader>
+
+        <!-- Summary cards — server counts; each filters the list by status. -->
+        <div class="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <VKpiCard k="stats.total" :value="stats.total" clickable :active="filters.status === ''" @click="setStatus('')" />
+            <VKpiCard k="stats.active" :value="stats.active" status="ok" clickable :active="filters.status === 'active'" @click="setStatus('active')" />
+            <VKpiCard k="stats.completed" :value="stats.completed" clickable :active="filters.status === 'completed'" @click="setStatus('completed')" />
+            <VKpiCard k="stats.on_hold" :value="stats.on_hold" status="warn" clickable :active="filters.status === 'on_hold'" @click="setStatus('on_hold')" />
+        </div>
 
         <div class="flex flex-wrap items-end gap-2 pb-3">
             <div class="w-full sm:w-56"><VSearchInput v-model="filters.search" /></div>

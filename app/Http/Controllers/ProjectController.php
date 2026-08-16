@@ -93,6 +93,7 @@ class ProjectController extends Controller
         return Inertia::render('Projects/Index', [
             'projects' => $projects,
             'kanban' => $kanban,
+            'stats' => $this->projectStats(),
             'view' => $request->string('view')->value() === 'kanban' ? 'kanban' : 'table',
             'filters' => (object) $request->only(['search', 'client_id', 'status', 'priority', 'sort', 'dir', 'per_page']),
             'filterOptions' => [
@@ -114,6 +115,28 @@ class ProjectController extends Controller
                 'export' => Gate::allows('projects.export'),
             ],
         ]);
+    }
+
+    /**
+     * Company-scoped project counts for the summary cards, in ONE query.
+     *
+     * @return array{total: int, active: int, completed: int, on_hold: int}
+     */
+    private function projectStats(): array
+    {
+        $row = Project::query()
+            ->selectRaw('COUNT(*) as total_count')
+            ->selectRaw("COALESCE(SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END), 0) as active_count")
+            ->selectRaw("COALESCE(SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END), 0) as completed_count")
+            ->selectRaw("COALESCE(SUM(CASE WHEN status = 'on_hold' THEN 1 ELSE 0 END), 0) as on_hold_count")
+            ->first();
+
+        return [
+            'total' => (int) ($row->total_count ?? 0),
+            'active' => (int) ($row->active_count ?? 0),
+            'completed' => (int) ($row->completed_count ?? 0),
+            'on_hold' => (int) ($row->on_hold_count ?? 0),
+        ];
     }
 
     /**

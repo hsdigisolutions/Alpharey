@@ -64,8 +64,19 @@ class ClientController extends Controller
                 'projects_count' => $client->projects_count,
             ]);
 
+        $statsRow = Client::query()
+            ->selectRaw('COUNT(*) as total_count')
+            ->selectRaw('COALESCE(SUM(CASE WHEN active = 1 THEN 1 ELSE 0 END), 0) as active_count')
+            ->selectRaw('COALESCE(SUM(CASE WHEN active = 0 THEN 1 ELSE 0 END), 0) as inactive_count')
+            ->first();
+
         return Inertia::render('Clients/Index', [
             'clients' => $clients,
+            'stats' => [
+                'total' => (int) ($statsRow->total_count ?? 0),
+                'active' => (int) ($statsRow->active_count ?? 0),
+                'inactive' => (int) ($statsRow->inactive_count ?? 0),
+            ],
             'filters' => (object) $request->only(['search', 'client_type', 'status', 'sort', 'dir', 'per_page']),
             'clientTypes' => array_map(fn (ClientType $t) => $t->value, ClientType::cases()),
             'can' => [

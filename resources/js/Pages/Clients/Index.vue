@@ -11,6 +11,7 @@ import VAvatar from '@/Components/ui/VAvatar.vue';
 import VBadge from '@/Components/ui/VBadge.vue';
 import VButton from '@/Components/ui/VButton.vue';
 import VEmptyState from '@/Components/ui/VEmptyState.vue';
+import VKpiCard from '@/Components/ui/VKpiCard.vue';
 import VPageHeader from '@/Components/ui/VPageHeader.vue';
 import VPagination from '@/Components/ui/VPagination.vue';
 import VSearchInput from '@/Components/ui/VSearchInput.vue';
@@ -19,6 +20,7 @@ import VTable from '@/Components/ui/VTable.vue';
 
 const props = defineProps({
     clients: { type: Object, required: true },
+    stats: { type: Object, default: () => ({ total: 0, active: 0, inactive: 0 }) },
     filters: { type: Object, required: true },
     clientTypes: { type: Array, required: true },
     can: { type: Object, required: true },
@@ -39,6 +41,7 @@ watch(() => filters.search, () => { clearTimeout(timer); timer = setTimeout(() =
 function apply(extra = {}) {
     router.get('/clients', { ...filters, ...extra }, { preserveScroll: true, preserveState: true });
 }
+function setStatus(val) { filters.status = val; apply(); }
 function sortBy(key) {
     filters.dir = filters.sort === key && filters.dir === 'asc' ? 'desc' : 'asc';
     filters.sort = key;
@@ -68,6 +71,13 @@ const columns = [
                 <Bilingual k="clients.new" inline />
             </VButton>
         </VPageHeader>
+
+        <!-- Summary cards — server counts; each filters the list by status. -->
+        <div class="mb-4 grid grid-cols-3 gap-3">
+            <VKpiCard k="stats.total" :value="stats.total" clickable :active="filters.status === ''" @click="setStatus('')" />
+            <VKpiCard k="stats.active" :value="stats.active" status="ok" clickable :active="filters.status === 'active'" @click="setStatus('active')" />
+            <VKpiCard k="stats.inactive" :value="stats.inactive" status="warn" clickable :active="filters.status === 'inactive'" @click="setStatus('inactive')" />
+        </div>
 
         <div class="flex flex-wrap items-end gap-2 pb-3">
             <div class="w-full sm:w-60"><VSearchInput v-model="filters.search" /></div>

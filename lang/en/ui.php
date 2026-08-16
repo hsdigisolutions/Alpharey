@@ -258,6 +258,19 @@ return [
         'ip' => 'IP address',
     ],
 
+    'stats' => [
+        'total' => 'Total',
+        'active' => 'Active',
+        'inactive' => 'Inactive',
+        'completed' => 'Completed',
+        'on_hold' => 'On hold',
+        'draft' => 'Draft',
+        'unpaid' => 'Unpaid',
+        'paid' => 'Paid',
+        'approved' => 'Approved',
+        'pending' => 'Pending',
+    ],
+
     'settings' => [
         'title' => 'Settings',
         'general' => 'General',

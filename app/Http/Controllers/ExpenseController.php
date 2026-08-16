@@ -75,6 +75,33 @@ class ExpenseController extends Controller
             ->orderByDesc('date')->orderByDesc('id');
     }
 
+    /**
+     * Summary-card counts + € totals (company-scoped), in ONE query.
+     *
+     * @return array{
+     *   total: array{count: int, amount: float},
+     *   approved: array{count: int, amount: float},
+     *   pending: array{count: int, amount: float},
+     * }
+     */
+    private function expenseStats(): array
+    {
+        $r = Expense::query()
+            ->selectRaw('COUNT(*) as total_count')
+            ->selectRaw('COALESCE(SUM(total), 0) as total_sum')
+            ->selectRaw('COALESCE(SUM(CASE WHEN approved = 1 THEN 1 ELSE 0 END), 0) as approved_count')
+            ->selectRaw('COALESCE(SUM(CASE WHEN approved = 1 THEN total ELSE 0 END), 0) as approved_sum')
+            ->selectRaw('COALESCE(SUM(CASE WHEN approved = 0 THEN 1 ELSE 0 END), 0) as pending_count')
+            ->selectRaw('COALESCE(SUM(CASE WHEN approved = 0 THEN total ELSE 0 END), 0) as pending_sum')
+            ->first();
+
+        return [
+            'total' => ['count' => (int) ($r->total_count ?? 0), 'amount' => (float) ($r->total_sum ?? 0)],
+            'approved' => ['count' => (int) ($r->approved_count ?? 0), 'amount' => (float) ($r->approved_sum ?? 0)],
+            'pending' => ['count' => (int) ($r->pending_count ?? 0), 'amount' => (float) ($r->pending_sum ?? 0)],
+        ];
+    }
+
     public function index(Request $request): Response
     {
         Gate::authorize('expenses.view');
@@ -86,6 +113,7 @@ class ExpenseController extends Controller
 
         return Inertia::render('Expenses/Index', [
             'expenses' => $expenses,
+            'stats' => $this->expenseStats(),
             'filters' => (object) $request->only(['search', 'project_id', 'vendor_id', 'type', 'expense_category_id', 'payment_status', 'approval', 'from', 'to']),
             'vendors' => Vendor::query()->orderBy('name')->get(['id', 'name']),
             'projects' => Project::query()->orderBy('name')->get(['id', 'name']),
