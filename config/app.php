@@ -17,6 +17,19 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | URL Cron Token
+    |--------------------------------------------------------------------------
+    |
+    | Secret for the URL-triggered scheduler (GET /cron/run?token=…). Shell cron
+    | is unavailable on the production host, so an external service calls that
+    | endpoint every minute. Set CRON_TOKEN in the server .env.
+    |
+    */
+
+    'cron_token' => env('CRON_TOKEN'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Application Environment
     |--------------------------------------------------------------------------
     |

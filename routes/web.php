@@ -25,6 +25,7 @@ use App\Http\Controllers\ColumnSettingsController;
 use App\Http\Controllers\CommissionController;
 use App\Http\Controllers\CompanyController;
 use App\Http\Controllers\CompanySwitchController;
+use App\Http\Controllers\CronController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DeploymentController;
 use App\Http\Controllers\DocumentCenterController;
@@ -81,6 +82,11 @@ Route::get('/', function () {
 });
 
 Route::post('/locale', [LocaleController::class, 'update'])->name('locale.update');
+
+// URL-triggered scheduler (shell cron is unavailable on this host). An external
+// service (cron-job.org) hits this every minute with the secret token; it runs
+// schedule:run. Public + token-gated by design — no auth middleware.
+Route::get('/cron/run', [CronController::class, 'run'])->name('cron.run');
 
 /*
 |--------------------------------------------------------------------------
