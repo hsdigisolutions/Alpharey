@@ -4,6 +4,42 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Status: Phase 9 in progress — hardening (2026-08-01)
 
+### Live staging browser QA (2026-08-16, DONE)
+
+Drove the real signed-in Super-Admin session on staging.alpharey.com through
+Screens 1–13 (Dashboard → Settings), clicking/filling/submitting on test data.
+**Confirmed working live:** dashboard charts render; company edit→save→persist +
+the smart document panel; the **BUG-1 fix** (Employees sort URL is `sort=full_name`,
+never a native-function string) + create; attendance cell→modal with the GPS
+block (±accuracy badge, distance-from-site line, selfie, check-out attachment,
+voice note); Projects **Site Location** (lat/lng/radius); Project Detail **task
+field order** (Category·Unit·Task·Price·Planned·Weightage·House) + **sub-task add
+with parent roll-up** (150→50); invoice line **autocomplete** endpoint
+(`/autocomplete/descriptions?q=…` returns matches); payroll **breakdown** (rate
+periods, frozen-50 vs current-100 wage history, net reconciles); inventory
+consumable-vs-tool action split; the **luxury vehicle session panel**; the
+5-tab Document Center. Screen 14 (Worker PWA) is **not testable as SA** (`/worker`
+is 403 for non-workers — the wall works; needs a worker login).
+
+**One real bug found + fixed + redeployed:** the Settings notification matrix
+showed 6 raw `settings.ntype_*` keys (invoice_reminder / worker_off_site /
+inventory_low_stock / equipment_overdue / ppe_expiring / ppe_missing) — those
+recent NotificationType cases never got their ES/EN labels. Added both locales +
+`NotificationMatrixLabelsTest` (asserts every non-worker-direct type has a
+`settings.ntype_` label in both locales). Verified live. **1035 Pest tests.**
+
+**Host-level finding (NOT a code bug), needs the client's host:** the private-file
+**download** route (`GET /documents/{id}/download`) returns an intermittent/repeat
+**503 on staging** with **no Laravel exception logged**, while the download test
+passes 200 and no other route is affected — i.e. the PHP-FPM/proxy on Mukhost is
+choking on the streamed file-download response. Not shipped a speculative code
+change for it. **Recommended mitigation if it persists:** return a
+`BinaryFileResponse` with an explicit `Content-Length`
+(`response()->download(Storage::disk('local')->path($path), $name)`) instead of
+`Storage::disk('local')->download()` (a `StreamedResponse`) — a fixed
+Content-Length commonly clears this FPM/proxy 503; applies to every private-file
+download route, and would need a staging re-test to confirm.
+
 ### QA session — Phase 6 fixes + Phase 7 dead-code + perf (2026-08-16, DONE)
 
 A full QA pass (audit → per-screen code review → security → calculations →
