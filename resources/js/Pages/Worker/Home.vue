@@ -416,11 +416,8 @@ const noteTextForm = useForm({ attendance_id: null, text_note: '', duration_seco
 
         <!-- Today's status banner. Hidden once checked out — the day summary
              card below already tells the whole story. -->
-        <div v-if="today.state !== 'checked_out'" class="mb-4 rounded-lg border border-line bg-surface-raised p-4 text-center shadow-card">
-            <p v-if="today.state === 'none' && weekend.rest_day" class="text-sm font-medium text-status-info">
-                {{ $t('worker.rest_day_title') }}
-            </p>
-            <p v-else-if="today.state === 'none'" class="text-sm text-ink-soft">
+        <div v-if="today.state !== 'checked_out' && !weekend.rest_day" class="mb-4 rounded-lg border border-line bg-surface-raised p-4 text-center shadow-card">
+            <p v-if="today.state === 'none'" class="text-sm text-ink-soft">
                 {{ $t('worker.status_none') }}
             </p>
             <p v-else-if="today.state === 'checked_in'" class="text-sm font-medium text-status-ok">
