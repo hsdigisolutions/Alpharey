@@ -173,7 +173,7 @@ class LeaveController extends Controller
 
         // Leave attachments can be medical certificates — audit the access, like
         // every other private-file download (Rule 10).
-        app(AuditLogger::class)->log('viewed', $leave, ['context' => 'leave_attachment']);
+        app(AuditLogger::class)->log('viewed', $leave, null, null, 'Leave attachment', 'leave_management');
 
         return Storage::disk('local')->download($leave->file_path, $leave->original_name);
     }

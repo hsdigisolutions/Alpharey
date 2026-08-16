@@ -97,7 +97,10 @@ const tabs = computed(() => [
 
 const statusBadge = { active: 'ok', in_progress: 'info', completed: 'ok', cancelled: 'danger', on_hold: 'warn' };
 const priorityBadge = { low: 'neutral', medium: 'info', high: 'warn', urgent: 'danger' };
-const canSeeWages = props.can.edit;
+// Wage-visibility gate comes from the server prop `canSeeWages`
+// (payroll.view || employees.edit) — NOT project-edit rights. A local const of
+// the same name previously shadowed the prop, gating every money column on
+// projects.edit by mistake; it was removed. Edit actions use `can.edit` directly.
 
 // Profitability formatting. Margin colour: > 15 % green · 5–15 % amber ·
 // < 5 % or negative red — mirrors the server's classification.

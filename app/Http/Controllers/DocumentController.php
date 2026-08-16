@@ -122,6 +122,8 @@ class DocumentController extends Controller
      */
     public function replace(ReplaceDocumentFileRequest $request, Document $document, AuditLogger $audit): RedirectResponse
     {
+        $this->assertCompanyDocumentAccess($document);
+
         $file = $request->file('file');
         abort_if($file === null, 422);
 
@@ -155,6 +157,8 @@ class DocumentController extends Controller
      */
     public function updateMetadata(UpdateDocumentMetadataRequest $request, Document $document, AuditLogger $audit): RedirectResponse
     {
+        $this->assertCompanyDocumentAccess($document);
+
         $validated = $request->validated();
 
         $document->update([

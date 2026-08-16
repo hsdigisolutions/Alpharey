@@ -102,6 +102,22 @@ class PermissionMatrixController extends Controller
         $selectedId = $request->integer('user') ?: null;
         $copyFromId = $request->integer('copy_from') ?: null;
 
+        // A non-SA admin may only inspect users of their OWN company. The raw
+        // ?user= / ?copy_from= ids are otherwise unvalidated, and
+        // UserModulePermission carries no CompanyScope — so an unguarded foreign
+        // id would leak another company's manager permission grid into the
+        // props (UI hiding is not the control). Super Admin keeps the
+        // cross-company directory.
+        if ($actor !== null && ! $actor->isSuperAdmin()) {
+            foreach ([$selectedId, $copyFromId] as $targetId) {
+                if ($targetId === null) {
+                    continue;
+                }
+                $target = User::query()->find($targetId);
+                abort_unless($target !== null && $target->isAssignedToCompany($companyId), 404);
+            }
+        }
+
         return Inertia::render('Admin/Permissions', [
             'users' => $users,
             'matrix' => $this->matrixDefinition(),

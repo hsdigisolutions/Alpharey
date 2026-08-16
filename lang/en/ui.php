@@ -516,6 +516,7 @@ return [
 
     'doc_center' => [
         'title' => 'Document Center',
+        'panel_error' => 'Could not open the document. You may not have permission.',
         'tab_urgent' => 'Urgent',
         'tab_all' => 'All',
         'tab_entity' => 'By entity',
@@ -1341,6 +1342,7 @@ return [
         'return_exceeds_issued' => 'La devolución supera lo pendiente (:outstanding) / Return exceeds the outstanding quantity (:outstanding)',
         'employee_not_found' => 'Empleado no encontrado / Employee not found',
         'project_not_found' => 'Proyecto no encontrado / Project not found',
+        'consumable_not_issuable' => 'Los consumibles no pueden entregarse a trabajadores ni asignarse a proyectos / Consumable items cannot be issued to workers or assigned to projects',
         'category_not_found' => 'Categoría no disponible / Category not available',
         'tab_items' => 'Items',
         'tab_movements' => 'Stock movements',

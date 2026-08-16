@@ -432,7 +432,8 @@ function submitFuel() {
                             <p class="text-xs text-ink-soft">{{ fine.fine_date }}<template v-if="fine.authority"> · {{ fine.authority }}</template></p>
                         </div>
                         <div class="shrink-0 text-right">
-                            <p class="tabular-nums font-semibold text-ink">{{ Number(fine.amount).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }} €</p>
+                            <!-- Workers never see money — the fine's euro amount is
+                                 withheld (server + UI). Only its status is shown. -->
                             <span class="text-xs"
                                 :class="fine.paid ? 'text-status-ok' : 'text-status-danger'">
                                 {{ $t(fine.paid ? 'worker_vehicles.fine_paid' : 'worker_vehicles.fine_unpaid') }}

@@ -11,6 +11,7 @@ import { tPair } from '@/translate';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import DocumentDetailPanel from '@/Components/Documents/DocumentDetailPanel.vue';
 import DocumentFieldForm from '@/Components/Documents/DocumentFieldForm.vue';
+import VAlert from '@/Components/ui/VAlert.vue';
 import VBadge from '@/Components/ui/VBadge.vue';
 import VButton from '@/Components/ui/VButton.vue';
 import VCard from '@/Components/ui/VCard.vue';
@@ -73,13 +74,22 @@ const typeOptions = computed(() => {
 /* ---------- inline View (fetch panel on demand) ---------- */
 const viewDoc = ref(null);
 const viewRow = ref(null);
+const viewError = ref(null);
 
 async function openView(row) {
     if (!row.document_id) {
         return;
     }
+    viewError.value = null;
     viewRow.value = row;
     const res = await fetch(`/documents/${row.document_id}/panel`, { headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' } });
+    // A 403/404 returns non-JSON (or an error payload) — surface it instead of
+    // parsing blindly, which would leave the panel silently unopened.
+    if (!res.ok) {
+        viewRow.value = null;
+        viewError.value = tPair('doc_center.panel_error');
+        return;
+    }
     viewDoc.value = (await res.json()).doc;
 }
 
@@ -258,7 +268,7 @@ function entityHref(row) {
                                 <Bilingual k="doc_center.go" inline />
                             </VButton>
                             <template v-else>
-                                <VButton v-if="row.document_id && can.download" variant="ghost" size="sm" @click="openView(row)">
+                                <VButton v-if="row.document_id && can.view" variant="ghost" size="sm" @click="openView(row)">
                                     <Bilingual k="doc_center.view" inline />
                                 </VButton>
                                 <VButton v-if="can.upload" variant="secondary" size="sm" @click="openUpload(row)">
@@ -332,7 +342,7 @@ function entityHref(row) {
                                 <div class="flex justify-end gap-1">
                                     <VButton v-if="row.is_vehicle" variant="ghost" size="sm" @click="router.visit(entityHref(row))"><Bilingual k="doc_center.go" inline /></VButton>
                                     <template v-else>
-                                        <VButton v-if="row.document_id && can.download" variant="ghost" size="sm" @click="openView(row)"><Bilingual k="doc_center.view" inline /></VButton>
+                                        <VButton v-if="row.document_id && can.view" variant="ghost" size="sm" @click="openView(row)"><Bilingual k="doc_center.view" inline /></VButton>
                                         <VButton v-if="can.upload" variant="ghost" size="sm" @click="openUpload(row)"><Bilingual :k="row.is_missing ? 'doc_center.upload' : 'doc_center.renew'" inline /></VButton>
                                     </template>
                                 </div>
@@ -431,6 +441,11 @@ function entityHref(row) {
                     </tbody>
                 </table>
             </VCard>
+        </div>
+
+        <!-- Panel fetch error (e.g. a 403 opening a document) — click to dismiss -->
+        <div v-if="viewError" class="fixed inset-x-0 bottom-4 z-50 mx-auto w-full max-w-md px-4">
+            <VAlert status="danger" class="cursor-pointer shadow-overlay" @click="viewError = null">{{ viewError }}</VAlert>
         </div>
 
         <!-- Inline View slide-over -->

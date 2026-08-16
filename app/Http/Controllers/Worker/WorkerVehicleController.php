@@ -83,10 +83,12 @@ class WorkerVehicleController extends Controller
             ->where('company_id', $employee->company_id)
             ->orderByDesc('fine_date')
             ->get()
+            // A worker never sees money (standing rule) — the fine's euro amount
+            // is deliberately withheld from the payload, not just the UI. The
+            // worker sees that a fine exists, its date/authority and paid status.
             ->map(fn (VehicleFine $f) => [
                 'id' => $f->id,
                 'fine_date' => $f->fine_date->toDateString(),
-                'amount' => $f->amount,
                 'description' => $f->description,
                 'authority' => $f->authority,
                 'paid' => (bool) $f->paid,

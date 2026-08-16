@@ -147,6 +147,12 @@ class InventoryController extends Controller
     {
         Gate::authorize('inventory.edit');
 
+        // Consumables are quantity-tracked stock (used up via Usage movements),
+        // never issued to a worker — the UI hides the action, enforced here too.
+        if ($item->item_type === EquipmentItemType::Consumable) {
+            return back()->withErrors(['item' => __('ui.inventory.consumable_not_issuable')]);
+        }
+
         $validated = $request->validate([
             'employee_id' => ['required', 'integer'],
             'issued_quantity' => ['required', 'numeric', 'min:0.01'],
@@ -193,6 +199,11 @@ class InventoryController extends Controller
     public function assignToProject(Request $request, EquipmentItem $item): RedirectResponse
     {
         Gate::authorize('inventory.edit');
+
+        // Consumables are never assigned to a project (see issue()).
+        if ($item->item_type === EquipmentItemType::Consumable) {
+            return back()->withErrors(['item' => __('ui.inventory.consumable_not_issuable')]);
+        }
 
         $validated = $request->validate([
             'project_id' => ['required', 'integer'],

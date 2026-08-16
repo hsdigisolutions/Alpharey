@@ -70,6 +70,7 @@ class DocumentCenterController extends Controller
             'entityTypes' => ['company', 'employee', 'project', 'client', 'vendor', 'vehicle'],
             'statuses' => ['ok', 'warn', 'danger', 'neutral', 'missing', 'exempt'],
             'can' => [
+                'view' => Gate::allows('documents.view'),
                 'upload' => Gate::allows('documents.upload'),
                 'download' => Gate::allows('documents.download'),
                 'editDocs' => Gate::allows('documents.edit'),
