@@ -40,7 +40,7 @@ class ProductionTaskController extends Controller
 
         return Inertia::render('ProductionTasks/Index', [
             'tasks' => $tasks,
-            'filters' => $request->only(['search', 'project_id', 'category', 'status']),
+            'filters' => (object) $request->only(['search', 'project_id', 'category', 'status']),
             'filterOptions' => [
                 'projects' => Project::query()->orderBy('name')->get(['id', 'name', 'code']),
                 'categories' => array_map(fn (ProductionTaskCategory $c) => $c->value, ProductionTaskCategory::cases()),

@@ -53,7 +53,7 @@ class VendorController extends Controller
 
         return Inertia::render('Vendors/Index', [
             'vendors' => $vendors,
-            'filters' => $request->only(['search', 'status', 'per_page']),
+            'filters' => (object) $request->only(['search', 'status', 'per_page']),
             'can' => [
                 'create' => Gate::allows('vendors.create'),
                 'edit' => Gate::allows('vendors.edit'),

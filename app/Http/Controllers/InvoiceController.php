@@ -103,7 +103,7 @@ class InvoiceController extends Controller
         return [
             'tab' => $tab->value,
             'invoices' => $invoices,
-            'filters' => $request->only(['search', 'payment_status', 'project_id', 'from', 'to']),
+            'filters' => (object) $request->only(['search', 'payment_status', 'project_id', 'from', 'to']),
             'clients' => Client::query()->orderBy('name')->get(['id', 'name']),
             'vendors' => Vendor::query()->orderBy('name')->get(['id', 'name']),
             // client_id lets the form show only the selected client's projects.

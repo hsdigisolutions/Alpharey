@@ -33,7 +33,11 @@ class EmployeeFactory extends Factory
             'city' => fake()->city(),
             'department' => fake()->randomElement(['Obra', 'Oficina', 'Logística']),
             'designation' => fake()->randomElement(['Oficial 1ª', 'Peón', 'Encargado', 'Administrativo']),
-            'joining_date' => fake()->dateTimeBetween('-4 years', '-1 month')->format('Y-m-d'),
+            // Always well in the past (≥2 years) so a date-sensitive test that
+            // seeds a recent month's attendance never has the worker "join"
+            // AFTER those dates — the -1 month upper bound used to make monthly
+            // pro-rata tests flaky as the clock advanced.
+            'joining_date' => fake()->dateTimeBetween('-6 years', '-2 years')->format('Y-m-d'),
             'active' => true,
             'is_contracted' => true,
             'wage_type' => fake()->randomElement(WageType::cases()),

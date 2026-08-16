@@ -47,7 +47,7 @@ class MeasurementController extends Controller
 
         return Inertia::render('Measurements/Index', [
             'measurements' => $measurements,
-            'filters' => $request->only(['project_id', 'employee_id', 'status', 'date_from', 'date_to', 'per_page']),
+            'filters' => (object) $request->only(['project_id', 'employee_id', 'status', 'date_from', 'date_to', 'per_page']),
             'projects' => Project::query()->orderBy('name')->get(['id', 'name']),
             // A2 — the standalone page can now set the employee.
             'employees' => $this->employees(),

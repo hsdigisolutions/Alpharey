@@ -94,7 +94,7 @@ class ProjectController extends Controller
             'projects' => $projects,
             'kanban' => $kanban,
             'view' => $request->string('view')->value() === 'kanban' ? 'kanban' : 'table',
-            'filters' => $request->only(['search', 'client_id', 'status', 'priority', 'sort', 'dir', 'per_page']),
+            'filters' => (object) $request->only(['search', 'client_id', 'status', 'priority', 'sort', 'dir', 'per_page']),
             'filterOptions' => [
                 'clients' => Client::query()->orderBy('name')->get(['id', 'name']),
                 'statuses' => array_map(fn (ProjectStatus $s) => $s->value, ProjectStatus::cases()),

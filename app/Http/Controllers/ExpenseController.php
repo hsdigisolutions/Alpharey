@@ -86,7 +86,7 @@ class ExpenseController extends Controller
 
         return Inertia::render('Expenses/Index', [
             'expenses' => $expenses,
-            'filters' => $request->only(['search', 'project_id', 'vendor_id', 'type', 'expense_category_id', 'payment_status', 'approval', 'from', 'to']),
+            'filters' => (object) $request->only(['search', 'project_id', 'vendor_id', 'type', 'expense_category_id', 'payment_status', 'approval', 'from', 'to']),
             'vendors' => Vendor::query()->orderBy('name')->get(['id', 'name']),
             'projects' => Project::query()->orderBy('name')->get(['id', 'name']),
             'employees' => Employee::query()->where('active', true)->orderBy('full_name')->get(['id', 'full_name']),

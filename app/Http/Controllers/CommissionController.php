@@ -51,7 +51,7 @@ class CommissionController extends Controller
         return Inertia::render('Commissions/Index', [
             'month' => $month,
             'entries' => $entries,
-            'filters' => $request->only(['employee_id', 'project_id', 'status']),
+            'filters' => (object) $request->only(['employee_id', 'project_id', 'status']),
             'employees' => Employee::query()->orderBy('full_name')->get(['id', 'full_name']),
             'projects' => Project::query()->orderBy('name')->get(['id', 'name']),
             'statuses' => array_map(fn ($s) => $s->value, CommissionStatus::cases()),

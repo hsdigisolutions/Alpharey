@@ -52,7 +52,7 @@ class AuditLogController extends Controller
 
         return Inertia::render('Admin/AuditLogs', [
             'logs' => $logs,
-            'filters' => $request->only(['action', 'module', 'user', 'date_from', 'date_to', 'per_page']),
+            'filters' => (object) $request->only(['action', 'module', 'user', 'date_from', 'date_to', 'per_page']),
             'stats' => [
                 'by_action' => $this->filteredQuery($request)
                     ->select('action')->selectRaw('count(*) as total')

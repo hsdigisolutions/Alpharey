@@ -91,7 +91,7 @@ class EmployeeController extends Controller
 
         return Inertia::render('Employees/Index', [
             'employees' => $employees,
-            'filters' => $request->only(['search', 'status', 'department', 'designation', 'wage_type', 'sort', 'dir', 'per_page']),
+            'filters' => (object) $request->only(['search', 'status', 'department', 'designation', 'wage_type', 'sort', 'dir', 'per_page']),
             'filterOptions' => [
                 'departments' => Employee::query()->whereNotNull('department')->distinct()->orderBy('department')->pluck('department'),
                 'designations' => Employee::query()->whereNotNull('designation')->distinct()->orderBy('designation')->pluck('designation'),

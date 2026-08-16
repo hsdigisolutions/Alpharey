@@ -49,7 +49,7 @@ class LeaveController extends Controller
 
         return Inertia::render('Leave/Index', [
             'leaves' => $leaves,
-            'filters' => $request->only(['employee_id', 'status', 'leave_category_id', 'date_from', 'date_to', 'per_page']),
+            'filters' => (object) $request->only(['employee_id', 'status', 'leave_category_id', 'date_from', 'date_to', 'per_page']),
             'employees' => Employee::query()->orderBy('full_name')->get(['id', 'full_name']),
             'categories' => $this->availableCategories(),
             'statuses' => array_map(fn (LeaveStatus $s): string => $s->value, LeaveStatus::cases()),

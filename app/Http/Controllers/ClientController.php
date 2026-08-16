@@ -66,7 +66,7 @@ class ClientController extends Controller
 
         return Inertia::render('Clients/Index', [
             'clients' => $clients,
-            'filters' => $request->only(['search', 'client_type', 'status', 'sort', 'dir', 'per_page']),
+            'filters' => (object) $request->only(['search', 'client_type', 'status', 'sort', 'dir', 'per_page']),
             'clientTypes' => array_map(fn (ClientType $t) => $t->value, ClientType::cases()),
             'can' => [
                 'create' => Gate::allows('clients.create'),

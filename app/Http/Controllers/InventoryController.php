@@ -58,7 +58,7 @@ class InventoryController extends Controller
 
         return Inertia::render('Inventory/Index', [
             'items' => $items,
-            'filters' => $request->only(['search', 'equipment_category_id', 'item_type', 'active', 'low_stock', 'per_page', 'mv_item', 'mv_from', 'mv_to']),
+            'filters' => (object) $request->only(['search', 'equipment_category_id', 'item_type', 'active', 'low_stock', 'per_page', 'mv_item', 'mv_from', 'mv_to']),
             'categories' => $this->availableCategories(),
             // Lightweight item list for the movements-tab filter dropdown.
             'itemOptions' => EquipmentItem::query()->orderBy('name')->get(['id', 'name'])

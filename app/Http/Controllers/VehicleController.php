@@ -114,7 +114,7 @@ class VehicleController extends Controller
             'vehicles' => $vehicles,
             'activeSessions' => $activeSessions,
             'recentSessions' => $recentSessions,
-            'filters' => $request->only(['search', 'ownership', 'active', 'compliance', 'per_page']),
+            'filters' => (object) $request->only(['search', 'ownership', 'active', 'compliance', 'per_page']),
             'employees' => Employee::query()->orderBy('full_name')->get(['id', 'full_name']),
             'ownerships' => array_map(fn (VehicleOwnership $o): string => $o->value, VehicleOwnership::cases()),
             'fuelTypes' => array_map(fn (FuelType $f): string => $f->value, FuelType::cases()),

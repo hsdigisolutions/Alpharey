@@ -46,7 +46,7 @@ class CallPanelController extends Controller
 
         return Inertia::render('CallPanel/Index', [
             'employees' => $this->employeeList($request),
-            'filters' => $request->only(['search', 'tab', 'employee']),
+            'filters' => (object) $request->only(['search', 'tab', 'employee']),
             'selected' => $selectedId > 0 ? $this->selected($selectedId) : null,
             'stats' => $this->stats(),
             'can' => [

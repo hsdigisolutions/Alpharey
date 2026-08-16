@@ -64,7 +64,7 @@ class DeploymentController extends Controller
 
         return Inertia::render('Deployments/Index', [
             'deployments' => $deployments,
-            'filters' => $request->only(['status']),
+            'filters' => (object) $request->only(['status']),
             // Home-company options exclude the acting company (can't deploy from
             // yourself to yourself); host projects come from the tenant scope.
             'homeCompanies' => Company::query()
