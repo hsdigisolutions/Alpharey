@@ -245,7 +245,7 @@ const docDot = { ok: 'ok', warn: 'warn', danger: 'danger', neutral: 'neutral', e
                 </VSelect>
                 <VSelect v-model="filters.department" @update:model-value="apply()">
                     <option value="">{{ $t('employees.department') }}</option>
-                    <option v-for="dept in filterOptions.departments" :key="dept" :value="dept">{{ dept }}</option>
+                    <option v-for="dept in filterOptions.departments" :key="dept.id" :value="dept.id">{{ dept.name }}</option>
                 </VSelect>
                 <VSelect v-model="filters.designation" @update:model-value="apply()">
                     <option value="">{{ $t('employees.designation') }}</option>

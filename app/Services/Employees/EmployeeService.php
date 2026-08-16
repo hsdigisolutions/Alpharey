@@ -2,6 +2,7 @@
 
 namespace App\Services\Employees;
 
+use App\Models\Department;
 use App\Models\Employee;
 use App\Models\EmployeeSalaryHistory;
 use App\Support\CurrentCompany;
@@ -35,6 +36,7 @@ class EmployeeService
 
             $employee = new Employee($data);
             $employee->employee_code = Employee::nextCode((int) $companyId);
+            $this->syncDepartmentName($employee);
             $employee->save();
 
             $this->wageRates->seedFromEmployee($employee);
@@ -50,6 +52,7 @@ class EmployeeService
     {
         return DB::transaction(function () use ($employee, $data): Employee {
             $employee->fill($data);
+            $this->syncDepartmentName($employee);
 
             $changedWageFields = array_values(array_filter(
                 self::WAGE_FIELDS,
@@ -80,6 +83,22 @@ class EmployeeService
 
             return $employee;
         });
+    }
+
+    /**
+     * Keep the legacy `department` display string in step with department_id
+     * (source of truth). Runs only when department_id changed — resolves the
+     * catalogue name (company-scoped), or clears the string when unset.
+     */
+    private function syncDepartmentName(Employee $employee): void
+    {
+        if (! $employee->isDirty('department_id')) {
+            return;
+        }
+
+        $employee->department = $employee->department_id !== null
+            ? Department::query()->whereKey($employee->department_id)->value('name')
+            : null;
     }
 
     private function stringable(mixed $value): ?string

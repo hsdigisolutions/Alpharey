@@ -3,6 +3,7 @@
 use App\Enums\VatRate;
 use App\Http\Controllers\Account\AccountController;
 use App\Http\Controllers\Admin\AuditLogController;
+use App\Http\Controllers\Admin\DepartmentController;
 use App\Http\Controllers\Admin\OvertimePolicyController;
 use App\Http\Controllers\Admin\PermissionMatrixController;
 use App\Http\Controllers\Admin\SettingsController;
@@ -542,6 +543,10 @@ Route::middleware(['auth', 'active', 'two_factor', 'not_worker'])->group(functio
         Route::put('/settings/attendance', [SettingsController::class, 'updateAttendance'])->name('settings.attendance');
         // Legal → worker-consent notice version (brand-wide re-accept trigger).
         Route::put('/settings/legal', [SettingsController::class, 'updateLegal'])->name('settings.legal');
+        // Settings → Departamentos (company-scoped catalogue for the employee form)
+        Route::post('/settings/departments', [DepartmentController::class, 'store'])->name('settings.departments.store');
+        Route::put('/settings/departments/{department}', [DepartmentController::class, 'update'])->name('settings.departments.update');
+        Route::delete('/settings/departments/{department}', [DepartmentController::class, 'destroy'])->name('settings.departments.destroy');
         Route::put('/settings/mail', [SettingsController::class, 'updateMail'])->name('settings.mail');
         Route::post('/settings/mail/test', [SettingsController::class, 'testMail'])->name('settings.mail.test');
         // Screen 26 — notification rules matrix (Phase 8, Super Admin only)

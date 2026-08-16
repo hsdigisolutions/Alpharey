@@ -27,6 +27,8 @@ const emit = defineEmits(['close']);
 
 // Trade-type catalogue (Feature 1) shipped on the page props.
 const designationOptions = computed(() => usePage().props.designationOptions ?? []);
+// Department catalogue (company Settings) — the dropdown source.
+const departmentOptions = computed(() => usePage().props.departmentOptions ?? []);
 // Keep the display string in sync with the picked type (grid/list show it).
 function onDesignationChange() {
     const picked = designationOptions.value.find((d) => String(d.id) === String(form.designation_id));
@@ -35,7 +37,7 @@ function onDesignationChange() {
 
 const blank = {
     full_name: '', nif: '', email: '', mobile: '', phone: '', city: '', address: '',
-    department: '', designation: '', designation_id: '', joining_date: null, leaving_date: null,
+    department: '', department_id: '', designation: '', designation_id: '', joining_date: null, leaving_date: null,
     active: true, is_contracted: false, default_check_in: '09:00', default_check_out: '17:00',
     wage_type: '', wage_rate: null, base_salary: null, daily_wage: null, per_meter_rate: null,
     commission_percent: null, payment_method: '', iban: '', bank_name: '',
@@ -111,8 +113,11 @@ const showBank = computed(() => !form.payment_method || form.payment_method === 
             <section>
                 <Bilingual k="employees.section_employment" class="mb-3 text-[15px] font-semibold" />
                 <div class="grid gap-4 sm:grid-cols-2">
-                    <FormField k="employees.department" :error="form.errors.department">
-                        <VInput v-model="form.department" />
+                    <FormField k="employees.department" :error="form.errors.department_id">
+                        <VSelect v-model="form.department_id">
+                            <option value="">—</option>
+                            <option v-for="d in departmentOptions" :key="d.id" :value="d.id">{{ d.name }}</option>
+                        </VSelect>
                     </FormField>
                     <FormField k="employees.designation" :error="form.errors.designation_id">
                         <VSelect v-model="form.designation_id" @update:model-value="onDesignationChange">

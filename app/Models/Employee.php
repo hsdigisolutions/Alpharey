@@ -24,6 +24,8 @@ use Illuminate\Support\Carbon;
  * @property string $full_name
  * @property string|null $nif
  * @property string|null $nif_hash
+ * @property string|null $department
+ * @property int|null $department_id
  * @property bool $active
  * @property Carbon|null $active_since
  * @property bool $can_use_vehicles
@@ -55,7 +57,7 @@ class Employee extends Model
      */
     protected $fillable = [
         'full_name', 'nif', 'email', 'mobile', 'phone', 'city', 'address',
-        'department', 'designation', 'designation_id', 'team_leader_id', 'joining_date',
+        'department', 'department_id', 'designation', 'designation_id', 'team_leader_id', 'joining_date',
         'leaving_date', 'active', 'is_contracted', 'default_check_in',
         'default_check_out', 'wage_type', 'wage_rate', 'base_salary',
         'daily_wage', 'per_meter_rate', 'commission_percent', 'payment_method',

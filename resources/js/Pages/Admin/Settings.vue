@@ -29,6 +29,7 @@ const props = defineProps({
     maxLocationDistance: { type: Number, default: 500 },
     offSiteAlertDistance: { type: Number, default: 2000 },
     consentVersion: { type: String, default: '' },
+    departments: { type: Array, default: () => [] },
     notificationMatrix: { type: Array, default: null },
     systemHealth: { type: Object, default: null },
 });
@@ -120,6 +121,26 @@ function savePolicy() {
 const confirm = ref({ open: false, message: '', fn: null });
 function askDelete(message, fn) { confirm.value = { open: true, message, fn }; }
 function runDelete() { confirm.value.fn?.(); confirm.value.open = false; }
+
+/* --- Departments (company catalogue) --- */
+const deptForm = useForm({ name: '' });
+function addDept() {
+    deptForm.post('/admin/settings/departments', { preserveScroll: true, onSuccess: () => deptForm.reset('name') });
+}
+const editingDept = ref(null); // department id being edited inline
+const deptEditForm = useForm({ name: '', active: true });
+function startEditDept(d) {
+    editingDept.value = d.id;
+    deptEditForm.name = d.name;
+    deptEditForm.active = d.active;
+    deptEditForm.clearErrors();
+}
+function saveDept(d) {
+    deptEditForm.put(`/admin/settings/departments/${d.id}`, { preserveScroll: true, onSuccess: () => (editingDept.value = null) });
+}
+function deleteDept(d) {
+    askDelete(d.name ?? '', () => router.delete(`/admin/settings/departments/${d.id}`, { preserveScroll: true }));
+}
 
 function deletePolicy(p) {
     askDelete(p.name ?? '',
@@ -293,6 +314,55 @@ function deletePolicy(p) {
                         <span v-if="thresholdForm.errors.off_site_alert_distance" class="text-xs text-status-danger">{{ thresholdForm.errors.off_site_alert_distance }}</span>
                     </label>
                     <VButton type="submit" :loading="thresholdForm.processing"><Bilingual k="common.save" inline /></VButton>
+                </form>
+            </VCard>
+
+            <!-- Departamentos — the company's department catalogue -->
+            <VCard title-key="settings.departments_section" class="lg:col-span-2" :padded="false">
+                <p class="border-b border-line px-4 py-3 text-sm text-ink-soft">{{ $t('settings.departments_hint') }}</p>
+                <table v-if="departments.length" class="w-full text-sm">
+                    <thead class="bg-surface-sunken text-xs uppercase text-muted">
+                        <tr>
+                            <th class="px-4 py-2 text-start"><Bilingual k="settings.department_name" inline /></th>
+                            <th class="px-4 py-2 text-start"><Bilingual k="employees.active" inline /></th>
+                            <th class="px-4 py-2 text-end"><Bilingual k="settings.department_employees" inline /></th>
+                            <th class="px-4 py-2 text-end"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr v-for="d in departments" :key="d.id" class="border-t border-line hover:bg-surface-hover">
+                            <td class="px-4 py-2.5">
+                                <VInput v-if="editingDept === d.id" v-model="deptEditForm.name" :error="deptEditForm.errors.name" />
+                                <span v-else class="font-medium">{{ d.name }}</span>
+                            </td>
+                            <td class="px-4 py-2.5">
+                                <label v-if="editingDept === d.id" class="flex items-center gap-2">
+                                    <input v-model="deptEditForm.active" type="checkbox" class="h-4 w-4 accent-accent" />
+                                </label>
+                                <VStatusDot v-else :status="d.active ? 'ok' : 'neutral'" />
+                            </td>
+                            <td class="px-4 py-2.5 text-end tabular-nums">{{ d.employee_count }}</td>
+                            <td class="px-4 py-2.5 text-end">
+                                <span class="flex items-center justify-end gap-1">
+                                    <template v-if="editingDept === d.id">
+                                        <VButton size="sm" @click="saveDept(d)"><Bilingual k="common.save" inline /></VButton>
+                                        <VButton variant="ghost" size="sm" @click="editingDept = null"><Bilingual k="common.cancel" inline /></VButton>
+                                    </template>
+                                    <template v-else>
+                                        <VButton variant="ghost" size="sm" icon="edit" @click="startEditDept(d)" />
+                                        <VButton variant="ghost" size="sm" icon="trash" @click="deleteDept(d)" />
+                                    </template>
+                                </span>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+                <p v-else class="px-4 py-4 text-sm text-muted">{{ $t('settings.departments_empty') }}</p>
+                <form class="flex items-end gap-3 border-t border-line px-4 py-3" @submit.prevent="addDept">
+                    <FormField k="settings.department_name" :error="deptForm.errors.name" class="flex-1">
+                        <VInput v-model="deptForm.name" :placeholder="$t('settings.department_name')" />
+                    </FormField>
+                    <VButton type="submit" :disabled="deptForm.processing"><Bilingual k="settings.department_add" inline /></VButton>
                 </form>
             </VCard>
 

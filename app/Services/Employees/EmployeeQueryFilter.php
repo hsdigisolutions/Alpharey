@@ -29,7 +29,7 @@ class EmployeeQueryFilter
             })
             ->when($request->string('status')->value() === 'active', fn (Builder $q) => $q->where('active', true))
             ->when($request->string('status')->value() === 'inactive', fn (Builder $q) => $q->where('active', false))
-            ->when($request->filled('department'), fn (Builder $q) => $q->where('department', $request->string('department')))
+            ->when($request->filled('department'), fn (Builder $q) => $q->where('department_id', $request->integer('department')))
             ->when($request->filled('designation'), fn (Builder $q) => $q->where('designation', $request->string('designation')))
             ->when($request->filled('wage_type'), fn (Builder $q) => $q->where('wage_type', $request->string('wage_type')));
     }

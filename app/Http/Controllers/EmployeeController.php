@@ -7,6 +7,7 @@ use App\Enums\WageType;
 use App\Http\Requests\Employees\StoreEmployeeRequest;
 use App\Http\Requests\Employees\UpdateEmployeeRequest;
 use App\Models\Attendance;
+use App\Models\Department;
 use App\Models\Employee;
 use App\Models\EmployeeEquipmentIssue;
 use App\Models\EmployeeWageRate;
@@ -65,6 +66,9 @@ class EmployeeController extends Controller
 
         $canSeeWages = Gate::allows('payroll.view') || Gate::allows('employees.edit');
 
+        // Resolved once, reused for both the list filter and the form dropdown.
+        $departmentOptions = $this->departmentOptions();
+
         $employees = $query->orderBy($sort, $dir)
             ->paginate($perPage)
             ->withQueryString()
@@ -74,6 +78,7 @@ class EmployeeController extends Controller
                 'full_name' => $employee->full_name,
                 'company' => $employee->company?->name,
                 'department' => $employee->department,
+                'department_id' => $employee->department_id,
                 'designation' => $employee->designation,
                 'city' => $employee->city,
                 'mobile' => $employee->mobile,
@@ -93,7 +98,9 @@ class EmployeeController extends Controller
             'employees' => $employees,
             'filters' => (object) $request->only(['search', 'status', 'department', 'designation', 'wage_type', 'sort', 'dir', 'per_page']),
             'filterOptions' => [
-                'departments' => Employee::query()->whereNotNull('department')->distinct()->orderBy('department')->pluck('department'),
+                // Departments now come from the company catalogue (Settings), not
+                // free-text employee values — active departments only.
+                'departments' => $departmentOptions,
                 'designations' => Employee::query()->whereNotNull('designation')->distinct()->orderBy('designation')->pluck('designation'),
                 'wageTypes' => array_map(fn (WageType $type) => $type->value, WageType::cases()),
             ],
@@ -108,6 +115,8 @@ class EmployeeController extends Controller
             'designationOptions' => ProjectDesignationRateController::optionsFor(
                 app(CurrentCompany::class)->id(),
             ),
+            // The department catalogue for the create/edit form's dropdown.
+            'departmentOptions' => $departmentOptions,
             'can' => [
                 'create' => Gate::allows('employees.create'),
                 'edit' => Gate::allows('employees.edit'),
@@ -115,6 +124,20 @@ class EmployeeController extends Controller
                 'export' => Gate::allows('employees.export'),
             ],
         ]);
+    }
+
+    /**
+     * Active departments for the acting company (Settings catalogue) — the
+     * {id, name} source for the employee form dropdown and the list filter.
+     *
+     * @return list<array{id: int, name: string}>
+     */
+    private function departmentOptions(): array
+    {
+        return Department::query()->where('active', true)->orderBy('name')
+            ->get(['id', 'name'])
+            ->map(fn (Department $d): array => ['id' => $d->id, 'name' => $d->name])
+            ->all();
     }
 
     /**
@@ -151,7 +174,7 @@ class EmployeeController extends Controller
         return Inertia::render('Employees/Detail', [
             'employee' => array_merge($employee->only([
                 'id', 'employee_code', 'full_name', 'email', 'mobile', 'phone', 'city', 'address',
-                'department', 'designation', 'designation_id', 'team_leader_id', 'active', 'is_contracted',
+                'department', 'department_id', 'designation', 'designation_id', 'team_leader_id', 'active', 'is_contracted',
                 'default_check_in', 'default_check_out', 'commission_percent',
                 'has_driving_license', 'has_company_vehicle', 'can_use_vehicles', 'works_at_height', 'notes',
             ]), [
@@ -218,6 +241,7 @@ class EmployeeController extends Controller
             'consent' => $this->consentPayload($employee),
             'canSeeWages' => $canSeeWages,
             'designationOptions' => ProjectDesignationRateController::optionsFor(app(CurrentCompany::class)->id()),
+            'departmentOptions' => $this->departmentOptions(),
             'can' => [
                 'edit' => Gate::allows('employees.edit'),
                 'delete' => Gate::allows('employees.delete'),

@@ -4,6 +4,7 @@ namespace App\Http\Requests\Employees;
 
 use App\Enums\PaymentMethod;
 use App\Enums\WageType;
+use App\Support\CurrentCompany;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
@@ -33,6 +34,14 @@ class StoreEmployeeRequest extends FormRequest
             'city' => ['nullable', 'string', 'max:100'],
             'address' => ['nullable', 'string', 'max:255'],
             'department' => ['nullable', 'string', 'max:100'],
+            // Department from the company catalogue (Settings). Scoped to the
+            // acting company so a foreign department id is rejected.
+            'department_id' => [
+                'nullable', 'integer',
+                Rule::exists('departments', 'id')->where(
+                    fn ($q) => $q->where('company_id', app(CurrentCompany::class)->id()),
+                ),
+            ],
             'designation' => ['nullable', 'string', 'max:100'],
             // The trade type (Feature 1); drives project designation rates.
             'designation_id' => ['nullable', 'integer', 'exists:designations,id'],

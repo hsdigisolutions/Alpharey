@@ -7,6 +7,8 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\TestMailRequest;
 use App\Http\Requests\Admin\UpdateGeneralSettingsRequest;
 use App\Http\Requests\Admin\UpdateMailSettingsRequest;
+use App\Models\Department;
+use App\Models\Employee;
 use App\Models\OvertimePolicy;
 use App\Services\Attendance\AttendanceService;
 use App\Services\Notifications\NotificationRules;
@@ -56,12 +58,44 @@ class SettingsController extends Controller
                 ->maxLocationDistance(app(CurrentCompany::class)->id() ?? 0),
             'offSiteAlertDistance' => app(AttendanceService::class)
                 ->offSiteAlertDistance(app(CurrentCompany::class)->id() ?? 0),
+            // Departamentos — the acting company's department catalogue (with a
+            // live employee count per row for the delete guard). Empty when a
+            // Super Admin has no single company selected (nothing to manage).
+            'departments' => $this->departmentsPayload(),
             // Legal → the current worker-consent notice version (brand-wide).
             'consentVersion' => WorkerPrivacyNotice::currentVersion(),
             // Notification matrix + system health are brand-level → Super Admin only
             'notificationMatrix' => $isSuperAdmin ? $rules->matrix() : null,
             'systemHealth' => $isSuperAdmin ? $health->check() : null,
         ]);
+    }
+
+    /**
+     * The acting company's departments with a live employee count per row.
+     *
+     * @return list<array{id: int, name: string, active: bool, employee_count: int}>
+     */
+    private function departmentsPayload(): array
+    {
+        $companyId = app(CurrentCompany::class)->id();
+        if ($companyId === null) {
+            return [];
+        }
+
+        // Employees-per-department in one grouped query, keyed by department_id.
+        $counts = Employee::query()
+            ->whereNotNull('department_id')
+            ->selectRaw('department_id, COUNT(*) as c')
+            ->groupBy('department_id')
+            ->pluck('c', 'department_id');
+
+        return Department::query()->orderBy('name')->get(['id', 'name', 'active'])
+            ->map(fn (Department $d): array => [
+                'id' => $d->id,
+                'name' => $d->name,
+                'active' => $d->active,
+                'employee_count' => (int) ($counts[$d->id] ?? 0),
+            ])->all();
     }
 
     public function updateNotifications(Request $request, NotificationRules $rules): RedirectResponse
