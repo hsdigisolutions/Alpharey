@@ -19,19 +19,30 @@ use Illuminate\Support\Carbon;
  */
 class AttendanceAbsence
 {
+    /**
+     * @param  list<int>|null  $workingDays  ISO weekday numbers (1=Mon…7=Sun) that
+     *                                       count as working days. Null falls back
+     *                                       to Mon–Fri (Sat/Sun off).
+     */
     public static function isUnrecordedAbsence(
         Carbon $date,
         Carbon $today,
         ?Carbon $joiningDate,
         bool $active = true,
         ?Carbon $activeSince = null,
+        ?array $workingDays = null,
     ): bool {
         // An inactive employee ("not working with us now") accrues no absences.
         if (! $active) {
             return false;
         }
 
-        if ($date->isWeekend()) {
+        // A non-working day (weekend by default, or per the company's configured
+        // working days) is never an absence.
+        $isOffDay = $workingDays !== null
+            ? ! in_array($date->dayOfWeekIso, $workingDays, true)
+            : $date->isWeekend();
+        if ($isOffDay) {
             return false;
         }
 

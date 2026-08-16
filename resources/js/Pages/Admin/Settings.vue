@@ -29,6 +29,8 @@ const props = defineProps({
     maxLocationDistance: { type: Number, default: 500 },
     offSiteAlertDistance: { type: Number, default: 2000 },
     consentVersion: { type: String, default: '' },
+    companyProfile: { type: Object, default: null },
+    workingDays: { type: Array, default: () => [1, 2, 3, 4, 5] },
     departments: { type: Array, default: () => [] },
     notificationMatrix: { type: Array, default: null },
     systemHealth: { type: Object, default: null },
@@ -121,6 +123,38 @@ function savePolicy() {
 const confirm = ref({ open: false, message: '', fn: null });
 function askDelete(message, fn) { confirm.value = { open: true, message, fn }; }
 function runDelete() { confirm.value.fn?.(); confirm.value.open = false; }
+
+/* --- Company profile (name / CIF / address / logo) --- */
+const profileForm = useForm({
+    name: props.companyProfile?.name ?? '',
+    cif: props.companyProfile?.cif ?? '',
+    address: props.companyProfile?.address ?? '',
+    logo: null,
+});
+const logoPreview = ref(props.companyProfile?.logo ?? null);
+function onLogoPick(e) {
+    const file = e.target.files?.[0] ?? null;
+    profileForm.logo = file;
+    if (file) logoPreview.value = URL.createObjectURL(file);
+}
+function saveProfile() {
+    profileForm.post('/admin/settings/company-profile', { preserveScroll: true, forceFormData: true });
+}
+
+/* --- Working days --- */
+const WEEKDAYS = [
+    { d: 1, k: 'weekdays.mon' }, { d: 2, k: 'weekdays.tue' }, { d: 3, k: 'weekdays.wed' },
+    { d: 4, k: 'weekdays.thu' }, { d: 5, k: 'weekdays.fri' }, { d: 6, k: 'weekdays.sat' }, { d: 7, k: 'weekdays.sun' },
+];
+const workingDaysForm = useForm({ working_days: [...props.workingDays] });
+function toggleDay(d) {
+    const i = workingDaysForm.working_days.indexOf(d);
+    if (i === -1) workingDaysForm.working_days.push(d);
+    else workingDaysForm.working_days.splice(i, 1);
+}
+function saveWorkingDays() {
+    workingDaysForm.put('/admin/settings/working-days', { preserveScroll: true });
+}
 
 /* --- Departments (company catalogue) --- */
 const deptForm = useForm({ name: '' });
@@ -315,6 +349,51 @@ function deletePolicy(p) {
                     </label>
                     <VButton type="submit" :loading="thresholdForm.processing"><Bilingual k="common.save" inline /></VButton>
                 </form>
+            </VCard>
+
+            <!-- Company profile — name / CIF / address / logo (feeds invoices + payslips) -->
+            <VCard v-if="companyProfile" title-key="settings.company_profile_section" class="lg:col-span-2">
+                <p class="mb-4 text-sm text-ink-soft">{{ $t('settings.company_profile_hint') }}</p>
+                <form class="grid gap-4 sm:grid-cols-2" @submit.prevent="saveProfile">
+                    <FormField k="settings.company_name" :error="profileForm.errors.name">
+                        <VInput v-model="profileForm.name" />
+                    </FormField>
+                    <FormField k="settings.company_cif" :error="profileForm.errors.cif">
+                        <VInput v-model="profileForm.cif" />
+                    </FormField>
+                    <FormField k="settings.company_address" :error="profileForm.errors.address" class="sm:col-span-2">
+                        <VTextarea v-model="profileForm.address" :rows="2" />
+                    </FormField>
+                    <div class="sm:col-span-2">
+                        <Bilingual k="settings.company_logo" class="mb-1.5 block text-sm font-medium text-ink-soft" />
+                        <div class="flex items-center gap-4">
+                            <img v-if="logoPreview" :src="logoPreview" alt="" class="h-14 max-w-[180px] rounded border border-line bg-surface object-contain p-1" />
+                            <span v-else class="text-xs text-muted">{{ $t('settings.company_logo_none') }}</span>
+                            <input type="file" accept="image/png,image/jpeg,image/webp" class="text-sm text-ink-soft" @change="onLogoPick" />
+                        </div>
+                        <p v-if="profileForm.errors.logo" class="mt-1 text-xs text-status-danger">{{ profileForm.errors.logo }}</p>
+                    </div>
+                    <div class="sm:col-span-2">
+                        <VButton type="submit" :disabled="profileForm.processing"><Bilingual k="common.save" inline /></VButton>
+                    </div>
+                </form>
+            </VCard>
+
+            <!-- Working days — which weekdays count for absence tracking -->
+            <VCard title-key="settings.working_days_section" class="lg:col-span-2">
+                <p class="mb-3 text-sm text-ink-soft">{{ $t('settings.working_days_hint') }}</p>
+                <div class="flex flex-wrap gap-2">
+                    <button v-for="w in WEEKDAYS" :key="w.d" type="button"
+                        class="rounded-md border px-3 py-1.5 text-sm font-medium transition-colors"
+                        :class="workingDaysForm.working_days.includes(w.d) ? 'border-accent bg-accent text-on-accent' : 'border-line-strong bg-surface-sunken text-ink-soft hover:text-ink'"
+                        @click="toggleDay(w.d)">
+                        {{ $t(w.k) }}
+                    </button>
+                </div>
+                <p v-if="workingDaysForm.errors.working_days" class="mt-2 text-xs text-status-danger">{{ workingDaysForm.errors.working_days }}</p>
+                <div class="mt-4">
+                    <VButton :disabled="workingDaysForm.processing" @click="saveWorkingDays"><Bilingual k="common.save" inline /></VButton>
+                </div>
             </VCard>
 
             <!-- Departamentos — the company's department catalogue -->

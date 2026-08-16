@@ -543,6 +543,9 @@ Route::middleware(['auth', 'active', 'two_factor', 'not_worker'])->group(functio
         Route::put('/settings/attendance', [SettingsController::class, 'updateAttendance'])->name('settings.attendance');
         // Legal → worker-consent notice version (brand-wide re-accept trigger).
         Route::put('/settings/legal', [SettingsController::class, 'updateLegal'])->name('settings.legal');
+        // Settings → Company profile (name/CIF/address/logo) + working days
+        Route::post('/settings/company-profile', [SettingsController::class, 'updateCompanyProfile'])->name('settings.company-profile');
+        Route::put('/settings/working-days', [SettingsController::class, 'updateWorkingDays'])->name('settings.working-days');
         // Settings → Departamentos (company-scoped catalogue for the employee form)
         Route::post('/settings/departments', [DepartmentController::class, 'store'])->name('settings.departments.store');
         Route::put('/settings/departments/{department}', [DepartmentController::class, 'update'])->name('settings.departments.update');

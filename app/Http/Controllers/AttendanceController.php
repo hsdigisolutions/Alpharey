@@ -121,13 +121,15 @@ class AttendanceController extends Controller
         // waiting for the nightly attendance:auto-absent sweep. Deployed-in
         // workers are excluded (their HOME company owns their absences).
         $today = now()->startOfDay();
+        $workingDays = app(AttendanceService::class)
+            ->workingDays(app(CurrentCompany::class)->id() ?? 0);
         $virtualAbsences = [];
         foreach ($ownEmployees as $emp) {
             $cursor = $start->copy();
             while ($cursor->lte($end)) {
                 $day = (int) $cursor->format('j');
                 if (! isset($grid[$emp->id][$day])
-                    && AttendanceAbsence::isUnrecordedAbsence($cursor, $today, $emp->joining_date, $emp->active, $emp->active_since)) {
+                    && AttendanceAbsence::isUnrecordedAbsence($cursor, $today, $emp->joining_date, $emp->active, $emp->active_since, $workingDays)) {
                     $grid[$emp->id][$day] = [
                         'id' => null, // no real row — clicking it opens "new entry"
                         'status' => 'absent',

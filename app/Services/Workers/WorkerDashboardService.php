@@ -5,6 +5,7 @@ namespace App\Services\Workers;
 use App\Models\Attendance;
 use App\Models\Employee;
 use App\Models\Scopes\CompanyScope;
+use App\Services\Attendance\AttendanceService;
 use App\Support\AttendanceAbsence;
 use Illuminate\Support\Carbon;
 
@@ -137,6 +138,7 @@ class WorkerDashboardService
         // worker) is grey. A reactivated worker counts from active_since.
         return AttendanceAbsence::isUnrecordedAbsence(
             $day, $today, $employee->joining_date, $employee->active, $employee->active_since,
+            app(AttendanceService::class)->workingDays((int) $employee->company_id),
         ) ? 'absent' : 'none';
     }
 }

@@ -16,6 +16,7 @@ use App\Models\Payroll;
 use App\Models\Project;
 use App\Models\UserColumnSetting;
 use App\Models\WorkerConsent;
+use App\Services\Attendance\AttendanceService;
 use App\Services\Audit\AuditLogger;
 use App\Services\Documents\DocumentStatus;
 use App\Services\Employees\EmployeeQueryFilter;
@@ -465,11 +466,13 @@ class EmployeeController extends Controller
         // an auto-absence immediately — the same shared rule the worker PWA and
         // the standalone grid use, so all three agree without the nightly sweep.
         $today = now()->startOfDay();
+        $workingDays = app(AttendanceService::class)
+            ->workingDays((int) $employee->company_id);
         $virtualAbsences = 0;
         $cursor = $start->copy();
         while ($cursor->lte($end)) {
             $day = (int) $cursor->format('j');
-            if (! isset($grid[$day]) && AttendanceAbsence::isUnrecordedAbsence($cursor, $today, $employee->joining_date, $employee->active, $employee->active_since)) {
+            if (! isset($grid[$day]) && AttendanceAbsence::isUnrecordedAbsence($cursor, $today, $employee->joining_date, $employee->active, $employee->active_since, $workingDays)) {
                 $grid[$day] = [
                     'id' => null, // no real row — clicking it opens "new entry"
                     'status' => 'absent',

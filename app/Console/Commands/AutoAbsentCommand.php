@@ -7,6 +7,7 @@ use App\Models\Attendance;
 use App\Models\Company;
 use App\Models\Employee;
 use App\Models\Scopes\CompanyScope;
+use App\Services\Attendance\AttendanceService;
 use App\Services\Notifications\NotificationDispatcher;
 use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
@@ -38,15 +39,29 @@ class AutoAbsentCommand extends Command
             ? Carbon::parse((string) $this->option('date'))
             : Carbon::now('Europe/Madrid');
         $dateStr = $date->toDateString();
-
-        if ($date->isWeekend()) {
-            $this->info("Weekend ({$dateStr}) — no auto-absences.");
-
-            return self::SUCCESS;
-        }
+        $iso = (int) $date->dayOfWeekIso; // 1=Mon … 7=Sun
 
         // Active companies = not soft-deleted (Company uses SoftDeletes).
         $activeCompanyIds = Company::query()->pluck('id');
+
+        // Per-company working days (default Mon–Fri). A day only produces
+        // absences for companies that count it as a working day.
+        $attendance = app(AttendanceService::class);
+        $workingByCompany = [];
+        $anyWorking = false;
+        foreach ($activeCompanyIds as $cid) {
+            $days = $attendance->workingDays((int) $cid);
+            $workingByCompany[(int) $cid] = $days;
+            if (in_array($iso, $days, true)) {
+                $anyWorking = true;
+            }
+        }
+
+        if (! $anyWorking) {
+            $this->info("{$dateStr} is a non-working day for every company — no auto-absences.");
+
+            return self::SUCCESS;
+        }
 
         $employees = Employee::query()
             ->withoutGlobalScope(CompanyScope::class) // keeps SoftDeletes in force
@@ -71,6 +86,11 @@ class AutoAbsentCommand extends Command
 
         foreach ($employees as $employee) {
             if (isset($already[$employee->id])) {
+                continue;
+            }
+
+            // Skip if this weekday is not a working day for the worker's company.
+            if (! in_array($iso, $workingByCompany[(int) $employee->company_id] ?? [1, 2, 3, 4, 5], true)) {
                 continue;
             }
 

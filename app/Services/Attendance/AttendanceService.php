@@ -288,6 +288,24 @@ class AttendanceService
     }
 
     /**
+     * The company's working days as ISO weekday numbers (1=Mon … 7=Sun).
+     * Default Mon–Fri (1–5), i.e. Sat/Sun off — identical to the legacy
+     * hardcoded weekend. Drives absence tracking (a non-working day is never
+     * an absence). Weekend-premium pay + weekend work offers remain a separate
+     * Sat/Sun concept and are unaffected by this setting.
+     *
+     * @return list<int>
+     */
+    public function workingDays(int $companyId): array
+    {
+        /** @var mixed $raw */
+        $raw = $this->settings->get("attendance.working_days.{$companyId}", [1, 2, 3, 4, 5]);
+        $days = is_array($raw) ? array_values(array_filter(array_map('intval', $raw), fn (int $d): bool => $d >= 1 && $d <= 7)) : [];
+
+        return $days === [] ? [1, 2, 3, 4, 5] : $days;
+    }
+
+    /**
      * Set the day type AUTOMATICALLY from the hours already computed on the row,
      * then re-freeze the rate for that type and re-price. Called on check-out —
      * the worker never picks a type; an admin can still override later via
