@@ -99,6 +99,11 @@ class EmployeeController extends Controller
             ],
             'visibleColumns' => UserColumnSetting::for($request->user(), 'employees'),
             'canSeeWages' => $canSeeWages,
+            // Summary cards (server-computed, company-scoped, excludes soft-deleted).
+            // Unaffected by the search/other filters — they are the company totals
+            // and double as the status filter (click a card → filter by status).
+            // One aggregate query (not three) to stay within the perf-guard budget.
+            'stats' => $this->employeeStats(),
             // The trade-type catalogue for the create/edit form's dropdown.
             'designationOptions' => ProjectDesignationRateController::optionsFor(
                 app(CurrentCompany::class)->id(),
@@ -110,6 +115,30 @@ class EmployeeController extends Controller
                 'export' => Gate::allows('employees.export'),
             ],
         ]);
+    }
+
+    /**
+     * Company-scoped employee totals for the summary cards, in ONE query
+     * (soft-deleted excluded by the model). CASE/COALESCE keep it portable
+     * across MySQL and the SQLite test DB.
+     *
+     * @return array{total: int, active: int, inactive: int}
+     */
+    private function employeeStats(): array
+    {
+        // Aliases must NOT collide with model attributes — aliasing as `active`
+        // would apply the model's boolean cast and turn the SUM into true/1.
+        $row = Employee::query()
+            ->selectRaw('COUNT(*) as total_count')
+            ->selectRaw('COALESCE(SUM(CASE WHEN active = 1 THEN 1 ELSE 0 END), 0) as active_count')
+            ->selectRaw('COALESCE(SUM(CASE WHEN active = 0 THEN 1 ELSE 0 END), 0) as inactive_count')
+            ->first();
+
+        return [
+            'total' => (int) ($row->total_count ?? 0),
+            'active' => (int) ($row->active_count ?? 0),
+            'inactive' => (int) ($row->inactive_count ?? 0),
+        ];
     }
 
     public function show(Request $request, Employee $employee, DocumentStatus $status, WageRateService $wageRates, DocumentPanelPayload $panel): Response

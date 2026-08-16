@@ -30,6 +30,18 @@ it('lists employees for authorized users', function (): void {
         ->assertInertia(fn (Assert $page) => $page->component('Employees/Index')->has('employees.data', 3));
 });
 
+it('ships server-computed summary stats (total/active/inactive)', function (): void {
+    Employee::factory()->count(3)->forCompany($this->company)->create(['active' => true]);
+    Employee::factory()->count(2)->forCompany($this->company)->create(['active' => false]);
+
+    $this->actingAs($this->admin)->get('/employees')
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('stats.total', 5)
+            ->where('stats.active', 3)
+            ->where('stats.inactive', 2));
+});
+
 it('denies employees list without view permission', function (): void {
     $user = User::factory()->forCompany($this->company)->create();
 

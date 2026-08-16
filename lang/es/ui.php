@@ -467,6 +467,7 @@ return [
         'doc_status' => 'Documentación',
         'active' => 'Activo',
         'inactive' => 'Inactivo',
+        'stat_total' => 'Total',
         'team_leader' => 'Jefe de equipo',
         'joining_date' => 'Fecha de alta',
         'leaving_date' => 'Fecha de baja',

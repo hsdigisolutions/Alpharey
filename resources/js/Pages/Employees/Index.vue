@@ -33,8 +33,15 @@ const props = defineProps({
     filterOptions: { type: Object, required: true },
     visibleColumns: { type: Array, default: null },
     canSeeWages: { type: Boolean, required: true },
+    stats: { type: Object, default: () => ({ total: 0, active: 0, inactive: 0 }) },
     can: { type: Object, required: true },
 });
+
+// Summary cards double as the status filter.
+function setStatus(val) {
+    filters.status = val;
+    apply();
+}
 
 /* ---------- filters (server-driven) ---------- */
 const filters = reactive({
@@ -172,6 +179,32 @@ const docDot = { ok: 'ok', warn: 'warn', danger: 'danger', neutral: 'neutral', e
                 <Bilingual k="employees.new" inline />
             </VButton>
         </VPageHeader>
+
+        <!-- Summary cards — server counts; each is a shortcut to the status
+             filter (Total = all · Active · Inactive). The selected one is ringed. -->
+        <div class="grid grid-cols-3 gap-3 pb-3">
+            <button type="button" @click="setStatus('')"
+                class="rounded-lg border bg-surface-raised p-4 text-start shadow-card transition hover:bg-surface-hover"
+                :class="filters.status === '' ? 'border-accent ring-1 ring-accent' : 'border-line'">
+                <Bilingual k="employees.stat_total" class="text-xs font-medium text-ink-soft" inline />
+                <p class="tabular-nums mt-1 text-2xl font-semibold text-ink">{{ stats.total }}</p>
+                <Bilingual k="employees.title" class="text-xs text-muted" inline />
+            </button>
+            <button type="button" @click="setStatus('active')"
+                class="rounded-lg border bg-surface-raised p-4 text-start shadow-card transition hover:bg-surface-hover"
+                :class="filters.status === 'active' ? 'border-status-ok ring-1 ring-status-ok' : 'border-line'">
+                <Bilingual k="employees.active" class="text-xs font-medium text-status-ok" inline />
+                <p class="tabular-nums mt-1 text-2xl font-semibold text-status-ok">{{ stats.active }}</p>
+                <Bilingual k="employees.title" class="text-xs text-muted" inline />
+            </button>
+            <button type="button" @click="setStatus('inactive')"
+                class="rounded-lg border bg-surface-raised p-4 text-start shadow-card transition hover:bg-surface-hover"
+                :class="filters.status === 'inactive' ? 'border-status-warn ring-1 ring-status-warn' : 'border-line'">
+                <Bilingual k="employees.inactive" class="text-xs font-medium text-status-warn" inline />
+                <p class="tabular-nums mt-1 text-2xl font-semibold text-status-warn">{{ stats.inactive }}</p>
+                <Bilingual k="employees.title" class="text-xs text-muted" inline />
+            </button>
+        </div>
 
         <!-- Toolbar: search + utilities on one row, filters on an even grid
              below. Filters are grid-sized (never fixed widths) so the long

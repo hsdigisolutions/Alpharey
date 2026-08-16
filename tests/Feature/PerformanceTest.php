@@ -56,9 +56,9 @@ it('lists employees with a bounded query count regardless of row count', functio
     $count = countQueries(fn () => $this->actingAs($this->admin)->get('/employees')->assertOk());
 
     // A page is 25 rows; with the documents relation eager-loaded this is a
-    // handful of queries (+1 constant for the designation catalogue). Without
-    // eager loading it would be 25+.
-    expect($count)->toBeLessThan(16);
+    // handful of queries (+1 constant for the designation catalogue, +1 for the
+    // single summary-stats aggregate). Without eager loading it would be 25+.
+    expect($count)->toBeLessThan(17);
 });
 
 it('renders the attendance grid with a bounded query count', function (): void {

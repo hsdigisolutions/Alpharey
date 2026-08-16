@@ -465,6 +465,7 @@ return [
         'doc_status' => 'Documents',
         'active' => 'Active',
         'inactive' => 'Inactive',
+        'stat_total' => 'Total',
         'team_leader' => 'Team leader',
         'joining_date' => 'Joining date',
         'leaving_date' => 'Leaving date',
