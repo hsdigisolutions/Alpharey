@@ -24,7 +24,6 @@ const props = defineProps({
     employees: { type: Array, required: true },
     projects: { type: Array, required: true },
     projectAssignments: { type: Object, default: () => ({}) },
-    canSeeWage: { type: Boolean, default: false },
     month: { type: String, required: true },
 });
 const emit = defineEmits(['close']);
@@ -181,10 +180,6 @@ function submit() {
 }
 
 const statuses = ['present', 'absent', 'late', 'early_leave', 'leave'];
-const titleKey = computed(() => {
-    const keys = ['attendance.bulk_step1', 'attendance.bulk_step2', 'attendance.bulk_step3', 'attendance.bulk_step4'];
-    return keys[step.value - 1] ?? 'attendance.bulk_new';
-});
 </script>
 
 <template>

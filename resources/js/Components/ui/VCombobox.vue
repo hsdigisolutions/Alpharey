@@ -11,7 +11,7 @@
  *   isHeader?: boolean,   // non-selectable section divider
  * }>
  */
-import { computed, nextTick, onMounted, onBeforeUnmount, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, onBeforeUnmount, ref } from 'vue';
 
 const props = defineProps({
     modelValue: { type: [String, Number], default: null },

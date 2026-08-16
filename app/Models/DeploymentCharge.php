@@ -5,7 +5,6 @@ namespace App\Models;
 use App\Enums\DeploymentRateType;
 use App\Models\Concerns\Auditable;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
  * Option A cross-charge: what the host company owes the home company for a
@@ -41,13 +40,5 @@ class DeploymentCharge extends Model
             'rate' => 'decimal:2',
             'amount' => 'decimal:2',
         ];
-    }
-
-    /**
-     * @return BelongsTo<EmployeeDeployment, $this>
-     */
-    public function deployment(): BelongsTo
-    {
-        return $this->belongsTo(EmployeeDeployment::class, 'employee_deployment_id');
     }
 }

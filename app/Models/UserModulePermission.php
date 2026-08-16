@@ -56,12 +56,4 @@ class UserModulePermission extends Model
     {
         return $this->belongsTo(Company::class);
     }
-
-    /**
-     * @return BelongsTo<User, $this>
-     */
-    public function grantedBy(): BelongsTo
-    {
-        return $this->belongsTo(User::class, 'granted_by');
-    }
 }

@@ -12,7 +12,6 @@ use App\Models\Project;
 use App\Services\Audit\AuditLogger;
 use App\Services\ProductionTasks\TaskProgressService;
 use Barryvdh\DomPDF\Facade\Pdf;
-use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;

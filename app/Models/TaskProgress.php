@@ -74,12 +74,4 @@ class TaskProgress extends Model
     {
         return $this->belongsTo(Employee::class);
     }
-
-    /**
-     * @return BelongsTo<User, $this>
-     */
-    public function loggedBy(): BelongsTo
-    {
-        return $this->belongsTo(User::class, 'logged_by');
-    }
 }

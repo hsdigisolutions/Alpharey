@@ -5,7 +5,6 @@ namespace App\Models;
 use App\Models\Concerns\Auditable;
 use App\Models\Concerns\BelongsToCompany;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
  * A company payment card, offered as a payment method on expenses (Settings).
@@ -27,13 +26,5 @@ class CompanyCard extends Model
     protected function casts(): array
     {
         return ['active' => 'boolean'];
-    }
-
-    /**
-     * @return BelongsTo<Employee, $this>
-     */
-    public function holder(): BelongsTo
-    {
-        return $this->belongsTo(Employee::class, 'holder_employee_id');
     }
 }

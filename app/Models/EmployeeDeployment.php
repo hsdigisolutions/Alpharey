@@ -11,7 +11,6 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Carbon;
 
 /**
@@ -122,13 +121,5 @@ class EmployeeDeployment extends Model
     public function approver(): BelongsTo
     {
         return $this->belongsTo(User::class, 'approved_by');
-    }
-
-    /**
-     * @return HasMany<DeploymentCharge, $this>
-     */
-    public function charges(): HasMany
-    {
-        return $this->hasMany(DeploymentCharge::class);
     }
 }

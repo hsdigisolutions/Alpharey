@@ -359,22 +359,6 @@ class DocumentTypes
     }
 
     /**
-     * @return list<string>
-     */
-    public static function companyMetadataKeys(string $typeKey): array
-    {
-        return self::metadataKeysFor('company', $typeKey);
-    }
-
-    /**
-     * @return array<string, string>
-     */
-    public static function companyColumnBindings(string $typeKey): array
-    {
-        return self::columnBindingsFor('company', $typeKey);
-    }
-
-    /**
      * Worker document sets (sheet TRABAJADORES).
      *
      * The plain identity/contact columns on that sheet (NOMBRE, APELLIDOS, NIE,

@@ -4,7 +4,7 @@
  * vehicle's insurance/ITV expiries, graded server-side by VehicleCompliance
  * on the same traffic light as documents.
  */
-import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
+import { onBeforeUnmount, onMounted, reactive, ref } from 'vue';
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
 import { ensureCompanySelected } from '@/composables/useCompanyGate';
 import AppLayout from '@/Layouts/AppLayout.vue';
@@ -91,6 +91,14 @@ const filters = reactive({
 });
 function apply(extra = {}) {
     router.get('/vehicles', { ...filters, ...extra }, { preserveScroll: true, preserveState: true });
+}
+
+// Debounce the search box: reload 350ms after the last keystroke, not on every
+// character (selects/pagination stay immediate).
+let searchTimer = null;
+function searchApply() {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => apply(), 350);
 }
 
 // Recent-activity row → the same luxury session detail panel as Show.vue.
@@ -184,7 +192,7 @@ const columns = [
         <!-- ══════════ Fleet list ══════════ -->
         <div class="flex flex-wrap items-end gap-2 pb-3">
             <VSearchInput v-model="filters.search" class="w-full sm:w-72" :placeholder="$t('vehicles.search')"
-                @update:model-value="apply()" />
+                @update:model-value="searchApply()" />
             <VSelect v-model="filters.ownership" class="w-full sm:w-48" @update:model-value="apply()">
                 <option value="">{{ $t('vehicles.ownership') }}</option>
                 <option v-for="o in ownerships" :key="o" :value="o">{{ $t(`vehicles.ownership_${o}`) }}</option>

@@ -6,7 +6,7 @@
  * actions. Previous versions (Step 4) render collapsed at the bottom.
  */
 import { computed, ref, watch } from 'vue';
-import { router, useForm } from '@inertiajs/vue3';
+import { useForm } from '@inertiajs/vue3';
 import { tPair } from '@/translate';
 import AppIcon from '@/Components/AppIcon.vue';
 import DocumentFieldForm from '@/Components/Documents/DocumentFieldForm.vue';

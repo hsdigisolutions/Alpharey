@@ -5,7 +5,7 @@
  * Inertia. All permission + tenancy scoping is server-side — this only
  * renders what the endpoint chose to return.
  */
-import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { router } from '@inertiajs/vue3';
 import AppIcon from '@/Components/AppIcon.vue';
 import { t } from '@/translate';

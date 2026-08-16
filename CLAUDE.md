@@ -4,6 +4,73 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Status: Phase 9 in progress — hardening (2026-08-01)
 
+### QA session — Phase 6 fixes + Phase 7 dead-code + perf (2026-08-16, DONE)
+
+A full QA pass (audit → per-screen code review → security → calculations →
+improvements) then a fix/cleanup pass, all deployed. **1034 Pest tests / 5894
+assertions.** The review confirmed the codebase secure (tenancy 404s, gates,
+append-only audit, private-file downloads) and the money math correct; three
+access-control bugs + four hardening items were the only real defects.
+
+**Phase 6 — fixes (each pinned by `QaPhase6FixesTest`, 6 tests):**
+1. **`canSeeWages` prop-shadow** (`Projects/Detail.vue`) — a local
+   `const canSeeWages = props.can.edit` shadowed the server prop
+   (`payroll.view || employees.edit`), so every wage column/labour-cost/rate
+   gate keyed off `projects.edit` instead. The shadow const was **removed** so
+   the bare `canSeeWages` template uses resolve to the prop (no call-site needed
+   an edit-named alias — edit actions already use `can.edit` directly). No
+   server leak (wage fields were nulled server-side on the correct gate); it was
+   wrong client-side gating.
+2. **Documents `replace`/`updateMetadata` admin guard** — both now call
+   `assertCompanyDocumentAccess($document)` like download/destroy/exempt, so a
+   Manager granted `documents.edit` (for employee paperwork) can no longer
+   mutate the company's OWN compliance documents. Intra-company gap, not
+   cross-tenant.
+3. **Permission Matrix cross-company props leak** — `index()` now rejects a
+   `?user=`/`?copy_from=` target not assigned to the acting admin's company
+   (404) before resolving permissions; `UserModulePermission` has no
+   CompanyScope, so an unguarded foreign id previously shipped that manager's
+   grid in the props.
+4. **Hardening:** (4A) Document Center View button gates on a new `can.view`
+   (was `can.download`); (4B) the panel fetch guards `res.ok` and shows an error
+   toast (`doc_center.panel_error`) on 403 instead of silently failing; (4C)
+   leave-attachment download audits via the description slot, not `$old`; (4D)
+   consumables are refused at `issue()`/`assignToProject()` server-side
+   (`inventory.consumable_not_issuable`), not just hidden in the UI.
+5. **Policy 1 — worker fine amounts:** the worker vehicle payload + UI now drop
+   the euro amount (server + UI), consistent with "workers never see money" —
+   the worker sees the fine's date, authority and paid status only.
+
+**Phase 7 — dead-code cleanup (all confirmed unused before removal):** 2 PHP
+imports (`ProductionTaskController` View, `VehicleService` Employee) · 8 model
+relations (`CompanyCard::holder`, `Employee::designationType`,
+`EmployeeDeployment::charges`, `DeploymentCharge::deployment`,
+`Expense::companyCard`, `TaskProgress::loggedBy`, `User::modulePermissions`,
+`UserModulePermission::grantedBy`) + their orphaned type-imports · 3 PHP methods
+(`WageRateService::snapshotValues` — the Phase-7 removal noted in the wage-rate
+section — plus its now-orphaned private helpers `hourlyFor`/`fallbackHourly`
+which PHPStan flagged as unused once their sole caller was gone;
+`DocumentTypes::companyMetadataKeys`/`companyColumnBindings`, superseded by
+`metadataKeysFor`/`columnBindingsFor`) · 6 Vue imports · 3 Vue dead-script
+(`Employees/Detail showDelete`, `Projects/Detail destroy()`,
+`BulkAttendanceModal titleKey`) · 4 Vue unused props (`Payroll paymentMethods`,
+`Projects/Detail alerts`, `Subcontractors/Detail summary`,
+`BulkAttendanceModal canSeeWage`). `WorkerExpense::autoExpense` was **kept**
+(recently added, may be used soon).
+
+**Perf:** P1 `ProductionReportService::plannedVsActual` — the per-task 7-day
+`sum()` inside the loop is now one grouped query keyed by task id (N+1 → 1); P2
+`ReportService::payroll` eager-loads `employee` (by-employee read was N+1); P3 a
+350ms search debounce on Vehicles/Inventory/CallPanel list pages (selects stay
+immediate); P4 `CallPanel` gained an `onUnmounted` that stops the MediaRecorder,
+closes the AudioContext and releases mic/system streams + timers.
+
+**Open follow-up (flagged, not done):** the worker consent **revoke panel** is
+not linked from the PWA UI — `POST /worker/consent` (`WorkerVehicleController`…
+actually `WorkerController::updateConsent`) + its route still exist but are
+unreachable from the current `Worker/Home.vue`; kept intentionally (may be
+needed again), no code change.
+
 ### Client feature batch — 7 steps (2026-08-15, DONE)
 
 Seven client-requested changes, all deployed. **1015 Pest tests.**

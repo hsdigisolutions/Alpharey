@@ -177,14 +177,6 @@ class Employee extends Model
     }
 
     /**
-     * @return BelongsTo<Designation, $this>
-     */
-    public function designationType(): BelongsTo
-    {
-        return $this->belongsTo(Designation::class, 'designation_id');
-    }
-
-    /**
      * @return HasMany<EmployeeNote, $this>
      */
     public function employeeNotes(): HasMany

@@ -5,7 +5,7 @@
  * Right column: log form (auto-fills today, voice recording, file attachment)
  * + full call history with download and inline rename.
  */
-import { reactive, ref, watch } from 'vue';
+import { onUnmounted, reactive, ref, watch } from 'vue';
 import { Head, router, useForm } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import AppIcon from '@/Components/AppIcon.vue';
@@ -48,6 +48,14 @@ function apply(extra = {}) {
         preserveScroll: true,
         preserveState: true,
     });
+}
+
+// Debounce the search box: reload 350ms after the last keystroke, not on every
+// character (tabs/filters stay immediate).
+let searchTimer = null;
+function searchApply() {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => apply(), 350);
 }
 function select(employee) {
     router.get('/calls', { ...state, employee: employee.id }, { preserveScroll: true, preserveState: true });
@@ -229,6 +237,19 @@ function fmtDuration(s) {
     return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
 }
 
+// If the admin navigates away mid-recording, release the mic / system-audio
+// capture, the AudioContext and every timer — otherwise the browser keeps the
+// microphone live after the page is gone.
+onUnmounted(() => {
+    clearInterval(durationTimer);
+    clearTimeout(searchTimer);
+    if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+        try { mediaRecorder.stop(); } catch { /* already stopped */ }
+    }
+    stopStreams();
+    if (audioUrl.value) URL.revokeObjectURL(audioUrl.value);
+});
+
 /* ── Contact actions ─────────────────────────────────────── */
 
 const numberCopied = ref(false);
@@ -303,7 +324,7 @@ const dotStatus = { red: 'danger', amber: 'warn', green: 'ok' };
         <div class="grid gap-4 lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)]">
             <!-- Left: who to call -->
             <div class="flex flex-col gap-3">
-                <VSearchInput v-model="state.search" :placeholder="$t('calls.search')" @update:model-value="apply()" />
+                <VSearchInput v-model="state.search" :placeholder="$t('calls.search')" @update:model-value="searchApply()" />
                 <VTabs v-model="state.tab" :tabs="tabs" @update:model-value="apply({ tab: $event })" />
 
                 <div class="flex max-h-[32rem] flex-col overflow-y-auto rounded-lg border border-line">

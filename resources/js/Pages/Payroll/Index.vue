@@ -27,7 +27,6 @@ const props = defineProps({
     rows: { type: Array, required: true },
     summary: { type: Object, required: true },
     locked: { type: Boolean, default: false },
-    paymentMethods: { type: Array, required: true },
     can: { type: Object, required: true },
 });
 

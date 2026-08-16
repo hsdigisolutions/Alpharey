@@ -62,6 +62,14 @@ function apply(extra = {}) {
     router.get('/inventory', { ...filters, ...movementFilters, ...extra }, { preserveScroll: true, preserveState: true });
 }
 
+// Debounce the search box: reload 350ms after the last keystroke, not on every
+// character (selects/date filters stay immediate).
+let searchTimer = null;
+function searchApply() {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => apply(), 350);
+}
+
 /* Stock-movements tab filters (item + date range) */
 const movementFilters = reactive({
     mv_item: props.filters.mv_item ?? '',
@@ -309,7 +317,7 @@ const categoryColumns = [
         <template v-if="view === 'items'">
             <div class="flex flex-wrap items-end gap-2 pb-3">
                 <VSearchInput v-model="filters.search" class="w-full sm:w-72" :placeholder="$t('inventory.search')"
-                    @update:model-value="apply()" />
+                    @update:model-value="searchApply()" />
                 <VSelect v-model="filters.equipment_category_id" class="w-full sm:w-52" @update:model-value="apply()">
                     <option value="">{{ $t('inventory.category') }}</option>
                     <option v-for="c in categories" :key="c.id" :value="c.id">{{ c.name }}</option>

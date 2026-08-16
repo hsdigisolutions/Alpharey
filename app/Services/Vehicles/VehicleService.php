@@ -5,7 +5,6 @@ namespace App\Services\Vehicles;
 use App\Enums\ExpenseType;
 use App\Enums\PaymentStatus;
 use App\Enums\VehicleAssignmentType;
-use App\Models\Employee;
 use App\Models\EmployeeVehicleAssignment;
 use App\Models\Expense;
 use App\Models\Scopes\CompanyScope;

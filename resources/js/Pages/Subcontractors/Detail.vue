@@ -27,7 +27,6 @@ const props = defineProps({
     subcontractor: { type: Object, required: true },
     workers: { type: Array, default: () => [] },
     payments: { type: Array, default: () => [] },
-    summary: { type: Object, required: true },
     settlement: { type: Object, required: true },
     expenses: { type: Array, default: () => [] },
     projects: { type: Array, default: () => [] },

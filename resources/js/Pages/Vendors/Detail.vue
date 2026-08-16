@@ -4,7 +4,7 @@
  * de Pago live; Gastos populates in Phase 6.
  */
 import { ref } from 'vue';
-import { Head, router, useForm } from '@inertiajs/vue3';
+import { Head, useForm } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import DocumentsPanel from '@/Components/Documents/DocumentsPanel.vue';
 import FormField from '@/Components/ui/FormField.vue';

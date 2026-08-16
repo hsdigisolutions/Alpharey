@@ -37,7 +37,6 @@ const props = defineProps({
     documentSets: { type: Object, required: true },
     documentFieldDefs: { type: Object, default: () => ({}) },
     remarks: { type: Array, required: true },
-    alerts: { type: Array, required: true },
     availableEmployees: { type: Array, required: true },
     clients: { type: Array, required: true },
     vatOptions: { type: Array, required: true },
@@ -439,11 +438,6 @@ const noteForm = useForm({ type: 'internal', body: '', noted_at: null });
 function addNote() { noteForm.post(`/projects/${props.project.id}/remarks`, { preserveScroll: true, onSuccess: () => noteForm.reset() }); }
 
 const noteStatus = { internal: 'neutral', client_call: 'info', client_email: 'accent', meeting: 'warn', message: 'neutral' };
-
-function destroy() {
-    askDelete(props.project.name,
-        () => router.delete(`/projects/${props.project.id}`));
-}
 </script>
 
 <template>

@@ -34,6 +34,16 @@ class ProductionReportService
             ->orderBy('category')->orderBy('name')
             ->get();
 
+        // One grouped query for every task's 7-day production, keyed by task id
+        // (was a per-task sum() inside the loop — a classic N+1).
+        $recentByTask = TaskProgress::query()
+            ->whereIn('production_task_id', $tasks->pluck('id'))
+            ->whereDate('date', '>=', $windowStart)
+            ->whereDate('date', '<=', $today->toDateString())
+            ->groupBy('production_task_id')
+            ->selectRaw('production_task_id, SUM(quantity) as total')
+            ->pluck('total', 'production_task_id');
+
         $rows = [];
         $sumPlanned = 0.0;
         $sumDone = 0.0;
@@ -44,11 +54,7 @@ class ProductionReportService
             $remaining = max(0.0, round($planned - $done, 2));
 
             // Average daily rate over the last 7 calendar days.
-            $recent = (float) TaskProgress::query()
-                ->where('production_task_id', $task->id)
-                ->whereDate('date', '>=', $windowStart)
-                ->whereDate('date', '<=', $today->toDateString())
-                ->sum('quantity');
+            $recent = (float) ($recentByTask[$task->id] ?? 0);
             $avgDaily = round($recent / 7, 2);
 
             $estFinish = null;

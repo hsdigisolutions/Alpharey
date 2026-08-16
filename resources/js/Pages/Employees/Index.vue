@@ -11,7 +11,6 @@ import { ensureCompanySelected } from '@/composables/useCompanyGate';
 import AppIcon from '@/Components/AppIcon.vue';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import EmployeeFormModal from '@/Components/Employees/EmployeeFormModal.vue';
-import FormField from '@/Components/ui/FormField.vue';
 import VAvatar from '@/Components/ui/VAvatar.vue';
 import VBadge from '@/Components/ui/VBadge.vue';
 import VBulkBar from '@/Components/ui/VBulkBar.vue';

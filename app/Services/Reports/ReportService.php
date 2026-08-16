@@ -146,7 +146,9 @@ class ReportService
     {
         $months = $this->monthsInRange($from, $to);
 
-        $payrolls = Payroll::query()->whereIn('month', $months)->get();
+        // Eager-load employee — by_employee below reads $group->first()->employee
+        // per group, which lazy-loaded one query per employee (N+1).
+        $payrolls = Payroll::query()->with('employee:id,full_name')->whereIn('month', $months)->get();
 
         $nets = $payrolls->map(fn (Payroll $p): float => (float) $p->getAttribute('net_amount'));
 

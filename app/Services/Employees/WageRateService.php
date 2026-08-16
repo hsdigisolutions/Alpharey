@@ -26,7 +26,6 @@ use Illuminate\Validation\ValidationException;
  * invariant — EmployeeService and the "Nueva Tarifa" flow both go through it.
  *
  *  - rateForDate()  → the rate in force on a given day (the spec's lookup).
- *  - snapshotValues() → what AttendanceService freezes onto each worked day.
  *  - createRate()   → open a new dated rate, close the previous one, sync the
  *                     employee's cached wage fields, and recalculate any UNPAID
  *                     attendance the change now reprices (paid days never move).
@@ -55,36 +54,6 @@ class WageRateService
             ->orderByDesc('effective_from')
             ->orderByDesc('id')
             ->first();
-    }
-
-    /**
-     * The three snapshot values AttendanceService freezes onto a worked day:
-     * [wage_type, wage_rate, hourly_rate].
-     *
-     * If a dated rate covers the day, it wins. Otherwise we fall back to the
-     * employee's live wage fields — replicating the pre-history behaviour
-     * exactly, so an employee created before any rate row (e.g. via factory)
-     * still prices correctly.
-     *
-     * @return array{0: WageType|null, 1: float|null, 2: float|null}
-     */
-    public function snapshotValues(Employee $employee, Carbon|string $date): array
-    {
-        $day = $date instanceof Carbon ? $date->toDateString() : $date;
-        $record = $this->rateForDate($employee->id, $day);
-
-        if ($record !== null && $record->wage_type !== null) {
-            $type = $record->wage_type;
-            $rate = (float) $record->rate;
-
-            return [$type, $rate, $this->hourlyFor($type, $rate)];
-        }
-
-        // Fallback: the live employee fields, matching the original snapshot.
-        $liveRate = $employee->getAttribute('wage_rate');
-        $wageRate = $liveRate !== null ? (float) $liveRate : null;
-
-        return [$employee->wage_type, $wageRate, $this->fallbackHourly($employee)];
     }
 
     /**
@@ -407,26 +376,5 @@ class WageRateService
         };
 
         return $value !== null ? (float) $value : null;
-    }
-
-    private function hourlyFor(WageType $type, float $rate): ?float
-    {
-        return match ($type) {
-            WageType::Hourly => $rate,
-            WageType::Daily => round($rate / 8, 2),
-            default => null, // monthly / per-meter: pay is not per attendance hour
-        };
-    }
-
-    private function fallbackHourly(Employee $employee): ?float
-    {
-        $rate = $employee->getAttribute('wage_rate');
-        $daily = $employee->getAttribute('daily_wage');
-
-        return match ($employee->wage_type) {
-            WageType::Hourly => $rate !== null ? (float) $rate : null,
-            WageType::Daily => $daily !== null ? round((float) $daily / 8, 2) : null,
-            default => $rate !== null ? (float) $rate : null,
-        };
     }
 }

@@ -9,7 +9,6 @@ use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
-use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
@@ -103,14 +102,6 @@ class User extends Authenticatable
     {
         return $this->belongsToMany(Company::class, 'user_company')
             ->withPivot('assigned_by', 'created_at');
-    }
-
-    /**
-     * @return HasMany<UserModulePermission, $this>
-     */
-    public function modulePermissions(): HasMany
-    {
-        return $this->hasMany(UserModulePermission::class);
     }
 
     public function isSuperAdmin(): bool

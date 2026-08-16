@@ -125,12 +125,4 @@ class Expense extends Model
     {
         return $this->belongsTo(ExpenseCategory::class, 'expense_category_id');
     }
-
-    /**
-     * @return BelongsTo<CompanyCard, $this>
-     */
-    public function companyCard(): BelongsTo
-    {
-        return $this->belongsTo(CompanyCard::class, 'company_card_id');
-    }
 }

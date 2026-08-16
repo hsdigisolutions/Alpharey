@@ -57,7 +57,6 @@ function resetConsent() {
 
 const tab = ref('info');
 const showEdit = ref(false);
-const showDelete = ref(false);
 
 const confirm = ref({ open: false, message: '', fn: null });
 function askDelete(message, fn) { confirm.value = { open: true, message, fn }; }
