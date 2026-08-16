@@ -29,7 +29,13 @@
 <body>
 @forelse ($payrolls as $payroll)
     <div class="page">
+        @if (!empty($logo))
+            <img src="{{ $logo }}" alt="" style="max-height:44px; max-width:160px; margin-bottom:5px;"><br>
+        @endif
         <h1>{{ $payroll->company?->name }}</h1>
+        @if ($payroll->company?->cif || $payroll->company?->address)
+            <div class="muted" style="font-size:10px;">{{ $payroll->company?->address }}@if ($payroll->company?->address && $payroll->company?->cif) &middot; @endif @if ($payroll->company?->cif) CIF: {{ $payroll->company?->cif }} @endif</div>
+        @endif
         <div class="muted">NÃ³mina interna / Internal payslip â€” <strong>{{ $payroll->month }}</strong></div>
 
         <table>

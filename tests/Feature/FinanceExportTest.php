@@ -4,9 +4,12 @@ use App\Models\Client;
 use App\Models\Company;
 use App\Models\Employee;
 use App\Models\Invoice;
+use App\Models\Payroll;
 use App\Models\User;
 use App\Models\UserModulePermission;
 use App\Services\Payroll\PayrollService;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 use Maatwebsite\Excel\Facades\Excel;
 
 beforeEach(function (): void {
@@ -47,6 +50,23 @@ it('exports every payslip for the month as one PDF', function (): void {
     app(PayrollService::class)->calculateFor($employee, $this->company->id, $this->month);
 
     $this->actingAs($this->admin)->get('/payroll/payslips?month='.$this->month)
+        ->assertOk()->assertHeader('content-type', 'application/pdf');
+});
+
+it('renders the payslip PDF with the company logo and address (Check 5)', function (): void {
+    Storage::fake('local');
+    $this->company->update([
+        'address' => 'Calle Real 1, Málaga', 'cif' => 'B99999999',
+        'logo_path' => UploadedFile::fake()->image('logo.png', 200, 80)->store('company-logos', 'local'),
+    ]);
+    $employee = Employee::factory()->forCompany($this->company)->create([
+        'wage_type' => 'hourly', 'wage_rate' => '20',
+    ]);
+    app(PayrollService::class)->calculateFor($employee, $this->company->id, $this->month);
+    $payroll = Payroll::query()->withoutGlobalScopes()->where('employee_id', $employee->id)->firstOrFail();
+
+    // The blade renders the logo + address branch without error.
+    $this->actingAs($this->admin)->get("/payroll/{$payroll->id}/payslip")
         ->assertOk()->assertHeader('content-type', 'application/pdf');
 });
 

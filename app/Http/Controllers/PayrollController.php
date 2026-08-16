@@ -13,6 +13,7 @@ use App\Services\Audit\AuditLogger;
 use App\Services\Notifications\NotificationDispatcher;
 use App\Services\Payroll\PayrollService;
 use App\Services\Payroll\PayrollWorkflow;
+use App\Support\CompanyBranding;
 use App\Support\PeriodLock;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\RedirectResponse;
@@ -231,7 +232,7 @@ class PayrollController extends Controller
         $rows = Payroll::query()
             ->where('company_id', $companyId)
             ->where('month', $month)
-            ->with(['employee:id,full_name,designation', 'company:id,name'])
+            ->with(['employee:id,full_name,designation', 'company:id,name,address,cif,logo_path'])
             ->get()
             ->each(fn (Payroll $p) => $p->healUndecryptable())
             ->sortBy(fn (Payroll $p) => $p->employee?->full_name)
@@ -239,7 +240,12 @@ class PayrollController extends Controller
 
         $audit->log('exported', new Payroll, null, null, 'Payslips PDF '.$month, 'payroll');
 
-        $pdf = Pdf::loadView('exports.payslips-bulk-pdf', ['payrolls' => $rows, 'month' => $month]);
+        // All rows belong to the same (acting) company — one logo for the run.
+        $pdf = Pdf::loadView('exports.payslips-bulk-pdf', [
+            'payrolls' => $rows,
+            'month' => $month,
+            'logo' => CompanyBranding::logoDataUri($rows->first()?->company),
+        ]);
 
         return $pdf->download('nominas-'.$month.'.pdf');
     }
@@ -258,7 +264,10 @@ class PayrollController extends Controller
         $payroll->healUndecryptable();
         $audit->log('exported', $payroll, null, null, 'Payslip PDF', 'payroll');
 
-        $pdf = Pdf::loadView('exports.payslip-pdf', ['payroll' => $payroll]);
+        $pdf = Pdf::loadView('exports.payslip-pdf', [
+            'payroll' => $payroll,
+            'logo' => CompanyBranding::logoDataUri($payroll->company),
+        ]);
 
         return $pdf->download('nomina-'.$payroll->month.'-'.$payroll->employee_id.'.pdf');
     }
