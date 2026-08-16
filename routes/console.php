@@ -22,3 +22,7 @@ Schedule::command('notifications:scan')->dailyAt('08:00')->timezone('Europe/Madr
 
 // Database-driver queue: processed via the scheduler on cPanel (no daemon)
 Schedule::command('queue:work --stop-when-empty --tries=3')->everyMinute()->withoutOverlapping();
+
+// Scheduler heartbeat: stamps a file every minute so we can confirm the server
+// cron is actually invoking schedule:run (its own output goes to /dev/null).
+Schedule::command('scheduler:heartbeat')->everyMinute();
