@@ -50,6 +50,40 @@ it('counts present and absent days and sums hours', function (): void {
     $this->travelBack();
 });
 
+it('never marks an inactive worker absent', function (): void {
+    // A worker no longer with us must not accrue absences on their calendar,
+    // even for past weekdays after their joining date.
+    $this->travelTo('2026-05-15 10:00'); // today = Fri 15 May
+    $this->employee->update(['joining_date' => '2026-05-01', 'active' => false]);
+
+    $data = $this->service->forMonth($this->employee, '2026-05');
+
+    expect($data['absent'])->toBe(0)
+        ->and(collect($data['calendar'])->pluck('status'))->not->toContain('absent');
+
+    $this->travelBack();
+});
+
+it('counts a reactivated worker absences only from active_since', function (): void {
+    // Reactivated on Wed 13 May: the earlier weekdays (inactive spell) are NOT
+    // back-filled with absences; only 13 + 14 (past weekdays, no record) count.
+    $this->travelTo('2026-05-15 10:00'); // today = Fri 15 May
+    // active_since is server-set (not fillable) — set it directly, as the model
+    // does on a real reactivation. active stays true, so the hook won't overwrite.
+    $this->employee->joining_date = '2026-05-01';
+    $this->employee->active = true;
+    $this->employee->active_since = '2026-05-13';
+    $this->employee->save();
+
+    $data = $this->service->forMonth($this->employee->fresh(), '2026-05');
+
+    // Wed 13 + Thu 14 are the only past weekdays on/after active_since with no
+    // record (Fri 15 is today → not an absence).
+    expect($data['absent'])->toBe(2);
+
+    $this->travelBack();
+});
+
 it('marks each calendar day with the right status', function (): void {
     $this->travelTo('2026-05-04 10:00'); // today = Mon 4 May
     $this->employee->update(['joining_date' => '2026-05-04']);

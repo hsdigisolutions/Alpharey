@@ -25,6 +25,7 @@ use Illuminate\Support\Carbon;
  * @property string|null $nif
  * @property string|null $nif_hash
  * @property bool $active
+ * @property Carbon|null $active_since
  * @property bool $can_use_vehicles
  * @property WageType|null $wage_type
  * @property PaymentMethod|null $payment_method
@@ -88,6 +89,7 @@ class Employee extends Model
             'payment_method' => PaymentMethod::class,
             'joining_date' => 'date:Y-m-d',
             'leaving_date' => 'date:Y-m-d',
+            'active_since' => 'date:Y-m-d',
             'privacy_notice_ack_at' => 'datetime',
             'active' => 'boolean',
             'is_contracted' => 'boolean',
@@ -105,6 +107,17 @@ class Employee extends Model
         static::saving(function (Employee $employee): void {
             if ($employee->isDirty('nif')) {
                 $employee->nif_hash = self::hashNif($employee->nif);
+            }
+        });
+
+        // Stamp the (re)activation date on the inactive → active transition.
+        // A reactivated worker's absences count from THIS date, not their
+        // original joining date (an inactive spell must not fill with red).
+        // Server-set only — active_since is never fillable. Skipped on the
+        // first create (null → an active hire keeps counting from joining).
+        static::updating(function (Employee $employee): void {
+            if ($employee->isDirty('active') && $employee->active === true) {
+                $employee->active_since = now();
             }
         });
     }

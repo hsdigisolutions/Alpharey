@@ -67,7 +67,7 @@ class WorkerDashboardService
         $cursor = $start->copy();
         while ($cursor->lte($end)) {
             $row = $byDate->get($cursor->toDateString());
-            $status = $this->cellStatus($row, $cursor, $today, $employee->joining_date);
+            $status = $this->cellStatus($row, $cursor, $today, $employee);
 
             if ($status === 'present') {
                 $present++;
@@ -121,7 +121,7 @@ class WorkerDashboardService
      *  - leave   : an approved leave day (blue, shown distinct from absent)
      *  - none    : grey — a weekend, a future date, or a day with no record yet
      */
-    private function cellStatus(?Attendance $row, Carbon $day, Carbon $today, ?Carbon $joiningDate): string
+    private function cellStatus(?Attendance $row, Carbon $day, Carbon $today, Employee $employee): string
     {
         if ($row !== null) {
             if (in_array($row->status->value, self::WORKED, true)) {
@@ -133,7 +133,10 @@ class WorkerDashboardService
 
         // No record: an unrecorded past weekday the worker was employed for is a
         // live absence (shared rule → the admin grid + employee tab agree);
-        // everything else (weekend, today, future, pre-joining) is grey.
-        return AttendanceAbsence::isUnrecordedAbsence($day, $today, $joiningDate) ? 'absent' : 'none';
+        // everything else (weekend, today, future, pre-joining, or an inactive
+        // worker) is grey. A reactivated worker counts from active_since.
+        return AttendanceAbsence::isUnrecordedAbsence(
+            $day, $today, $employee->joining_date, $employee->active, $employee->active_since,
+        ) ? 'absent' : 'none';
     }
 }

@@ -14,10 +14,22 @@
  * exact text, IP, user-agent, timestamp, version and language as evidence and
  * refuses a punch without an active consent — this screen is not the only gate.
  */
-import { ref } from 'vue';
-import { useForm } from '@inertiajs/vue3';
+import { computed, ref } from 'vue';
+import { router, useForm, usePage } from '@inertiajs/vue3';
 
 const scrolledToBottom = ref(false);
+
+// This screen covers the whole viewport before the layout's language switch is
+// reachable, so it carries its own ES · EN · UR toggle — a worker who doesn't
+// read Spanish must be able to read the notice before consenting. Switching
+// re-renders the $t notice (UR falls back to English for the legal block).
+const page = usePage();
+const primary = computed(() => page.props.locale?.primary ?? 'es');
+function setLang(lang) {
+    if (lang !== primary.value) {
+        router.post('/locale', { locale: lang }, { preserveScroll: true });
+    }
+}
 
 const form = useForm({
     consent_attendance: false, // mandatory acknowledgement
@@ -43,6 +55,13 @@ function accept() {
         <!-- Scrollable notice body -->
         <div class="flex-1 overflow-y-auto px-5 py-6" @scroll="onScroll">
             <div class="mx-auto w-full max-w-md">
+                <!-- Language switch (this screen precedes the layout's toggle) -->
+                <div class="mb-4 flex justify-end gap-1">
+                    <button v-for="l in ['es', 'en', 'ur']" :key="l" type="button"
+                        class="rounded-md px-2.5 py-1 text-xs font-semibold uppercase transition-colors"
+                        :class="primary === l ? 'bg-accent text-on-accent' : 'bg-surface-sunken text-ink-soft hover:text-ink'"
+                        @click="setLang(l)">{{ l }}</button>
+                </div>
                 <div class="mb-5 flex items-center gap-3">
                     <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-accent-soft text-accent">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"

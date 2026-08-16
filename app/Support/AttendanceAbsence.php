@@ -5,32 +5,49 @@ namespace App\Support;
 use Illuminate\Support\Carbon;
 
 /**
- * The single rule for "a day with NO attendance row should count as an absence".
+ * The single authority for a COMPUTED absence — a past weekday the worker was
+ * employed for but has no attendance row on yet. Every calendar surface (the
+ * worker PWA, the admin grid, the employee-detail Asistencia tab) calls this so
+ * they agree by construction, without waiting for the nightly auto-absent sweep.
  *
- * A PAST weekday (before today) the worker was already employed for — on/after
- * their joining date, and not a Saturday/Sunday — with no record at all is an
- * absence, shown live so every calendar (worker PWA, admin grid, employee tab)
- * agrees immediately, without waiting for the nightly attendance:auto-absent
- * sweep that later writes the real row. Weekends, today (still in progress),
- * future days, and days before the worker joined are never absences.
- *
- * The caller must have already established there is NO row for the day.
+ * A day is a computed absence only when ALL hold:
+ *  - the employee is currently active (an inactive worker is not with us, so a
+ *    gap is not an absence);
+ *  - it is a weekday (Mon–Fri);
+ *  - it is strictly in the past (today and future are never absences);
+ *  - it is on/after the later of the joining date and the (re)activation date.
  */
 class AttendanceAbsence
 {
-    public static function isUnrecordedAbsence(Carbon $date, Carbon $today, ?Carbon $joiningDate): bool
-    {
+    public static function isUnrecordedAbsence(
+        Carbon $date,
+        Carbon $today,
+        ?Carbon $joiningDate,
+        bool $active = true,
+        ?Carbon $activeSince = null,
+    ): bool {
+        // An inactive employee ("not working with us now") accrues no absences.
+        if (! $active) {
+            return false;
+        }
+
         if ($date->isWeekend()) {
             return false;
         }
 
-        // Today (not over yet) and any future date are never absences.
         if ($date->gte($today)) {
             return false;
         }
 
-        // A day before the worker joined is not their absence.
-        if ($joiningDate !== null && $date->lt($joiningDate->copy()->startOfDay())) {
+        // Count from the LATER of joining and reactivation: a worker who was
+        // deactivated and later brought back starts a fresh count from the day
+        // they became active again — the inactive spell is never back-filled.
+        $start = $joiningDate;
+        if ($activeSince !== null && ($start === null || $activeSince->gt($start))) {
+            $start = $activeSince;
+        }
+
+        if ($start !== null && $date->lt($start->copy()->startOfDay())) {
             return false;
         }
 

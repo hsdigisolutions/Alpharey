@@ -53,6 +53,10 @@ class AutoAbsentCommand extends Command
             ->where('active', true)
             ->whereIn('company_id', $activeCompanyIds)
             ->where(fn ($q) => $q->whereNull('joining_date')->orWhere('joining_date', '<=', $dateStr))
+            // A reactivated worker accrues absences only from active_since — a
+            // backdated sweep never fills the inactive spell (same rule as the
+            // computed calendars in AttendanceAbsence).
+            ->where(fn ($q) => $q->whereNull('active_since')->orWhere('active_since', '<=', $dateStr))
             ->get(['id', 'company_id']);
 
         $already = Attendance::query()->withoutGlobalScopes()

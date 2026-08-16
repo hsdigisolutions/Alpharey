@@ -198,6 +198,22 @@ it('requires full_name', function (): void {
         ->assertSessionHasErrors('full_name');
 });
 
+it('stamps active_since when an employee is reactivated', function (): void {
+    // A new hire gets no active_since (they count from joining_date).
+    $employee = Employee::factory()->forCompany($this->company)->create(['active' => true]);
+    expect($employee->active_since)->toBeNull();
+
+    // Deactivating does not stamp it either.
+    $employee->update(['active' => false]);
+    expect($employee->fresh()->active_since)->toBeNull();
+
+    // Reactivating stamps today — a reactivated worker counts absences from now.
+    $this->travelTo('2026-05-20 09:00');
+    $employee->update(['active' => true]);
+    expect($employee->fresh()->active_since?->toDateString())->toBe('2026-05-20');
+    $this->travelBack();
+});
+
 it('bulk-deactivates selected employees', function (): void {
     $employees = Employee::factory()->count(2)->forCompany($this->company)->create(['active' => true]);
 
