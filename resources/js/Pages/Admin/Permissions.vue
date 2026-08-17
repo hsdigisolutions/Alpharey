@@ -150,7 +150,15 @@ const editingUser = ref(null);
 
 const userForm = useForm({
     name: '', email: '', password: '', role: 'manager', locale: 'es', active: true,
+    // Only used when a Super Admin demotes another SA to a company role — the
+    // demoted account must land in a company.
+    company_id: '',
 });
+
+// Demoting an SA (currently super_admin → a company role) needs a company.
+const demotingSuperAdmin = computed(
+    () => isSuperAdmin.value && editingUser.value?.role === 'super_admin' && userForm.role !== 'super_admin',
+);
 
 function openCreate() {
     editingUser.value = null;
@@ -167,6 +175,7 @@ function openEdit(user) {
     userForm.role = user.role;
     userForm.locale = user.locale ?? 'es';
     userForm.active = user.active;
+    userForm.company_id = '';
     userForm.clearErrors();
     showUserModal.value = true;
 }
@@ -396,18 +405,16 @@ function submitUser() {
                 </FormField>
                 <div class="grid gap-4 sm:grid-cols-2">
                     <FormField k="permissions.role" :error="userForm.errors.role" required>
-                        <VSelect v-model="userForm.role" :disabled="editingUser?.role === 'super_admin'">
-                            <!-- An SA's role is LOCKED server-side (no demotion path) — the
-                                 select renders their role read-only so email/password edits
-                                 still submit a valid value. -->
-                            <template v-if="editingUser?.role === 'super_admin'">
+                        <!-- A Super Admin may set ANY role (incl. promoting/demoting
+                             another SA); an admin only ever sees Manager. -->
+                        <VSelect v-model="userForm.role" :disabled="!isSuperAdmin && editingUser?.role === 'super_admin'">
+                            <template v-if="isSuperAdmin">
                                 <option value="super_admin">{{ $tPair('permissions.role_super_admin') }}</option>
+                                <option value="admin">{{ $tPair('permissions.role_admin') }}</option>
+                                <option value="manager">{{ $tPair('permissions.role_manager') }}</option>
                             </template>
                             <template v-else>
                                 <option value="manager">{{ $tPair('permissions.role_manager') }}</option>
-                                <option v-if="$page.props.auth.user?.role === 'super_admin'" value="admin">
-                                    {{ $tPair('permissions.role_admin') }}
-                                </option>
                             </template>
                         </VSelect>
                     </FormField>
@@ -418,6 +425,14 @@ function submitUser() {
                         </VSelect>
                     </FormField>
                 </div>
+                <!-- Demoting a Super Admin to a company role: they must land in a
+                     company (a company user cannot be company-less). -->
+                <FormField v-if="demotingSuperAdmin" k="permissions.assign_company" :error="userForm.errors.company_id" required>
+                    <VSelect v-model="userForm.company_id">
+                        <option value="">{{ $t('permissions.assign_company') }}</option>
+                        <option v-for="c in availableCompanies" :key="c.id" :value="c.id">{{ c.name }}</option>
+                    </VSelect>
+                </FormField>
                 <FormField k="auth.password" :error="userForm.errors.password" :required="!editingUser">
                     <VInput v-model="userForm.password" type="password" autocomplete="new-password"
                         :invalid="Boolean(userForm.errors.password)" />

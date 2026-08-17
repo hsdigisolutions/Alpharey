@@ -35,19 +35,85 @@ it('creates a user inside the admin company, ignoring any company_id input', fun
     ]);
 });
 
-it('locks a super admin role — even another super admin cannot demote them', function (): void {
+it('requires a company when a super admin demotes another super admin', function (): void {
+    $actor = User::factory()->superAdmin()->create();
+    $target = User::factory()->superAdmin()->create();
+
+    // Demoting an SA to a company role without a company would strand them.
+    $this->actingAs($actor)->put("/admin/users/{$target->id}", [
+        'name' => $target->name,
+        'email' => $target->email,
+        'role' => 'manager',
+        'locale' => 'es',
+        'active' => true,
+    ])->assertSessionHasErrors('company_id');
+
+    expect($target->fresh()->role)->toBe(UserRole::SuperAdmin);
+});
+
+it('lets a super admin demote another super admin into a company', function (): void {
     $actor = User::factory()->superAdmin()->create();
     $target = User::factory()->superAdmin()->create();
 
     $this->actingAs($actor)->put("/admin/users/{$target->id}", [
         'name' => $target->name,
         'email' => $target->email,
-        'role' => 'manager', // demotion attempt
+        'role' => 'manager',
         'locale' => 'es',
         'active' => true,
-    ])->assertSessionHasErrors('role');
+        'company_id' => $this->companyA->id,
+    ])->assertRedirect()->assertSessionHasNoErrors();
 
-    expect($target->fresh()->role)->toBe(UserRole::SuperAdmin);
+    $fresh = $target->fresh();
+    expect($fresh->role)->toBe(UserRole::Manager)
+        ->and($fresh->company_id)->toBe($this->companyA->id);
+    $this->assertDatabaseHas('user_company', [
+        'user_id' => $target->id, 'company_id' => $this->companyA->id,
+    ]);
+});
+
+it('lets a super admin promote a manager to super admin and drops their company', function (): void {
+    $actor = User::factory()->superAdmin()->create();
+    $target = User::factory()->forCompany($this->companyA)->create(); // manager
+
+    $this->actingAs($actor)->put("/admin/users/{$target->id}", [
+        'name' => $target->name,
+        'email' => $target->email,
+        'role' => 'super_admin',
+        'locale' => 'es',
+        'active' => true,
+    ])->assertRedirect()->assertSessionHasNoErrors();
+
+    $fresh = $target->fresh();
+    expect($fresh->role)->toBe(UserRole::SuperAdmin)
+        ->and($fresh->company_id)->toBeNull();
+    $this->assertDatabaseMissing('user_company', ['user_id' => $target->id]);
+});
+
+it('lets a super admin delete another super admin', function (): void {
+    $actor = User::factory()->superAdmin()->create();
+    $target = User::factory()->superAdmin()->create();
+
+    $this->actingAs($actor)->delete("/admin/users/{$target->id}")->assertRedirect();
+
+    expect(User::query()->find($target->id))->toBeNull();
+});
+
+it('never deletes the last super admin', function (): void {
+    // Only one SA exists → they cannot be removed (and cannot delete themselves).
+    $only = User::factory()->superAdmin()->create();
+
+    $this->actingAs($only)->delete("/admin/users/{$only->id}")->assertStatus(422);
+
+    expect(User::query()->find($only->id))->not->toBeNull();
+});
+
+it('does not let a company admin delete a super admin', function (): void {
+    $sa = User::factory()->superAdmin()->create();
+
+    $this->actingAs($this->admin)->delete("/admin/users/{$sa->id}")->assertForbidden();
+
+    expect(User::query()->find($sa->id))->not->toBeNull();
 });
 
 it('still lets a super admin edit another super admin keeping the role', function (): void {
@@ -238,15 +304,6 @@ it('lets an admin delete a manager in their company', function (): void {
     $this->actingAs($this->admin)->delete("/admin/users/{$target->id}")->assertRedirect();
 
     $this->assertDatabaseMissing('users', ['id' => $target->id]);
-});
-
-it('prevents deleting a super admin', function (): void {
-    $sa = User::factory()->superAdmin()->create();
-    $otherSa = User::factory()->superAdmin()->create();
-
-    $this->actingAs($sa)->delete("/admin/users/{$otherSa->id}")->assertForbidden();
-
-    $this->assertDatabaseHas('users', ['id' => $otherSa->id]);
 });
 
 it('prevents deleting yourself', function (): void {

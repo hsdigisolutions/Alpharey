@@ -76,13 +76,32 @@ class UserController extends Controller
             abort_if($user->role !== UserRole::Manager, 403);
         }
 
+        $newRole = (string) $request->validated('role');
+
+        // Never demote the LAST Super Admin — the group must always keep one.
+        if ($user->isSuperAdmin() && $newRole !== UserRole::SuperAdmin->value) {
+            abort_if(
+                User::query()->where('role', UserRole::SuperAdmin)->count() <= 1,
+                422,
+                'At least one Super Admin must remain.',
+            );
+        }
+
         $data = [
             'name' => $request->validated('name'),
             'email' => $request->validated('email'),
-            'role' => $request->validated('role'),
+            'role' => $newRole,
             'locale' => $request->validated('locale'),
             'active' => (bool) $request->validated('active'),
         ];
+
+        // Role transition side-effects (a Super Admin has NO company; a company
+        // role MUST have one). Keep users.company_id + the pivot in step.
+        if ($newRole === UserRole::SuperAdmin->value) {
+            $data['company_id'] = null; // promoted to SA → drops out of every company
+        } elseif ($user->isSuperAdmin() && $request->filled('company_id')) {
+            $data['company_id'] = (int) $request->validated('company_id'); // demoted → lands in one
+        }
 
         $password = $request->validated('password');
 
@@ -90,7 +109,18 @@ class UserController extends Controller
             $data['password'] = $password;
         }
 
-        $user->update($data);
+        DB::transaction(function () use ($user, $data, $newRole, $actor): void {
+            $user->update($data);
+
+            if ($newRole === UserRole::SuperAdmin->value) {
+                DB::table('user_company')->where('user_id', $user->id)->delete();
+            } elseif (array_key_exists('company_id', $data) && $data['company_id'] !== null) {
+                DB::table('user_company')->updateOrInsert(
+                    ['user_id' => $user->id, 'company_id' => $data['company_id']],
+                    ['assigned_by' => $actor?->id, 'created_at' => now()],
+                );
+            }
+        });
 
         return back()->with('success', __('ui.permissions.user_saved'));
     }
@@ -101,12 +131,20 @@ class UserController extends Controller
 
         // Cannot delete yourself
         abort_if($actor !== null && $actor->id === $user->id, 422, 'Cannot delete yourself.');
-        // Super Admin accounts are never hard-deleted — deactivate instead
-        abort_if($user->isSuperAdmin(), 403, 'Super Admin accounts cannot be deleted. Deactivate them instead.');
         // Workers are managed via their employee record, not here
         abort_if($user->isWorker(), 403, 'Worker accounts are managed via the employee record.');
 
-        if ($actor === null || ! $actor->isSuperAdmin()) {
+        if ($user->isSuperAdmin()) {
+            // Only another Super Admin may delete a Super Admin, and never the
+            // last one — the group must always keep at least one.
+            abort_unless($actor !== null && $actor->isSuperAdmin(), 403);
+            abort_if(
+                User::query()->where('role', UserRole::SuperAdmin)->count() <= 1,
+                422,
+                'At least one Super Admin must remain.',
+            );
+        } elseif ($actor === null || ! $actor->isSuperAdmin()) {
+            // A company admin may only delete Managers of their own company.
             $companyId = $this->contextCompanyId();
             abort_unless($user->isAssignedToCompany($companyId), 404);
             abort_if($user->role !== UserRole::Manager, 403);
