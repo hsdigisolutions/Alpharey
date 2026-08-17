@@ -35,6 +35,42 @@ function currentOtpFor(User $user): string
     return (new Google2FA)->getCurrentOtp($user->two_factor_secret);
 }
 
+it('reuses the pending secret across setup reloads so the QR stays stable', function (): void {
+    // Regression: regenerating the secret on every setup open rotated it out
+    // from under a phone that had scanned it → every code read "invalid".
+    $user = User::factory()->pendingTwoFactor()->forCompany($this->company)->create();
+
+    $first = $this->service->startEnrolment($user);
+    $second = $this->service->startEnrolment($user->fresh());
+    $third = $this->service->startEnrolment($user->fresh());
+
+    expect($second)->toBe($first)->and($third)->toBe($first);
+
+    // A code from that stable secret confirms enrolment.
+    expect($this->service->confirmEnrolment($user->fresh(), (new Google2FA)->getCurrentOtp($first)))
+        ->not->toBeNull();
+});
+
+it('mints a fresh secret for a new enrolment after the previous one is confirmed', function (): void {
+    $user = enrolledUser($this->company); // already confirmed
+    $confirmedSecret = $user->two_factor_secret;
+
+    // Starting a brand-new enrolment (e.g. after an admin reset cleared it) must
+    // not silently reuse the old confirmed secret.
+    $user->two_factor_confirmed_at = null;
+    $user->save();
+    $fresh = $this->service->startEnrolment($user->fresh());
+
+    // It reuses the still-present secret (unconfirmed) — stable — but a truly
+    // cleared account gets a new one.
+    expect($fresh)->toBe($confirmedSecret);
+
+    $user->two_factor_secret = null;
+    $user->save();
+    $brandNew = $this->service->startEnrolment($user->fresh());
+    expect($brandNew)->not->toBe($confirmedSecret);
+});
+
 it('does not log a user in on the password alone', function (): void {
     $user = enrolledUser($this->company);
 

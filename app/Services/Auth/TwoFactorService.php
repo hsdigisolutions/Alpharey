@@ -118,6 +118,23 @@ class TwoFactorService
      */
     public function startEnrolment(User $user): string
     {
+        // Reuse an existing UNCONFIRMED secret so a page refresh — or the
+        // re-render after a failed confirm — shows the SAME QR. Regenerating on
+        // every open rotated the secret out from under a phone that had already
+        // scanned it, so every code the app produced read "invalid". An
+        // unconfirmed secret grants nothing (isEnrolled requires a confirmed_at),
+        // so keeping it until confirmation is safe.
+        if ($user->two_factor_confirmed_at === null) {
+            try {
+                $existing = $user->two_factor_secret;
+                if (is_string($existing) && $existing !== '') {
+                    return $existing;
+                }
+            } catch (\Throwable) {
+                // An undecryptable/legacy value → fall through and mint a fresh one.
+            }
+        }
+
         $secret = $this->generateSecret();
 
         $user->two_factor_secret = $secret;
