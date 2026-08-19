@@ -16,6 +16,7 @@ import WeekendOfferModal from '@/Components/Attendance/WeekendOfferModal.vue';
 import VBadge from '@/Components/ui/VBadge.vue';
 import VButton from '@/Components/ui/VButton.vue';
 import VPageHeader from '@/Components/ui/VPageHeader.vue';
+import VSelect from '@/Components/ui/VSelect.vue';
 
 const props = defineProps({
     month: { type: String, required: true },
@@ -25,12 +26,26 @@ const props = defineProps({
     summary: { type: Object, required: true },
     projects: { type: Array, required: true },
     projectAssignments: { type: Object, default: () => ({}) },
+    projectPanel: { type: Object, default: null },
     canSeeWage: { type: Boolean, default: false },
     editing: { type: Object, default: null },
     can: { type: Object, required: true },
 });
 
 const page = usePage();
+
+// --- Feature 1: project roster panel ---
+const panelProject = ref(props.projectPanel?.project?.id ?? '');
+const panelDate = ref(props.projectPanel?.date ?? new Date().toISOString().slice(0, 10));
+function reloadPanel() {
+    router.get('/attendance',
+        { month: props.month, project: panelProject.value || undefined, panel_date: panelDate.value },
+        { only: ['projectPanel'], preserveScroll: true, preserveState: true });
+}
+const panelStatusStyle = {
+    present: 'text-status-ok', working: 'text-status-info', late: 'text-status-warn',
+    early_leave: 'text-status-warn', absent: 'text-status-danger', leave: 'text-status-info',
+};
 
 const days = computed(() => Array.from({ length: props.daysInMonth }, (_, i) => i + 1));
 
@@ -199,6 +214,17 @@ const monthLabel = computed(() => {
             <button type="button" class="rounded-md border border-line p-1.5 hover:bg-surface-hover" @click="changeMonth(1)">
                 <AppIcon name="chevron-right" class="h-4 w-4" />
             </button>
+
+            <!-- Feature 1 — project roster filter -->
+            <div class="ms-auto flex flex-wrap items-center gap-2">
+                <VSelect v-model="panelProject" class="w-56" @update:model-value="reloadPanel">
+                    <option value="">{{ $t('attendance.roster_pick_project') }}</option>
+                    <option v-for="p in projects" :key="p.id" :value="p.id">{{ p.name }}</option>
+                </VSelect>
+                <input v-if="panelProject" v-model="panelDate" type="date"
+                    class="rounded-md border border-line-strong bg-surface-sunken px-2 py-1.5 text-sm text-ink"
+                    @change="reloadPanel" />
+            </div>
         </div>
 
         <!-- Calendar grid -->
@@ -266,6 +292,64 @@ const monthLabel = computed(() => {
                     </tr>
                 </tbody>
             </table>
+        </div>
+
+        <!-- Feature 1 — project roster panel for the picked project + date -->
+        <div v-if="projectPanel" class="mt-6 rounded-lg border border-line bg-surface-raised p-4 shadow-card">
+            <div class="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+                <div>
+                    <h2 class="text-[15px] font-semibold text-ink">{{ projectPanel.project.name }}</h2>
+                    <p class="text-xs text-ink-soft">{{ projectPanel.date }}</p>
+                </div>
+                <p class="text-sm font-semibold">
+                    <span class="text-status-ok">{{ projectPanel.present }}</span>
+                    <span class="text-ink-soft"> / {{ projectPanel.assigned }} </span>
+                    <Bilingual k="attendance.roster_present_of" inline />
+                </p>
+            </div>
+            <div class="overflow-x-auto rounded-md border border-line">
+                <table class="w-full min-w-max text-sm">
+                    <thead>
+                        <tr class="border-b border-line bg-surface-sunken/60 text-xs text-ink-soft">
+                            <th class="px-3 py-2 text-start"><Bilingual k="attendance.employee" inline /></th>
+                            <th class="px-3 py-2 text-center"><Bilingual k="attendance.check_in" inline /></th>
+                            <th class="px-3 py-2 text-center"><Bilingual k="attendance.check_out" inline /></th>
+                            <th class="px-3 py-2 text-end"><Bilingual k="attendance.hours_worked" inline /></th>
+                            <th class="px-3 py-2 text-start"><Bilingual k="attendance.status" inline /></th>
+                            <th class="px-3 py-2 text-end"><Bilingual k="attendance.distance" inline /></th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-line">
+                        <tr v-for="(row, i) in projectPanel.rows" :key="i" class="hover:bg-surface-hover/50">
+                            <td class="px-3 py-2">
+                                <span class="block font-medium text-ink">{{ row.employee }}</span>
+                                <span class="block text-xs text-muted">{{ row.designation ?? '—' }}</span>
+                            </td>
+                            <td class="tabular-nums px-3 py-2 text-center">{{ row.check_in ?? '—' }}</td>
+                            <td class="tabular-nums px-3 py-2 text-center">{{ row.check_out ?? '—' }}</td>
+                            <td class="tabular-nums px-3 py-2 text-end">{{ row.hours != null ? `${row.hours}h` : '—' }}</td>
+                            <td class="px-3 py-2">
+                                <span class="text-xs font-semibold" :class="panelStatusStyle[row.status] ?? 'text-ink-soft'">
+                                    <Bilingual :k="`attendance.roster_status_${row.status}`" inline />
+                                </span>
+                            </td>
+                            <td class="tabular-nums px-3 py-2 text-end">
+                                <span v-if="row.distance != null" :class="{
+                                    'text-status-ok': row.distance_band === 'on_site',
+                                    'text-status-warn': row.distance_band === 'near_site',
+                                    'text-status-danger': row.distance_band === 'off_site',
+                                }">{{ Math.round(row.distance) }}m</span>
+                                <span v-else class="text-muted">—</span>
+                            </td>
+                        </tr>
+                        <tr v-if="projectPanel.rows.length === 0">
+                            <td colspan="6" class="px-3 py-4 text-center text-sm text-muted">
+                                <Bilingual k="attendance.roster_no_workers" inline />
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
         </div>
 
         <!-- Monthly summary -->

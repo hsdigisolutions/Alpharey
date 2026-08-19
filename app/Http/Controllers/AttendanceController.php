@@ -260,6 +260,9 @@ class AttendanceController extends Controller
             'summary' => $summary,
             'projects' => $projects,
             'projectAssignments' => $projectAssignments,
+            // Feature 1 — the day's roster for a selected project (partial reload
+            // via ?project + ?panel_date). Null unless a project is chosen.
+            'projectPanel' => $this->projectPanel($request, $offSiteThreshold),
             'canSeeWage' => $canSeeWage,
             'editing' => $editing,
             'can' => [
@@ -490,6 +493,85 @@ class AttendanceController extends Controller
      * distance or the project has no coordinates). Grades against the project's
      * own geofence radius and the company's off-site threshold.
      */
+    /**
+     * Feature 1 — the day's roster for a selected project: every ASSIGNED worker
+     * (project rate rows + active deployments into the project) with their
+     * attendance for that date, present AND absent, plus a present-of-assigned
+     * tally. Null unless a project is selected.
+     *
+     * @return array{project: array{id: int, name: string}, date: string, rows: list<array<string, mixed>>, present: int, assigned: int}|null
+     */
+    private function projectPanel(Request $request, int $offSiteThreshold): ?array
+    {
+        $projectId = (int) $request->query('project', 0);
+        if ($projectId <= 0) {
+            return null;
+        }
+
+        $project = Project::query()->where('id', $projectId)->first(['id', 'name', 'latitude', 'longitude', 'geofence_radius']);
+        if ($project === null) {
+            return null;
+        }
+
+        $date = $request->filled('panel_date')
+            ? Carbon::parse((string) $request->query('panel_date'))->toDateString()
+            : now()->toDateString();
+
+        // Assigned = project rate rows + workers actively deployed into the project.
+        $assignedIds = ProjectEmployeeRate::query()->where('project_id', $projectId)->pluck('employee_id')
+            ->merge(EmployeeDeployment::query()->where('project_id', $projectId)
+                ->where('status', DeploymentStatus::Active)->pluck('employee_id'))
+            ->filter()->unique()->values();
+
+        $employees = Employee::query()->withoutGlobalScope(CompanyScope::class)
+            ->whereIn('id', $assignedIds)->orderBy('full_name')
+            ->get(['id', 'full_name', 'designation']);
+
+        $records = Attendance::query()->withoutGlobalScopes()
+            ->where('project_id', $projectId)
+            ->where('date', $date)
+            ->whereIn('employee_id', $assignedIds)
+            ->with('project:id,name,latitude,longitude,geofence_radius')
+            ->get()->keyBy('employee_id');
+
+        $worked = ['present', 'late', 'early_leave'];
+        $present = 0;
+
+        $rows = $employees->map(function (Employee $e) use ($records, $worked, &$present, $offSiteThreshold): array {
+            $r = $records->get($e->id);
+            $status = 'absent';
+            if ($r !== null) {
+                if (in_array($r->status->value, $worked, true)) {
+                    $status = $r->check_out_at === null ? 'working' : 'present';
+                    $present++;
+                } else {
+                    $status = $r->status->value;
+                }
+            }
+
+            $isWorked = $r !== null && in_array($r->status->value, $worked, true);
+
+            return [
+                'employee' => $e->full_name,
+                'designation' => $e->designation,
+                'check_in' => $r?->check_in_at?->format('H:i'),
+                'check_out' => $r?->check_out_at?->format('H:i'),
+                'hours' => $isWorked ? (float) $r->hours_worked : null,
+                'status' => $status,
+                'distance' => $r !== null && $r->distance_from_project !== null ? (float) $r->distance_from_project : null,
+                'distance_band' => $r !== null ? $this->distanceBand($r, $offSiteThreshold) : null,
+            ];
+        })->values()->all();
+
+        return [
+            'project' => ['id' => $project->id, 'name' => $project->name],
+            'date' => $date,
+            'rows' => $rows,
+            'present' => $present,
+            'assigned' => $employees->count(),
+        ];
+    }
+
     private function distanceBand(Attendance $record, int $offSiteThreshold): ?string
     {
         if ($record->distance_from_project === null || $record->project === null) {
