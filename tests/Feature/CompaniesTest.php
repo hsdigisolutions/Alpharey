@@ -47,6 +47,22 @@ it('creates a company and audits it', function (): void {
         ->and(AuditLog::query()->where('action', 'created')->where('module', 'companies')->exists())->toBeTrue();
 });
 
+it('saves a brand name and displayName falls back to the legal name', function (): void {
+    $this->actingAs($this->superAdmin)->post('/companies', [
+        'name' => 'Contalex 365 SL',
+        'brand_name' => 'Contalex',
+        'status' => 'active',
+    ])->assertRedirect();
+
+    $branded = Company::query()->where('name', 'Contalex 365 SL')->firstOrFail();
+    expect($branded->brand_name)->toBe('Contalex')
+        ->and($branded->displayName())->toBe('Contalex');
+
+    // No brand name → the legal name is shown to workers.
+    $plain = Company::factory()->create(['name' => 'Sin Marca SL', 'brand_name' => null]);
+    expect($plain->displayName())->toBe('Sin Marca SL');
+});
+
 it('rejects duplicate company names', function (): void {
     $this->actingAs($this->superAdmin)->post('/companies', [
         'name' => 'Empresa Uno',

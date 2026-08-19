@@ -50,6 +50,7 @@ class CompanyController extends Controller
                     return [
                         'id' => $company->id,
                         'name' => $company->name,
+                        'brand_name' => $company->brand_name,
                         'cif' => $company->cif,
                         'ccc' => $company->ccc,
                         'province' => $company->province,

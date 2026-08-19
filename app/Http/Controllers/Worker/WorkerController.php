@@ -50,7 +50,7 @@ class WorkerController extends Controller
             'worker' => [
                 'name' => $employee->full_name,
                 'code' => $employee->employee_code,
-                'company' => $employee->company?->name,
+                'company' => $employee->company?->displayName(),
                 'can_use_vehicles' => $employee->can_use_vehicles,
             ],
             'today' => $this->todayPayload($today, $this->fullDayThreshold($employee)),

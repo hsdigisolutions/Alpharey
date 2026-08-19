@@ -36,7 +36,7 @@ const showDelete = ref(false);
 const selected = computed(() => props.companies.find((c) => c.id === selectedId.value) ?? null);
 
 const blankFields = {
-    name: '', cif: '', ccc: '', province: '', address: '', city: '', postal_code: '',
+    name: '', brand_name: '', cif: '', ccc: '', province: '', address: '', city: '', postal_code: '',
     phone: '', email: '', website: '', status: 'active', notes: '',
 };
 
@@ -84,12 +84,12 @@ function submitDelete() {
 }
 
 const fieldRows = [
-    ['name', 'cif'],
-    ['ccc', 'province'],
-    ['city', 'address'],
-    ['postal_code', 'phone'],
-    ['email', 'website'],
-    ['status'],
+    ['name', 'brand_name'],
+    ['cif', 'ccc'],
+    ['province', 'city'],
+    ['address', 'postal_code'],
+    ['phone', 'email'],
+    ['website', 'status'],
 ];
 </script>
 
@@ -110,7 +110,9 @@ const fieldRows = [
                 <div class="flex items-start gap-3">
                     <VAvatar :name="company.name" size="lg" />
                     <div class="min-w-0 flex-1">
-                        <p class="truncate text-[17px] font-semibold">{{ company.name }}</p>
+                        <p class="truncate text-[17px] font-semibold">
+                            {{ company.name }}<span v-if="company.brand_name" class="text-ink-soft"> ({{ company.brand_name }})</span>
+                        </p>
                         <p class="truncate text-sm text-ink-soft">{{ company.province ?? '—' }}</p>
                         <p class="tabular-nums text-xs text-muted">{{ company.cif ?? '—' }}</p>
                     </div>
@@ -193,6 +195,10 @@ const fieldRows = [
             <form id="create-company" class="space-y-4" @submit.prevent="submitCreate">
                 <FormField k="companies.name" :error="createForm.errors.name" required>
                     <VInput v-model="createForm.name" :invalid="Boolean(createForm.errors.name)" />
+                </FormField>
+                <FormField k="companies.brand_name" :error="createForm.errors.brand_name">
+                    <VInput v-model="createForm.brand_name" :invalid="Boolean(createForm.errors.brand_name)" />
+                    <p class="mt-1 text-xs text-muted"><Bilingual k="companies.brand_name_hint" /></p>
                 </FormField>
                 <div class="grid gap-4 sm:grid-cols-2">
                     <FormField k="companies.cif" :error="createForm.errors.cif">

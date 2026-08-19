@@ -29,6 +29,7 @@ class UpdateCompanyRequest extends FormRequest
                 'required', 'string', 'max:255',
                 Rule::unique('companies', 'name')->ignore($company->id)->whereNull('deleted_at'),
             ],
+            'brand_name' => ['nullable', 'string', 'max:100'],
             'cif' => ['nullable', 'string', 'max:20'],
             'ccc' => ['nullable', 'string', 'max:30'],
             'province' => ['nullable', 'string', 'max:100'],

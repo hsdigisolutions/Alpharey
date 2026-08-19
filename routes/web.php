@@ -401,6 +401,10 @@ Route::middleware(['auth', 'active', 'two_factor', 'not_worker'])->group(functio
     Route::get('/payroll/payslips', [PayrollController::class, 'payslips'])->name('payroll.payslips');
     Route::post('/payroll/calculate', [PayrollController::class, 'calculate'])->name('payroll.calculate');
     Route::post('/payroll/approve-all', [PayrollController::class, 'approveAll'])->name('payroll.approve-all');
+    // Bulk actions on selected rows (register before /payroll/{payroll})
+    Route::post('/payroll/bulk-approve', [PayrollController::class, 'bulkApprove'])->name('payroll.bulk-approve');
+    Route::post('/payroll/bulk-paid', [PayrollController::class, 'bulkMarkPaid'])->name('payroll.bulk-paid');
+    Route::get('/payroll/bulk-export', [PayrollController::class, 'bulkExport'])->name('payroll.bulk-export');
     Route::post('/payroll/lock', [PayrollController::class, 'lockPeriod'])->name('payroll.lock');
     Route::post('/payroll/unlock', [PayrollController::class, 'unlockPeriod'])->name('payroll.unlock');
     Route::get('/payroll/{payroll}/payslip', [PayrollController::class, 'payslip'])->name('payroll.payslip');

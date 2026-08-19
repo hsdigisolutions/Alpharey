@@ -16,6 +16,7 @@ use App\Services\Payroll\PayrollWorkflow;
 use App\Support\CompanyBranding;
 use App\Support\PeriodLock;
 use Barryvdh\DomPDF\Facade\Pdf;
+use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response as HttpResponse;
@@ -136,6 +137,112 @@ class PayrollController extends Controller
         $workflow->markPaid($payroll, $method);
 
         return back()->with('success', __('ui.payroll.marked_paid'));
+    }
+
+    /**
+     * The selected payroll ids that belong to the acting company + month.
+     *
+     * @return EloquentCollection<int, Payroll>
+     */
+    private function selectedPayrolls(Request $request): EloquentCollection
+    {
+        $validated = $request->validate([
+            'ids' => ['required', 'array', 'min:1'],
+            'ids.*' => ['integer'],
+        ]);
+
+        return Payroll::query()
+            ->where('company_id', $this->contextCompanyId())
+            ->whereIn('id', $validated['ids'])
+            ->get();
+    }
+
+    /**
+     * Bulk-approve the selected DRAFT (pending, unstamped) payrolls. Rows that
+     * are already approved or paid are skipped and counted.
+     */
+    public function bulkApprove(Request $request): RedirectResponse
+    {
+        Gate::authorize('payroll.approve');
+
+        $payrolls = $this->selectedPayrolls($request);
+        $approved = 0;
+        $skipped = 0;
+
+        foreach ($payrolls as $p) {
+            if ($p->status === PayrollStatus::Pending && $p->approved_at === null) {
+                app(PeriodLock::class)->assertOpen($p->company_id, $p->month);
+                $p->approved_by = $request->user()?->id;
+                $p->approved_at = now();
+                $p->save();
+                $approved++;
+            } else {
+                $skipped++;
+            }
+        }
+
+        return back()->with('success', __('ui.payroll.bulk_approved', ['approved' => $approved, 'skipped' => $skipped]));
+    }
+
+    /**
+     * Bulk mark-as-paid the selected APPROVED (pending + stamped) payrolls.
+     * Drafts (not yet approved) and already-paid rows are skipped and counted.
+     */
+    public function bulkMarkPaid(Request $request, PayrollWorkflow $workflow): RedirectResponse
+    {
+        Gate::authorize('payroll.edit');
+
+        $payrolls = $this->selectedPayrolls($request);
+        $paid = 0;
+        $skipped = 0;
+
+        foreach ($payrolls as $p) {
+            if ($p->status === PayrollStatus::Pending && $p->approved_at !== null) {
+                app(PeriodLock::class)->assertOpen($p->company_id, $p->month);
+                $workflow->markPaid($p);
+                $paid++;
+            } else {
+                $skipped++;
+            }
+        }
+
+        return back()->with('success', __('ui.payroll.bulk_paid', ['paid' => $paid, 'skipped' => $skipped]));
+    }
+
+    /**
+     * Export ONLY the selected payrolls — Excel (default) or a combined PDF of
+     * their payslips.
+     */
+    public function bulkExport(Request $request, AuditLogger $audit): BinaryFileResponse|HttpResponse
+    {
+        Gate::authorize('payroll.export');
+        Gate::authorize('payroll.view');
+
+        $format = $request->input('format') === 'pdf' ? 'pdf' : 'excel';
+
+        $rows = $this->selectedPayrolls($request)
+            ->load(['employee:id,full_name,designation', 'company:id,name,brand_name,address,cif,logo_path'])
+            ->each(fn (Payroll $p) => $p->healUndecryptable())
+            ->sortBy(fn (Payroll $p) => $p->employee?->full_name)
+            ->values();
+
+        abort_if($rows->isEmpty(), 404);
+
+        $audit->log('exported', new Payroll, null, null, 'Payroll bulk '.strtoupper($format).' ('.$rows->count().' rows)', 'payroll');
+
+        if ($format === 'pdf') {
+            Gate::authorize('payroll.download');
+
+            $first = $rows->first();
+
+            return Pdf::loadView('exports.payslips-bulk-pdf', [
+                'payrolls' => $rows,
+                'month' => $first->month,
+                'logo' => CompanyBranding::logoDataUri($first->company),
+            ])->download('nominas-seleccion.pdf');
+        }
+
+        return Excel::download(new PayrollExport($rows), 'nominas-seleccion.xlsx');
     }
 
     /**
@@ -320,6 +427,8 @@ class PayrollController extends Controller
             'manual_additions' => $money('manual_additions'),
             'net_amount' => $money('net_amount'),
             'status' => $p->status->value,
+            // Pending rows split into draft (no sign-off) vs approved (stamped).
+            'approved' => $p->approved_at !== null,
             'payment_method' => $p->payment_method?->value,
             'paid_at' => $p->paid_at?->toDateString(),
             'deployment_notes' => $p->deployment_notes,

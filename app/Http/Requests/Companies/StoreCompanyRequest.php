@@ -22,6 +22,8 @@ class StoreCompanyRequest extends FormRequest
     {
         return [
             'name' => ['required', 'string', 'max:255', Rule::unique('companies', 'name')->whereNull('deleted_at')],
+            // Optional short display name shown to workers (falls back to name).
+            'brand_name' => ['nullable', 'string', 'max:100'],
             'cif' => ['nullable', 'string', 'max:20'],
             'ccc' => ['nullable', 'string', 'max:30'],
             'province' => ['nullable', 'string', 'max:100'],

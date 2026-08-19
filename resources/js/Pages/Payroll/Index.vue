@@ -7,7 +7,7 @@
  * null otherwise — this page never decides who may see pay, it just renders
  * what it was given.
  */
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { Head, router, useForm, usePage } from '@inertiajs/vue3';
 import AppIcon from '@/Components/AppIcon.vue';
 import AppLayout from '@/Layouts/AppLayout.vue';
@@ -49,6 +49,31 @@ const monthLabel = computed(() => {
 });
 
 const post = (url) => router.post(url, { month: props.month }, { preserveScroll: true });
+
+// --- Bulk selection + actions (Feature 5) ---
+const selectedIds = ref([]);
+watch(() => props.month, () => { selectedIds.value = []; }); // reset when the month changes
+const isSelected = (id) => selectedIds.value.includes(id);
+function toggleRow(id) {
+    selectedIds.value = isSelected(id) ? selectedIds.value.filter((x) => x !== id) : [...selectedIds.value, id];
+}
+const allSelected = computed(() => props.rows.length > 0 && selectedIds.value.length === props.rows.length);
+function toggleAll(checked) {
+    selectedIds.value = checked ? props.rows.map((r) => r.id) : [];
+}
+const canSelect = computed(() => !props.locked && (props.can.approve || props.can.edit || props.can.export));
+const showPaidConfirm = ref(false);
+function bulkAction(url) {
+    router.post(url, { ids: selectedIds.value }, { preserveScroll: true, onSuccess: () => { selectedIds.value = []; } });
+}
+function bulkApprove() { bulkAction('/payroll/bulk-approve'); }
+function confirmBulkPaid() { showPaidConfirm.value = false; bulkAction('/payroll/bulk-paid'); }
+function bulkExport(format) {
+    const params = new URLSearchParams();
+    selectedIds.value.forEach((id) => params.append('ids[]', id));
+    params.append('format', format);
+    window.location.href = `/payroll/bulk-export?${params.toString()}`;
+}
 
 function markPaid(row) {
     router.post(`/payroll/${row.id}/paid`, { payment_method: row.payment_method }, { preserveScroll: true });
@@ -206,8 +231,13 @@ const columns = [
             </div>
         </div>
 
-        <VTable :columns="columns">
-            <tr v-for="r in rows" :key="r.id" class="hover:bg-surface-hover">
+        <VTable :columns="columns" :selectable="canSelect" :all-selected="allSelected" @toggle-all="toggleAll">
+            <tr v-for="r in rows" :key="r.id" class="hover:bg-surface-hover"
+                :class="isSelected(r.id) ? 'bg-accent-soft' : ''">
+                <td v-if="canSelect" class="px-3 py-2.5">
+                    <input type="checkbox" :checked="isSelected(r.id)" class="h-4 w-4 rounded-sm accent-[var(--color-accent)]"
+                        :aria-label="`${r.employee}`" @change="toggleRow(r.id)" />
+                </td>
                 <td class="px-3 py-2.5 text-sm">
                     <span class="block font-medium text-ink">{{ r.employee }}</span>
                     <span class="block text-xs text-muted">{{ r.designation ?? '—' }}</span>
@@ -226,8 +256,8 @@ const columns = [
                 </td>
                 <td class="tabular-nums px-3 py-2.5 text-end text-sm font-semibold">{{ eur(r.net_amount) }}</td>
                 <td class="px-3 py-2.5">
-                    <VBadge :status="r.status === 'paid' ? 'ok' : 'warn'">
-                        <Bilingual :k="`payroll.status_${r.status}`" inline />
+                    <VBadge :status="r.status === 'paid' ? 'ok' : (r.approved ? 'info' : 'warn')">
+                        <Bilingual :k="r.status === 'paid' ? 'payroll.status_paid' : (r.approved ? 'payroll.status_approved' : 'payroll.status_pending')" inline />
                     </VBadge>
                 </td>
                 <td class="px-3 py-2.5 text-end">
@@ -252,6 +282,40 @@ const columns = [
                 <VEmptyState icon="payroll" message-key="payroll.no_rows" />
             </template>
         </VTable>
+
+        <!-- Bulk action bar (Feature 5) — appears when rows are selected -->
+        <div v-if="selectedIds.length > 0"
+            class="sticky bottom-4 z-10 mt-4 flex flex-wrap items-center gap-3 rounded-lg border border-line-strong bg-surface-raised px-4 py-3 shadow-overlay">
+            <span class="text-sm font-semibold text-ink">
+                {{ selectedIds.length }} <Bilingual k="payroll.bulk_selected" inline />
+            </span>
+            <div class="flex flex-wrap items-center gap-2">
+                <VButton v-if="can.approve" variant="secondary" size="sm" icon="check" @click="bulkApprove">
+                    <Bilingual k="payroll.bulk_approve" inline />
+                </VButton>
+                <VButton v-if="can.edit" variant="secondary" size="sm" @click="showPaidConfirm = true">
+                    <Bilingual k="payroll.bulk_mark_paid" inline />
+                </VButton>
+                <VButton v-if="can.export" variant="secondary" size="sm" icon="download" @click="bulkExport('excel')">
+                    Excel
+                </VButton>
+                <VButton v-if="can.export && can.download" variant="secondary" size="sm" icon="download" @click="bulkExport('pdf')">
+                    PDF
+                </VButton>
+            </div>
+            <button type="button" class="ms-auto text-xs text-ink-soft hover:text-ink" @click="selectedIds = []">
+                <Bilingual k="common.cancel" inline />
+            </button>
+        </div>
+
+        <!-- Bulk mark-paid confirmation -->
+        <VModal :open="showPaidConfirm" title-key="payroll.bulk_mark_paid" size="sm" @close="showPaidConfirm = false">
+            <p class="text-sm text-ink-soft"><Bilingual k="payroll.bulk_paid_confirm" /></p>
+            <template #footer>
+                <VButton variant="ghost" @click="showPaidConfirm = false"><Bilingual k="common.cancel" inline /></VButton>
+                <VButton variant="primary" @click="confirmBulkPaid"><Bilingual k="payroll.bulk_mark_paid" inline /></VButton>
+            </template>
+        </VModal>
 
         <!-- Breakdown modal — layout per REQUIREMENTS.md Screen 12 -->
         <VModal :open="breakdown !== null" title-key="payroll.breakdown" @close="breakdownId = null">

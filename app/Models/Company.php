@@ -22,9 +22,21 @@ class Company extends Model
 
     public string $auditModule = 'companies';
 
+    /**
+     * The name shown to WORKERS — the short brand name when set, else the legal
+     * name. The single fallback authority (worker PWA + payslip use this).
+     */
+    public function displayName(): string
+    {
+        $brand = trim((string) $this->brand_name);
+
+        return $brand !== '' ? $brand : (string) $this->name;
+    }
+
     protected $fillable = [
         'brand_id',
         'name',
+        'brand_name',
         'cif',
         'ccc',
         'province',
