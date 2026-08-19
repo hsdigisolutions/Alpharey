@@ -204,14 +204,42 @@ class ReportService
                     'date' => $i->invoice_date->toDateString(),
                 ])
                 ->all(),
-            'expense_by_category' => Expense::query()
-                ->whereBetween('date', [$from, $to])
-                ->with('category:id,name')
-                ->get()
-                ->groupBy(fn (Expense $e): string => $e->category !== null ? $e->category->name : '—')
-                ->map(fn ($group): float => round((float) $group->sum(fn (Expense $e): float => (float) $e->total), 2))
-                ->all(),
+            // Split-aware: a multi-category expense distributes its total across
+            // its split rows; a single-category one attributes the whole total
+            // to its one category (categoryBreakdown() is the shared authority).
+            'expense_by_category' => $this->expensesByCategory($from, $to),
         ];
+    }
+
+    /**
+     * Expense totals per category over the window, split-aware.
+     *
+     * @return array<string, float>
+     */
+    private function expensesByCategory(string $from, string $to): array
+    {
+        $byCategory = [];
+
+        Expense::query()
+            ->whereBetween('date', [$from, $to])
+            ->with(['category:id,name', 'splits.category:id,name'])
+            ->get()
+            ->each(function (Expense $e) use (&$byCategory): void {
+                $breakdown = $e->categoryBreakdown();
+
+                if ($breakdown === null) {
+                    $byCategory['—'] = ($byCategory['—'] ?? 0.0) + (float) $e->total;
+
+                    return;
+                }
+
+                foreach ($breakdown as $slice) {
+                    $name = $slice['category'] ?? '—';
+                    $byCategory[$name] = ($byCategory[$name] ?? 0.0) + $slice['amount'];
+                }
+            });
+
+        return array_map(fn (float $v): float => round($v, 2), $byCategory);
     }
 
     /**

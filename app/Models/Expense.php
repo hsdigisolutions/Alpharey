@@ -95,6 +95,48 @@ class Expense extends Model
     }
 
     /**
+     * Category slices of a multi-category expense (Smart Expense Split). Empty
+     * for a single-category expense — see categoryBreakdown().
+     *
+     * @return HasMany<ExpenseSplit, $this>
+     */
+    public function splits(): HasMany
+    {
+        return $this->hasMany(ExpenseSplit::class)->orderBy('sort_order');
+    }
+
+    /**
+     * The single source of truth for "how is this expense's money attributed to
+     * categories": split rows if present, else the whole total to its single
+     * category, else null (no category at all). Every category-breakdown reader
+     * (project view, reports) goes through this so single + split expenses agree.
+     *
+     * Eager-load ['splits.category', 'category'] at the call site.
+     *
+     * @return list<array{category_id: int|null, category: string|null, amount: float}>|null
+     */
+    public function categoryBreakdown(): ?array
+    {
+        if ($this->splits->isNotEmpty()) {
+            return $this->splits->map(fn (ExpenseSplit $s): array => [
+                'category_id' => $s->expense_category_id,
+                'category' => $s->category?->name,
+                'amount' => (float) $s->amount,
+            ])->all();
+        }
+
+        if ($this->expense_category_id !== null) {
+            return [[
+                'category_id' => $this->expense_category_id,
+                'category' => $this->category?->name,
+                'amount' => (float) $this->total,
+            ]];
+        }
+
+        return null;
+    }
+
+    /**
      * @return BelongsTo<Vendor, $this>
      */
     public function vendor(): BelongsTo

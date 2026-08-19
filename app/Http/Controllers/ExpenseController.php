@@ -13,6 +13,7 @@ use App\Models\CompanyCard;
 use App\Models\Employee;
 use App\Models\Expense;
 use App\Models\ExpenseCategory;
+use App\Models\ExpenseSplit;
 use App\Models\Project;
 use App\Models\SubcontractorPayment;
 use App\Models\Vendor;
@@ -27,6 +28,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response as HttpResponse;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
@@ -60,7 +62,7 @@ class ExpenseController extends Controller
     private function filteredQuery(Request $request): Builder
     {
         return Expense::query()
-            ->with(['vendor:id,name', 'project:id,name', 'employee:id,full_name', 'category:id,name'])
+            ->with(['vendor:id,name', 'project:id,name', 'employee:id,full_name', 'category:id,name', 'splits.category:id,name'])
             ->when($request->filled('search'), fn ($q) => $q->where('number', 'like', '%'.$request->string('search').'%'))
             ->when($request->filled('project_id'), fn ($q) => $q->where('project_id', $request->integer('project_id')))
             ->when($request->filled('vendor_id'), fn ($q) => $q->where('vendor_id', $request->integer('vendor_id')))
@@ -146,12 +148,23 @@ class ExpenseController extends Controller
     {
         Gate::authorize('expenses.create');
 
+        $companyId = $this->contextCompanyId();
         $expense = new Expense($this->validated($request));
-        $expense->company_id = $this->contextCompanyId();
+        $expense->company_id = $companyId;
         $this->applyTotals($expense);
         $this->applyBearer($expense);
         $this->storeAttachment($request, $expense);
-        $expense->save();
+
+        // Multi-category split (Smart Expense Split): amounts sum to the total.
+        $splits = $this->validatedSplits($request, (float) $expense->total, $companyId);
+        if ($splits !== null) {
+            $expense->expense_category_id = null; // the breakdown lives in the split rows
+        }
+
+        DB::transaction(function () use ($expense, $splits): void {
+            $expense->save();
+            $this->syncSplits($expense, $splits);
+        });
 
         return back()->with('success', __('ui.expenses.saved'));
     }
@@ -166,9 +179,84 @@ class ExpenseController extends Controller
         $this->applyTotals($expense);
         $this->applyBearer($expense);
         $this->storeAttachment($request, $expense);
-        $expense->save();
+
+        $splits = $this->validatedSplits($request, (float) $expense->total, (int) $expense->company_id);
+        if ($splits !== null) {
+            $expense->expense_category_id = null;
+        }
+
+        DB::transaction(function () use ($expense, $splits): void {
+            $expense->save();
+            $this->syncSplits($expense, $splits);
+        });
 
         return back()->with('success', __('ui.expenses.saved'));
+    }
+
+    /**
+     * Validate the optional category split. Returns null for a single-category
+     * expense; otherwise a normalised list whose amounts sum EXACTLY to the
+     * expense total. Splits need >=2 rows and own-company (or group-default)
+     * categories.
+     *
+     * @return list<array{expense_category_id: int, amount: float, description: string|null}>|null
+     */
+    private function validatedSplits(Request $request, float $total, int $companyId): ?array
+    {
+        if (! is_array($request->input('splits')) || $request->input('splits') === []) {
+            return null;
+        }
+
+        $validated = $request->validate([
+            'splits' => ['array', 'min:2'],
+            'splits.*.expense_category_id' => ['required', 'integer',
+                Rule::exists('expense_categories', 'id')->where(
+                    fn ($q) => $q->whereNull('company_id')->orWhere('company_id', $companyId),
+                )],
+            'splits.*.amount' => ['required', 'numeric', 'min:0.01', 'max:9999999'],
+            'splits.*.description' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        $sum = round(array_sum(array_map(fn (array $s): float => (float) $s['amount'], $validated['splits'])), 2);
+        if (abs($sum - round($total, 2)) > 0.001) {
+            throw ValidationException::withMessages([
+                'splits' => __('ui.expenses.split_sum_mismatch', [
+                    'sum' => number_format($sum, 2), 'total' => number_format($total, 2),
+                ]),
+            ]);
+        }
+
+        return array_map(fn (array $s): array => [
+            'expense_category_id' => (int) $s['expense_category_id'],
+            'amount' => (float) $s['amount'],
+            'description' => isset($s['description']) && $s['description'] !== '' ? (string) $s['description'] : null,
+        ], array_values($validated['splits']));
+    }
+
+    /**
+     * Replace the expense's split rows. amount + expense_id are set directly
+     * (not mass assignable).
+     *
+     * @param  list<array{expense_category_id: int, amount: float, description: string|null}>|null  $splits
+     */
+    private function syncSplits(Expense $expense, ?array $splits): void
+    {
+        $expense->splits()->delete();
+
+        if ($splits === null) {
+            return;
+        }
+
+        foreach ($splits as $i => $s) {
+            $split = new ExpenseSplit([
+                'expense_category_id' => $s['expense_category_id'],
+                'description' => $s['description'],
+                'sort_order' => $i,
+            ]);
+            $split->expense_id = $expense->id;
+            $split->amount = (string) $s['amount'];
+            $split->save();
+        }
     }
 
     public function approve(Request $request, Expense $expense): RedirectResponse
@@ -372,6 +460,15 @@ class ExpenseController extends Controller
             'employee_id' => $e->employee_id,
             'category' => $e->category?->name,
             'expense_category_id' => $e->expense_category_id,
+            // Multi-category split (Smart Expense Split). is_split → the list
+            // shows "Multiple categories"; splits[] prefill the edit form.
+            'is_split' => $e->splits->isNotEmpty(),
+            'splits' => $e->splits->map(fn (ExpenseSplit $s): array => [
+                'expense_category_id' => $s->expense_category_id,
+                'category' => $s->category?->name,
+                'amount' => (float) $s->amount,
+                'description' => $s->description,
+            ])->all(),
             'company_card_id' => $e->company_card_id,
             'date' => $e->date->toDateString(),
             'due_date' => $e->due_date?->toDateString(),

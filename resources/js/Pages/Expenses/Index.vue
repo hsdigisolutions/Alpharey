@@ -95,6 +95,8 @@ function openCreate() {
     editingId.value = null;
     editingApproved.value = false;
     Object.keys(blank).forEach((k) => { form[k] = blank[k]; });
+    splitMode.value = false;
+    splits.value = [];
     currentFile.value = null;
     form.clearErrors();
     showModal.value = true;
@@ -123,20 +125,40 @@ function openEdit(row) {
         notes: row.notes ?? '',
         file: null,
     });
+    if (row.is_split && row.splits?.length) {
+        splitMode.value = true;
+        splits.value = row.splits.map((s) => ({
+            expense_category_id: s.expense_category_id ?? '', amount: s.amount, description: s.description ?? '',
+        }));
+    } else {
+        splitMode.value = false;
+        splits.value = [];
+    }
     currentFile.value = row.original_name ?? null;
     form.clearErrors();
     showModal.value = true;
 }
 
 function submit() {
+    // Block a split that does not reconcile to the total (server re-checks too).
+    if (splitMode.value && !splitBalanced.value) return;
+
     const payload = form.transform((d) => ({
         ...d,
-        expense_category_id: d.expense_category_id || null,
+        // A split expense carries no single category — the breakdown is the rows.
+        expense_category_id: splitMode.value ? null : (d.expense_category_id || null),
         vendor_id: d.vendor_id || null,
         project_id: d.project_id || null,
         employee_id: d.employee_id || null,
         company_card_id: d.company_card_id || null,
         payment_method: d.payment_method || null,
+        splits: splitMode.value
+            ? splits.value.map((s) => ({
+                expense_category_id: s.expense_category_id || null,
+                amount: Number(s.amount) || 0,
+                description: s.description || null,
+            }))
+            : undefined,
     }));
     const opts = { preserveScroll: true, onSuccess: () => (showModal.value = false) };
     editingId.value ? payload.post(`/expenses/${editingId.value}`, opts) : payload.post('/expenses', opts);
@@ -184,6 +206,33 @@ const preview = computed(() => {
     const vat = subtotal * vatPct / 100;
     return { vat, total: subtotal + vat };
 });
+
+/* ---------- multi-category split (Smart Expense Split) ---------- */
+const splitMode = ref(false);
+const splits = ref([]);
+const blankSplit = () => ({ expense_category_id: '', amount: 0, description: '' });
+function toggleSplit(on) {
+    splitMode.value = on;
+    if (on && splits.value.length < 2) splits.value = [blankSplit(), blankSplit()];
+}
+function addSplitRow() { splits.value.push(blankSplit()); }
+function removeSplitRow(i) { if (splits.value.length > 1) splits.value.splice(i, 1); }
+const splitSum = computed(() => Math.round(splits.value.reduce((s, r) => s + (Number(r.amount) || 0), 0) * 100) / 100);
+const splitRemaining = computed(() => Math.round((preview.value.total - splitSum.value) * 100) / 100);
+const splitBalanced = computed(() => Math.abs(splitRemaining.value) < 0.005 && splits.value.length >= 2);
+const splitPct = (amount) => {
+    const t = preview.value.total || 0;
+    return t > 0 ? Math.min(100, Math.round((Number(amount) || 0) / t * 100)) : 0;
+};
+function autoSplit() {
+    const n = splits.value.length;
+    if (!n) return;
+    const total = preview.value.total;
+    const base = Math.floor((total / n) * 100) / 100;
+    splits.value.forEach((r, idx) => {
+        r.amount = idx === n - 1 ? Math.round((total - base * (n - 1)) * 100) / 100 : base;
+    });
+}
 
 function eur(n) {
     return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(Number(n ?? 0));
@@ -273,6 +322,7 @@ const columns = [
                     <VBadge v-if="r.source === 'worker_fuel'" status="info" class="ms-1" :title="$t('expenses.auto_fuel_hint')">
                         {{ $t('expenses.auto_fuel_badge') }}
                     </VBadge>
+                    <VBadge v-if="r.is_split" status="neutral" class="ms-1">{{ $t('expenses.split_multiple') }}</VBadge>
                 </td>
                 <td class="px-3 py-2.5 text-sm text-ink-soft">
                     <Bilingual :k="`expenses.type_${r.type}`" inline />
@@ -343,12 +393,25 @@ const columns = [
                         <option v-for="v in vendors" :key="v.id" :value="v.id">{{ v.name }}</option>
                     </VSelect>
                 </FormField>
-                <FormField k="expenses.category" :error="form.errors.expense_category_id">
+                <FormField v-if="!splitMode" k="expenses.category" :error="form.errors.expense_category_id">
                     <VSelect v-model="form.expense_category_id">
                         <option value="">—</option>
                         <option v-for="c in activeCategories" :key="c.id" :value="c.id">{{ c.name }}</option>
                     </VSelect>
+                    <label class="mt-1.5 flex items-center gap-2 text-xs text-ink-soft">
+                        <input type="checkbox" :checked="splitMode" class="h-3.5 w-3.5 rounded-sm accent-[var(--color-accent)]"
+                            @change="toggleSplit($event.target.checked)" />
+                        {{ $t('expenses.split_toggle') }}
+                    </label>
                 </FormField>
+                <div v-else class="rounded-md border border-line-strong bg-surface-sunken px-3 py-2">
+                    <label class="flex items-center gap-2 text-sm text-ink">
+                        <input type="checkbox" checked class="h-4 w-4 rounded-sm accent-[var(--color-accent)]"
+                            @change="toggleSplit($event.target.checked)" />
+                        {{ $t('expenses.split_toggle') }}
+                    </label>
+                    <p class="mt-0.5 text-xs text-muted">{{ $t('expenses.split_breakdown') }} ↓</p>
+                </div>
 
                 <FormField k="expenses.project" :error="form.errors.project_id">
                     <VSelect v-model="form.project_id">
@@ -424,6 +487,41 @@ const columns = [
                     </div>
                 </dl>
 
+                <!-- Smart Expense Split — distribute the total across categories -->
+                <div v-if="splitMode" class="sm:col-span-2 space-y-2 rounded-lg border border-line-strong bg-surface-raised p-3">
+                    <div class="flex flex-wrap items-center justify-between gap-2">
+                        <span class="text-sm font-semibold text-ink">{{ $t('expenses.split_breakdown') }}</span>
+                        <div class="flex items-center gap-2">
+                            <VButton variant="ghost" size="sm" @click="autoSplit">{{ $t('expenses.split_auto') }}</VButton>
+                            <span class="text-sm font-semibold" :class="splitBalanced ? 'text-status-ok' : 'text-status-danger'">
+                                {{ $t('expenses.split_remaining') }}: {{ eur(splitRemaining) }} <span v-if="splitBalanced">✅</span>
+                            </span>
+                        </div>
+                    </div>
+                    <div v-for="(row, i) in splits" :key="i" class="grid grid-cols-12 items-center gap-2">
+                        <VSelect v-model="row.expense_category_id" class="col-span-4">
+                            <option value="">{{ $t('expenses.split_category') }}</option>
+                            <option v-for="c in activeCategories" :key="c.id" :value="c.id">{{ c.name }}</option>
+                        </VSelect>
+                        <VInput v-model="row.amount" type="number" step="0.01" min="0" class="col-span-2" :placeholder="$t('expenses.split_amount')" />
+                        <div class="col-span-2 flex items-center gap-1">
+                            <div class="h-2 flex-1 overflow-hidden rounded-full bg-surface-sunken">
+                                <div class="h-full rounded-full bg-accent" :style="{ width: `${splitPct(row.amount)}%` }" />
+                            </div>
+                            <span class="w-8 text-end text-xs tabular-nums text-muted">{{ splitPct(row.amount) }}%</span>
+                        </div>
+                        <VInput v-model="row.description" class="col-span-3" :placeholder="$t('expenses.split_desc')" />
+                        <button type="button" class="col-span-1 rounded-sm p-1.5 text-muted hover:text-status-danger"
+                            :disabled="splits.length <= 1" @click="removeSplitRow(i)">
+                            <AppIcon name="trash" class="h-4 w-4" />
+                        </button>
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <VButton variant="ghost" size="sm" icon="plus" @click="addSplitRow">{{ $t('expenses.split_add') }}</VButton>
+                        <span v-if="form.errors.splits" class="text-xs text-status-danger">{{ form.errors.splits }}</span>
+                    </div>
+                </div>
+
                 <FormField k="expenses.file" :error="form.errors.file" class="sm:col-span-2">
                     <input type="file" accept=".pdf,.jpg,.jpeg,.png,.webp" class="block w-full text-sm text-ink-soft
                         file:me-3 file:rounded-md file:border-0 file:bg-surface-sunken file:px-3 file:py-1.5
@@ -443,7 +541,8 @@ const columns = [
                     {{ $t('expenses.approved_locked') }}
                 </span>
                 <VButton variant="ghost" @click="showModal = false"><Bilingual k="common.cancel" inline /></VButton>
-                <VButton v-if="!editingApproved" type="submit" form="expense-form" :loading="form.processing">
+                <VButton v-if="!editingApproved" type="submit" form="expense-form" :loading="form.processing"
+                    :disabled="splitMode && !splitBalanced">
                     <Bilingual k="common.save" inline />
                 </VButton>
             </template>

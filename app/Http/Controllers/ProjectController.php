@@ -273,6 +273,8 @@ class ProjectController extends Controller
             'invoiceSummary' => Gate::allows('invoices.view') ? $this->invoiceSummary($project) : null,
             'canCreateInvoice' => Gate::allows('invoices.create'),
             'expenses' => Gate::allows('expenses.view') ? $this->projectExpenses($project) : [],
+            // Category breakdown of this project's expenses (split-aware).
+            'expenseBreakdown' => Gate::allows('expenses.view') ? $this->projectExpenseBreakdown($project) : [],
             'canViewInvoices' => Gate::allows('invoices.view'),
             'canViewExpenses' => Gate::allows('expenses.view'),
             // Profitability (P&L) for the Resumen tab — labour cost + margins,
@@ -408,6 +410,52 @@ class ProjectController extends Controller
                 'status' => $e->payment_status->value,
             ])
             ->all();
+    }
+
+    /**
+     * Category breakdown of this project's expenses — split-aware (a
+     * multi-category expense distributes across its splits; a single-category
+     * one attributes its whole total). Sorted by amount, with the % of total.
+     *
+     * @return list<array{category: string, total: float, pct: float}>
+     */
+    private function projectExpenseBreakdown(Project $project): array
+    {
+        $byCategory = [];
+        $grand = 0.0;
+
+        Expense::query()
+            ->where('project_id', $project->id)
+            ->with(['category:id,name', 'splits.category:id,name'])
+            ->get()
+            ->each(function (Expense $e) use (&$byCategory, &$grand): void {
+                $grand += (float) $e->total;
+                $breakdown = $e->categoryBreakdown();
+
+                if ($breakdown === null) {
+                    $byCategory['—'] = ($byCategory['—'] ?? 0.0) + (float) $e->total;
+
+                    return;
+                }
+
+                foreach ($breakdown as $slice) {
+                    $name = $slice['category'] ?? '—';
+                    $byCategory[$name] = ($byCategory[$name] ?? 0.0) + $slice['amount'];
+                }
+            });
+
+        $grand = round($grand, 2);
+        $rows = [];
+        foreach ($byCategory as $name => $amount) {
+            $rows[] = [
+                'category' => (string) $name,
+                'total' => round($amount, 2),
+                'pct' => $grand > 0.0 ? round($amount / $grand * 100, 1) : 0.0,
+            ];
+        }
+        usort($rows, fn (array $a, array $b): int => $b['total'] <=> $a['total']);
+
+        return $rows;
     }
 
     /**

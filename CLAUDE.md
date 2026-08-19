@@ -4,6 +4,34 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Status: Phase 9 in progress — hardening (2026-08-01)
 
+### Smart Expense Split — one expense across many categories (2026-08-19, DONE)
+
+An expense's TOTAL can now be split across several categories (Materials 40 /
+Transport 20 / Labor 30 / Other 10 = 100). **1099 Pest tests.** New
+`expense_splits` table (expense_id cascade · expense_category_id nullOnDelete ·
+`amount` decimal 14,2 · description · sort_order) — deliberately NOT named
+`expense_line_items` (that dormant itemization table already exists). Split
+amounts are **VAT-inclusive and sum to `total`** (client-confirmed basis). An
+expense is EITHER single-category (`expense_category_id`, no split rows) OR
+multi-split (≥2 rows, `expense_category_id` NULLed). `ExpenseSplit` (`amount` +
+`expense_id` NOT fillable — set directly by the controller in the same
+transaction). `Expense::categoryBreakdown()` is the single authority every
+category reader goes through: split rows if present → else whole total to the
+single category → else null. `ExpenseController::store/update` accept a `splits[]`
+array, `validatedSplits()` requires ≥2 rows + own-company/group categories + a
+sum that equals the total to the cent (else 422), `syncSplits()` replaces the
+rows. Reports `expense_by_category` (`ReportService::expensesByCategory`) +
+Project Detail → Gastos breakdown card (`ProjectController::projectExpenseBreakdown`)
+are split-aware. P&L profit numbers are UNCHANGED (a split is sub-attribution of
+the same total). Payroll reimbursement stays on the full total (categories are
+cost attribution only). Form (`Expenses/Index.vue`): a "Split across categories"
+toggle → locked total, per-row category + amount + % bar, add/auto-distribute,
+a live green/red Remaining indicator, save blocked until it reaches 0; the list
+shows a "Multiple categories" badge on split rows. Tests: `ExpenseSplitTest` (8 —
+single-category unchanged, split saves+nulls-category, sum-mismatch 422, <2-rows
+422, cross-company category 422, amount not mass-assignable, breakdown fallback
+chain, reports split-aware).
+
 ### Live staging browser QA (2026-08-16, DONE)
 
 Drove the real signed-in Super-Admin session on staging.alpharey.com through

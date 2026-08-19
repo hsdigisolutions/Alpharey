@@ -44,6 +44,7 @@ const props = defineProps({
     invoiceSummary: { type: Object, default: null },
     canCreateInvoice: { type: Boolean, default: false },
     expenses: { type: Array, default: () => [] },
+    expenseBreakdown: { type: Array, default: () => [] },
     canViewInvoices: { type: Boolean, default: false },
     canViewExpenses: { type: Boolean, default: false },
     canSeeWages: { type: Boolean, default: false },
@@ -941,8 +942,37 @@ const noteStatus = { internal: 'neutral', client_call: 'info', client_email: 'ac
             </div>
 
             <!-- Gastos — expenses booked against this project -->
-            <VFinanceRows v-else-if="tab === 'expenses'"
-                :rows="expenses" :can-view="canViewExpenses" empty-key="finance.no_expenses" />
+            <div v-else-if="tab === 'expenses'" class="space-y-4">
+                <VFinanceRows :rows="expenses" :can-view="canViewExpenses" empty-key="finance.no_expenses" />
+
+                <!-- Category breakdown (split-aware) -->
+                <div v-if="canViewExpenses && expenseBreakdown.length"
+                    class="rounded-lg border border-line bg-surface-raised p-4 shadow-card">
+                    <h3 class="mb-3 text-sm font-semibold text-ink">{{ $t('expenses.split_breakdown') }}</h3>
+                    <table class="w-full text-sm">
+                        <thead>
+                            <tr class="border-b border-line text-xs uppercase text-muted">
+                                <th class="px-2 py-2 text-start font-medium">{{ $t('expenses.split_category') }}</th>
+                                <th class="px-2 py-2 text-end font-medium">{{ $t('expenses.total') }}</th>
+                                <th class="px-2 py-2 text-end font-medium">{{ $t('expenses.split_pct_of') }}</th>
+                                <th class="w-1/3 px-2 py-2"></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="(b, i) in expenseBreakdown" :key="i" class="border-b border-line">
+                                <td class="px-2 py-2 text-ink">{{ b.category }}</td>
+                                <td class="tabular-nums px-2 py-2 text-end">{{ eur(b.total) }}</td>
+                                <td class="tabular-nums px-2 py-2 text-end text-ink-soft">{{ b.pct }}%</td>
+                                <td class="px-2 py-2">
+                                    <div class="h-2 overflow-hidden rounded-full bg-surface-sunken">
+                                        <div class="h-full rounded-full bg-accent" :style="{ width: `${Math.min(100, b.pct)}%` }" />
+                                    </div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
 
             <!-- Asistencia — this project's attendance for the month -->
             <div v-else-if="tab === 'attendance'" class="space-y-4">
