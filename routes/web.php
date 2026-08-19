@@ -228,6 +228,7 @@ Route::middleware(['auth', 'active', 'two_factor', 'not_worker'])->group(functio
     Route::get('/employees/{employee}', [EmployeeController::class, 'show'])->name('employees.show');
     Route::put('/employees/{employee}', [EmployeeController::class, 'update'])->name('employees.update');
     Route::delete('/employees/{employee}', [EmployeeController::class, 'destroy'])->name('employees.destroy');
+    Route::post('/employees/{employee}/transfer', [EmployeeController::class, 'transfer'])->name('employees.transfer');
     Route::post('/employees/{employee}/wage-rates', [WageRateController::class, 'store'])->name('employees.wage-rates.store');
     Route::delete('/employees/{employee}/wage-rates/{wageRate}', [WageRateController::class, 'destroy'])->name('employees.wage-rates.destroy');
     Route::post('/employees/{employee}/notes', [EmployeeNoteController::class, 'store'])->name('employees.notes.store');

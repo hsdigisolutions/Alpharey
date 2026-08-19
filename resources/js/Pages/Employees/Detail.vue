@@ -47,8 +47,25 @@ const props = defineProps({
     appAccess: { type: Object, default: () => ({ email: null, active: false }) },
     canSeeWages: { type: Boolean, default: false },
     consent: { type: Object, default: () => ({ has_app_access: false, accepted: false, active: null, history: [], current_version: '' }) },
+    transferCompanies: { type: Array, default: () => [] },
     can: { type: Object, required: true },
 });
+
+// --- Feature 4: transfer to another company ---
+const showTransfer = ref(false);
+const transferForm = useForm({ to_company_id: '', transfer_date: new Date().toISOString().slice(0, 10) });
+function openTransfer() {
+    transferForm.reset();
+    transferForm.transfer_date = new Date().toISOString().slice(0, 10);
+    transferForm.clearErrors();
+    showTransfer.value = true;
+}
+function submitTransfer() {
+    transferForm.post(`/employees/${props.employee.id}/transfer`, {
+        preserveScroll: true,
+        onSuccess: () => { showTransfer.value = false; },
+    });
+}
 
 function resetConsent() {
     if (!window.confirm(t('employees.consent_reset_confirm'))) return;
@@ -304,6 +321,19 @@ function destroy() {
             <VButton v-if="can.edit" variant="secondary" icon="edit" @click="showEdit = true">
                 <Bilingual k="employees.edit" inline />
             </VButton>
+            <VButton v-if="can.transfer && transferCompanies.length" variant="secondary" @click="openTransfer">
+                <Bilingual k="employees.transfer" inline />
+            </VButton>
+        </div>
+
+        <!-- Feature 4 — transferred-in notice: documents must be re-uploaded -->
+        <div v-if="employee.documents_pending_reupload"
+            class="mt-4 flex items-start gap-2 rounded-lg border border-status-warn/40 bg-status-warn-soft px-4 py-3 text-sm text-status-warn">
+            <AppIcon name="alert" class="mt-0.5 h-4 w-4 shrink-0" />
+            <span>
+                <Bilingual k="employees.transfer_docs_banner" />
+                <span v-if="employee.previous_company"> ({{ employee.previous_company }})</span>
+            </span>
         </div>
 
         <VTabs v-model="tab" :tabs="tabs" />
@@ -815,6 +845,50 @@ function destroy() {
         </div>
 
         <EmployeeFormModal :open="showEdit" :employee="employee" :can-see-wages="canSeeWages" @close="showEdit = false" />
+
+        <!-- Feature 4 — transfer to another company -->
+        <VModal :open="showTransfer" title-key="employees.transfer" @close="showTransfer = false">
+            <div class="space-y-4">
+                <p class="text-sm font-semibold text-ink">{{ employee.full_name }}</p>
+                <div class="grid gap-4 sm:grid-cols-2">
+                    <div>
+                        <p class="text-xs text-muted"><Bilingual k="employees.transfer_current" inline /></p>
+                        <p class="text-sm text-ink">{{ employee.company ?? '—' }}</p>
+                    </div>
+                    <FormField k="employees.transfer_to" :error="transferForm.errors.to_company_id" required>
+                        <VSelect v-model="transferForm.to_company_id">
+                            <option value="">—</option>
+                            <option v-for="c in transferCompanies" :key="c.id" :value="c.id">{{ c.name }}</option>
+                        </VSelect>
+                    </FormField>
+                </div>
+                <FormField k="employees.transfer_date" :error="transferForm.errors.transfer_date" required>
+                    <VInput v-model="transferForm.transfer_date" type="date" />
+                </FormField>
+
+                <p v-if="transferForm.errors.transfer" class="rounded-md bg-status-danger-soft px-3 py-2 text-sm text-status-danger">
+                    {{ transferForm.errors.transfer }}
+                </p>
+
+                <div class="rounded-md bg-surface-sunken px-3 py-3 text-xs text-ink-soft">
+                    <p class="mb-1 font-semibold text-ink"><Bilingual k="employees.transfer_what_title" inline /></p>
+                    <ul class="space-y-1">
+                        <li class="flex gap-1.5"><span>✅</span><Bilingual k="employees.transfer_what_profile" /></li>
+                        <li class="flex gap-1.5"><span>✅</span><Bilingual k="employees.transfer_what_wages" /></li>
+                        <li class="flex gap-1.5"><span>✅</span><Bilingual k="employees.transfer_what_attendance" /></li>
+                        <li class="flex gap-1.5"><span>📄</span><Bilingual k="employees.transfer_what_docs" /></li>
+                        <li class="flex gap-1.5"><span>❌</span><Bilingual k="employees.transfer_what_payroll" /></li>
+                        <li class="flex gap-1.5"><span>❌</span><Bilingual k="employees.transfer_what_equipment" /></li>
+                    </ul>
+                </div>
+            </div>
+            <template #footer>
+                <VButton variant="ghost" @click="showTransfer = false"><Bilingual k="common.cancel" inline /></VButton>
+                <VButton variant="primary" :loading="transferForm.processing" :disabled="!transferForm.to_company_id" @click="submitTransfer">
+                    <Bilingual k="employees.transfer_confirm" inline />
+                </VButton>
+            </template>
+        </VModal>
 
         <WageRateFormModal v-if="canSeeWages" :open="showWageModal" :employee-id="employee.id"
             :current-type="employee.wage_type" :current-rate="currentRate" @close="showWageModal = false" />

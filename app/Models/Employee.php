@@ -26,6 +26,9 @@ use Illuminate\Support\Carbon;
  * @property string|null $nif_hash
  * @property string|null $department
  * @property int|null $department_id
+ * @property int|null $previous_company_id
+ * @property Carbon|null $transferred_at
+ * @property bool $documents_pending_reupload
  * @property bool $active
  * @property Carbon|null $active_since
  * @property bool $can_use_vehicles
@@ -92,6 +95,8 @@ class Employee extends Model
             'joining_date' => 'date:Y-m-d',
             'leaving_date' => 'date:Y-m-d',
             'active_since' => 'date:Y-m-d',
+            'transferred_at' => 'datetime',
+            'documents_pending_reupload' => 'boolean',
             'privacy_notice_ack_at' => 'datetime',
             'active' => 'boolean',
             'is_contracted' => 'boolean',
@@ -205,6 +210,17 @@ class Employee extends Model
     public function callLogs(): HasMany
     {
         return $this->hasMany(EmployeeCallLog::class);
+    }
+
+    /**
+     * The company this employee was transferred FROM (read-only history for the
+     * old company). Null unless the employee has been transferred.
+     *
+     * @return BelongsTo<Company, $this>
+     */
+    public function previousCompany(): BelongsTo
+    {
+        return $this->belongsTo(Company::class, 'previous_company_id');
     }
 
     /**

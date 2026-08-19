@@ -5,8 +5,10 @@ namespace App\Http\Controllers;
 use App\Enums\EquipmentIssueStatus;
 use App\Enums\WageType;
 use App\Http\Requests\Employees\StoreEmployeeRequest;
+use App\Http\Requests\Employees\TransferEmployeeRequest;
 use App\Http\Requests\Employees\UpdateEmployeeRequest;
 use App\Models\Attendance;
+use App\Models\Company;
 use App\Models\Department;
 use App\Models\Employee;
 use App\Models\EmployeeEquipmentIssue;
@@ -21,6 +23,7 @@ use App\Services\Audit\AuditLogger;
 use App\Services\Documents\DocumentStatus;
 use App\Services\Employees\EmployeeQueryFilter;
 use App\Services\Employees\EmployeeService;
+use App\Services\Employees\EmployeeTransferService;
 use App\Services\Employees\WageRateService;
 use App\Services\Inventory\PpeComplianceService;
 use App\Services\Workers\WorkerConsentService;
@@ -182,6 +185,10 @@ class EmployeeController extends Controller
                 'joining_date' => $employee->joining_date?->toDateString(),
                 'leaving_date' => $employee->leaving_date?->toDateString(),
                 'company' => $employee->company?->name,
+                // Feature 4 — transfer state for the docs banner + history note.
+                'documents_pending_reupload' => $employee->documents_pending_reupload,
+                'transferred_at' => $employee->transferred_at?->toDateString(),
+                'previous_company' => $employee->previousCompany?->name,
                 'team_leader' => $employee->teamLeader?->full_name,
                 'wage_type' => $employee->wage_type?->value,
                 'payment_method' => $employee->payment_method?->value,
@@ -243,9 +250,12 @@ class EmployeeController extends Controller
             'canSeeWages' => $canSeeWages,
             'designationOptions' => ProjectDesignationRateController::optionsFor(app(CurrentCompany::class)->id()),
             'departmentOptions' => $this->departmentOptions(),
+            // Feature 4 — companies this employee could be transferred to (admins only).
+            'transferCompanies' => $this->transferCompanies($employee),
             'can' => [
                 'edit' => Gate::allows('employees.edit'),
                 'delete' => Gate::allows('employees.delete'),
+                'transfer' => $this->canTransfer($request),
                 'manageWages' => Gate::allows('employees.edit'),
                 'upload' => Gate::allows('documents.upload'),
                 'download' => Gate::allows('documents.download'),
@@ -253,6 +263,35 @@ class EmployeeController extends Controller
                 'editDocs' => Gate::allows('documents.edit'),
             ],
         ]);
+    }
+
+    /** Whether the acting user may transfer employees between companies. */
+    private function canTransfer(Request $request): bool
+    {
+        $user = $request->user();
+
+        return Gate::allows('employees.edit')
+            && $user !== null && ($user->isSuperAdmin() || $user->isCompanyAdmin());
+    }
+
+    /**
+     * Target companies for a transfer — all active companies except the
+     * employee's current one. Empty unless the user may transfer.
+     *
+     * @return list<array{id: int, name: string}>
+     */
+    private function transferCompanies(Employee $employee): array
+    {
+        if (! $this->canTransfer(request())) {
+            return [];
+        }
+
+        return Company::query()->withoutGlobalScopes()
+            ->where('id', '!=', $employee->company_id)
+            ->orderBy('name')
+            ->get(['id', 'name'])
+            ->map(fn (Company $c): array => ['id' => $c->id, 'name' => $c->name])
+            ->all();
     }
 
     /**
@@ -626,6 +665,22 @@ class EmployeeController extends Controller
         $employee->delete(); // soft delete — employees are never hard-deleted
 
         return redirect()->route('employees.index')->with('success', __('ui.employees.deleted'));
+    }
+
+    /**
+     * Feature 4 — transfer the employee to another company. The service enforces
+     * the equipment + paid-payroll guards and moves the wage history; attendance
+     * and payroll history stay with the old company.
+     */
+    public function transfer(TransferEmployeeRequest $request, Employee $employee, EmployeeTransferService $service): RedirectResponse
+    {
+        $service->transfer(
+            $employee,
+            (int) $request->validated('to_company_id'),
+            (string) $request->validated('transfer_date'),
+        );
+
+        return redirect()->route('employees.index')->with('success', __('ui.employees.transferred'));
     }
 
     /**

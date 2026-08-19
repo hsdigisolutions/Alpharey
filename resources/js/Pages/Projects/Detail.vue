@@ -295,6 +295,66 @@ const bulkForm = useForm({ tasks: [blankTaskRow()] });
 function openBulk() { bulkForm.tasks = [blankTaskRow()]; bulkForm.clearErrors(); bulkOpen.value = true; }
 function addBulkRow() { bulkForm.tasks.push(blankTaskRow()); }
 function removeBulkRow(i) { if (bulkForm.tasks.length > 1) bulkForm.tasks.splice(i, 1); }
+function duplicateBulkRow(i) { bulkForm.tasks.splice(i + 1, 0, { ...bulkForm.tasks[i] }); }
+
+// Auto-distribute 100% weightage equally, remainder onto the last row so the
+// sum is exactly 100.
+function autoWeightage() {
+    const n = bulkForm.tasks.length;
+    if (!n) return;
+    const base = Math.floor((100 / n) * 100) / 100;
+    bulkForm.tasks.forEach((r, idx) => {
+        r.weightage = idx === n - 1 ? Math.round((100 - base * (n - 1)) * 100) / 100 : base;
+    });
+}
+const weightageTotal = computed(() => Math.round(bulkForm.tasks.reduce((s, r) => s + (Number(r.weightage) || 0), 0) * 100) / 100);
+
+// Map a pasted category cell (label or key, any case) to a valid category key.
+function normalizeCategory(v) {
+    const s = String(v ?? '').trim().toLowerCase();
+    if (props.taskCategories.includes(s)) return s;
+    const byLabel = props.taskCategories.find((c) => t(`production_tasks.cat_${c}`).toLowerCase() === s);
+    return byLabel ?? 'other';
+}
+
+// The grid's visual column order — paste-from-Excel fills fields in this order.
+const BULK_COLS = ['category', 'unit', 'name', 'unit_price', 'planned_quantity', 'weightage', 'house_number'];
+
+// Paste tab-separated rows from a spreadsheet. Starting at (rowIndex, colKey),
+// fill across and down, appending rows as needed. Single-cell pastes fall
+// through to the default input behaviour.
+function onBulkPaste(e, rowIndex, colKey) {
+    const text = e.clipboardData?.getData('text/plain') ?? '';
+    if (!/\t|\n/.test(text)) return; // ordinary single value → let the input handle it
+    e.preventDefault();
+    const lines = text.replace(/\r/g, '').split('\n').filter((l, idx, arr) => l !== '' || idx < arr.length - 1);
+    const startCol = BULK_COLS.indexOf(colKey);
+    lines.forEach((line, r) => {
+        const target = rowIndex + r;
+        if (!bulkForm.tasks[target]) bulkForm.tasks.push(blankTaskRow());
+        line.split('\t').forEach((cell, c) => {
+            const key = BULK_COLS[startCol + c];
+            if (!key) return;
+            const val = cell.trim();
+            if (key === 'category') bulkForm.tasks[target].category = normalizeCategory(val);
+            else if (['unit_price', 'planned_quantity', 'weightage'].includes(key)) bulkForm.tasks[target][key] = val === '' ? (key === 'unit_price' || key === 'weightage' ? 0 : null) : Number(val.replace(',', '.'));
+            else bulkForm.tasks[target][key] = val;
+        });
+    });
+}
+
+// Enter adds a row after the current one; Delete/Backspace on a fully blank row
+// removes it (keyboard-only bulk entry).
+function onBulkRowKeydown(e, i) {
+    if (e.key === 'Enter') {
+        e.preventDefault();
+        bulkForm.tasks.splice(i + 1, 0, blankTaskRow());
+    } else if ((e.key === 'Delete' || e.key === 'Backspace')) {
+        const r = bulkForm.tasks[i];
+        const blank = !r.name && !r.unit_price && r.planned_quantity == null && !r.house_number && !r.weightage;
+        if (blank && bulkForm.tasks.length > 1) { e.preventDefault(); removeBulkRow(i); }
+    }
+}
 function submitBulk() {
     bulkForm.post(`/projects/${props.project.id}/tasks`, { preserveScroll: true, onSuccess: () => (bulkOpen.value = false) });
 }
@@ -1400,6 +1460,16 @@ const noteStatus = { internal: 'neutral', client_call: 'info', client_email: 'ac
                         <option v-for="tpl in taskTemplates" :key="tpl.id" :value="tpl.id">{{ tpl.name }}</option>
                     </VSelect>
                 </div>
+                <!-- Toolbar: auto-distribute weightage + a running total indicator -->
+                <div class="flex flex-wrap items-center gap-3">
+                    <VButton variant="secondary" size="sm" @click="autoWeightage">
+                        <Bilingual k="production_tasks.auto_weightage" inline />
+                    </VButton>
+                    <span class="text-xs" :class="weightageTotal === 100 ? 'text-status-ok' : 'text-status-warn'">
+                        {{ $t('production_tasks.weightage') }}: {{ weightageTotal }}% <span v-if="weightageTotal === 100">✅</span>
+                    </span>
+                    <span class="ms-auto text-[11px] text-muted">{{ $t('production_tasks.paste_hint') }}</span>
+                </div>
                 <!-- Column headers in the agreed order -->
                 <div class="grid grid-cols-12 gap-2 px-0.5 text-[11px] font-medium uppercase tracking-wide text-muted">
                     <span class="col-span-2">{{ $t('production_tasks.category') }}</span>
@@ -1411,19 +1481,25 @@ const noteStatus = { internal: 'neutral', client_call: 'info', client_email: 'ac
                     <span class="col-span-1">{{ $t('production_tasks.house') }}</span>
                     <span class="col-span-1"></span>
                 </div>
-                <div v-for="(row, i) in bulkForm.tasks" :key="i" class="grid grid-cols-12 items-start gap-2">
-                    <VSelect v-model="row.category" class="col-span-2">
+                <div v-for="(row, i) in bulkForm.tasks" :key="i" class="grid grid-cols-12 items-start gap-2"
+                    @keydown="onBulkRowKeydown($event, i)">
+                    <VSelect v-model="row.category" class="col-span-2" @paste="onBulkPaste($event, i, 'category')">
                         <option v-for="c in taskCategories" :key="c" :value="c">{{ $t(`production_tasks.cat_${c}`) }}</option>
                     </VSelect>
-                    <VInput v-model="row.unit" class="col-span-1" :placeholder="$t('production_tasks.ph_unit')" />
-                    <VInput v-model="row.name" class="col-span-3" :placeholder="$t('production_tasks.ph_name')" />
-                    <VInput v-model="row.unit_price" type="number" step="0.01" min="0" class="col-span-1" :placeholder="$t('production_tasks.ph_unit_price')" />
-                    <VInput v-model="row.planned_quantity" type="number" step="0.01" min="0" class="col-span-2" :placeholder="$t('production_tasks.ph_planned')" />
-                    <VInput v-model="row.weightage" type="number" step="0.01" min="0" max="100" class="col-span-1" :placeholder="$t('production_tasks.ph_weightage')" />
-                    <VInput v-model="row.house_number" class="col-span-1" :placeholder="$t('production_tasks.ph_house')" />
-                    <button type="button" class="col-span-1 rounded-sm p-1.5 text-muted hover:text-status-danger" :disabled="bulkForm.tasks.length === 1" @click="removeBulkRow(i)">
-                        <AppIcon name="trash" class="h-3.5 w-3.5" />
-                    </button>
+                    <VInput v-model="row.unit" class="col-span-1" :placeholder="$t('production_tasks.ph_unit')" @paste="onBulkPaste($event, i, 'unit')" />
+                    <VInput v-model="row.name" class="col-span-3" :placeholder="$t('production_tasks.ph_name')" @paste="onBulkPaste($event, i, 'name')" />
+                    <VInput v-model="row.unit_price" type="number" step="0.01" min="0" class="col-span-1" :placeholder="$t('production_tasks.ph_unit_price')" @paste="onBulkPaste($event, i, 'unit_price')" />
+                    <VInput v-model="row.planned_quantity" type="number" step="0.01" min="0" class="col-span-2" :placeholder="$t('production_tasks.ph_planned')" @paste="onBulkPaste($event, i, 'planned_quantity')" />
+                    <VInput v-model="row.weightage" type="number" step="0.01" min="0" max="100" class="col-span-1" :placeholder="$t('production_tasks.ph_weightage')" @paste="onBulkPaste($event, i, 'weightage')" />
+                    <VInput v-model="row.house_number" class="col-span-1" :placeholder="$t('production_tasks.ph_house')" @paste="onBulkPaste($event, i, 'house_number')" />
+                    <div class="col-span-1 flex items-center gap-0.5">
+                        <button type="button" class="rounded-sm p-1.5 text-muted hover:text-accent" :title="$t('production_tasks.duplicate_row')" @click="duplicateBulkRow(i)">
+                            <AppIcon name="copy" class="h-3.5 w-3.5" />
+                        </button>
+                        <button type="button" class="rounded-sm p-1.5 text-muted hover:text-status-danger" :disabled="bulkForm.tasks.length === 1" @click="removeBulkRow(i)">
+                            <AppIcon name="trash" class="h-3.5 w-3.5" />
+                        </button>
+                    </div>
                 </div>
                 <VButton variant="ghost" size="sm" icon="plus" @click="addBulkRow"><Bilingual k="production_tasks.add_row" inline /></VButton>
                 <p class="text-xs text-muted">{{ $t('production_tasks.unit_price_hint') }}</p>
