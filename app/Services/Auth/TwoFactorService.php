@@ -28,11 +28,13 @@ class TwoFactorService
     private const RECOVERY_CODE_COUNT = 8;
 
     /**
-     * How many 30-second windows either side of now are accepted. One window
-     * tolerates ordinary clock drift between the phone and the server without
-     * meaningfully widening the guessing surface.
+     * How many 30-second windows either side of now are accepted. The server
+     * clock is NTP-accurate, but authenticator phones frequently drift by a
+     * minute or two (manual time, poor network time) — a ±30s tolerance then
+     * rejects every code they produce. ±4 steps (±2 min) absorbs that real
+     * drift while keeping the guessing surface negligible for a 6-digit code.
      */
-    private const WINDOW = 1;
+    private const WINDOW = 4;
 
     public function __construct(private readonly Google2FA $engine) {}
 
