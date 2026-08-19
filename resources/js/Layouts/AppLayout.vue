@@ -140,7 +140,12 @@ const mobileAllModules = computed(() => [
 ]);
 
 const isDark = ref(document.documentElement.classList.contains('dark'));
-const collapsed = ref(localStorage.getItem('sidebar-collapsed') === '1');
+// Collapsed (icons-only rail) BY DEFAULT — only an explicit '0' pins it open.
+const collapsed = ref(localStorage.getItem('sidebar-collapsed') !== '0');
+// Hovering the rail expands it as an overlay (labels revealed) without pushing
+// the page content — so the default is a compact rail that opens on hover.
+const hovered = ref(false);
+const expanded = computed(() => !collapsed.value || hovered.value);
 
 function toggleTheme() {
     isDark.value = !isDark.value;
@@ -176,11 +181,12 @@ function switchLocale() {
 
         <!-- Sidebar (desktop) — always dark, both themes. FIXED: never scrolls
              with the content; only the right side scrolls (design skill). -->
-        <aside class="fixed inset-y-0 start-0 z-30 hidden h-screen flex-col bg-sidebar transition-[width] duration-200 md:flex"
-            :class="collapsed ? 'w-14' : 'w-60'">
-            <div class="flex items-center gap-2.5 border-b border-white/5 px-3 py-4" :class="collapsed ? 'justify-center px-0' : 'px-4'">
+        <aside class="fixed inset-y-0 start-0 z-30 hidden h-screen flex-col bg-sidebar shadow-overlay transition-[width] duration-200 md:flex"
+            :class="expanded ? 'w-60' : 'w-14'"
+            @mouseenter="hovered = true" @mouseleave="hovered = false">
+            <div class="flex items-center gap-2.5 border-b border-white/5 px-3 py-4" :class="expanded ? 'px-4' : 'justify-center px-0'">
                 <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-accent text-sm font-bold text-on-accent shadow-sm">AR</span>
-                <span v-if="!collapsed" class="text-base font-semibold tracking-tight text-white">Alpha<span class="text-accent">Rey</span></span>
+                <span v-if="expanded" class="whitespace-nowrap text-base font-semibold tracking-tight text-white">Alpha<span class="text-accent">Rey</span></span>
             </div>
 
             <nav class="sidebar-nav flex-1 space-y-0.5 overflow-y-auto px-2 pb-2">
@@ -191,7 +197,7 @@ function switchLocale() {
                         :href="item.href ?? undefined"
                         class="flex items-center gap-3 rounded-md px-2.5 py-2 transition-colors duration-150"
                         :class="[
-                            collapsed ? 'justify-center px-0' : '',
+                            expanded ? '' : 'justify-center px-0',
                             item.href
                                 ? isActive(item.href)
                                     ? 'bg-accent font-medium text-on-accent'
@@ -201,7 +207,7 @@ function switchLocale() {
                         :title="item.href ? undefined : `${$t('common.coming_soon')}`"
                     >
                         <AppIcon :name="item.icon" class="h-5 w-5 shrink-0" />
-                        <Bilingual v-if="!collapsed" :k="`nav.${item.key}`" class="text-sm" />
+                        <Bilingual v-if="expanded" :k="`nav.${item.key}`" class="whitespace-nowrap text-sm" />
                     </component>
                 </template>
 
@@ -209,16 +215,16 @@ function switchLocale() {
                 <div class="mt-1 border-t border-white/10 pt-1">
                     <button type="button"
                         class="flex w-full items-center gap-3 rounded-md px-2.5 py-2 text-sidebar-ink transition-colors duration-150 hover:bg-sidebar-hover hover:text-white"
-                        :class="collapsed ? 'justify-center px-0' : ''"
+                        :class="expanded ? '' : 'justify-center px-0'"
                         @click="moreOpen = !moreOpen">
                         <AppIcon name="apps" class="h-5 w-5 shrink-0" />
-                        <template v-if="!collapsed">
+                        <template v-if="expanded">
                             <Bilingual k="nav.apps" inline class="flex-1 text-sm" />
                             <AppIcon :name="moreOpen ? 'chevron-up' : 'chevron-down'" class="h-4 w-4 shrink-0 opacity-60" />
                         </template>
                     </button>
 
-                    <div v-show="moreOpen && !collapsed" class="mt-0.5 space-y-0.5">
+                    <div v-show="moreOpen && expanded" class="mt-0.5 space-y-0.5">
                         <component v-for="item in secondaryNav" :key="item.key"
                             :is="item.href ? 'a' : 'div'"
                             :href="item.href ?? undefined"
@@ -240,10 +246,11 @@ function switchLocale() {
             <div class="space-y-0.5 border-t border-white/10 p-2">
                 <button type="button"
                     class="flex w-full items-center gap-3 rounded-md px-2.5 py-2 text-sidebar-ink transition-colors duration-150 hover:bg-sidebar-hover hover:text-white"
-                    :class="collapsed ? 'justify-center px-0' : ''"
+                    :class="expanded ? '' : 'justify-center px-0'"
                     :aria-label="collapsed ? $tPair('common.expand_menu') : $tPair('common.collapse_menu')"
                     @click="toggleSidebar">
                     <AppIcon :name="collapsed ? 'chevron-right' : 'chevron-left'" class="h-5 w-5 shrink-0" />
+                    <Bilingual v-if="expanded" :k="collapsed ? 'common.expand_menu' : 'common.collapse_menu'" inline class="whitespace-nowrap text-sm" />
                 </button>
             </div>
         </aside>
