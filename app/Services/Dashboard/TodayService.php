@@ -13,6 +13,7 @@ use App\Models\Employee;
 use App\Models\EmployeeCallLog;
 use App\Models\EmployeeDeployment;
 use App\Models\Payroll;
+use App\Models\ProjectEmployeeRate;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -55,6 +56,7 @@ class TodayService
 
         return [
             'kpis' => $this->kpis($companyId, $today),
+            'project_breakdown' => $this->projectBreakdown($allToday),
             'attendance' => $rows->values()->all(),
             'attendance_total' => $allToday->count(),
             'filters' => [
@@ -123,12 +125,21 @@ class TodayService
             ->whereDate('date', $today)
             ->sum('hours_worked');
 
+        // Currently checked in = punched in via the PWA and not yet out.
+        $checkedInNow = Attendance::query()
+            ->whereDate('date', $today)
+            ->whereNotNull('check_in_at')
+            ->whereNull('check_out_at')
+            ->distinct('employee_id')
+            ->count('employee_id');
+
         return [
             'total_workers' => $totalWorkers,
             'active_today' => $activeToday,
             'on_leave_today' => $onLeaveToday,
             // Absent = active headcount not accounted for by presence or leave.
             'absent_today' => max(0, $totalWorkers - $activeToday - $onLeaveToday),
+            'checked_in_now' => $checkedInNow,
             'hours_today' => round($hoursToday, 2),
             'pending_calls' => $this->pendingCallsCount($companyId),
         ];
@@ -168,9 +179,47 @@ class TodayService
                 'check_out' => $a->check_out,
                 'hours' => (float) $a->hours_worked,
                 'status' => $a->status->value,
+                // GPS distance from the project site (metres), when captured.
+                'distance' => $a->distance_from_project !== null ? (float) $a->distance_from_project : null,
             ])
             ->values()
             ->all();
+    }
+
+    /**
+     * Per-project roll-up for today: assigned roster, present, absent, hours.
+     * Grouped from today's attendance; "assigned" reads the project's rate
+     * roster (falling back to the number who actually showed up).
+     *
+     * @param  Collection<int, array<string, mixed>>  $allToday
+     * @return list<array<string, mixed>>
+     */
+    private function projectBreakdown(Collection $allToday): array
+    {
+        $byProject = $allToday->groupBy(fn (array $r): string => (string) ($r['project_id'] ?? '0'));
+
+        $projectIds = $byProject->keys()->filter(fn (string $k): bool => $k !== '0')->map(fn (string $k): int => (int) $k)->all();
+        $assigned = ProjectEmployeeRate::query()
+            ->whereIn('project_id', $projectIds)
+            ->selectRaw('project_id, COUNT(DISTINCT employee_id) as c')
+            ->groupBy('project_id')
+            ->pluck('c', 'project_id');
+
+        return $byProject->map(function (Collection $rows, string $pidKey) use ($assigned): array {
+            $pid = $pidKey === '0' ? null : (int) $pidKey;
+            $present = $rows->filter(fn (array $r): bool => in_array($r['status'], self::WORKED, true))->count();
+            $rosterCount = $pid !== null ? (int) ($assigned[$pid] ?? 0) : 0;
+            $assignedCount = max($rosterCount, $rows->count());
+
+            return [
+                'project_id' => $pid,
+                'project' => $pid !== null ? ($rows->first()['project'] ?? null) : null,
+                'assigned' => $assignedCount,
+                'present' => $present,
+                'absent' => max(0, $assignedCount - $present),
+                'hours' => round($rows->sum(fn (array $r): float => (float) $r['hours']), 2),
+            ];
+        })->values()->sortByDesc('present')->values()->all();
     }
 
     /**

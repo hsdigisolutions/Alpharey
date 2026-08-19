@@ -55,6 +55,7 @@ use App\Http\Controllers\SearchController;
 use App\Http\Controllers\SubcontractorController;
 use App\Http\Controllers\TaskProgressController;
 use App\Http\Controllers\TaskTemplateController;
+use App\Http\Controllers\TimesheetController;
 use App\Http\Controllers\TodayController;
 use App\Http\Controllers\VehicleController;
 use App\Http\Controllers\VendorController;
@@ -202,6 +203,7 @@ Route::middleware(['auth', 'active', 'two_factor', 'not_worker'])->group(functio
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
 
     // Screen 15 — Today's Report (Phase 8). Live view, client auto-refresh.
+    Route::get('/today/export', [TodayController::class, 'export'])->name('today.export');
     Route::get('/today', [TodayController::class, 'index'])->name('today.index');
 
     // Global search (Phase 8) — JSON for the header dropdown; permission- and
@@ -320,6 +322,10 @@ Route::middleware(['auth', 'active', 'two_factor', 'not_worker'])->group(functio
     Route::post('/projects/{project}/alerts', [ProjectWorkerController::class, 'storeAlert'])->name('projects.alerts.store');
 
     // Screen 11 — Attendance (company-owned)
+    // Timesheet — weekly/monthly per-employee attendance view (F3)
+    Route::get('/timesheet/export', [TimesheetController::class, 'export'])->name('timesheet.export');
+    Route::get('/timesheet', [TimesheetController::class, 'index'])->name('timesheet.index');
+
     Route::get('/attendance/export', [AttendanceImportExportController::class, 'export'])->name('attendance.export');
     Route::get('/attendance/template', [AttendanceImportExportController::class, 'template'])->name('attendance.template');
     Route::get('/attendance', [AttendanceController::class, 'index'])->name('attendance.index');

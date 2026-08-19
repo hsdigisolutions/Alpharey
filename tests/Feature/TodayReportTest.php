@@ -29,6 +29,32 @@ it('renders Today for a company admin', function (): void {
         ->assertInertia(fn ($page) => $page->component('Today/Index')->has('data.kpis')->has('data.pending'));
 });
 
+it('ships the checked-in-now KPI, project breakdown and row distance', function (): void {
+    $project = Project::factory()->forCompany($this->company)->create(['name' => 'Reforma']);
+    $e = Employee::factory()->forCompany($this->company)->create();
+    Attendance::factory()->create([
+        'company_id' => $this->company->id, 'employee_id' => $e->id, 'project_id' => $project->id,
+        'date' => now()->toDateString(), 'status' => 'present', 'hours_worked' => '8',
+    ]);
+
+    $this->actingAs($this->admin)->get('/today')
+        ->assertInertia(fn ($page) => $page
+            ->has('data.kpis.checked_in_now')
+            ->has('data.project_breakdown', 1)
+            ->has('data.attendance.0.distance'));
+});
+
+it('exports the filtered worker view as Excel and PDF', function (): void {
+    $e = Employee::factory()->forCompany($this->company)->create();
+    Attendance::factory()->create([
+        'company_id' => $this->company->id, 'employee_id' => $e->id,
+        'date' => now()->toDateString(), 'status' => 'present', 'hours_worked' => '8',
+    ]);
+
+    $this->actingAs($this->admin)->get('/today/export?format=excel')->assertOk();
+    $this->actingAs($this->admin)->get('/today/export?format=pdf')->assertOk();
+});
+
 it('sends a Super Admin with no company selected to Welcome', function (): void {
     $sa = User::factory()->create(['role' => UserRole::SuperAdmin, 'company_id' => null]);
 

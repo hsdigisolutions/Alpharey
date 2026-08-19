@@ -22,7 +22,7 @@ const props = defineProps({
     can: { type: Object, default: () => ({}) },
 });
 
-const REFRESH_MS = 5 * 60 * 1000;
+const REFRESH_MS = 60 * 1000; // auto-refresh every 60 seconds
 let timer = null;
 
 function eur(value) {
@@ -67,6 +67,16 @@ function clearFilters() {
     applyFilters();
 }
 
+// Export the current filtered worker-detail view (Excel or PDF).
+function exportToday(format) {
+    const params = new URLSearchParams();
+    if (filters.search) params.append('search', filters.search);
+    if (filters.project) params.append('project', filters.project);
+    if (filters.status) params.append('status', filters.status);
+    params.append('format', format);
+    window.location.href = `/today/export?${params.toString()}`;
+}
+
 onMounted(() => {
     timer = setInterval(() => {
         // Partial reload of just the data prop — keeps scroll + the active
@@ -91,18 +101,47 @@ onBeforeUnmount(() => {
             {{ $t('today.auto_refresh') }} · {{ $t('today.updated') }} {{ data.generated_at?.slice(11, 16) }}
         </p>
 
-        <!-- 6 KPI cards -->
-        <div class="grid grid-cols-2 gap-4 lg:grid-cols-6">
+        <!-- KPI cards -->
+        <div class="grid grid-cols-2 gap-4 lg:grid-cols-4 xl:grid-cols-7">
             <VKpiCard k="today.total_workers" icon="employees" :value="data.kpis.total_workers" />
             <VKpiCard k="today.active_today" icon="attendance" :value="data.kpis.active_today" status="ok" />
-            <VKpiCard k="today.on_leave_today" icon="attendance" :value="data.kpis.on_leave_today"
-                :status="data.kpis.on_leave_today > 0 ? 'warn' : null" />
+            <VKpiCard k="today.checked_in_now" icon="attendance" :value="data.kpis.checked_in_now"
+                :status="data.kpis.checked_in_now > 0 ? 'info' : null" />
             <VKpiCard k="today.absent_today" icon="attendance" :value="data.kpis.absent_today"
                 :status="data.kpis.absent_today > 0 ? 'danger' : null" />
+            <VKpiCard k="today.on_leave_today" icon="attendance" :value="data.kpis.on_leave_today"
+                :status="data.kpis.on_leave_today > 0 ? 'warn' : null" />
             <VKpiCard k="today.hours_today" icon="attendance" :value="data.kpis.hours_today" />
             <VKpiCard k="today.pending_calls" icon="calls" :value="data.kpis.pending_calls"
                 :status="data.kpis.pending_calls > 0 ? 'warn' : null" />
         </div>
+
+        <!-- Project breakdown -->
+        <VCard v-if="data.project_breakdown && data.project_breakdown.length" class="mt-6">
+            <h2 class="mb-3 text-sm font-semibold text-ink"><Bilingual k="today.project_breakdown" inline /></h2>
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="border-b border-line text-xs uppercase text-muted">
+                            <th class="px-2 py-2 text-start font-medium">{{ $t('today.project') }}</th>
+                            <th class="px-2 py-2 text-end font-medium">{{ $t('today.pb_assigned') }}</th>
+                            <th class="px-2 py-2 text-end font-medium">{{ $t('today.pb_present') }}</th>
+                            <th class="px-2 py-2 text-end font-medium">{{ $t('today.pb_absent') }}</th>
+                            <th class="px-2 py-2 text-end font-medium">{{ $t('today.pb_hours') }}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr v-for="(pb, i) in data.project_breakdown" :key="i" class="border-b border-line">
+                            <td class="px-2 py-2">{{ pb.project ?? $t('today.no_project') }}</td>
+                            <td class="tabular-nums px-2 py-2 text-end">{{ pb.assigned }}</td>
+                            <td class="tabular-nums px-2 py-2 text-end text-status-ok">{{ pb.present }}</td>
+                            <td class="tabular-nums px-2 py-2 text-end" :class="pb.absent > 0 ? 'text-status-danger' : ''">{{ pb.absent }}</td>
+                            <td class="tabular-nums px-2 py-2 text-end">{{ pb.hours }}h</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </VCard>
 
         <!-- Attendance table -->
         <VCard class="mt-6">
@@ -126,6 +165,10 @@ onBeforeUnmount(() => {
                 <VButton v-if="hasFilters" variant="ghost" size="sm" @click="clearFilters">
                     <Bilingual k="today.clear_filters" inline />
                 </VButton>
+                <div class="ms-auto flex items-center gap-2">
+                    <VButton variant="secondary" size="sm" icon="download" @click="exportToday('excel')">Excel</VButton>
+                    <VButton variant="secondary" size="sm" icon="download" @click="exportToday('pdf')">PDF</VButton>
+                </div>
             </div>
 
             <VEmptyState v-if="data.attendance.length === 0" title-key="today.no_attendance" message-key="today.no_attendance" />
@@ -140,6 +183,7 @@ onBeforeUnmount(() => {
                             <th class="px-2 py-2 text-start font-medium">{{ $t('today.check_out') }}</th>
                             <th class="tabular-nums px-2 py-2 text-end font-medium">{{ $t('today.hours') }}</th>
                             <th class="px-2 py-2 text-start font-medium">{{ $t('today.status') }}</th>
+                            <th class="px-2 py-2 text-end font-medium">{{ $t('today.distance') }}</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -154,6 +198,7 @@ onBeforeUnmount(() => {
                             <td class="tabular-nums px-2 py-2 text-ink-soft">{{ row.check_out ?? '—' }}</td>
                             <td class="tabular-nums px-2 py-2 text-end text-ink">{{ row.hours }}</td>
                             <td class="px-2 py-2"><VBadge :status="statusBadge[row.status] ?? 'neutral'">{{ statusLabel(row.status) }}</VBadge></td>
+                            <td class="tabular-nums px-2 py-2 text-end text-ink-soft">{{ row.distance != null ? `${Math.round(row.distance)}m` : '—' }}</td>
                         </tr>
                     </tbody>
                 </table>

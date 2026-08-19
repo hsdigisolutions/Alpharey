@@ -3,12 +3,18 @@
 namespace App\Http\Controllers;
 
 use App\Enums\AttendanceStatus;
+use App\Exports\TodayExport;
 use App\Http\Controllers\Admin\Concerns\ResolvesCompanyContext;
+use App\Services\Audit\AuditLogger;
 use App\Services\Dashboard\TodayService;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response as HttpResponse;
 use Illuminate\Support\Facades\Gate;
 use Inertia\Inertia;
 use Inertia\Response;
+use Maatwebsite\Excel\Facades\Excel;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 /**
  * Screen 15 — Today's Report. Per selected company, auto-refreshed by the
@@ -20,18 +26,25 @@ class TodayController extends Controller
 
     public function __construct(private readonly TodayService $today) {}
 
-    public function index(Request $request): Response
+    /**
+     * @return array{search: string, project: int|null, status: string|null}
+     */
+    private function resolveFilters(Request $request): array
     {
-        $companyId = $this->contextCompanyId();
-
         $statuses = array_map(fn (AttendanceStatus $s): string => $s->value, AttendanceStatus::cases());
-        $filters = [
+
+        return [
             'search' => trim((string) $request->query('search', '')),
             'project' => is_numeric($request->query('project')) ? (int) $request->query('project') : null,
             'status' => in_array($request->query('status'), $statuses, true) ? (string) $request->query('status') : null,
         ];
+    }
 
-        $data = $this->today->for($companyId, $filters);
+    public function index(Request $request): Response
+    {
+        $companyId = $this->contextCompanyId();
+
+        $data = $this->today->for($companyId, $this->resolveFilters($request));
 
         // Advance amounts are encrypted pay data — strip them for anyone
         // without the right to see pay (same rule as the payroll screen).
@@ -52,5 +65,28 @@ class TodayController extends Controller
                 'view_pay' => Gate::allows('payroll.view'),
             ],
         ]);
+    }
+
+    /**
+     * Export the filtered worker-detail view (Excel or PDF).
+     */
+    public function export(Request $request, AuditLogger $audit): BinaryFileResponse|HttpResponse
+    {
+        $companyId = $this->contextCompanyId();
+        $data = $this->today->for($companyId, $this->resolveFilters($request));
+        /** @var list<array<string, mixed>> $rows */
+        $rows = $data['attendance'];
+        $format = $request->query('format') === 'pdf' ? 'pdf' : 'excel';
+
+        $audit->log('exported', null, null, null, 'Today report '.strtoupper($format), 'other');
+
+        if ($format === 'pdf') {
+            return Pdf::loadView('exports.today-pdf', [
+                'rows' => $rows,
+                'generated_at' => (string) $data['generated_at'],
+            ])->download('informe-hoy.pdf');
+        }
+
+        return Excel::download(new TodayExport($rows), 'informe-hoy.xlsx');
     }
 }
