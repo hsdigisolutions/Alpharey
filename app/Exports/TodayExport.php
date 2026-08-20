@@ -19,6 +19,7 @@ class TodayExport implements FromArray, WithHeadings
     public function array(): array
     {
         return array_map(fn (array $r): array => [
+            (string) ($r['date'] ?? ''),
             (string) ($r['employee'] ?? ''),
             (string) ($r['project'] ?? '—'),
             (string) ($r['check_in'] ?? '—'),
@@ -34,6 +35,6 @@ class TodayExport implements FromArray, WithHeadings
      */
     public function headings(): array
     {
-        return ['Worker', 'Project', 'Check-in', 'Check-out', 'Hours', 'Status', 'Distance'];
+        return ['Date', 'Worker', 'Project', 'Check-in', 'Check-out', 'Hours', 'Status', 'Distance'];
     }
 }

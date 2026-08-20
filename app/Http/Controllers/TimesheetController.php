@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Enums\AttendanceStatus;
+use App\Exports\GenericRowsExport;
 use App\Exports\TimesheetExport;
 use App\Http\Controllers\Admin\Concerns\ResolvesCompanyContext;
 use App\Models\Attendance;
@@ -14,6 +15,7 @@ use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response as HttpResponse;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Gate;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -37,23 +39,34 @@ class TimesheetController extends Controller
 
         $this->contextCompanyId(); // ensures a company is selected (SA → Welcome)
 
+        $view = $request->query('view') === 'project' ? 'project' : 'employee';
         $employees = Employee::query()->where('active', true)->orderBy('full_name')->get(['id', 'full_name']);
         $employeeId = $this->resolveEmployeeId($request, $employees->pluck('id')->all());
         [$mode, $start, $end] = $this->resolveRange($request);
         $projectId = is_numeric($request->query('project')) ? (int) $request->query('project') : null;
 
-        $sheet = $employeeId !== null
-            ? $this->buildTimesheet($employeeId, $start, $end, $projectId)
-            : ['rows' => [], 'total_hours' => 0.0, 'days_present' => 0];
+        if ($view === 'project') {
+            // All employees who worked on the project in the period, summarised.
+            $sheet = $projectId !== null
+                ? $this->buildProjectTimesheet($projectId, $start, $end)
+                : ['rows' => [], 'total_hours' => 0.0, 'workers' => 0];
+        } else {
+            $sheet = $employeeId !== null
+                ? $this->buildTimesheet($employeeId, $start, $end, $projectId)
+                : ['rows' => [], 'total_hours' => 0.0, 'days_present' => 0];
+        }
 
         return Inertia::render('Timesheet/Index', [
             'employees' => $employees->map(fn (Employee $e): array => ['id' => $e->id, 'name' => $e->full_name])->all(),
             'projects' => Project::query()->orderBy('name')->get(['id', 'name'])
                 ->map(fn (Project $p): array => ['id' => $p->id, 'name' => $p->name])->all(),
             'filters' => [
+                'view' => $view,
                 'employee' => $employeeId,
                 'mode' => $mode,
                 'date' => $start->toDateString(),
+                'from' => $start->toDateString(),
+                'to' => $end->toDateString(),
                 'project' => $projectId,
             ],
             'period' => ['start' => $start->toDateString(), 'end' => $end->toDateString()],
@@ -62,19 +75,81 @@ class TimesheetController extends Controller
         ]);
     }
 
+    /**
+     * By-project view — every employee who worked on the project in the window,
+     * with their days present + hours. Deployed-in workers count (scope dropped,
+     * pinned to the project).
+     *
+     * @return array{rows: list<array<string, mixed>>, total_hours: float, workers: int}
+     */
+    private function buildProjectTimesheet(int $projectId, Carbon $start, Carbon $end): array
+    {
+        $rows = Attendance::query()->withoutGlobalScope(CompanyScope::class)
+            ->where('project_id', $projectId)
+            ->whereBetween('date', [$start->toDateString(), $end->toDateString()])
+            ->with('employee:id,full_name,designation')
+            ->get()
+            ->groupBy('employee_id')
+            ->map(function ($group) {
+                /** @var Collection<int, Attendance> $group */
+                $first = $group->first();
+                $worked = $group->filter(fn (Attendance $a): bool => in_array($a->status->value, self::WORKED, true));
+
+                return [
+                    'employee_id' => $first?->employee_id,
+                    'employee' => $first?->employee?->full_name,
+                    'designation' => $first?->employee?->designation,
+                    'days_present' => $worked->count(),
+                    'hours' => round((float) $worked->sum(fn (Attendance $a): float => (float) $a->hours_worked), 2),
+                ];
+            })
+            ->sortByDesc('hours')
+            ->values()
+            ->all();
+
+        return [
+            'rows' => $rows,
+            'total_hours' => round(array_sum(array_map(fn (array $r): float => (float) $r['hours'], $rows)), 2),
+            'workers' => count($rows),
+        ];
+    }
+
     public function export(Request $request, AuditLogger $audit): BinaryFileResponse|HttpResponse
     {
         Gate::authorize('attendance.export');
         $this->contextCompanyId();
 
-        $employeeId = $this->resolveEmployeeId($request, Employee::query()->pluck('id')->all());
-        abort_if($employeeId === null, 404);
         [, $start, $end] = $this->resolveRange($request);
         $projectId = is_numeric($request->query('project')) ? (int) $request->query('project') : null;
+        $format = $request->query('format') === 'pdf' ? 'pdf' : 'excel';
 
+        // By-project view — export the per-employee summary for the project.
+        if ($request->query('view') === 'project') {
+            abort_if($projectId === null, 404);
+            $project = Project::query()->findOrFail($projectId);
+            $sheet = $this->buildProjectTimesheet($projectId, $start, $end);
+            $audit->log('exported', $project, null, null, 'Timesheet project '.strtoupper($format), 'attendance');
+
+            $heading = ['Employee', 'Designation', 'Days present', 'Hours'];
+            $rows = array_map(fn (array $r): array => [
+                (string) ($r['employee'] ?? ''), (string) ($r['designation'] ?? '—'),
+                (int) $r['days_present'], (float) $r['hours'],
+            ], $sheet['rows']);
+
+            if ($format === 'pdf') {
+                return Pdf::loadView('exports.timesheet-project-pdf', [
+                    'project' => $project->name, 'start' => $start->toDateString(),
+                    'end' => $end->toDateString(), 'sheet' => $sheet,
+                ])->download('timesheet-project.pdf');
+            }
+
+            return Excel::download(new GenericRowsExport($heading, $rows), 'timesheet-project.xlsx');
+        }
+
+        $employeeId = $this->resolveEmployeeId($request, Employee::query()->pluck('id')->all());
+        abort_if($employeeId === null, 404);
         $employee = Employee::query()->findOrFail($employeeId);
         $sheet = $this->buildTimesheet($employeeId, $start, $end, $projectId);
-        $format = $request->query('format') === 'pdf' ? 'pdf' : 'excel';
 
         $audit->log('exported', $employee, null, null, 'Timesheet '.strtoupper($format), 'attendance');
 
@@ -108,7 +183,7 @@ class TimesheetController extends Controller
      */
     private function resolveRange(Request $request): array
     {
-        $mode = $request->query('mode') === 'month' ? 'month' : 'week';
+        $mode = (string) $request->query('mode', 'week');
         $anchor = $request->filled('date')
             ? Carbon::parse((string) $request->query('date'))
             : Carbon::now();
@@ -117,7 +192,18 @@ class TimesheetController extends Controller
             return ['month', $anchor->copy()->startOfMonth(), $anchor->copy()->endOfMonth()];
         }
 
-        // Monday-first week.
+        // Custom range: explicit from/to (falls back to a week around the anchor).
+        if ($mode === 'custom') {
+            $from = $request->filled('from') ? Carbon::parse((string) $request->query('from')) : $anchor->copy()->startOfWeek(Carbon::MONDAY);
+            $to = $request->filled('to') ? Carbon::parse((string) $request->query('to')) : $anchor->copy()->endOfWeek(Carbon::SUNDAY);
+            if ($to->lt($from)) {
+                [$from, $to] = [$to, $from];
+            }
+
+            return ['custom', $from->startOfDay(), $to->startOfDay()];
+        }
+
+        // Monday-first week (default).
         return ['week', $anchor->copy()->startOfWeek(Carbon::MONDAY), $anchor->copy()->endOfWeek(Carbon::SUNDAY)];
     }
 

@@ -26,26 +26,35 @@ const page = usePage();
 const locale = computed(() => (page.props.locale?.primary === 'es' ? 'es-ES' : 'en-GB'));
 
 const state = reactive({
+    view: props.filters.view ?? 'employee',
     employee: props.filters.employee ?? '',
     mode: props.filters.mode ?? 'week',
     project: props.filters.project ?? '',
+    from: props.filters.from ?? props.period.start,
+    to: props.filters.to ?? props.period.end,
 });
 
 function go(date) {
     router.get('/timesheet', {
+        view: state.view,
         employee: state.employee || undefined,
         mode: state.mode,
         date: date ?? props.period.start,
+        from: state.mode === 'custom' ? state.from : undefined,
+        to: state.mode === 'custom' ? state.to : undefined,
         project: state.project || undefined,
     }, { preserveScroll: true, preserveState: true });
 }
 
 function shift(dir) {
+    if (state.mode === 'custom') return; // custom uses explicit from/to
     const d = new Date(props.period.start);
     if (state.mode === 'month') d.setMonth(d.getMonth() + dir);
     else d.setDate(d.getDate() + dir * 7);
     go(d.toISOString().slice(0, 10));
 }
+
+function setView(v) { state.view = v; go(); }
 
 const weekdayKeys = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
 const dayTypeBadge = { full: 'ok', half: 'warn', hourly: 'info', per_meter: 'info' };
@@ -58,9 +67,11 @@ const periodLabel = computed(() => {
 
 function exportSheet(format) {
     const params = new URLSearchParams();
+    params.append('view', state.view);
     if (state.employee) params.append('employee', state.employee);
     params.append('mode', state.mode);
     params.append('date', props.period.start);
+    if (state.mode === 'custom') { params.append('from', state.from); params.append('to', state.to); }
     if (state.project) params.append('project', state.project);
     params.append('format', format);
     window.location.href = `/timesheet/export?${params.toString()}`;
@@ -75,34 +86,60 @@ function exportSheet(format) {
 
         <!-- Controls -->
         <div class="mb-4 flex flex-wrap items-center gap-2">
-            <VSelect v-model="state.employee" class="w-full sm:w-64" @update:model-value="go()">
+            <!-- View: one employee's days, or all employees on a project -->
+            <div class="inline-flex rounded-md border border-line-strong bg-surface-raised p-0.5">
+                <button type="button" class="rounded px-2.5 py-1 text-xs font-medium transition-colors"
+                    :class="state.view === 'employee' ? 'bg-accent text-on-accent' : 'text-ink-soft hover:text-ink'"
+                    @click="setView('employee')">{{ $t('timesheet.by_employee') }}</button>
+                <button type="button" class="rounded px-2.5 py-1 text-xs font-medium transition-colors"
+                    :class="state.view === 'project' ? 'bg-accent text-on-accent' : 'text-ink-soft hover:text-ink'"
+                    @click="setView('project')">{{ $t('timesheet.by_project') }}</button>
+            </div>
+
+            <VSelect v-if="state.view === 'employee'" v-model="state.employee" class="w-full sm:w-64" @update:model-value="go()">
                 <option v-for="e in employees" :key="e.id" :value="e.id">{{ e.name }}</option>
+            </VSelect>
+            <VSelect v-model="state.project" class="w-full sm:w-52" @update:model-value="go()">
+                <option value="">{{ state.view === 'project' ? $t('timesheet.select_project') : $t('timesheet.all_projects') }}</option>
+                <option v-for="p in projects" :key="p.id" :value="p.id">{{ p.name }}</option>
             </VSelect>
             <VSelect v-model="state.mode" class="w-32" @update:model-value="go()">
                 <option value="week">{{ $t('timesheet.week') }}</option>
                 <option value="month">{{ $t('timesheet.month') }}</option>
-            </VSelect>
-            <VSelect v-model="state.project" class="w-full sm:w-52" @update:model-value="go()">
-                <option value="">{{ $t('timesheet.all_projects') }}</option>
-                <option v-for="p in projects" :key="p.id" :value="p.id">{{ p.name }}</option>
+                <option value="custom">{{ $t('timesheet.custom') }}</option>
             </VSelect>
 
             <div class="ms-auto flex items-center gap-2">
-                <button type="button" class="rounded-md border border-line p-1.5 hover:bg-surface-hover" @click="shift(-1)">
-                    <AppIcon name="chevron-left" class="h-4 w-4" />
-                </button>
-                <span class="min-w-40 text-center text-sm font-semibold">{{ periodLabel }}</span>
-                <button type="button" class="rounded-md border border-line p-1.5 hover:bg-surface-hover" @click="shift(1)">
-                    <AppIcon name="chevron-right" class="h-4 w-4" />
-                </button>
+                <template v-if="state.mode === 'custom'">
+                    <input v-model="state.from" type="date"
+                        class="rounded-md border border-line-strong bg-surface-sunken px-2 py-1 text-sm text-ink" @change="go()" />
+                    <span class="text-muted">→</span>
+                    <input v-model="state.to" type="date"
+                        class="rounded-md border border-line-strong bg-surface-sunken px-2 py-1 text-sm text-ink" @change="go()" />
+                </template>
+                <template v-else>
+                    <button type="button" class="rounded-md border border-line p-1.5 hover:bg-surface-hover" @click="shift(-1)">
+                        <AppIcon name="chevron-left" class="h-4 w-4" />
+                    </button>
+                    <span class="min-w-40 text-center text-sm font-semibold">{{ periodLabel }}</span>
+                    <button type="button" class="rounded-md border border-line p-1.5 hover:bg-surface-hover" @click="shift(1)">
+                        <AppIcon name="chevron-right" class="h-4 w-4" />
+                    </button>
+                </template>
             </div>
         </div>
 
         <VCard>
             <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
                 <p class="text-sm font-semibold text-ink">
-                    {{ $t('timesheet.week_total') }}: <span class="tabular-nums">{{ sheet.total_hours }}h</span>
-                    · {{ $t('timesheet.days_present') }}: <span class="tabular-nums">{{ sheet.days_present }}</span>
+                    <template v-if="state.view === 'project'">
+                        {{ $t('timesheet.workers') }}: <span class="tabular-nums">{{ sheet.workers ?? 0 }}</span>
+                        · {{ $t('timesheet.week_total') }}: <span class="tabular-nums">{{ sheet.total_hours }}h</span>
+                    </template>
+                    <template v-else>
+                        {{ $t('timesheet.week_total') }}: <span class="tabular-nums">{{ sheet.total_hours }}h</span>
+                        · {{ $t('timesheet.days_present') }}: <span class="tabular-nums">{{ sheet.days_present }}</span>
+                    </template>
                 </p>
                 <div v-if="can.export" class="flex items-center gap-2">
                     <VButton variant="secondary" size="sm" icon="download" @click="exportSheet('excel')">Excel</VButton>
@@ -110,7 +147,8 @@ function exportSheet(format) {
                 </div>
             </div>
 
-            <div class="overflow-x-auto">
+            <!-- By employee — the daily rows -->
+            <div v-if="state.view === 'employee'" class="overflow-x-auto">
                 <table class="w-full text-sm">
                     <thead>
                         <tr class="border-b border-line text-xs uppercase text-muted">
@@ -145,6 +183,32 @@ function exportSheet(format) {
                                     <Bilingual :k="`attendance.roster_status_${row.status}`" inline />
                                 </VBadge>
                             </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- By project — all employees on the project, summarised -->
+            <div v-else class="overflow-x-auto">
+                <p v-if="!state.project" class="py-6 text-center text-sm text-muted">{{ $t('timesheet.pick_project') }}</p>
+                <table v-else class="w-full text-sm">
+                    <thead>
+                        <tr class="border-b border-line text-xs uppercase text-muted">
+                            <th class="px-2 py-2 text-start font-medium">{{ $t('today.employee') }}</th>
+                            <th class="px-2 py-2 text-start font-medium">{{ $t('employees.designation') }}</th>
+                            <th class="px-2 py-2 text-end font-medium">{{ $t('timesheet.days_present') }}</th>
+                            <th class="px-2 py-2 text-end font-medium">{{ $t('timesheet.hours') }}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr v-for="row in sheet.rows" :key="row.employee_id" class="border-b border-line">
+                            <td class="px-2 py-2 text-ink">{{ row.employee }}</td>
+                            <td class="px-2 py-2 text-ink-soft">{{ row.designation ?? '—' }}</td>
+                            <td class="tabular-nums px-2 py-2 text-end">{{ row.days_present }}</td>
+                            <td class="tabular-nums px-2 py-2 text-end text-ink">{{ row.hours }}h</td>
+                        </tr>
+                        <tr v-if="sheet.rows.length === 0">
+                            <td colspan="4" class="py-6 text-center text-sm text-muted">{{ $t('timesheet.no_rows') }}</td>
                         </tr>
                     </tbody>
                 </table>

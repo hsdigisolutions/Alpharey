@@ -20,6 +20,7 @@
     <table class="data">
         <thead>
             <tr>
+                <th>Date</th>
                 <th>Worker</th>
                 <th>Project</th>
                 <th>Check-in</th>
@@ -32,6 +33,7 @@
         <tbody>
             @forelse ($rows as $r)
                 <tr>
+                    <td>{{ $r['date'] ?? '' }}</td>
                     <td>{{ $r['employee'] ?? '' }}</td>
                     <td>{{ $r['project'] ?? '—' }}</td>
                     <td>{{ $r['check_in'] ?? '—' }}</td>
@@ -41,7 +43,7 @@
                     <td class="right">{{ $r['distance'] !== null ? round((float) $r['distance']) . ' m' : '—' }}</td>
                 </tr>
             @empty
-                <tr><td colspan="7" class="muted">No rows.</td></tr>
+                <tr><td colspan="8" class="muted">No rows.</td></tr>
             @endforelse
         </tbody>
     </table>

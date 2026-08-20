@@ -10,6 +10,7 @@ use App\Services\Dashboard\TodayService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response as HttpResponse;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Gate;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -27,17 +28,35 @@ class TodayController extends Controller
     public function __construct(private readonly TodayService $today) {}
 
     /**
-     * @return array{search: string, project: int|null, status: string|null}
+     * @return array{search: string, project: int|null, statuses: list<string>, from: string|null, to: string|null}
      */
     private function resolveFilters(Request $request): array
     {
-        $statuses = array_map(fn (AttendanceStatus $s): string => $s->value, AttendanceStatus::cases());
+        $valid = array_map(fn (AttendanceStatus $s): string => $s->value, AttendanceStatus::cases());
+        $requested = is_array($request->query('statuses')) ? $request->query('statuses') : [];
+        $statuses = array_values(array_intersect(array_map('strval', $requested), $valid));
 
         return [
             'search' => trim((string) $request->query('search', '')),
             'project' => is_numeric($request->query('project')) ? (int) $request->query('project') : null,
-            'status' => in_array($request->query('status'), $statuses, true) ? (string) $request->query('status') : null,
+            'statuses' => $statuses,
+            'from' => $this->validDate($request->query('from')),
+            'to' => $this->validDate($request->query('to')),
         ];
+    }
+
+    /** A valid Y-m-d date string, or null. */
+    private function validDate(mixed $value): ?string
+    {
+        if (! is_string($value) || $value === '') {
+            return null;
+        }
+
+        try {
+            return Carbon::createFromFormat('Y-m-d', $value)->toDateString();
+        } catch (\Throwable) {
+            return null;
+        }
     }
 
     public function index(Request $request): Response

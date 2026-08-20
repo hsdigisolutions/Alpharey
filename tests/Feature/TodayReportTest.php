@@ -178,8 +178,25 @@ it('filters the attendance list by search, project and status', function (): voi
         ->and($byProject['attendance'][0]['employee'])->toBe('Carlos García')
         ->and($byProject['attendance_total'])->toBe(2); // total stays unfiltered
 
-    // Filter by status.
-    expect($service->for($this->company->id, ['status' => AttendanceStatus::Absent->value])['attendance'])->toHaveCount(1);
+    // Filter by status (multi-select — one ticked).
+    expect($service->for($this->company->id, ['statuses' => [AttendanceStatus::Absent->value]])['attendance'])->toHaveCount(1);
+});
+
+it('honours a date range and flags a single day', function (): void {
+    $e = Employee::factory()->create(['company_id' => $this->company->id]);
+    Attendance::factory()->create(['company_id' => $this->company->id, 'employee_id' => $e->id, 'date' => '2026-07-10', 'status' => 'present', 'hours_worked' => '8']);
+    Attendance::factory()->create(['company_id' => $this->company->id, 'employee_id' => $e->id, 'date' => '2026-07-11', 'status' => 'absent']);
+
+    $this->actingAs($this->admin);
+    $service = app(TodayService::class);
+
+    $range = $service->for($this->company->id, ['from' => '2026-07-10', 'to' => '2026-07-11']);
+    expect($range['attendance'])->toHaveCount(2)
+        ->and($range['single_day'])->toBeFalse();
+
+    $oneDay = $service->for($this->company->id, ['from' => '2026-07-10', 'to' => '2026-07-10']);
+    expect($oneDay['attendance'])->toHaveCount(1)
+        ->and($oneDay['single_day'])->toBeTrue();
 });
 
 it('denies Today to a guest', function (): void {

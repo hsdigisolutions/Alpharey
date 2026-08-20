@@ -32,19 +32,24 @@ class TodayService
     private const WORKED = [AttendanceStatus::Present->value, AttendanceStatus::Late->value, AttendanceStatus::EarlyLeave->value];
 
     /**
-     * @param  array{search?: string, project?: int|null, status?: string|null}  $filters
+     * @param  array{search?: string, project?: int|null, statuses?: list<string>, from?: string, to?: string}  $filters
      * @return array<string, mixed>
      */
     public function for(int $companyId, array $filters = []): array
     {
         $today = Carbon::now()->toDateString();
+        $from = (string) ($filters['from'] ?? $today);
+        $to = (string) ($filters['to'] ?? $from);
+        if ($to < $from) {
+            [$from, $to] = [$to, $from];
+        }
 
-        // Fetch today's attendance once, unfiltered — the filter dropdowns are
+        // Fetch the range's attendance once, unfiltered — the project dropdown is
         // built from this stable set, then the visible rows are the filtered
-        // subset. KPIs stay the day's headline totals (never filtered).
-        $allToday = collect($this->attendanceToday($companyId, $today));
+        // subset. KPIs are the range's headline totals (never text-filtered).
+        $allRows = collect($this->attendanceInRange($companyId, $from, $to));
 
-        $projectOptions = $allToday
+        $projectOptions = $allRows
             ->filter(fn (array $r): bool => $r['project_id'] !== null)
             ->unique('project_id')
             ->map(fn (array $r): array => ['id' => $r['project_id'], 'name' => $r['project']])
@@ -52,17 +57,20 @@ class TodayService
             ->values()
             ->all();
 
-        $rows = $this->applyAttendanceFilters($allToday, $filters);
+        $rows = $this->applyAttendanceFilters($allRows, $filters);
 
         return [
-            'kpis' => $this->kpis($companyId, $today),
-            'project_breakdown' => $this->projectBreakdown($allToday),
+            'kpis' => $this->kpis($companyId, $from, $to, $today),
+            'project_breakdown' => $this->projectBreakdown($allRows),
             'attendance' => $rows->values()->all(),
-            'attendance_total' => $allToday->count(),
+            'attendance_total' => $allRows->count(),
+            'single_day' => $from === $to,
             'filters' => [
                 'search' => (string) ($filters['search'] ?? ''),
                 'project' => $filters['project'] ?? null,
-                'status' => $filters['status'] ?? null,
+                'statuses' => $filters['statuses'] ?? [],
+                'from' => $from,
+                'to' => $to,
             ],
             'filter_options' => [
                 'projects' => $projectOptions,
@@ -78,23 +86,24 @@ class TodayService
      * so a query rebuild is not worth it and keeps the options/rows in step.
      *
      * @param  Collection<int, array<string, mixed>>  $rows
-     * @param  array{search?: string, project?: int|null, status?: string|null}  $filters
+     * @param  array{search?: string, project?: int|null, statuses?: list<string>}  $filters
      * @return Collection<int, array<string, mixed>>
      */
     private function applyAttendanceFilters(Collection $rows, array $filters): Collection
     {
         $search = mb_strtolower(trim((string) ($filters['search'] ?? '')));
         $project = $filters['project'] ?? null;
-        $status = $filters['status'] ?? null;
+        $statuses = $filters['statuses'] ?? [];
 
-        return $rows->filter(function (array $r) use ($search, $project, $status): bool {
+        return $rows->filter(function (array $r) use ($search, $project, $statuses): bool {
             if ($search !== '' && ! str_contains(mb_strtolower((string) ($r['employee'] ?? '')), $search)) {
                 return false;
             }
             if ($project !== null && $r['project_id'] !== $project) {
                 return false;
             }
-            if ($status !== null && $r['status'] !== $status) {
+            // Empty = all statuses; otherwise keep only the ticked ones.
+            if ($statuses !== [] && ! in_array($r['status'], $statuses, true)) {
                 return false;
             }
 
@@ -103,71 +112,81 @@ class TodayService
     }
 
     /**
+     * Headline figures for the selected range. For a single day, "absent" is the
+     * active headcount not accounted for by presence/leave; for a multi-day
+     * range that is meaningless, so it counts distinct employees with a recorded
+     * absence in the window.
+     *
      * @return array<string, int|float>
      */
-    private function kpis(int $companyId, string $today): array
+    private function kpis(int $companyId, string $from, string $to, string $today): array
     {
         $totalWorkers = Employee::query()->where('active', true)->count();
 
-        $activeToday = Attendance::query()
-            ->whereDate('date', $today)
+        $present = Attendance::query()
+            ->whereBetween('date', [$from, $to])
             ->whereIn('status', self::WORKED)
             ->distinct('employee_id')
             ->count('employee_id');
 
-        $onLeaveToday = Attendance::query()
-            ->whereDate('date', $today)
+        $onLeave = Attendance::query()
+            ->whereBetween('date', [$from, $to])
             ->where('status', AttendanceStatus::Leave->value)
             ->distinct('employee_id')
             ->count('employee_id');
 
-        $hoursToday = (float) Attendance::query()
-            ->whereDate('date', $today)
+        $hours = (float) Attendance::query()
+            ->whereBetween('date', [$from, $to])
             ->sum('hours_worked');
 
-        // Currently checked in = punched in via the PWA and not yet out.
-        $checkedInNow = Attendance::query()
-            ->whereDate('date', $today)
-            ->whereNotNull('check_in_at')
-            ->whereNull('check_out_at')
-            ->distinct('employee_id')
-            ->count('employee_id');
+        // Currently checked in only makes sense for today (open PWA punch).
+        $checkedInNow = ($from <= $today && $today <= $to)
+            ? Attendance::query()->whereDate('date', $today)
+                ->whereNotNull('check_in_at')->whereNull('check_out_at')
+                ->distinct('employee_id')->count('employee_id')
+            : 0;
+
+        $absent = $from === $to
+            ? max(0, $totalWorkers - $present - $onLeave)
+            : Attendance::query()->whereBetween('date', [$from, $to])
+                ->where('status', AttendanceStatus::Absent->value)
+                ->distinct('employee_id')->count('employee_id');
 
         return [
             'total_workers' => $totalWorkers,
-            'active_today' => $activeToday,
-            'on_leave_today' => $onLeaveToday,
-            // Absent = active headcount not accounted for by presence or leave.
-            'absent_today' => max(0, $totalWorkers - $activeToday - $onLeaveToday),
+            'active_today' => $present,
+            'on_leave_today' => $onLeave,
+            'absent_today' => $absent,
             'checked_in_now' => $checkedInNow,
-            'hours_today' => round($hoursToday, 2),
+            'hours_today' => round($hours, 2),
             'pending_calls' => $this->pendingCallsCount($companyId),
         ];
     }
 
     /**
-     * Today's attendance rows, including workers deployed INTO this company
-     * (whose home company is shown in its own column).
+     * Attendance rows in [from, to], including workers deployed INTO this company
+     * (whose home company is shown in its own column). Each row carries its date
+     * so a multi-day range reads as a log.
      *
      * @return list<array<string, mixed>>
      */
-    private function attendanceToday(int $companyId, string $today): array
+    private function attendanceInRange(int $companyId, string $from, string $to): array
     {
-        // Home-company lookup for anyone deployed into us right now.
+        // Home-company lookup for anyone deployed into us within the window.
         $homeByEmployee = EmployeeDeployment::query()
             ->where('host_company_id', $companyId)
             ->where('status', DeploymentStatus::Active->value)
-            ->where('deployment_start', '<=', $today)
-            ->where(fn ($q) => $q->whereNull('deployment_end')->orWhere('deployment_end', '>=', $today))
+            ->where('deployment_start', '<=', $to)
+            ->where(fn ($q) => $q->whereNull('deployment_end')->orWhere('deployment_end', '>=', $from))
             ->with('homeCompany:id,name')
             ->get()
             ->keyBy('employee_id')
             ->map(fn (EmployeeDeployment $d): ?string => $d->homeCompany?->name);
 
         return Attendance::query()
-            ->whereDate('date', $today)
+            ->whereBetween('date', [$from, $to])
             ->with(['employee:id,full_name', 'project:id,name'])
-            ->orderBy('employee_id')
+            ->orderByDesc('date')->orderBy('employee_id')
             ->get()
             ->map(fn (Attendance $a): array => [
                 'id' => $a->id,
@@ -175,6 +194,7 @@ class TodayService
                 'home_company' => $homeByEmployee[$a->employee_id] ?? null,
                 'project' => $a->project?->name,
                 'project_id' => $a->project_id,
+                'date' => $a->date->toDateString(),
                 'check_in' => $a->check_in,
                 'check_out' => $a->check_out,
                 'hours' => (float) $a->hours_worked,

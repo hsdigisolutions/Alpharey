@@ -4,7 +4,7 @@
  * (with a home-company column for workers deployed in), and the four
  * pending-action lists. Reloads itself every 5 minutes.
  */
-import { onMounted, onBeforeUnmount, reactive, computed } from 'vue';
+import { onMounted, onBeforeUnmount, reactive, computed, ref } from 'vue';
 import { Head, router } from '@inertiajs/vue3';
 import { t } from '@/translate';
 import AppLayout from '@/Layouts/AppLayout.vue';
@@ -35,14 +35,53 @@ function statusLabel(s) {
     return t(`today.status_${s}`);
 }
 
-/* ── Attendance filters (server-side, preserved across auto-refresh) ── */
+/* ── Filters (server-side, preserved across auto-refresh) ── */
+const STATUS_ORDER = ['present', 'late', 'early_leave', 'leave', 'absent'];
+
+function todayIso() { return new Date().toISOString().slice(0, 10); }
+function isoDaysAgo(n) { const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString().slice(0, 10); }
+
 const filters = reactive({
     search: props.data.filters?.search ?? '',
     project: props.data.filters?.project ?? '',
-    status: props.data.filters?.status ?? '',
+    statuses: [...(props.data.filters?.statuses ?? [])],
+    from: props.data.filters?.from ?? todayIso(),
+    to: props.data.filters?.to ?? todayIso(),
 });
 
-const hasFilters = computed(() => filters.search !== '' || filters.project !== '' || filters.status !== '');
+function computePreset() {
+    const f = filters.from, t = filters.to;
+    if (f === todayIso() && t === todayIso()) return 'today';
+    if (f === isoDaysAgo(1) && t === isoDaysAgo(1)) return 'yesterday';
+    if (f === isoDaysAgo(6) && t === todayIso()) return 'last7';
+    if (f === isoDaysAgo(29) && t === todayIso()) return 'last30';
+    return 'custom';
+}
+const datePreset = ref(computePreset());
+
+function setPreset(p) {
+    datePreset.value = p;
+    if (p === 'today') { filters.from = todayIso(); filters.to = todayIso(); }
+    else if (p === 'yesterday') { filters.from = isoDaysAgo(1); filters.to = isoDaysAgo(1); }
+    else if (p === 'last7') { filters.from = isoDaysAgo(6); filters.to = todayIso(); }
+    else if (p === 'last30') { filters.from = isoDaysAgo(29); filters.to = todayIso(); }
+    if (p !== 'custom') applyFilters();
+}
+
+function toggleStatus(s) {
+    const i = filters.statuses.indexOf(s);
+    if (i >= 0) filters.statuses.splice(i, 1); else filters.statuses.push(s);
+    applyFilters();
+}
+
+const hasFilters = computed(() => filters.search !== '' || filters.project !== '' || filters.statuses.length > 0 || computePreset() !== 'today');
+
+// Attendance grouped into status sections (Present, Late, Early leave, Leave, Absent).
+const groupedAttendance = computed(() => {
+    const byStatus = {};
+    for (const r of props.data.attendance) (byStatus[r.status] ??= []).push(r);
+    return STATUS_ORDER.filter((s) => byStatus[s]?.length).map((s) => ({ status: s, rows: byStatus[s] }));
+});
 
 let searchDebounce = null;
 
@@ -50,7 +89,9 @@ function applyFilters() {
     router.get('/today', {
         search: filters.search || undefined,
         project: filters.project || undefined,
-        status: filters.status || undefined,
+        statuses: filters.statuses.length ? filters.statuses : undefined,
+        from: filters.from || undefined,
+        to: filters.to || undefined,
     }, { preserveState: true, preserveScroll: true, replace: true, only: ['data'] });
 }
 
@@ -63,16 +104,18 @@ function onSearch(v) {
 function clearFilters() {
     filters.search = '';
     filters.project = '';
-    filters.status = '';
-    applyFilters();
+    filters.statuses = [];
+    setPreset('today');
 }
 
-// Export the current filtered worker-detail view (Excel or PDF).
+// Export the current filtered view (Excel or PDF).
 function exportToday(format) {
     const params = new URLSearchParams();
     if (filters.search) params.append('search', filters.search);
     if (filters.project) params.append('project', filters.project);
-    if (filters.status) params.append('status', filters.status);
+    filters.statuses.forEach((s) => params.append('statuses[]', s));
+    if (filters.from) params.append('from', filters.from);
+    if (filters.to) params.append('to', filters.to);
     params.append('format', format);
     window.location.href = `/today/export?${params.toString()}`;
 }
@@ -97,9 +140,26 @@ onBeforeUnmount(() => {
     <AppLayout>
         <VPageHeader k="today.title" />
 
-        <p class="mb-4 text-xs text-muted">
+        <p class="mb-3 text-xs text-muted">
             {{ $t('today.auto_refresh') }} · {{ $t('today.updated') }} {{ data.generated_at?.slice(11, 16) }}
         </p>
+
+        <!-- Date range -->
+        <div class="mb-4 flex flex-wrap items-center gap-2">
+            <div class="inline-flex rounded-md border border-line-strong bg-surface-raised p-0.5">
+                <button v-for="p in ['today', 'yesterday', 'last7', 'last30', 'custom']" :key="p" type="button"
+                    class="rounded px-2.5 py-1 text-xs font-medium transition-colors"
+                    :class="datePreset === p ? 'bg-accent text-on-accent' : 'text-ink-soft hover:text-ink'"
+                    @click="setPreset(p)">{{ $t(`today.date_${p}`) }}</button>
+            </div>
+            <template v-if="datePreset === 'custom'">
+                <input v-model="filters.from" type="date"
+                    class="rounded-md border border-line-strong bg-surface-sunken px-2 py-1 text-sm text-ink" @change="applyFilters" />
+                <span class="text-muted">→</span>
+                <input v-model="filters.to" type="date"
+                    class="rounded-md border border-line-strong bg-surface-sunken px-2 py-1 text-sm text-ink" @change="applyFilters" />
+            </template>
+        </div>
 
         <!-- KPI cards -->
         <div class="grid grid-cols-2 gap-4 lg:grid-cols-4 xl:grid-cols-7">
@@ -158,10 +218,15 @@ onBeforeUnmount(() => {
                     <option value="">{{ $t('today.all_projects') }}</option>
                     <option v-for="p in data.filter_options.projects" :key="p.id" :value="p.id">{{ p.name }}</option>
                 </VSelect>
-                <VSelect v-model="filters.status" class="w-full sm:w-44" @update:model-value="applyFilters">
-                    <option value="">{{ $t('today.all_statuses') }}</option>
-                    <option v-for="s in data.filter_options.statuses" :key="s" :value="s">{{ statusLabel(s) }}</option>
-                </VSelect>
+                <!-- Status multi-select: tick to show only those sections -->
+                <div class="flex flex-wrap items-center gap-1.5">
+                    <button v-for="s in STATUS_ORDER" :key="s" type="button"
+                        class="rounded-full border px-2.5 py-1 text-xs transition-colors"
+                        :class="filters.statuses.includes(s) ? 'border-accent bg-accent-soft text-accent' : 'border-line-strong text-ink-soft hover:text-ink'"
+                        @click="toggleStatus(s)">
+                        {{ statusLabel(s) }}
+                    </button>
+                </div>
                 <VButton v-if="hasFilters" variant="ghost" size="sm" @click="clearFilters">
                     <Bilingual k="today.clear_filters" inline />
                 </VButton>
@@ -172,22 +237,29 @@ onBeforeUnmount(() => {
             </div>
 
             <VEmptyState v-if="data.attendance.length === 0" title-key="today.no_attendance" message-key="today.no_attendance" />
-            <div v-else class="overflow-x-auto">
+
+            <!-- Grouped into status sections (Present, Late, Early leave, Leave, Absent) -->
+            <div v-for="group in groupedAttendance" :key="group.status" class="mb-5 overflow-x-auto">
+                <div class="mb-1.5 flex items-center gap-2">
+                    <VBadge :status="statusBadge[group.status] ?? 'neutral'">{{ statusLabel(group.status) }}</VBadge>
+                    <span class="text-xs text-muted">{{ group.rows.length }}</span>
+                </div>
                 <table class="w-full text-sm">
                     <thead>
                         <tr class="border-b border-line text-start text-xs uppercase text-muted">
+                            <th v-if="!data.single_day" class="px-2 py-2 text-start font-medium">{{ $t('timesheet.day') }}</th>
                             <th class="px-2 py-2 text-start font-medium">{{ $t('today.employee') }}</th>
                             <th class="px-2 py-2 text-start font-medium">{{ $t('today.home_company') }}</th>
                             <th class="px-2 py-2 text-start font-medium">{{ $t('today.project') }}</th>
                             <th class="px-2 py-2 text-start font-medium">{{ $t('today.check_in') }}</th>
                             <th class="px-2 py-2 text-start font-medium">{{ $t('today.check_out') }}</th>
                             <th class="tabular-nums px-2 py-2 text-end font-medium">{{ $t('today.hours') }}</th>
-                            <th class="px-2 py-2 text-start font-medium">{{ $t('today.status') }}</th>
                             <th class="px-2 py-2 text-end font-medium">{{ $t('today.distance') }}</th>
                         </tr>
                     </thead>
                     <tbody>
-                        <tr v-for="row in data.attendance" :key="row.id" class="border-b border-line">
+                        <tr v-for="row in group.rows" :key="row.id" class="border-b border-line">
+                            <td v-if="!data.single_day" class="tabular-nums px-2 py-2 text-ink-soft">{{ row.date }}</td>
                             <td class="px-2 py-2 text-ink">{{ row.employee }}</td>
                             <td class="px-2 py-2">
                                 <VBadge v-if="row.home_company" status="info">{{ row.home_company }}</VBadge>
@@ -197,7 +269,6 @@ onBeforeUnmount(() => {
                             <td class="tabular-nums px-2 py-2 text-ink-soft">{{ row.check_in ?? '—' }}</td>
                             <td class="tabular-nums px-2 py-2 text-ink-soft">{{ row.check_out ?? '—' }}</td>
                             <td class="tabular-nums px-2 py-2 text-end text-ink">{{ row.hours }}</td>
-                            <td class="px-2 py-2"><VBadge :status="statusBadge[row.status] ?? 'neutral'">{{ statusLabel(row.status) }}</VBadge></td>
                             <td class="tabular-nums px-2 py-2 text-end text-ink-soft">{{ row.distance != null ? `${Math.round(row.distance)}m` : '—' }}</td>
                         </tr>
                     </tbody>

@@ -5,7 +5,7 @@
  * the exact filtered view. Everything is computed server-side by
  * ReportService; this page renders whatever shape it returns.
  */
-import { computed, reactive } from 'vue';
+import { computed, reactive, ref } from 'vue';
 import { Head, router } from '@inertiajs/vue3';
 import { route } from 'ziggy-js';
 import AppLayout from '@/Layouts/AppLayout.vue';
@@ -45,6 +45,33 @@ function apply() {
         project_id: isProfit.value && form.project_id ? form.project_id : undefined,
         client_id: isProfit.value && form.client_id ? form.client_id : undefined,
     }, { preserveState: true, preserveScroll: true });
+}
+
+/* ── Date presets (quick filtering) ── */
+function iso(d) { return d.toISOString().slice(0, 10); }
+function todayIso() { return iso(new Date()); }
+function firstOfMonth(offset = 0) { const d = new Date(); d.setMonth(d.getMonth() + offset, 1); return iso(d); }
+function lastOfMonth(offset = 0) { const d = new Date(); d.setMonth(d.getMonth() + offset + 1, 0); return iso(d); }
+function firstOfYear() { return `${new Date().getFullYear()}-01-01`; }
+
+function computeReportPreset() {
+    if (form.from === firstOfMonth(0) && form.to === todayIso()) return 'this_month';
+    if (form.from === firstOfMonth(-1) && form.to === lastOfMonth(-1)) return 'last_month';
+    if ((form.from === firstOfYear() || !form.from) && (form.to === todayIso() || !form.to)) return 'this_year';
+    return 'custom';
+}
+const reportPreset = ref(computeReportPreset());
+function setReportPreset(p) {
+    reportPreset.value = p;
+    if (p === 'this_month') { form.from = firstOfMonth(0); form.to = todayIso(); }
+    else if (p === 'last_month') { form.from = firstOfMonth(-1); form.to = lastOfMonth(-1); }
+    else if (p === 'this_year') { form.from = firstOfYear(); form.to = todayIso(); }
+    if (p !== 'custom') apply();
+}
+
+// Humanised header for the generic detail table (raw DB keys → Title Case).
+function columnLabel(col) {
+    return col.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 // Reset the drill-down when switching module or client (a stale project id
@@ -130,14 +157,23 @@ const tableColumns = computed(() => (table.value ? Object.keys(table.value[0]) :
                         <option v-for="m in modules" :key="m" :value="m">{{ t(`reports.mod_${m}`) }}</option>
                     </VSelect>
                 </label>
+                <div class="flex flex-col gap-1">
+                    <span class="text-xs font-medium text-ink-soft">{{ $t('reports.period') }}</span>
+                    <div class="inline-flex rounded-md border border-line-strong bg-surface-raised p-0.5">
+                        <button v-for="p in ['this_month', 'last_month', 'this_year', 'custom']" :key="p" type="button"
+                            class="rounded px-2.5 py-1 text-xs font-medium transition-colors"
+                            :class="reportPreset === p ? 'bg-accent text-on-accent' : 'text-ink-soft hover:text-ink'"
+                            @click="setReportPreset(p)">{{ $t(`reports.preset_${p}`) }}</button>
+                    </div>
+                </div>
                 <label class="flex flex-col gap-1">
                     <span class="text-xs font-medium text-ink-soft">{{ $t('reports.date_from') }}</span>
-                    <input v-model="form.from" type="date" @change="apply"
+                    <input v-model="form.from" type="date" @change="() => { reportPreset = 'custom'; apply(); }"
                         class="rounded-md border border-line-strong bg-surface-sunken px-3 py-1.5 text-sm text-ink focus:border-accent focus:outline-none" />
                 </label>
                 <label class="flex flex-col gap-1">
                     <span class="text-xs font-medium text-ink-soft">{{ $t('reports.date_to') }}</span>
-                    <input v-model="form.to" type="date" @change="apply"
+                    <input v-model="form.to" type="date" @change="() => { reportPreset = 'custom'; apply(); }"
                         class="rounded-md border border-line-strong bg-surface-sunken px-3 py-1.5 text-sm text-ink focus:border-accent focus:outline-none" />
                 </label>
                 <!-- Profitability-only: client + project filters -->
@@ -283,12 +319,15 @@ const tableColumns = computed(() => (table.value ? Object.keys(table.value[0]) :
 
             <!-- Primary detail table -->
             <VCard v-else-if="table" class="mt-6">
+                <div class="mb-2 flex items-center justify-between">
+                    <span class="text-xs text-muted">{{ table.length }} {{ $t('reports.rows') }}</span>
+                </div>
                 <div class="overflow-x-auto">
                     <table class="w-full text-sm">
                         <thead>
                             <tr class="border-b border-line text-start text-xs uppercase text-muted">
                                 <th v-for="col in tableColumns" :key="col" class="px-2 py-2 text-start font-medium">
-                                    {{ t(`reports.${col}`) ?? col.replace('_', ' ') }}
+                                    {{ columnLabel(col) }}
                                 </th>
                             </tr>
                         </thead>
