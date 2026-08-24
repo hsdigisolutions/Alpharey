@@ -16,6 +16,7 @@ use Illuminate\Support\Carbon;
  *
  * @property int $id
  * @property int $vehicle_id
+ * @property int|null $expense_id
  * @property Carbon $maintenance_date
  * @property int|null $vehicle_km
  * @property numeric-string|null $cost
@@ -50,6 +51,12 @@ class VehicleMaintenanceHistory extends Model
     public function vehicle(): BelongsTo
     {
         return $this->belongsTo(Vehicle::class);
+    }
+
+    /** @return BelongsTo<Expense, $this> */
+    public function expense(): BelongsTo
+    {
+        return $this->belongsTo(Expense::class);
     }
 
     /**

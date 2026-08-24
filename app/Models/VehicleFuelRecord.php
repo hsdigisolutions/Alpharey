@@ -17,6 +17,7 @@ use Illuminate\Support\Carbon;
  *
  * @property int $id
  * @property int $vehicle_id
+ * @property int|null $expense_id
  * @property int $company_id
  * @property int|null $employee_id
  * @property Carbon $fuel_date
@@ -66,6 +67,12 @@ class VehicleFuelRecord extends Model
     public function employee(): BelongsTo
     {
         return $this->belongsTo(Employee::class);
+    }
+
+    /** @return BelongsTo<Expense, $this> */
+    public function expense(): BelongsTo
+    {
+        return $this->belongsTo(Expense::class);
     }
 
     /** @return BelongsTo<User, $this> */

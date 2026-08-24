@@ -45,6 +45,7 @@ use Illuminate\Support\Carbon;
  * @property numeric-string $total
  * @property string|null $source
  * @property int|null $source_id
+ * @property int|null $vehicle_id
  */
 class Expense extends Model
 {
@@ -58,7 +59,7 @@ class Expense extends Model
 
     /** @var list<string> */
     protected $fillable = [
-        'number', 'type', 'expense_category_id', 'vendor_id', 'project_id',
+        'number', 'type', 'expense_category_id', 'vendor_id', 'project_id', 'vehicle_id',
         'employee_id', 'company_card_id', 'date', 'due_date', 'subtotal',
         'vat_rate', 'vat_custom_percent', 'vat_amount', 'total', 'payment_method', 'payment_status',
         'payment_date', 'is_reimbursable', 'bearable_by', 'deduct_from_salary', 'notes',
@@ -158,6 +159,16 @@ class Expense extends Model
     public function employee(): BelongsTo
     {
         return $this->belongsTo(Employee::class);
+    }
+
+    /**
+     * The vehicle this expense relates to (fuel / fine / maintenance), when any.
+     *
+     * @return BelongsTo<Vehicle, $this>
+     */
+    public function vehicle(): BelongsTo
+    {
+        return $this->belongsTo(Vehicle::class);
     }
 
     /**
