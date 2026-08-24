@@ -101,6 +101,7 @@ function approve(expense) {
                         <th class="px-4 py-3"><Bilingual k="worker_expenses.date" inline /></th>
                         <th class="px-4 py-3 text-right"><Bilingual k="worker_expenses.amount" inline /></th>
                         <th class="px-4 py-3"><Bilingual k="worker_expenses.category" inline /></th>
+                        <th class="px-4 py-3"><Bilingual k="worker_expenses.vehicle" inline /></th>
                         <th class="px-4 py-3"><Bilingual k="worker_expenses.description" inline /></th>
                         <th class="px-4 py-3 text-center"><Bilingual k="worker_expenses.receipt" inline /></th>
                         <th class="px-4 py-3 text-center"><Bilingual k="worker_expenses.status_label" inline /></th>
@@ -109,7 +110,7 @@ function approve(expense) {
                 </thead>
                 <tbody>
                     <tr v-if="!expenses.data.length">
-                        <td :colspan="can.approve ? 8 : 7" class="px-4 py-8 text-center text-sm text-muted">
+                        <td :colspan="can.approve ? 9 : 8" class="px-4 py-8 text-center text-sm text-muted">
                             <Bilingual k="worker_expenses.empty" />
                         </td>
                     </tr>
@@ -124,6 +125,7 @@ function approve(expense) {
                         <td class="px-4 py-3 text-ink-soft">
                             <Bilingual :k="categoryKey(e.category)" inline />
                         </td>
+                        <td class="px-4 py-3 text-ink-soft">{{ e.vehicle || '—' }}</td>
                         <td class="max-w-xs px-4 py-3">
                             <p class="truncate text-ink-soft">{{ e.description || '—' }}</p>
                             <p v-if="e.rejection_reason" class="mt-1 text-xs text-status-danger">

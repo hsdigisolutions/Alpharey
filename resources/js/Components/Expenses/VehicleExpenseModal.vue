@@ -35,9 +35,11 @@ const form = useForm({ ...blank });
 // Driver auto-lookup for a fine.
 const driverOptions = ref([]);
 const driverLoading = ref(false);
+const showAllDrivers = ref(false);
 
 async function lookupDrivers() {
     driverOptions.value = [];
+    showAllDrivers.value = false;
     if (form.vehicle_expense_type !== 'fine' || !form.vehicle_id || !form.date) return;
     driverLoading.value = true;
     try {
@@ -64,16 +66,15 @@ watch(() => props.open, (open) => {
     driverOptions.value = [];
 });
 
-// For a fine: the looked-up drivers first, then everyone else (admin may still
-// pick anyone if no session matched).
-const employeeChoices = computed(() => {
-    if (form.vehicle_expense_type === 'fine' && driverOptions.value.length) {
-        const ids = new Set(driverOptions.value.map((d) => d.id));
-        const rest = props.employees.filter((e) => !ids.has(e.id)).map((e) => ({ id: e.id, name: e.full_name }));
-        return [...driverOptions.value, ...rest];
-    }
-    return props.employees.map((e) => ({ id: e.id, name: e.full_name }));
-});
+// For a fine with matched drivers, show ONLY the drivers who had the vehicle
+// that day (unless the admin opts to see everyone). No match, or a non-fine
+// type → the full active list so a driver can still be picked manually.
+const usingSessionDrivers = computed(() =>
+    form.vehicle_expense_type === 'fine' && driverOptions.value.length > 0 && !showAllDrivers.value);
+
+const employeeChoices = computed(() => usingSessionDrivers.value
+    ? driverOptions.value
+    : props.employees.map((e) => ({ id: e.id, name: e.full_name })));
 
 function submit() {
     form.transform((d) => ({
@@ -121,6 +122,12 @@ function submit() {
                         <option value="">{{ driverLoading ? '…' : '—' }}</option>
                         <option v-for="e in employeeChoices" :key="e.id" :value="e.id">{{ e.name }}</option>
                     </VSelect>
+                    <p v-if="usingSessionDrivers" class="mt-1 text-[11px] text-muted">
+                        {{ $t('expenses.driver_from_sessions') }} ·
+                        <button type="button" class="text-accent hover:underline" @click="showAllDrivers = true">
+                            {{ $t('expenses.driver_show_all') }}
+                        </button>
+                    </p>
                 </FormField>
             </template>
 

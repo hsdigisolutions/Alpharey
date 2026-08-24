@@ -39,7 +39,7 @@ class WorkerExpenseAdminController extends Controller
 
         $expenses = WorkerExpense::query()
             ->where('company_id', $companyId)
-            ->with(['employee:id,full_name,employee_code', 'approver:id,name'])
+            ->with(['employee:id,full_name,employee_code', 'approver:id,name', 'vehicle:id,plate_number,brand,model'])
             ->latest()
             ->paginate(25)
             ->withQueryString()
@@ -49,6 +49,9 @@ class WorkerExpenseAdminController extends Controller
                 'date' => $e->date->toDateString(),
                 'amount' => $e->amount,
                 'category' => $e->category,
+                'vehicle' => $e->vehicle !== null
+                    ? trim($e->vehicle->plate_number.' '.trim(($e->vehicle->brand ?? '').' '.($e->vehicle->model ?? '')))
+                    : null,
                 'description' => $e->description,
                 'status' => $e->status->value,
                 'approved_by' => $e->approver?->name,
