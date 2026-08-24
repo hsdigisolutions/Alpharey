@@ -4,49 +4,47 @@ namespace App\Services\Employees;
 
 use App\Enums\EquipmentIssueStatus;
 use App\Enums\PayrollStatus;
-use App\Models\Document;
 use App\Models\Employee;
+use App\Models\EmployeeCompanyHistory;
 use App\Models\EmployeeEquipmentIssue;
 use App\Models\Payroll;
 use App\Models\Scopes\CompanyScope;
 use App\Services\Audit\AuditLogger;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 /**
- * Transfer an employee from one company to another, KEEPING history (Change 2).
+ * Transfer an employee from one company to another — SINGLE-RECORD model.
  *
- * Instead of moving the single record's company_id (which stranded the old
- * company's view), a transfer now:
- *   - keeps the OLD record as history, marked Transferred (transferred_out_at),
- *     deactivated and with its login released — its attendance, payroll,
- *     documents and wage history stay with the old company;
- *   - creates a NEW record in the target company sharing the same person_uuid
- *     (the link the Employment History tab follows), with a fresh employee_code,
- *     joining_date = the transfer date (so absence-counting starts then), the
- *     login moved onto it, fresh wage rates seeded from the carried wage fields,
- *     and its personal/qualification documents carried over.
+ * There is exactly ONE employee record per person, always. A transfer flips
+ * that record's company_id IN PLACE (it does NOT create a new record). This is
+ * the redesign that replaced the earlier "new record per transfer" model, which
+ * stranded attendance history on superseded records and multiplied records on
+ * round-trip transfers.
+ *
+ * On transfer:
+ *   - the record's company_id is set to the new company (same id, same login,
+ *     same documents, same attendance — nothing is copied or moved);
+ *   - the current company stint is closed and a new one opened in
+ *     employee_company_history (the Employment History tab reads from there);
+ *   - the open wage-rate period is carried into the new company from the
+ *     transfer date (same amount, new company tag) — old periods keep their
+ *     company, exactly like attendance;
+ *   - transferred_at is stamped so absence-counting at the new company starts
+ *     from the transfer date;
+ *   - documents_pending_reupload flags that the new company's employment
+ *     documents are still needed.
+ *
+ * PERMANENT RULE: every attendance row keeps the company_id it was logged under
+ * forever — this service never touches the attendance table, so a worker's
+ * history stays with the company where it was earned.
  *
  * Blocked when: outstanding equipment issues exist, or the current month's
- * payroll for this employee is already PAID (kept as an extra safety guard even
- * though old and new records now have distinct employee_ids).
+ * payroll for this employee is already PAID.
  */
 class EmployeeTransferService
 {
-    /**
-     * Personal identity + portable qualification documents that follow the
-     * PERSON across companies. Employment docs (contrato, alta/baja SS, IDC,
-     * art.18, EPIs, machinery authorisation) are company-specific and are
-     * re-created fresh by the new company — deliberately NOT copied.
-     */
-    private const CARRY_OVER_DOC_TYPES = [
-        'dni', 'nie_fotocopia', 'foto',
-        'aptitud_medica', 'formacion_art19', 'formacion_prl_20h',
-    ];
-
     public function __construct(private readonly AuditLogger $audit) {}
 
     public function transfer(Employee $employee, int $toCompanyId, string $date): Employee
@@ -77,95 +75,59 @@ class EmployeeTransferService
         }
 
         return DB::transaction(function () use ($employee, $fromCompanyId, $toCompanyId, $date): Employee {
-            // One shared person link across the whole transfer chain.
-            if ($employee->person_uuid === null) {
-                $employee->person_uuid = (string) Str::uuid();
-            }
             $transferDate = Carbon::parse($date);
+            $transferDay = $transferDate->toDateString();
 
-            // The NEW record — cloned from the current profile + wage fields
-            // (replicate BEFORE the old record is mutated). A fresh stint.
-            $new = $employee->replicate();
-            $new->company_id = $toCompanyId; // creating hook only fills when null
-            $new->employee_code = Employee::nextCode();
-            $new->previous_company_id = $fromCompanyId;
-            $new->transferred_at = now();
-            $new->transferred_out_at = null;
-            $new->active = true;
-            $new->active_since = $transferDate;
-            $new->joining_date = $transferDate;
-            $new->leaving_date = null;
-            $new->documents_pending_reupload = true;
-            // person_uuid + user_id are carried by replicate().
+            // --- Company-stint history (Employment History tab reads this) ---
+            $openStint = EmployeeCompanyHistory::query()
+                ->where('employee_id', $employee->id)
+                ->whereNull('ended_at')
+                ->orderByDesc('started_at')
+                ->first();
 
-            // The OLD record: kept as history, marked Transferred, deactivated,
-            // and its login released FIRST so the unique user_id is free for the
-            // new record.
-            $employee->transferred_out_at = now();
-            $employee->active = false;
-            $employee->user_id = null;
+            if ($openStint !== null && $openStint->started_at->toDateString() >= $transferDay) {
+                // Same-day (or a transfer dated on/before the current stint's
+                // start) — just move the still-open stint, never open a
+                // zero-length one. This is what keeps round-trip transfers from
+                // proliferating stint rows.
+                $openStint->company_id = $toCompanyId;
+                $openStint->save();
+            } else {
+                if ($openStint !== null) {
+                    $openStint->ended_at = $transferDate;
+                    $openStint->save();
+                }
+                EmployeeCompanyHistory::create([
+                    'employee_id' => $employee->id,
+                    'company_id' => $toCompanyId,
+                    'started_at' => $transferDay,
+                    'ended_at' => null,
+                ]);
+            }
+
+            // --- Flip the ONE record's company in place ---
+            // company_id is guarded (not mass-assignable); set on the instance
+            // directly and persist. Login, documents and attendance are untouched.
+            $employee->previous_company_id = $fromCompanyId;
+            $employee->transferred_at = $transferDate;
+            $employee->transferred_out_at = null; // single record is never "transferred out"
+            $employee->documents_pending_reupload = true;
+            $employee->company_id = $toCompanyId;
             $employee->save();
 
-            $new->save();
-
-            // Fresh wage-rate history for the new stint (the old record keeps its
-            // own rows for its historical payroll).
-            app(WageRateService::class)->seedFromEmployee($new);
-
-            // Carry over the personal + qualification documents to the new record.
-            $this->carryOverDocuments($employee, $new);
+            // --- Wage: carry the same rate into the new company from today ---
+            app(WageRateService::class)->openTransferStint($employee, $toCompanyId, $transferDay);
 
             $this->audit->log(
                 'transferred',
                 $employee,
-                ['status' => 'active'],
-                ['status' => 'transferred'],
-                "Transferred out to company {$toCompanyId} (new record #{$new->id})",
-                'employees',
-            );
-            $this->audit->log(
-                'created',
-                $new,
-                null,
+                ['company_id' => $fromCompanyId],
                 ['company_id' => $toCompanyId],
-                "Transferred in from company {$fromCompanyId} (from record #{$employee->id})",
+                "Transferred from company {$fromCompanyId} to {$toCompanyId} (single record, history + attendance kept)",
                 'employees',
             );
 
-            return $new;
+            return $employee;
         });
-    }
-
-    /**
-     * Copy the person's carry-over documents (identity + portable
-     * qualifications) from the old record to the new one, duplicating the
-     * physical files so the new company owns its own copy.
-     */
-    private function carryOverDocuments(Employee $old, Employee $new): void
-    {
-        $docs = Document::query()->withoutGlobalScope(CompanyScope::class)
-            ->where('documentable_type', $old->getMorphClass())
-            ->where('documentable_id', $old->id)
-            ->where('is_current', true)
-            ->whereIn('type_key', self::CARRY_OVER_DOC_TYPES)
-            ->get();
-
-        foreach ($docs as $doc) {
-            $copy = $doc->replicate(['file_path']);
-            $copy->documentable()->associate($new);
-            $copy->company_id = $new->company_id;
-            $copy->version = 1;
-            $copy->setAttribute('is_current', true);
-
-            $oldPath = $doc->getAttribute('file_path');
-            if (is_string($oldPath) && $oldPath !== '' && Storage::disk('local')->exists($oldPath)) {
-                $ext = pathinfo($oldPath, PATHINFO_EXTENSION);
-                $newPath = "employees/{$new->id}/documents/".Str::random(40).($ext !== '' ? '.'.$ext : '');
-                Storage::disk('local')->copy($oldPath, $newPath);
-                $copy->setAttribute('file_path', $newPath);
-            }
-
-            $copy->save();
-        }
     }
 }

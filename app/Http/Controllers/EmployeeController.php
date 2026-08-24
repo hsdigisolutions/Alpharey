@@ -11,12 +11,12 @@ use App\Models\Attendance;
 use App\Models\Company;
 use App\Models\Department;
 use App\Models\Employee;
+use App\Models\EmployeeCompanyHistory;
 use App\Models\EmployeeEquipmentIssue;
 use App\Models\EmployeeWageRate;
 use App\Models\EquipmentIncident;
 use App\Models\Payroll;
 use App\Models\Project;
-use App\Models\Scopes\CompanyScope;
 use App\Models\UserColumnSetting;
 use App\Models\WorkerConsent;
 use App\Services\Attendance\AttendanceService;
@@ -605,40 +605,30 @@ class EmployeeController extends Controller
     }
 
     /**
-     * Employment History (Change 2): every company stint of this person, linked
-     * by person_uuid. Cross-company (scope dropped) but soft-deletes still
-     * excluded. `can_view` gates the read-only drill-in to the acting company's
-     * own records (or any, for a Super Admin).
+     * Employment History (Change 2, single-record model): every company stint of
+     * this ONE employee record over time, read from employee_company_history.
+     * The open stint (ended_at null) is the current company. `can_view` marks
+     * stints at a company the viewer may see (own company, or any for a Super
+     * Admin) — it does not drill into a separate record (there is only one).
      *
      * @return list<array<string, mixed>>
      */
     private function employmentHistoryPayload(Request $request, Employee $employee): array
     {
-        if ($employee->person_uuid === null) {
-            return [];
-        }
-
         $currentCompanyId = app(CurrentCompany::class)->id();
         $isSuperAdmin = $request->user()?->isSuperAdmin() ?? false;
 
-        return Employee::query()
-            ->withoutGlobalScope(CompanyScope::class)
-            ->where('person_uuid', $employee->person_uuid)
+        return $employee->companyHistory()
             ->with('company:id,name,brand_name')
-            ->get(['id', 'company_id', 'employee_code', 'joining_date', 'transferred_at', 'transferred_out_at', 'active'])
-            ->map(fn (Employee $r): array => [
-                'id' => $r->id,
-                'employee_code' => $r->employee_code,
-                'company' => $r->company?->displayName(),
-                'since' => $r->joining_date?->toDateString() ?? $r->transferred_at?->toDateString(),
-                'until' => $r->transferred_out_at?->toDateString(),
-                'status' => $r->status(),
-                'is_current' => $r->id === $employee->id,
-                'can_view' => $isSuperAdmin || $r->company_id === $currentCompanyId,
+            ->get()
+            ->map(fn (EmployeeCompanyHistory $h): array => [
+                'id' => $h->id,
+                'company' => $h->company?->displayName(),
+                'since' => $h->started_at->toDateString(),
+                'until' => $h->ended_at?->toDateString(),
+                'is_current' => $h->ended_at === null,
+                'can_view' => $isSuperAdmin || $h->company_id === $currentCompanyId,
             ])
-            // Current/most-recent stint first, oldest last.
-            ->sortByDesc(fn (array $r): string => (string) ($r['since'] ?? ''))
-            ->values()
             ->all();
     }
 
@@ -715,9 +705,10 @@ class EmployeeController extends Controller
     }
 
     /**
-     * Feature 4 — transfer the employee to another company. The service enforces
-     * the equipment + paid-payroll guards and moves the wage history; attendance
-     * and payroll history stay with the old company.
+     * Feature 4 — transfer the employee to another company (single-record model).
+     * The service enforces the equipment + paid-payroll guards, flips this ONE
+     * record's company_id in place, logs the company stint, and carries the wage
+     * rate forward. Attendance rows keep the company they were logged under.
      */
     public function transfer(TransferEmployeeRequest $request, Employee $employee, EmployeeTransferService $service): RedirectResponse
     {

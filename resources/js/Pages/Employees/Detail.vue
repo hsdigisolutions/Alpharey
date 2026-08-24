@@ -5,7 +5,7 @@
  * until Phases 4/6. Edit opens the shared modal (never a separate page).
  */
 import { computed, ref, watch } from 'vue';
-import { Head, Link, router, useForm } from '@inertiajs/vue3';
+import { Head, router, useForm } from '@inertiajs/vue3';
 import { t } from '@/translate';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import AppIcon from '@/Components/AppIcon.vue';
@@ -845,7 +845,7 @@ function destroy() {
                 </VCard>
             </div>
 
-            <!-- Employment History (Change 2) — every company stint of this person -->
+            <!-- Employment History (Change 2, single record) — every company stint over time -->
             <div v-else-if="tab === 'history'">
                 <VCard>
                     <ul class="divide-y divide-line">
@@ -857,17 +857,11 @@ function destroy() {
                                 <div class="flex items-center gap-2">
                                     <p class="truncate text-sm font-semibold text-ink">{{ stint.company }}</p>
                                     <VBadge v-if="stint.is_current" status="ok"><Bilingual k="employees.history_present" inline /></VBadge>
-                                    <VBadge v-else-if="stint.status === 'transferred'" status="info"><Bilingual k="employees.status_transferred" inline /></VBadge>
                                 </div>
                                 <p class="tabular-nums text-xs text-muted">
                                     {{ stint.since ?? '—' }} → {{ stint.until ?? $t('employees.history_present') }}
-                                    <span class="ms-1">· {{ stint.employee_code }}</span>
                                 </p>
                             </div>
-                            <Link v-if="stint.can_view && !stint.is_current" :href="`/employees/${stint.id}`"
-                                class="shrink-0 text-xs font-medium text-accent hover:underline">
-                                <Bilingual k="employees.history_view" inline />
-                            </Link>
                         </li>
                     </ul>
                 </VCard>

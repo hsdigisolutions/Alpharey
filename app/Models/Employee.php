@@ -163,6 +163,28 @@ class Employee extends Model
                 $employee->active_since = now();
             }
         });
+
+        // Open the initial company stint (Change 2 single-record model) so the
+        // Employment History has a current row from day one — for every creation
+        // path (form, factory, importer). A transfer later closes this stint and
+        // opens the next. Guarded so it never double-inserts.
+        static::created(function (Employee $employee): void {
+            if (! $employee->company_id) {
+                return;
+            }
+            $exists = EmployeeCompanyHistory::query()
+                ->where('employee_id', $employee->id)
+                ->exists();
+            if ($exists) {
+                return;
+            }
+            EmployeeCompanyHistory::create([
+                'employee_id' => $employee->id,
+                'company_id' => $employee->company_id,
+                'started_at' => ($employee->joining_date ?? now())->toDateString(),
+                'ended_at' => null,
+            ]);
+        });
     }
 
     public static function hashNif(?string $nif): ?string
@@ -265,6 +287,19 @@ class Employee extends Model
     public function documents(): MorphMany
     {
         return $this->morphMany(Document::class, 'documentable');
+    }
+
+    /**
+     * The company stints of this ONE record over time (Change 2 single-record
+     * model). Newest stint first; the open one (ended_at null) is current.
+     *
+     * @return HasMany<EmployeeCompanyHistory, $this>
+     */
+    public function companyHistory(): HasMany
+    {
+        return $this->hasMany(EmployeeCompanyHistory::class)
+            ->orderByDesc('started_at')
+            ->orderByDesc('id');
     }
 
     /**

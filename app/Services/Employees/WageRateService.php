@@ -233,6 +233,76 @@ class WageRateService
     }
 
     /**
+     * A transfer (single-record model) carries the SAME rate into the new
+     * company from the transfer date: close the current open period the day
+     * before, then open a new period tagged to the new company. The wage amount
+     * is unchanged — only the company_id of the rate row moves forward, so each
+     * period keeps the company it was earned under (mirrors attendance).
+     *
+     * Same-day edge (a second transfer on the same date, or the open period
+     * already starts on/after the transfer date): just retag the open period's
+     * company_id instead of opening a zero-length period.
+     */
+    public function openTransferStint(Employee $employee, int $toCompanyId, string $date): void
+    {
+        $open = EmployeeWageRate::query()
+            ->withoutGlobalScope(CompanyScope::class)
+            ->where('employee_id', $employee->id)
+            ->whereNull('effective_to')
+            ->orderByDesc('effective_from')
+            ->first();
+
+        // No rate yet — seed one for the new company starting at the transfer date.
+        if ($open === null) {
+            if ($employee->wage_type === null) {
+                return;
+            }
+            $amount = $this->liveAmountFor($employee);
+            if ($amount === null || $amount <= 0) {
+                return;
+            }
+            $rate = new EmployeeWageRate([
+                'wage_type' => $employee->wage_type->value,
+                'rate' => (string) $amount,
+                'effective_from' => $date,
+                'is_default' => true,
+            ]);
+            $rate->effective_to = null;
+            $rate->employee_id = $employee->id;
+            $rate->company_id = $toCompanyId;
+            $rate->created_by = Auth::id();
+            $rate->save();
+
+            return;
+        }
+
+        // Same-day / already-open-on-or-after: retag rather than split.
+        if ($open->effective_from->toDateString() >= $date) {
+            $open->company_id = $toCompanyId;
+            $open->save();
+
+            return;
+        }
+
+        // Close the current period the day before the transfer, open the new one.
+        $open->effective_to = Carbon::parse($date)->subDay();
+        $open->is_default = false;
+        $open->save();
+
+        $rate = new EmployeeWageRate([
+            'wage_type' => $open->wage_type->value,
+            'rate' => (string) $open->rate,
+            'effective_from' => $date,
+            'is_default' => true,
+        ]);
+        $rate->effective_to = null;
+        $rate->employee_id = $employee->id;
+        $rate->company_id = $toCompanyId;
+        $rate->created_by = Auth::id();
+        $rate->save();
+    }
+
+    /**
      * A direct edit of the employee's wage fields (the employee form, not the
      * dated "Nueva Tarifa" flow) is a correction to the CURRENT rate — update
      * the open record in place rather than opening a spurious same-day period.
