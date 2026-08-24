@@ -734,7 +734,9 @@ class ProjectController extends Controller
 
         $project = new Project($request->validated());
         $project->company_id = $companyId;
-        $project->code = Project::nextCode($companyId);
+        // Admin may type a code; blank falls back to the auto-generated one.
+        $code = trim((string) $request->input('code', ''));
+        $project->code = $code !== '' ? $code : Project::nextCode();
         $project->save();
 
         return redirect()->route('projects.show', $project)->with('success', __('ui.projects.saved'));
@@ -743,6 +745,13 @@ class ProjectController extends Controller
     public function update(UpdateProjectRequest $request, Project $project): RedirectResponse
     {
         $project->update($request->validated());
+
+        // Code is editable after creation; a blank field keeps the current code.
+        $code = trim((string) $request->input('code', ''));
+        if ($code !== '' && $code !== $project->code) {
+            $project->code = $code;
+            $project->save();
+        }
 
         return back()->with('success', __('ui.projects.saved'));
     }

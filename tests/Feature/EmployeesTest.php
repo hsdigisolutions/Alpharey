@@ -59,7 +59,8 @@ it('creates an employee with a generated code and records wage history', functio
 
     $employee = Employee::query()->where('full_name', 'María García')->firstOrFail();
 
-    expect($employee->employee_code)->toStartWith('E'.$this->company->id.'-')
+    // Change 6: auto-generated codes now use the legacy VE-### format.
+    expect($employee->employee_code)->toStartWith('VE-')
         ->and($employee->company_id)->toBe($this->company->id)
         ->and($employee->getAttribute('wage_rate'))->toBe('14.5');
 });

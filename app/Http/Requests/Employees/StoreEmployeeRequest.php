@@ -25,7 +25,15 @@ class StoreEmployeeRequest extends FormRequest
      */
     public function rules(): array
     {
+        $employee = $this->route('employee');
+
         return [
+            // Optional, admin-editable code. Blank on create → auto-generated
+            // (Employee::nextCode). Unique across the group; ignores self on edit.
+            'employee_code' => [
+                'nullable', 'string', 'max:20',
+                Rule::unique('employees', 'employee_code')->ignore($employee?->id),
+            ],
             'full_name' => ['required', 'string', 'max:255'],
             'nif' => ['nullable', 'string', 'max:20'],
             'email' => ['nullable', 'email', 'max:255'],

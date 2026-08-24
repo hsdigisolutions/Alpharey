@@ -39,6 +39,7 @@ class ClientController extends Controller
                 $term = $request->string('search')->value();
                 $q->where(fn (Builder $q) => $q
                     ->where('name', 'like', "%{$term}%")
+                    ->orWhere('code', 'like', "%{$term}%")
                     ->orWhere('company_name', 'like', "%{$term}%")
                     ->orWhere('nif', 'like', "%{$term}%"));
             })
@@ -51,6 +52,7 @@ class ClientController extends Controller
             ->withQueryString()
             ->through(fn (Client $client): array => [
                 'id' => $client->id,
+                'code' => $client->code,
                 'name' => $client->name,
                 'company_name' => $client->company_name,
                 'nif' => $client->nif,
@@ -94,7 +96,7 @@ class ClientController extends Controller
 
         return Inertia::render('Clients/Detail', [
             'client' => $client->only([
-                'id', 'name', 'company_name', 'nif', 'vat_number', 'client_type',
+                'id', 'code', 'name', 'company_name', 'nif', 'vat_number', 'client_type',
                 'contact_person', 'phone', 'mobile', 'email', 'address', 'city',
                 'postal_code', 'country', 'website', 'bank_account', 'payment_terms',
                 'industry', 'company_size', 'preferred_contact', 'active', 'notes',
@@ -163,7 +165,11 @@ class ClientController extends Controller
 
     public function store(StoreClientRequest $request): RedirectResponse
     {
-        Client::query()->create($request->validated());
+        $client = new Client($request->validated());
+        // Admin may type a code; blank falls back to the auto-generated one.
+        $code = trim((string) $request->input('code', ''));
+        $client->code = $code !== '' ? $code : Client::nextCode();
+        $client->save();
 
         return back()->with('success', __('ui.clients.saved'));
     }
@@ -171,6 +177,13 @@ class ClientController extends Controller
     public function update(UpdateClientRequest $request, Client $client): RedirectResponse
     {
         $client->update($request->validated());
+
+        // Code is editable after creation; a blank field keeps the current code.
+        $code = trim((string) $request->input('code', ''));
+        if ($code !== '' && $code !== $client->code) {
+            $client->code = $code;
+            $client->save();
+        }
 
         return back()->with('success', __('ui.clients.saved'));
     }

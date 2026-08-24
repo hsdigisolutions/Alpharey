@@ -59,7 +59,7 @@ class ProjectsImporter extends AbstractImporter
                     'description' => $row->description ?? null,
                 ]);
                 $project->company_id = $defaultCompanyId;
-                $project->code = ($row->code ?? '') !== '' ? $row->code : Project::nextCode((int) $defaultCompanyId);
+                $project->code = ($row->code ?? '') !== '' ? $row->code : Project::nextCode();
                 $project->save();
 
                 $this->recordMapping($row->id, $project->id);

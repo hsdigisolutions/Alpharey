@@ -188,10 +188,21 @@ class Project extends Model
         return $this->morphMany(Document::class, 'documentable');
     }
 
-    public static function nextCode(int $companyId): string
+    public static function nextCode(): string
     {
-        $count = self::withoutGlobalScopes()->where('company_id', $companyId)->count();
+        // Continue the legacy Verto6### sequence GLOBALLY (Verto6026, …). MAX of
+        // the numeric part of existing Verto6 codes + 1, so imported + new codes
+        // never collide. A blank code on create falls back to this.
+        $max = 0;
+        $codes = self::withoutGlobalScopes()
+            ->where('code', 'like', 'Verto6%')
+            ->pluck('code');
+        foreach ($codes as $code) {
+            if (preg_match('/^Verto6(\d+)$/', (string) $code, $m)) {
+                $max = max($max, (int) $m[1]);
+            }
+        }
 
-        return sprintf('P%d-%04d', $companyId, $count + 1);
+        return 'Verto6'.str_pad((string) ($max + 1), 3, '0', STR_PAD_LEFT);
     }
 }

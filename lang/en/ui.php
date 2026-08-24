@@ -478,6 +478,7 @@ return [
         'import_done' => ':imported empleados importados / :imported employees imported',
         'import_partial' => ':imported importados, con incidencias / :imported imported, with issues:',
         'code' => 'Code',
+        'code_hint' => 'Leave blank to auto-generate',
         'full_name' => 'Full name',
         'company' => 'Company',
         'department' => 'Department',
@@ -821,6 +822,8 @@ return [
 
     'clients' => [
         'title' => 'Clients',
+        'code' => 'Code',
+        'code_hint' => 'Leave blank to auto-generate',
         'new' => 'New Client',
         'edit' => 'Edit Client',
         'saved' => 'Cliente guardado / Client saved',
@@ -918,6 +921,7 @@ return [
         'saved' => 'Proyecto guardado / Project saved',
         'deleted' => 'Proyecto eliminado / Project removed',
         'code' => 'Code',
+        'code_hint' => 'Leave blank to auto-generate',
         'name' => 'Name',
         'client' => 'Client',
         'type' => 'Type',

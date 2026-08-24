@@ -81,7 +81,7 @@ class EmployeesImporter extends AbstractImporter
                 $employee->company_id = $defaultCompanyId;
                 $employee->employee_code = ($row->employee_code ?? '') !== ''
                     ? $row->employee_code
-                    : Employee::nextCode((int) $defaultCompanyId);
+                    : Employee::nextCode();
                 $employee->save();
 
                 $this->recordMapping($row->id, $employee->id);

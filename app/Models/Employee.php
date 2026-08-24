@@ -248,14 +248,23 @@ class Employee extends Model
      * Next sequential code, per company prefix (EMP-0001, …). Company id
      * is embedded so codes stay readable across the group.
      */
-    public static function nextCode(int $companyId): string
+    public static function nextCode(): string
     {
-        $last = self::withTrashed()
-            ->withoutGlobalScopes()
-            ->where('company_id', $companyId)
-            ->count();
+        // Continue the legacy VE-#### sequence GLOBALLY (VE-445, VE-446, …).
+        // MAX of the numeric part of existing VE- codes + 1 (not count+1), so
+        // imported + newly-created codes never collide even when the sequence
+        // is non-contiguous. Includes soft-deleted rows.
+        $max = 0;
+        $codes = self::withTrashed()->withoutGlobalScopes()
+            ->where('employee_code', 'like', 'VE-%')
+            ->pluck('employee_code');
+        foreach ($codes as $code) {
+            if (preg_match('/^VE-(\d+)$/', (string) $code, $m)) {
+                $max = max($max, (int) $m[1]);
+            }
+        }
 
-        return sprintf('E%d-%04d', $companyId, $last + 1);
+        return 'VE-'.str_pad((string) ($max + 1), 3, '0', STR_PAD_LEFT);
     }
 
     /**

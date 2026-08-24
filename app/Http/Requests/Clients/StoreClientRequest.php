@@ -19,7 +19,16 @@ class StoreClientRequest extends FormRequest
      */
     public function rules(): array
     {
+        $client = $this->route('client');
+
         return [
+            // Optional, admin-editable code. Blank on create → auto-generated
+            // (Client::nextCode → CLI-###). Unique across the shared client
+            // pool; ignores self on edit.
+            'code' => [
+                'nullable', 'string', 'max:30',
+                Rule::unique('clients', 'code')->ignore($client?->id),
+            ],
             'name' => ['required', 'string', 'max:255'],
             'company_name' => ['nullable', 'string', 'max:255'],
             'nif' => ['nullable', 'string', 'max:20'],

@@ -20,7 +20,7 @@ const props = defineProps({
 const emit = defineEmits(['close']);
 
 const blank = {
-    name: '', company_name: '', nif: '', vat_number: '', client_type: 'company',
+    code: '', name: '', company_name: '', nif: '', vat_number: '', client_type: 'company',
     contact_person: '', phone: '', mobile: '', email: '', address: '', city: '',
     postal_code: '', country: '', website: '', bank_account: '', payment_terms: 'net30',
     industry: '', company_size: '', preferred_contact: '', active: true, notes: '',
@@ -44,6 +44,9 @@ const types = ['company', 'private', 'municipality', 'other'];
 <template>
     <VModal :open="open" :title-key="client ? 'clients.edit' : 'clients.new'" size="lg" @close="emit('close')">
         <form id="client-form" class="grid gap-4 sm:grid-cols-2" @submit.prevent="submit">
+            <FormField k="clients.code" :error="form.errors.code">
+                <VInput v-model="form.code" :invalid="Boolean(form.errors.code)" :placeholder="$t('clients.code_hint')" />
+            </FormField>
             <FormField k="clients.name" :error="form.errors.name" required>
                 <VInput v-model="form.name" :invalid="Boolean(form.errors.name)" />
             </FormField>

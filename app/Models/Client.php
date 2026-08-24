@@ -17,6 +17,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
  * Rule 1) — deliberately NO BelongsToCompany. Soft-deleted; audited.
  *
  * @property int $id
+ * @property ?string $code
  * @property string $name
  * @property ClientType $client_type
  * @property bool $active
@@ -57,6 +58,23 @@ class Client extends Model
     public function scopeActive(Builder $query): void
     {
         $query->where('active', true);
+    }
+
+    /**
+     * Next sequential client code (CLI-001, …) — a fresh, global sequence
+     * (clients are shared across companies). MAX of the numeric part + 1,
+     * including soft-deleted rows so a code is never reused.
+     */
+    public static function nextCode(): string
+    {
+        $max = 0;
+        foreach (self::withTrashed()->where('code', 'like', 'CLI-%')->pluck('code') as $code) {
+            if (preg_match('/^CLI-(\d+)$/', (string) $code, $m)) {
+                $max = max($max, (int) $m[1]);
+            }
+        }
+
+        return 'CLI-'.str_pad((string) ($max + 1), 3, '0', STR_PAD_LEFT);
     }
 
     /**

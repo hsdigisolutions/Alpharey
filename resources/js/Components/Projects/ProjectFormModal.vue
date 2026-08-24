@@ -27,7 +27,7 @@ const props = defineProps({
 const emit = defineEmits(['close']);
 
 const blank = {
-    client_id: '', name: '', project_type: '', status: 'active', priority: 'medium',
+    code: '', client_id: '', name: '', project_type: '', status: 'active', priority: 'medium',
     billing_type: '', vat_rate: null,
     site_manager_id: null, foreman_id: null, safety_id: null, coordinator_id: null,
     start_date: null, end_date: null, budget: null,
@@ -74,6 +74,9 @@ function employeeLabel(e) {
     <VModal :open="open" :title-key="project ? 'projects.edit' : 'projects.new'" size="lg" @close="emit('close')">
         <form id="project-form" class="space-y-4" @submit.prevent="submit">
             <div class="grid gap-4 sm:grid-cols-2">
+                <FormField k="projects.code" :error="form.errors.code">
+                    <VInput v-model="form.code" :invalid="Boolean(form.errors.code)" :placeholder="$t('projects.code_hint')" />
+                </FormField>
                 <FormField k="projects.name" :error="form.errors.name" required>
                     <VInput v-model="form.name" :invalid="Boolean(form.errors.name)" />
                 </FormField>

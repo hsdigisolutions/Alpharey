@@ -7,6 +7,7 @@ use App\Enums\ProjectPriority;
 use App\Enums\ProjectStatus;
 use App\Enums\VatRate;
 use App\Rules\OwnCompanyEmployee;
+use App\Support\CurrentCompany;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
@@ -26,7 +27,17 @@ class StoreProjectRequest extends FormRequest
      */
     public function rules(): array
     {
+        $project = $this->route('project');
+
         return [
+            // Optional, admin-editable code. Blank on create → auto-generated
+            // (Project::nextCode). Unique per company; ignores self on update.
+            'code' => [
+                'nullable', 'string', 'max:30',
+                Rule::unique('projects', 'code')
+                    ->where('company_id', app(CurrentCompany::class)->id())
+                    ->ignore($project?->id),
+            ],
             'client_id' => ['nullable', 'integer', Rule::exists('clients', 'id')],
             'name' => ['required', 'string', 'max:255'],
             'project_type' => ['nullable', 'string', 'max:100'],

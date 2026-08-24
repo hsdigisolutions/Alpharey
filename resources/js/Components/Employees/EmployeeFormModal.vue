@@ -36,6 +36,7 @@ function onDesignationChange() {
 }
 
 const blank = {
+    employee_code: '',
     full_name: '', nif: '', email: '', mobile: '', phone: '', city: '', address: '',
     department: '', department_id: '', designation: '', designation_id: '', joining_date: null, leaving_date: null,
     active: true, is_contracted: false, default_check_in: '09:00', default_check_out: '17:00',
@@ -88,6 +89,9 @@ const showBank = computed(() => !form.payment_method || form.payment_method === 
             <section>
                 <Bilingual k="employees.section_personal" class="mb-3 text-[15px] font-semibold" />
                 <div class="grid gap-4 sm:grid-cols-2">
+                    <FormField k="employees.code" :error="form.errors.employee_code">
+                        <VInput v-model="form.employee_code" :invalid="Boolean(form.errors.employee_code)" :placeholder="$t('employees.code_hint')" />
+                    </FormField>
                     <FormField k="employees.full_name" :error="form.errors.full_name" required>
                         <VInput v-model="form.full_name" :invalid="Boolean(form.errors.full_name)" />
                     </FormField>

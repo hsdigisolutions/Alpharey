@@ -5,7 +5,6 @@ namespace App\Services\Employees;
 use App\Models\Department;
 use App\Models\Employee;
 use App\Models\EmployeeSalaryHistory;
-use App\Support\CurrentCompany;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 
@@ -32,10 +31,10 @@ class EmployeeService
     public function create(array $data): Employee
     {
         return DB::transaction(function () use ($data): Employee {
-            $companyId = app(CurrentCompany::class)->id();
-
             $employee = new Employee($data);
-            $employee->employee_code = Employee::nextCode((int) $companyId);
+            // Admin may type a code; blank falls back to the auto-generated one.
+            $code = trim((string) ($data['employee_code'] ?? ''));
+            $employee->employee_code = $code !== '' ? $code : Employee::nextCode();
             $this->syncDepartmentName($employee);
             $employee->save();
 
@@ -52,6 +51,12 @@ class EmployeeService
     {
         return DB::transaction(function () use ($employee, $data): Employee {
             $employee->fill($data);
+            // Code is editable after creation (not $fillable, so set explicitly);
+            // a blank field keeps the current code.
+            $code = trim((string) ($data['employee_code'] ?? ''));
+            if ($code !== '') {
+                $employee->employee_code = $code;
+            }
             $this->syncDepartmentName($employee);
 
             $changedWageFields = array_values(array_filter(

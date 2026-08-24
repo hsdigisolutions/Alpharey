@@ -44,7 +44,8 @@ it('creates a project with a generated code in the active company', function ():
     $project = Project::withoutGlobalScopes()->where('name', 'Obra Castellana')->firstOrFail();
 
     expect($project->company_id)->toBe($this->companyA->id)
-        ->and($project->code)->toStartWith('P'.$this->companyA->id.'-')
+        // Change 6: auto-generated codes now use the legacy Verto6### format.
+        ->and($project->code)->toStartWith('Verto6')
         ->and($project->vat_rate->value)->toBe('general');
 });
 
