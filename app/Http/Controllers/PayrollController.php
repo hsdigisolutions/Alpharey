@@ -87,10 +87,21 @@ class PayrollController extends Controller
         $companyId = $this->contextCompanyId();
 
         $month = $this->resolveMonth($request);
+
+        // Only announce "payroll ready" the FIRST time a month is generated. The
+        // calculation is fully synchronous and re-runnable, so an admin may click
+        // Calculate repeatedly to refresh figures — those re-runs must NOT re-fire
+        // the notification (and its inline e-mail) to every admin each click.
+        $alreadyGenerated = Payroll::query()->withoutGlobalScopes()
+            ->where('company_id', $companyId)
+            ->where('month', $month)
+            ->exists();
+
         $count = $service->calculateMonth($companyId, $month);
 
-        // The month's payroll is ready to review — notify the admins/managers.
-        if ($count > 0) {
+        // The month's payroll is ready to review — notify the admins/managers,
+        // once, on the first generation only.
+        if (! $alreadyGenerated && $count > 0) {
             app(NotificationDispatcher::class)->dispatch(NotificationType::PayrollReady, $companyId, [
                 'title_es' => "Nómina lista para revisar ({$month})",
                 'title_en' => "Payroll ready to review ({$month})",
@@ -99,6 +110,28 @@ class PayrollController extends Controller
         }
 
         return back()->with('success', __('ui.payroll.calculated', ['count' => $count]));
+    }
+
+    /**
+     * Recalculate a SINGLE employee's payroll row synchronously (the per-row
+     * "Recalcular" button). Instant, re-runnable, and safe to click repeatedly
+     * on an unpaid month — it re-reads attendance, wage rate, expenses, fines
+     * and advances at that moment. A Paid row stays frozen (422).
+     */
+    public function recalculate(Payroll $payroll, PayrollService $service): RedirectResponse
+    {
+        Gate::authorize('payroll.create');
+
+        app(PeriodLock::class)->assertOpen($payroll->company_id, $payroll->month);
+
+        abort_if($payroll->status === PayrollStatus::Paid, 422, 'Paid payroll cannot be recalculated.');
+
+        $employee = $payroll->employee;
+        if ($employee !== null) {
+            $service->calculateFor($employee, $payroll->company_id, $payroll->month, $payroll);
+        }
+
+        return back()->with('success', __('ui.payroll.recalculated'));
     }
 
     public function approveAll(Request $request, PayrollWorkflow $workflow): RedirectResponse

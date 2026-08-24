@@ -417,6 +417,7 @@ Route::middleware(['auth', 'active', 'two_factor', 'not_worker'])->group(functio
     Route::get('/payroll/{payroll}/payslip', [PayrollController::class, 'payslip'])->name('payroll.payslip');
     Route::post('/payroll/{payroll}/paid', [PayrollController::class, 'markPaid'])->name('payroll.paid');
     Route::put('/payroll/{payroll}/adjust', [PayrollController::class, 'adjust'])->name('payroll.adjust');
+    Route::post('/payroll/{payroll}/recalculate', [PayrollController::class, 'recalculate'])->name('payroll.recalculate');
 
     // Salary advances (payroll module)
     Route::post('/advances', [AdvanceController::class, 'store'])->name('advances.store');

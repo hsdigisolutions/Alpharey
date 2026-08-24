@@ -79,6 +79,12 @@ function markPaid(row) {
     router.post(`/payroll/${row.id}/paid`, { payment_method: row.payment_method }, { preserveScroll: true });
 }
 
+// Synchronous per-employee recalculation — re-reads attendance/rate/expenses/
+// fines/advances now and refreshes this row's figures immediately.
+function recalc(row) {
+    router.post(`/payroll/${row.id}/recalculate`, {}, { preserveScroll: true });
+}
+
 /* ---------- breakdown ----------
  * Track the row by id and read it back out of props, never by holding the row
  * object: after any action Inertia hands us a NEW rows array, and a captured
@@ -264,6 +270,10 @@ const columns = [
                     <span class="flex items-center justify-end gap-1.5">
                         <VButton variant="ghost" size="sm" icon="eye" @click="breakdownId = r.id">
                             <Bilingual k="payroll.breakdown" inline />
+                        </VButton>
+                        <VButton v-if="can.create && r.status !== 'paid' && !locked" variant="ghost" size="sm" icon="refresh"
+                            @click="recalc(r)">
+                            <Bilingual k="payroll.recalculate" inline />
                         </VButton>
                         <VButton v-if="can.edit && r.status !== 'paid' && !locked" variant="ghost" size="sm" icon="edit"
                             @click="openAdjust(r)" />
