@@ -74,3 +74,24 @@ it('gives every document type a label in both languages', function (): void {
         expect(array_values(array_diff($keys, array_keys($labels))))->toBe([]);
     }
 });
+
+it('registers the new Spanish employee documents Baja SS and 20h PRL', function (): void {
+    $employment = DocumentTypes::employee()['employment'];
+    $prevencion = DocumentTypes::employee()['prevencion'];
+
+    // Baja SS — employment category, an event record (never expires).
+    expect($employment)->toHaveKey('documento_baja_ss')
+        ->and($employment['documento_baja_ss'])->toBe(['flag' => false, 'file' => true, 'expiry' => false]);
+
+    // 20h construction PRL / TPC — prevención, expiry tracked for the renewal alerts.
+    expect($prevencion)->toHaveKey('formacion_prl_20h')
+        ->and($prevencion['formacion_prl_20h'])->toBe(['flag' => false, 'file' => true, 'expiry' => true]);
+
+    // The expiry-tracked one exposes an expiry_date field via the generic date fields.
+    $fields = collect(DocumentTypes::fieldsFor('employee', 'formacion_prl_20h'))->pluck('key')->all();
+    expect($fields)->toContain('issue_date')->toContain('expiry_date');
+
+    // Baja has no expiry field.
+    $bajaFields = collect(DocumentTypes::fieldsFor('employee', 'documento_baja_ss'))->pluck('key')->all();
+    expect($bajaFields)->toContain('issue_date')->not->toContain('expiry_date');
+});

@@ -394,11 +394,17 @@ class DocumentTypes
                 // too. Expiry carries the end date of a temporary contract.
                 'contrato_trabajo' => ['flag' => false, 'file' => true, 'expiry' => true],
                 'documento_alta_ss' => ['flag' => false, 'file' => true, 'expiry' => false],
+                // Baja en la Seguridad Social — the deregistration filed (model
+                // TA.2/S) when the worker leaves. An event record, never expires.
+                'documento_baja_ss' => ['flag' => false, 'file' => true, 'expiry' => false],
                 'documento_idc' => ['flag' => false, 'file' => true, 'expiry' => false],
             ],
             'prevencion' => [
                 'aptitud_medica' => ['flag' => false, 'file' => true, 'expiry' => true],
                 'formacion_art19' => ['flag' => false, 'file' => true, 'expiry' => true],
+                // 20h construction PRL (2nd cycle by trade — the TPC card). Expiry
+                // tracked so the ~5-year TPC renewal enters the 90/60/30 alerts.
+                'formacion_prl_20h' => ['flag' => false, 'file' => true, 'expiry' => true],
                 'informacion_art18' => ['flag' => false, 'file' => true, 'expiry' => false],
                 'entrega_epis' => ['flag' => false, 'file' => true, 'expiry' => false],
                 'autorizacion_maquinaria' => ['flag' => false, 'file' => true, 'expiry' => false],
