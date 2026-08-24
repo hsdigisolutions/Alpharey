@@ -5,7 +5,7 @@
  * until Phases 4/6. Edit opens the shared modal (never a separate page).
  */
 import { computed, ref, watch } from 'vue';
-import { Head, router, useForm } from '@inertiajs/vue3';
+import { Head, Link, router, useForm } from '@inertiajs/vue3';
 import { t } from '@/translate';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import AppIcon from '@/Components/AppIcon.vue';
@@ -36,6 +36,7 @@ const props = defineProps({
     documentFieldDefs: { type: Object, default: () => ({}) },
     notes: { type: Array, required: true },
     calls: { type: Array, required: true },
+    employmentHistory: { type: Array, default: () => [] },
     payroll: { type: Array, default: () => [] },
     wageHistory: { type: Array, default: () => [] },
     attendanceTab: { type: Object, default: null },
@@ -271,6 +272,7 @@ const tabs = [
     ...(props.equipmentTab ? [{ key: 'equipment', labelKey: 'employees.tab_equipment', count: props.equipmentTab.count }] : []),
     { key: 'notes', labelKey: 'employees.tab_notes', count: props.notes.length },
     { key: 'calls', labelKey: 'employees.tab_calls', count: props.calls.length },
+    ...(props.employmentHistory.length > 1 ? [{ key: 'history', labelKey: 'employees.employment_history', count: props.employmentHistory.length }] : []),
 ];
 
 const noteStatus = { general: 'neutral', reminder: 'info', issue: 'warn', call: 'accent' };
@@ -840,6 +842,34 @@ function destroy() {
                             <Bilingual k="employees.add_call" inline />
                         </VButton>
                     </form>
+                </VCard>
+            </div>
+
+            <!-- Employment History (Change 2) — every company stint of this person -->
+            <div v-else-if="tab === 'history'">
+                <VCard>
+                    <ul class="divide-y divide-line">
+                        <li v-for="stint in employmentHistory" :key="stint.id" class="flex items-center gap-3 py-3">
+                            <span class="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-surface-sunken text-muted">
+                                <AppIcon name="companies" class="h-4 w-4" />
+                            </span>
+                            <div class="min-w-0 flex-1">
+                                <div class="flex items-center gap-2">
+                                    <p class="truncate text-sm font-semibold text-ink">{{ stint.company }}</p>
+                                    <VBadge v-if="stint.is_current" status="ok"><Bilingual k="employees.history_present" inline /></VBadge>
+                                    <VBadge v-else-if="stint.status === 'transferred'" status="info"><Bilingual k="employees.status_transferred" inline /></VBadge>
+                                </div>
+                                <p class="tabular-nums text-xs text-muted">
+                                    {{ stint.since ?? '—' }} → {{ stint.until ?? $t('employees.history_present') }}
+                                    <span class="ms-1">· {{ stint.employee_code }}</span>
+                                </p>
+                            </div>
+                            <Link v-if="stint.can_view && !stint.is_current" :href="`/employees/${stint.id}`"
+                                class="shrink-0 text-xs font-medium text-accent hover:underline">
+                                <Bilingual k="employees.history_view" inline />
+                            </Link>
+                        </li>
+                    </ul>
                 </VCard>
             </div>
         </div>

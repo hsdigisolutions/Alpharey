@@ -27,6 +27,10 @@ class EmployeeQueryFilter
                         ->orWhere('nif_hash', Employee::hashNif($term));
                 });
             })
+            // Transferred-out records (Change 2) are history: shown ONLY under the
+            // 'transferred' filter, excluded from the active/inactive/default lists.
+            ->when($request->string('status')->value() === 'transferred', fn (Builder $q) => $q->whereNotNull('transferred_out_at'))
+            ->when($request->string('status')->value() !== 'transferred', fn (Builder $q) => $q->whereNull('transferred_out_at'))
             ->when($request->string('status')->value() === 'active', fn (Builder $q) => $q->where('active', true))
             ->when($request->string('status')->value() === 'inactive', fn (Builder $q) => $q->where('active', false))
             ->when($request->filled('department'), fn (Builder $q) => $q->where('department_id', $request->integer('department')))

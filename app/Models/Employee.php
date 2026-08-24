@@ -27,8 +27,10 @@ use Illuminate\Support\Carbon;
  * @property string|null $nif_hash
  * @property string|null $department
  * @property int|null $department_id
+ * @property string|null $person_uuid
  * @property int|null $previous_company_id
  * @property Carbon|null $transferred_at
+ * @property Carbon|null $transferred_out_at
  * @property bool $documents_pending_reupload
  * @property bool $active
  * @property Carbon|null $active_since
@@ -97,6 +99,7 @@ class Employee extends Model
             'leaving_date' => 'date:Y-m-d',
             'active_since' => 'date:Y-m-d',
             'transferred_at' => 'datetime',
+            'transferred_out_at' => 'datetime',
             'documents_pending_reupload' => 'boolean',
             'privacy_notice_ack_at' => 'datetime',
             'active' => 'boolean',
@@ -111,14 +114,34 @@ class Employee extends Model
 
     /**
      * Active employees only — the single source for selection dropdowns
-     * (create/edit forms). SoftDeletes already excludes deleted rows.
+     * (create/edit forms). SoftDeletes already excludes deleted rows; a record
+     * transferred OUT to another company (transferred_out_at set) is likewise
+     * excluded — it is history, not a selectable worker (Change 2).
      * Index-page list filters keep showing all.
      *
      * @param  Builder<Employee>  $query
      */
     public function scopeActive(Builder $query): void
     {
-        $query->where('active', true);
+        $query->where('active', true)->whereNull('transferred_out_at');
+    }
+
+    /**
+     * The distinct workforce state: 'transferred' takes precedence (a superseded
+     * record kept for history), else 'active' / 'inactive'.
+     */
+    public function status(): string
+    {
+        if ($this->transferred_out_at !== null) {
+            return 'transferred';
+        }
+
+        return $this->active ? 'active' : 'inactive';
+    }
+
+    public function isTransferredOut(): bool
+    {
+        return $this->transferred_out_at !== null;
     }
 
     protected static function booted(): void

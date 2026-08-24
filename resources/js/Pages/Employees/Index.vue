@@ -242,6 +242,7 @@ const docDot = { ok: 'ok', warn: 'warn', danger: 'danger', neutral: 'neutral', e
                     <option value="">{{ $tPair('employees.status') }}</option>
                     <option value="active">{{ $t('employees.active') }}</option>
                     <option value="inactive">{{ $t('employees.inactive') }}</option>
+                    <option value="transferred">{{ $t('employees.status_transferred') }}</option>
                 </VSelect>
                 <VSelect v-model="filters.department" @update:model-value="apply()">
                     <option value="">{{ $t('employees.department') }}</option>
@@ -290,7 +291,10 @@ const docDot = { ok: 'ok', warn: 'warn', danger: 'danger', neutral: 'neutral', e
                         </span>
                     </td>
                     <td v-else-if="column.key === 'active'" class="px-3 py-2.5">
-                        <VBadge :status="employee.active ? 'ok' : 'neutral'">
+                        <VBadge v-if="employee.status === 'transferred'" status="info">
+                            <Bilingual k="employees.status_transferred" inline />
+                        </VBadge>
+                        <VBadge v-else :status="employee.active ? 'ok' : 'neutral'">
                             <Bilingual :k="employee.active ? 'employees.active' : 'employees.inactive'" inline />
                         </VBadge>
                     </td>

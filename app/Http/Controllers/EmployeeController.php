@@ -16,6 +16,7 @@ use App\Models\EmployeeWageRate;
 use App\Models\EquipmentIncident;
 use App\Models\Payroll;
 use App\Models\Project;
+use App\Models\Scopes\CompanyScope;
 use App\Models\UserColumnSetting;
 use App\Models\WorkerConsent;
 use App\Services\Attendance\AttendanceService;
@@ -96,6 +97,7 @@ class EmployeeController extends Controller
                 'base_salary' => $canSeeWages ? $employee->getAttribute('base_salary') : null,
                 'commission_percent' => $canSeeWages ? $employee->commission_percent : null,
                 'active' => $employee->active,
+                'status' => $employee->status(),
                 'doc_status' => $status->worst($employee->documents),
             ]);
 
@@ -187,8 +189,10 @@ class EmployeeController extends Controller
                 'leaving_date' => $employee->leaving_date?->toDateString(),
                 'company' => $employee->company?->name,
                 // Feature 4 — transfer state for the docs banner + history note.
+                'status' => $employee->status(),
                 'documents_pending_reupload' => $employee->documents_pending_reupload,
                 'transferred_at' => $employee->transferred_at?->toDateString(),
+                'transferred_out_at' => $employee->transferred_out_at?->toDateString(),
                 'previous_company' => $employee->previousCompany?->name,
                 'team_leader' => $employee->teamLeader?->full_name,
                 'wage_type' => $employee->wage_type?->value,
@@ -208,6 +212,9 @@ class EmployeeController extends Controller
                 'email' => $employee->user?->email,
                 'active' => (bool) $employee->user?->active,
             ],
+            // Employment History (Change 2) — every company stint of this person,
+            // linked by person_uuid, newest company last.
+            'employmentHistory' => $this->employmentHistoryPayload($request, $employee),
             'documents' => $panel->forEntity($employee, 'employee'),
             'documentSets' => DocumentTypes::employee(),
             'documentFieldDefs' => DocumentTypes::fieldDefsMap('employee'),
@@ -595,6 +602,44 @@ class EmployeeController extends Controller
             'exception_reason' => $a->exception_reason,
             'notes' => $a->notes,
         ];
+    }
+
+    /**
+     * Employment History (Change 2): every company stint of this person, linked
+     * by person_uuid. Cross-company (scope dropped) but soft-deletes still
+     * excluded. `can_view` gates the read-only drill-in to the acting company's
+     * own records (or any, for a Super Admin).
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function employmentHistoryPayload(Request $request, Employee $employee): array
+    {
+        if ($employee->person_uuid === null) {
+            return [];
+        }
+
+        $currentCompanyId = app(CurrentCompany::class)->id();
+        $isSuperAdmin = $request->user()?->isSuperAdmin() ?? false;
+
+        return Employee::query()
+            ->withoutGlobalScope(CompanyScope::class)
+            ->where('person_uuid', $employee->person_uuid)
+            ->with('company:id,name,brand_name')
+            ->get(['id', 'company_id', 'employee_code', 'joining_date', 'transferred_at', 'transferred_out_at', 'active'])
+            ->map(fn (Employee $r): array => [
+                'id' => $r->id,
+                'employee_code' => $r->employee_code,
+                'company' => $r->company?->displayName(),
+                'since' => $r->joining_date?->toDateString() ?? $r->transferred_at?->toDateString(),
+                'until' => $r->transferred_out_at?->toDateString(),
+                'status' => $r->status(),
+                'is_current' => $r->id === $employee->id,
+                'can_view' => $isSuperAdmin || $r->company_id === $currentCompanyId,
+            ])
+            // Current/most-recent stint first, oldest last.
+            ->sortByDesc(fn (array $r): string => (string) ($r['since'] ?? ''))
+            ->values()
+            ->all();
     }
 
     /**
