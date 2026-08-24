@@ -1,3 +1,18 @@
+# Vite content-hashed build assets are immutable — a new deploy ships new
+# filenames, so a cached file can never go stale. Cache them hard (1 year) to
+# skip revalidation round-trips on repeat visits and SPA navigation, which
+# matter most on slow mobile links.
+#
+# Scoped by the "-<hash>.<ext>" filename pattern Vite emits (e.g.
+# app-01qYTbwV.js), so it matches ONLY hashed assets — never the PWA service
+# worker (public/sw.js, no hash), favicon.ico, or the webmanifest, which must
+# stay revalidatable.
+<IfModule mod_headers.c>
+    <FilesMatch "-[A-Za-z0-9_-]{8,}\.(js|css|woff2|woff|ttf)$">
+        Header set Cache-Control "public, max-age=31536000, immutable"
+    </FilesMatch>
+</IfModule>
+
 <IfModule mod_rewrite.c>
     <IfModule mod_negotiation.c>
         Options -MultiViews -Indexes

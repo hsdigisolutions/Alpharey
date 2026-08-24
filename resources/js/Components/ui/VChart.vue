@@ -11,10 +11,32 @@
  * Chart.js is bundled through Vite, not a CDN — the CSP blocks external
  * origins, so this is the only safe way to ship it.
  */
-import { Chart, registerables } from 'chart.js';
+// Register ONLY the Chart.js pieces this component uses (bar / line / doughnut)
+// instead of `...registerables` (every controller, scale and element) — that
+// pulled radar/polar/bubble/scatter, the time scales and unused plugins into
+// the bundle for no reason. This chunk loads only on the 2 pages that chart.
+import {
+    ArcElement,
+    BarController,
+    BarElement,
+    CategoryScale,
+    Chart,
+    DoughnutController,
+    Legend,
+    LineController,
+    LineElement,
+    LinearScale,
+    PointElement,
+    Tooltip,
+} from 'chart.js';
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
 
-Chart.register(...registerables);
+Chart.register(
+    BarController, LineController, DoughnutController,
+    BarElement, LineElement, PointElement, ArcElement,
+    CategoryScale, LinearScale,
+    Legend, Tooltip,
+);
 
 const props = defineProps({
     // 'bar' | 'line' | 'doughnut'

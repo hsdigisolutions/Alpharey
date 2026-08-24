@@ -4,6 +4,7 @@ use App\Enums\VatRate;
 use App\Http\Controllers\Account\AccountController;
 use App\Http\Controllers\Admin\AuditLogController;
 use App\Http\Controllers\Admin\DepartmentController;
+use App\Http\Controllers\Admin\ExpenseReviewController;
 use App\Http\Controllers\Admin\OvertimePolicyController;
 use App\Http\Controllers\Admin\PermissionMatrixController;
 use App\Http\Controllers\Admin\SettingsController;
@@ -530,9 +531,9 @@ Route::middleware(['auth', 'active', 'two_factor', 'not_worker'])->group(functio
     // Screen 02 + Screen 04 — Super Admin only
     Route::middleware('super_admin')->group(function (): void {
         // Part C — Expenses awaiting review (Super Admin final decision).
-        Route::get('/expense-review', [\App\Http\Controllers\Admin\ExpenseReviewController::class, 'index'])->name('expense-review.index');
-        Route::post('/expense-review/{expense}/approve', [\App\Http\Controllers\Admin\ExpenseReviewController::class, 'approve'])->name('expense-review.approve');
-        Route::post('/expense-review/{expense}/reject', [\App\Http\Controllers\Admin\ExpenseReviewController::class, 'reject'])->name('expense-review.reject');
+        Route::get('/expense-review', [ExpenseReviewController::class, 'index'])->name('expense-review.index');
+        Route::post('/expense-review/{expense}/approve', [ExpenseReviewController::class, 'approve'])->name('expense-review.approve');
+        Route::post('/expense-review/{expense}/reject', [ExpenseReviewController::class, 'reject'])->name('expense-review.reject');
 
         Route::get('/welcome', [WelcomeController::class, 'index'])->name('welcome');
         Route::post('/welcome/{company}/select', [WelcomeController::class, 'select'])->name('welcome.select');
