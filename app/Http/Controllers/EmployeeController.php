@@ -513,7 +513,7 @@ class EmployeeController extends Controller
         $cursor = $start->copy();
         while ($cursor->lte($end)) {
             $day = (int) $cursor->format('j');
-            if (! isset($grid[$day]) && AttendanceAbsence::isUnrecordedAbsence($cursor, $today, $employee->joining_date, $employee->active, $employee->active_since, $workingDays)) {
+            if (! isset($grid[$day]) && AttendanceAbsence::isUnrecordedAbsence($cursor, $today, $employee->joining_date, $employee->active, $employee->active_since, $employee->transferred_at, $workingDays)) {
                 $grid[$day] = [
                     'id' => null, // no real row — clicking it opens "new entry"
                     'status' => 'absent',

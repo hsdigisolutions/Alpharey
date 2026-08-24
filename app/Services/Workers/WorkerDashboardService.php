@@ -138,6 +138,7 @@ class WorkerDashboardService
         // worker) is grey. A reactivated worker counts from active_since.
         return AttendanceAbsence::isUnrecordedAbsence(
             $day, $today, $employee->joining_date, $employee->active, $employee->active_since,
+            $employee->transferred_at,
             app(AttendanceService::class)->workingDays((int) $employee->company_id),
         ) ? 'absent' : 'none';
     }

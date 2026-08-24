@@ -79,9 +79,9 @@ it('honours working days in the computed absence rule', function (): void {
     $joining = Carbon::parse('2026-05-01');
 
     // Default Mon–Fri: Saturday is off → not an absence.
-    expect(AttendanceAbsence::isUnrecordedAbsence($sat, $today, $joining, true, null, [1, 2, 3, 4, 5]))->toBeFalse();
+    expect(AttendanceAbsence::isUnrecordedAbsence($sat, $today, $joining, true, null, null, [1, 2, 3, 4, 5]))->toBeFalse();
     // Saturday declared a working day → it IS an absence.
-    expect(AttendanceAbsence::isUnrecordedAbsence($sat, $today, $joining, true, null, [1, 2, 3, 4, 5, 6]))->toBeTrue();
+    expect(AttendanceAbsence::isUnrecordedAbsence($sat, $today, $joining, true, null, null, [1, 2, 3, 4, 5, 6]))->toBeTrue();
 });
 
 it('auto-absent respects per-company working days on a weekend', function (): void {

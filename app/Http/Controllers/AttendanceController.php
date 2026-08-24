@@ -49,7 +49,7 @@ class AttendanceController extends Controller
 
         // Own active employees… (joining_date kept for the live-absence sweep).
         $ownEmployees = Employee::query()->where('active', true)->orderBy('full_name')
-            ->get(['id', 'full_name', 'designation', 'joining_date', 'active', 'active_since']);
+            ->get(['id', 'full_name', 'designation', 'joining_date', 'active', 'active_since', 'transferred_at']);
 
         $employees = $ownEmployees->map(fn (Employee $e): array => [
             'id' => $e->id,
@@ -131,7 +131,7 @@ class AttendanceController extends Controller
             while ($cursor->lte($end)) {
                 $day = (int) $cursor->format('j');
                 if (! isset($grid[$emp->id][$day])
-                    && AttendanceAbsence::isUnrecordedAbsence($cursor, $today, $emp->joining_date, $emp->active, $emp->active_since, $workingDays)) {
+                    && AttendanceAbsence::isUnrecordedAbsence($cursor, $today, $emp->joining_date, $emp->active, $emp->active_since, $emp->transferred_at, $workingDays)) {
                     $grid[$emp->id][$day] = [
                         'id' => null, // no real row — clicking it opens "new entry"
                         'status' => 'absent',

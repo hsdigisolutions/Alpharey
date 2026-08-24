@@ -15,7 +15,10 @@ use Illuminate\Support\Carbon;
  *    gap is not an absence);
  *  - it is a weekday (Mon–Fri);
  *  - it is strictly in the past (today and future are never absences);
- *  - it is on/after the later of the joining date and the (re)activation date.
+ *  - it is on/after the later of the joining date, the (re)activation date, and
+ *    the transfer date (a worker transferred INTO this company on 24 Aug cannot
+ *    be absent here before then — even if their original hire date is older or
+ *    null).
  */
 class AttendanceAbsence
 {
@@ -30,6 +33,7 @@ class AttendanceAbsence
         ?Carbon $joiningDate,
         bool $active = true,
         ?Carbon $activeSince = null,
+        ?Carbon $transferredAt = null,
         ?array $workingDays = null,
     ): bool {
         // An inactive employee ("not working with us now") accrues no absences.
@@ -50,12 +54,16 @@ class AttendanceAbsence
             return false;
         }
 
-        // Count from the LATER of joining and reactivation: a worker who was
-        // deactivated and later brought back starts a fresh count from the day
-        // they became active again — the inactive spell is never back-filled.
+        // Count from the LATEST of joining, reactivation and transfer: a worker
+        // who was deactivated and later brought back, OR transferred in from
+        // another company, starts a fresh count from that later day — an earlier
+        // (or null) hire date never back-fills absences at this company.
         $start = $joiningDate;
         if ($activeSince !== null && ($start === null || $activeSince->gt($start))) {
             $start = $activeSince;
+        }
+        if ($transferredAt !== null && ($start === null || $transferredAt->gt($start))) {
+            $start = $transferredAt;
         }
 
         if ($start !== null && $date->lt($start->copy()->startOfDay())) {
