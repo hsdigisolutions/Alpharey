@@ -94,6 +94,7 @@ class WorkerFuelExpenseService
         // Server-set columns (never mass-assignable).
         $expense->company_id = $companyId;
         $expense->vehicle_id = $workerExpense->vehicle_id;
+        $expense->vehicle_expense_type = $isFuel ? 'fuel' : null;
         $expense->source = $isFuel ? self::SOURCE : self::SOURCE_GENERAL;
         $expense->source_id = $workerExpense->id;
         $expense->review_status = $reviewStatus;

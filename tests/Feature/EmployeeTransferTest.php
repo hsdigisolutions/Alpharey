@@ -21,7 +21,7 @@ beforeEach(function (): void {
     $this->companyA = Company::factory()->create();
     $this->companyB = Company::factory()->create();
     $this->sa = User::factory()->superAdmin()->create();
-    $this->employee = Employee::factory()->forCompany($this->companyA)->create();
+    $this->employee = Employee::factory()->forCompany($this->companyA)->create(['wage_type' => 'daily', 'daily_wage' => '50']);
 });
 
 function seedWageRate(Employee $e, Company $c): EmployeeWageRate

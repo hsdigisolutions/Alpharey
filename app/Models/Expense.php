@@ -46,6 +46,7 @@ use Illuminate\Support\Carbon;
  * @property string|null $source
  * @property int|null $source_id
  * @property int|null $vehicle_id
+ * @property string|null $vehicle_expense_type
  * @property string|null $review_status
  */
 class Expense extends Model
@@ -60,7 +61,7 @@ class Expense extends Model
 
     /** @var list<string> */
     protected $fillable = [
-        'number', 'type', 'expense_category_id', 'vendor_id', 'project_id', 'vehicle_id',
+        'number', 'type', 'expense_category_id', 'vendor_id', 'project_id', 'vehicle_id', 'vehicle_expense_type',
         'employee_id', 'company_card_id', 'date', 'due_date', 'subtotal',
         'vat_rate', 'vat_custom_percent', 'vat_amount', 'total', 'payment_method', 'payment_status',
         'payment_date', 'is_reimbursable', 'bearable_by', 'deduct_from_salary', 'notes',

@@ -7,15 +7,21 @@ use App\Enums\ExpenseType;
 use App\Enums\PaymentMethod;
 use App\Enums\PaymentStatus;
 use App\Enums\VatRate;
+use App\Enums\VehicleExpenseType;
 use App\Exports\ExpensesExport;
 use App\Http\Controllers\Admin\Concerns\ResolvesCompanyContext;
+use App\Http\Requests\Expenses\StoreVehicleExpenseRequest;
 use App\Models\CompanyCard;
 use App\Models\Employee;
 use App\Models\Expense;
 use App\Models\ExpenseCategory;
 use App\Models\ExpenseSplit;
 use App\Models\Project;
+use App\Models\Scopes\CompanyScope;
 use App\Models\SubcontractorPayment;
+use App\Models\Vehicle;
+use App\Models\VehicleDailyAssignment;
+use App\Models\VehicleSession;
 use App\Models\Vendor;
 use App\Rules\OwnCompanyEmployee;
 use App\Rules\OwnCompanyProject;
@@ -26,6 +32,7 @@ use App\Support\CompanyBranding;
 use App\Support\CurrentCompany;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response as HttpResponse;
@@ -120,6 +127,13 @@ class ExpenseController extends Controller
             'stats' => $this->expenseStats(),
             'filters' => (object) $request->only(['search', 'project_id', 'vendor_id', 'type', 'expense_category_id', 'payment_status', 'approval', 'from', 'to']),
             'vendors' => Vendor::query()->orderBy('name')->get(['id', 'name']),
+            // Active company vehicles for the direct vehicle-expense entry (Part D).
+            'vehicles' => Vehicle::query()->where('active', true)->orderBy('plate_number')
+                ->get(['id', 'plate_number', 'brand', 'model'])
+                ->map(fn (Vehicle $v): array => [
+                    'id' => $v->id,
+                    'label' => trim($v->plate_number.' '.trim(($v->brand ?? '').' '.($v->model ?? ''))),
+                ])->all(),
             // Filter dropdown = all projects; create form uses active-only `formProjects`.
             'projects' => Project::query()->orderBy('name')->get(['id', 'name']),
             'formProjects' => Project::query()->active()->orderBy('name')->get(['id', 'name']),
@@ -172,6 +186,103 @@ class ExpenseController extends Controller
         });
 
         return back()->with('success', __('ui.expenses.saved'));
+    }
+
+    /**
+     * Direct vehicle expense entry (Part D) — fine / maintenance / fuel created
+     * from the Expenses tab. Creates an UNAPPROVED Expense (single source of
+     * truth); it then flows through the same two-gate approval as any expense,
+     * and on final approval VehicleExpenseSyncService writes the vehicle_* row.
+     */
+    public function storeVehicle(StoreVehicleExpenseRequest $request): RedirectResponse
+    {
+        $companyId = $this->contextCompanyId();
+
+        $v = $request->validated();
+        $type = $v['vehicle_expense_type'];
+        $amount = (string) $v['amount'];
+        $bearer = $v['bearable_by'] ?? BearableBy::Company->value;
+        $employeeBorne = $bearer === BearableBy::Employee->value;
+
+        $reference = $type === VehicleExpenseType::Fine->value ? ($v['reference'] ?? null) : null;
+        $notes = trim(($v['notes'] ?? '').($reference !== null && $reference !== '' ? ' · Ref: '.$reference : ''));
+
+        $expense = new Expense([
+            'type' => ExpenseType::Other->value,
+            'expense_category_id' => $this->vehicleCategory($companyId, $type)->id,
+            'vendor_id' => $type === VehicleExpenseType::Maintenance->value ? ($v['vendor_id'] ?? null) : null,
+            'employee_id' => $v['employee_id'] ?? null,
+            'vehicle_id' => $v['vehicle_id'],
+            'vehicle_expense_type' => $type,
+            'date' => $v['date'],
+            'subtotal' => $amount,
+            'vat_rate' => null,
+            'vat_amount' => '0',
+            'total' => $amount,
+            'payment_status' => PaymentStatus::Unpaid->value,
+            'bearable_by' => $bearer,
+            // Company cost, or deducted from the driver when employee-borne —
+            // never a worker-fronted reimbursement.
+            'is_reimbursable' => false,
+            'deduct_from_salary' => $employeeBorne,
+            'notes' => $notes !== '' ? $notes : null,
+        ]);
+        $expense->company_id = $companyId;
+        $expense->save();
+
+        return back()->with('success', __('ui.expenses.saved'));
+    }
+
+    /**
+     * Employees who had a vehicle checked out on a given date — for the direct
+     * fine entry's driver auto-lookup (vehicle sessions spanning the date, plus
+     * any daily assignment). JSON.
+     */
+    public function driversOnDate(Vehicle $vehicle, Request $request): JsonResponse
+    {
+        Gate::authorize('expenses.create');
+
+        $date = $request->string('date')->value();
+        if ($date === '') {
+            return response()->json(['drivers' => []]);
+        }
+
+        $fromSessions = VehicleSession::query()->withoutGlobalScope(CompanyScope::class)
+            ->where('vehicle_id', $vehicle->id)
+            ->whereDate('taken_at', '<=', $date)
+            ->where(fn (Builder $q) => $q->whereNull('returned_at')->orWhereDate('returned_at', '>=', $date))
+            ->pluck('employee_id');
+
+        $fromDaily = VehicleDailyAssignment::query()->withoutGlobalScope(CompanyScope::class)
+            ->where('vehicle_id', $vehicle->id)
+            ->whereDate('assigned_date', $date)
+            ->pluck('employee_id');
+
+        $ids = $fromSessions->merge($fromDaily)->filter()->unique()->values();
+
+        $drivers = Employee::query()->withoutGlobalScope(CompanyScope::class)
+            ->whereIn('id', $ids)
+            ->orderBy('full_name')
+            ->get(['id', 'full_name'])
+            ->map(fn (Employee $e): array => ['id' => $e->id, 'name' => $e->full_name])
+            ->all();
+
+        return response()->json(['drivers' => $drivers]);
+    }
+
+    /** The company's Multa / Mantenimiento / Combustible expense category. */
+    private function vehicleCategory(int $companyId, string $type): ExpenseCategory
+    {
+        $name = match ($type) {
+            VehicleExpenseType::Fine->value => 'Multas',
+            VehicleExpenseType::Maintenance->value => 'Mantenimiento',
+            default => 'Combustible',
+        };
+
+        return ExpenseCategory::query()->firstOrCreate(
+            ['company_id' => $companyId, 'name' => $name],
+            ['active' => true],
+        );
     }
 
     public function update(Request $request, Expense $expense): RedirectResponse

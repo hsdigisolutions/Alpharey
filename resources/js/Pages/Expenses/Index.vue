@@ -24,6 +24,7 @@ import VEmptyState from '@/Components/ui/VEmptyState.vue';
 import VInput from '@/Components/ui/VInput.vue';
 import VKpiCard from '@/Components/ui/VKpiCard.vue';
 import VModal from '@/Components/ui/VModal.vue';
+import VehicleExpenseModal from '@/Components/Expenses/VehicleExpenseModal.vue';
 import VPageHeader from '@/Components/ui/VPageHeader.vue';
 import VPagination from '@/Components/ui/VPagination.vue';
 import VSelect from '@/Components/ui/VSelect.vue';
@@ -36,6 +37,7 @@ const props = defineProps({
     stats: { type: Object, default: () => ({ total: { count: 0, amount: 0 }, approved: { count: 0, amount: 0 }, pending: { count: 0, amount: 0 } }) },
     filters: { type: Object, required: true },
     vendors: { type: Array, required: true },
+    vehicles: { type: Array, default: () => [] },
     projects: { type: Array, required: true },
     formProjects: { type: Array, default: () => [] },
     employees: { type: Array, required: true },
@@ -74,6 +76,7 @@ const exportQuery = computed(() => new URLSearchParams(
 
 /* ---------- create / edit ---------- */
 const showModal = ref(false);
+const showVehicleModal = ref(false);
 const editingId = ref(null);
 const editingApproved = ref(false); // approved expenses are view-only (locked server-side)
 const blank = {
@@ -283,6 +286,9 @@ const columns = [
             </a>
             <VButton v-if="can.edit" variant="secondary" icon="settings" @click="showCategories = true">
                 <Bilingual k="expenses.manage_categories" inline />
+            </VButton>
+            <VButton v-if="can.create" variant="secondary" icon="vehicles" @click="showVehicleModal = true">
+                <Bilingual k="expenses.new_vehicle_expense" inline />
             </VButton>
             <VButton v-if="can.create" icon="plus" @click="openCreate">
                 <Bilingual k="expenses.new" inline />
@@ -572,6 +578,10 @@ const columns = [
                 </VButton>
             </template>
         </VModal>
+
+        <VehicleExpenseModal :open="showVehicleModal" :vehicles="vehicles" :vendors="vendors"
+            :employees="employees" @close="showVehicleModal = false" />
+
         <VModal :open="showCategories" title-key="expenses.categories_title" @close="showCategories = false">
             <div class="space-y-4">
                 <form class="flex items-end gap-2" @submit.prevent="addCategory">

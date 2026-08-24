@@ -373,6 +373,9 @@ Route::middleware(['auth', 'active', 'two_factor', 'not_worker'])->group(functio
     Route::get('/expenses/export', [ExpenseController::class, 'export'])->name('expenses.export');
     Route::get('/expenses/export-pdf', [ExpenseController::class, 'exportPdf'])->name('expenses.export-pdf');
     Route::post('/expenses', [ExpenseController::class, 'store'])->name('expenses.store');
+    // Direct vehicle expense entry (Part D) — before /expenses/{expense}.
+    Route::post('/expenses/vehicle', [ExpenseController::class, 'storeVehicle'])->name('expenses.vehicle.store');
+    Route::get('/vehicles/{vehicle}/drivers-on-date', [ExpenseController::class, 'driversOnDate'])->name('vehicles.drivers-on-date');
     Route::get('/expenses/{expense}/receipt', [ExpenseController::class, 'downloadReceipt'])->name('expenses.receipt');
     Route::post('/expenses/{expense}', [ExpenseController::class, 'update'])->name('expenses.update');
     Route::post('/expenses/{expense}/approve', [ExpenseController::class, 'approve'])->name('expenses.approve');
