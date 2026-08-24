@@ -67,7 +67,7 @@ it('does not create a duplicate when approved twice', function (): void {
     expect(Expense::query()->where('source', 'worker_fuel')->count())->toBe(1);
 });
 
-it('does not create an auto expense for a non-fuel expense', function (): void {
+it('creates a reimbursable mirror expense for a non-fuel worker expense too', function (): void {
     $we = WorkerExpense::factory()->create([
         'company_id' => $this->company->id, 'employee_id' => $this->employee->id,
         'category' => 'materials', 'amount' => '30.00', 'date' => '2026-08-10',
@@ -75,8 +75,13 @@ it('does not create an auto expense for a non-fuel expense', function (): void {
 
     $this->actingAs($this->admin)->post("/worker-expenses/{$we->id}/approve");
 
-    expect($we->fresh()->auto_expense_id)->toBeNull()
-        ->and(Expense::query()->count())->toBe(0);
+    $mirror = Expense::query()->find($we->fresh()->auto_expense_id);
+    expect($mirror)->not->toBeNull()
+        ->and($mirror->source)->toBe('worker_expense')
+        ->and($mirror->employee_id)->toBe($this->employee->id)
+        ->and((bool) $mirror->is_reimbursable)->toBeTrue()
+        // Starts UNAPPROVED — needs the admin's final approval to reach payroll.
+        ->and($mirror->approved)->toBeFalse();
 });
 
 it('keeps the auto expense when the worker expense is later rejected', function (): void {
@@ -98,15 +103,17 @@ it('degrades the description gracefully when no vehicle is linked', function ():
     expect($expense->notes)->toContain('Combustible')->toContain('Carlos García');
 });
 
-it('refuses to approve the auto-created fuel expense — it would double-count', function (): void {
+it('lets the admin give final approval to the fuel mirror in the Expenses tab', function (): void {
     $we = fuelExpense($this->company, $this->employee);
     $this->actingAs($this->admin)->post("/worker-expenses/{$we->id}/approve");
     $mirror = Expense::query()->where('source', 'worker_fuel')->firstOrFail();
 
+    // The old auto_fuel_locked guard is gone — the admin's final approval is now
+    // exactly what releases the money into payroll.
     $this->actingAs($this->admin)->post("/expenses/{$mirror->id}/approve", ['approved' => true])
-        ->assertSessionHasErrors('approved');
+        ->assertRedirect();
 
-    expect($mirror->fresh()->approved)->toBeFalse();
+    expect($mirror->fresh()->approved)->toBeTrue();
 });
 
 it('does not delete the shared worker receipt when the mirror expense is removed', function (): void {

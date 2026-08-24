@@ -16,6 +16,7 @@ enum PermissionAction: string
     case Download = 'download';
     case Export = 'export';
     case Approve = 'approve';
+    case ApproveFinal = 'approve_final';
 
     public function column(): string
     {

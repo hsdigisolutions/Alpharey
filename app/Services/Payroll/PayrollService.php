@@ -569,8 +569,14 @@ class PayrollService
     }
 
     /**
-     * Approved worker-PWA expenses submitted for this month. Folded into the
-     * reimbursements line on the payslip.
+     * LEGACY worker-PWA expenses that were approved before the two-gate flow and
+     * never got a mirror Expense. Folded into the reimbursements line.
+     *
+     * A worker expense that HAS a mirror (auto_expense_id set) is deliberately
+     * excluded here — it is now counted through the mirror Expense, and ONLY once
+     * the Admin gives final approval (approved = true) in the Expenses tab. This
+     * is what stops payroll counting the money at the manager step and prevents a
+     * double count.
      */
     private function pwaExpensesFor(int $employeeId, string $month): float
     {
@@ -580,6 +586,7 @@ class PayrollService
             ->where('employee_id', $employeeId)
             ->where('status', WorkerExpenseStatus::Approved->value)
             ->whereNull('payroll_id')
+            ->whereNull('auto_expense_id')
             ->whereBetween('date', [$start, $end])
             ->sum('amount'), 2);
     }

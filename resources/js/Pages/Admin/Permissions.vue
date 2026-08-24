@@ -32,7 +32,7 @@ const props = defineProps({
     copySourcePermissions: { type: Object, default: null },
 });
 
-const actionOrder = ['view', 'create', 'edit', 'delete', 'upload', 'download', 'export', 'approve'];
+const actionOrder = ['view', 'create', 'edit', 'delete', 'upload', 'download', 'export', 'approve', 'approve_final'];
 
 const confirm = ref({ open: false, message: '', fn: null });
 function askDelete(message, fn) { confirm.value = { open: true, message, fn }; }

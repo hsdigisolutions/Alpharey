@@ -56,7 +56,10 @@ enum Module: string
             self::Subcontractors => [$a::View, $a::Create, $a::Edit, $a::Delete],
             // Inventory ships item / movement / issue / PPE-compliance exports.
             self::Inventory => [$a::View, $a::Create, $a::Edit, $a::Delete, $a::Export],
-            self::Expenses => [$a::View, $a::Create, $a::Edit, $a::Delete, $a::Export, $a::Approve],
+            // Approve = manager-level (Worker Expenses screen); ApproveFinal =
+            // admin-level final approval in the Expenses tab that releases the
+            // money into payroll (separation of duties).
+            self::Expenses => [$a::View, $a::Create, $a::Edit, $a::Delete, $a::Export, $a::Approve, $a::ApproveFinal],
             // Deployments: create → complete/cancel + a cross-charge approval;
             // never deleted (decision 25), no export.
             self::Deployments => [$a::View, $a::Create, $a::Edit, $a::Approve],

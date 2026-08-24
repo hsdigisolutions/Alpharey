@@ -236,6 +236,7 @@ return [
         'download' => 'Download',
         'export' => 'Export',
         'approve' => 'Approve',
+        'approve_final' => 'Final approval',
     ],
 
     'audit' => [

@@ -264,7 +264,10 @@ class ExpenseController extends Controller
 
     public function approve(Request $request, Expense $expense): RedirectResponse
     {
-        Gate::authorize('expenses.approve');
+        // Admin-level FINAL approval (separation of duties): this is the gate that
+        // releases the money into payroll. Distinct from the manager-level
+        // expenses.approve on the Worker Expenses screen.
+        Gate::authorize('expenses.approve_final');
 
         $validated = $request->validate(['approved' => ['required', 'boolean']]);
 
@@ -279,16 +282,11 @@ class ExpenseController extends Controller
             ]);
         }
 
-        // Same reasoning for a worker-fuel mirror expense: the worker is already
-        // reimbursed the fuel through payroll, so approving this mirror would
-        // count the same euro again in the approved-expense sum. Kept unapproved.
-        if ($validated['approved'] && $expense->source === WorkerFuelExpenseService::SOURCE) {
-            throw ValidationException::withMessages([
-                'approved' => __('ui.expenses.auto_fuel_locked'),
-            ]);
-        }
-
         // Not mass-assignable — set directly (Measurement/Document convention).
+        // A worker-sourced mirror expense (source worker_fuel / worker_expense)
+        // is NOW approvable here — this final approval is exactly what makes
+        // payroll count the reimbursement (the old auto_fuel_locked guard is
+        // gone; payroll no longer counts the WorkerExpense at the manager step).
         $expense->approved = $validated['approved'];
         $expense->approved_by = $validated['approved'] ? Auth::id() : null;
         $expense->approved_at = $validated['approved'] ? now() : null;
@@ -347,10 +345,11 @@ class ExpenseController extends Controller
 
         abort_if($expense->approved, 422, 'Approved expenses cannot be removed.');
 
-        // A worker-fuel mirror expense REFERENCES the worker expense's receipt
+        // A worker-sourced mirror expense REFERENCES the worker expense's receipt
         // file (shared, not copied) — deleting it here would destroy the
         // worker's own receipt, so leave the file and only drop the mirror row.
-        if ($expense->file_path !== null && $expense->source !== WorkerFuelExpenseService::SOURCE) {
+        $isWorkerMirror = in_array($expense->source, [WorkerFuelExpenseService::SOURCE, WorkerFuelExpenseService::SOURCE_GENERAL], true);
+        if ($expense->file_path !== null && ! $isWorkerMirror) {
             Storage::disk('local')->delete($expense->file_path);
         }
 

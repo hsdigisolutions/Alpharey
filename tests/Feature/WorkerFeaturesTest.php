@@ -8,6 +8,7 @@ use App\Models\Attendance;
 use App\Models\AttendanceVoiceNote;
 use App\Models\Company;
 use App\Models\Employee;
+use App\Models\Expense;
 use App\Models\Scopes\CompanyScope;
 use App\Models\User;
 use App\Models\Vehicle;
@@ -35,7 +36,7 @@ function workerWithEmployee(array $employeeOverrides = []): array
     return [$user, $employee, $company];
 }
 
-it('lets an admin add a worker expense from the CRM, approved and payroll-bound', function () {
+it('adds a worker expense from the CRM — payroll counts it only after FINAL approval', function () {
     [, $employee, $company] = workerWithEmployee(['daily_wage' => '50']);
     $admin = User::factory()->companyAdmin()->forCompany($company)->create();
 
@@ -48,9 +49,17 @@ it('lets an admin add a worker expense from the CRM, approved and payroll-bound'
     expect($expense->status)->toBe(WorkerExpenseStatus::Approved)
         ->and($expense->company_id)->toBe($company->id);
 
-    // Approved worker expenses fold into that month's payroll reimbursements.
-    $payroll = app(PayrollService::class)->calculateFor($employee, $company->id, '2026-05');
-    expect((float) $payroll->getAttribute('reimbursements'))->toBe(25.0);
+    // Manager-level approval created the mirror Expense, but it is NOT yet
+    // approved → payroll must NOT count it (the whole point of the two-gate flow).
+    $mirror = Expense::withoutGlobalScopes()->where('source', 'worker_fuel')->firstOrFail();
+    $before = app(PayrollService::class)->calculateFor($employee, $company->id, '2026-05');
+    expect((float) $before->getAttribute('reimbursements'))->toBe(0.0);
+
+    // Admin FINAL approval in the Expenses tab releases the money into payroll.
+    // (Re-use the same payroll row so we recompute rather than insert a second.)
+    $this->actingAs($admin)->post("/expenses/{$mirror->id}/approve", ['approved' => true])->assertRedirect();
+    $after = app(PayrollService::class)->calculateFor($employee, $company->id, '2026-05', $before);
+    expect((float) $after->getAttribute('reimbursements'))->toBe(25.0);
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

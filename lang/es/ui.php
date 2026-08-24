@@ -238,6 +238,7 @@ return [
         'download' => 'Descargar',
         'export' => 'Exportar',
         'approve' => 'Aprobar',
+        'approve_final' => 'Aprobación final',
     ],
 
     'audit' => [
