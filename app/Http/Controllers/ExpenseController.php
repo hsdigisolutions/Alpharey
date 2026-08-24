@@ -143,6 +143,7 @@ class ExpenseController extends Controller
                 'edit' => Gate::allows('expenses.edit'),
                 'delete' => Gate::allows('expenses.delete'),
                 'approve' => Gate::allows('expenses.approve'),
+                'approve_final' => Gate::allows('expenses.approve_final'),
                 'export' => Gate::allows('expenses.export'),
             ],
         ]);
@@ -301,6 +302,24 @@ class ExpenseController extends Controller
         }
 
         return back()->with('success', __('ui.expenses.'.($validated['approved'] ? 'approved' : 'rejected')));
+    }
+
+    /**
+     * Send an expense to the Super-Admin review queue (Part C) instead of a
+     * final approve/reject — for when the admin is unsure. The Super Admin's
+     * decision in that queue is the final call.
+     */
+    public function sendToReview(Expense $expense): RedirectResponse
+    {
+        Gate::authorize('expenses.approve_final');
+
+        $expense->review_status = 'in_review';
+        $expense->approved = false;
+        $expense->approved_by = null;
+        $expense->approved_at = null;
+        $expense->save();
+
+        return back()->with('success', __('ui.expenses.sent_to_review'));
     }
 
     /**
@@ -491,6 +510,7 @@ class ExpenseController extends Controller
             'payment_status' => $e->payment_status->value,
             'payment_date' => $e->payment_date?->toDateString(),
             'approved' => $e->approved,
+            'review_status' => $e->review_status,
             'is_reimbursable' => $e->is_reimbursable,
             'bearable_by' => $e->bearable_by->value,
             'deduct_from_salary' => $e->deduct_from_salary,

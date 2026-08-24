@@ -46,6 +46,7 @@ use Illuminate\Support\Carbon;
  * @property string|null $source
  * @property int|null $source_id
  * @property int|null $vehicle_id
+ * @property string|null $review_status
  */
 class Expense extends Model
 {

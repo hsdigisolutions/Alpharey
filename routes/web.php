@@ -376,6 +376,7 @@ Route::middleware(['auth', 'active', 'two_factor', 'not_worker'])->group(functio
     Route::get('/expenses/{expense}/receipt', [ExpenseController::class, 'downloadReceipt'])->name('expenses.receipt');
     Route::post('/expenses/{expense}', [ExpenseController::class, 'update'])->name('expenses.update');
     Route::post('/expenses/{expense}/approve', [ExpenseController::class, 'approve'])->name('expenses.approve');
+    Route::post('/expenses/{expense}/review', [ExpenseController::class, 'sendToReview'])->name('expenses.review');
     Route::delete('/expenses/{expense}', [ExpenseController::class, 'destroy'])->name('expenses.destroy');
 
     // Custom expense categories (managed inline on the Gastos screen)
@@ -387,6 +388,7 @@ Route::middleware(['auth', 'active', 'two_factor', 'not_worker'])->group(functio
     Route::get('/worker-expenses', [WorkerExpenseAdminController::class, 'index'])->name('worker-expenses.index');
     Route::post('/worker-expenses', [WorkerExpenseAdminController::class, 'store'])->name('worker-expenses.store');
     Route::post('/worker-expenses/{workerExpense}/approve', [WorkerExpenseAdminController::class, 'approve'])->name('worker-expenses.approve');
+    Route::post('/worker-expenses/{workerExpense}/review', [WorkerExpenseAdminController::class, 'sendToReview'])->name('worker-expenses.review');
     Route::post('/worker-expenses/{workerExpense}/reject', [WorkerExpenseAdminController::class, 'reject'])->name('worker-expenses.reject');
     Route::get('/worker-expenses/{workerExpense}/receipt', [WorkerExpenseAdminController::class, 'downloadReceipt'])->name('worker-expenses.receipt');
 
@@ -524,6 +526,11 @@ Route::middleware(['auth', 'active', 'two_factor', 'not_worker'])->group(functio
 
     // Screen 02 + Screen 04 — Super Admin only
     Route::middleware('super_admin')->group(function (): void {
+        // Part C — Expenses awaiting review (Super Admin final decision).
+        Route::get('/expense-review', [\App\Http\Controllers\Admin\ExpenseReviewController::class, 'index'])->name('expense-review.index');
+        Route::post('/expense-review/{expense}/approve', [\App\Http\Controllers\Admin\ExpenseReviewController::class, 'approve'])->name('expense-review.approve');
+        Route::post('/expense-review/{expense}/reject', [\App\Http\Controllers\Admin\ExpenseReviewController::class, 'reject'])->name('expense-review.reject');
+
         Route::get('/welcome', [WelcomeController::class, 'index'])->name('welcome');
         Route::post('/welcome/{company}/select', [WelcomeController::class, 'select'])->name('welcome.select');
         Route::post('/welcome/clear', [WelcomeController::class, 'clearSelection'])->name('welcome.clear');

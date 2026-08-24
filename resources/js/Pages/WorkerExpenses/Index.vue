@@ -40,7 +40,7 @@ function eur(v) {
 }
 
 function statusVariant(status) {
-    return { pending: 'warn', approved: 'ok', rejected: 'danger' }[status] ?? 'neutral';
+    return { pending: 'warn', approved: 'ok', rejected: 'danger', in_review: 'info' }[status] ?? 'neutral';
 }
 
 // Normalise a stored category (a bare code 'fuel', a stray full key
@@ -70,6 +70,10 @@ function submitReject() {
 }
 
 // ── Approve ──────────────────────────────────────────────────────────────────
+function sendToReview(expense) {
+    router.post(route('worker-expenses.review', expense.id), {}, { preserveScroll: true });
+}
+
 function approve(expense) {
     router.post(route('worker-expenses.approve', expense.id));
 }
@@ -152,8 +156,14 @@ function approve(expense) {
                                     <VButton size="sm" variant="ghost" class="text-status-danger" @click="openReject(e)">
                                         <Bilingual k="worker_expenses.reject" inline />
                                     </VButton>
+                                    <VButton size="sm" variant="ghost" @click="sendToReview(e)">
+                                        <Bilingual k="worker_expenses.send_to_review" inline />
+                                    </VButton>
                                 </div>
                             </template>
+                            <VBadge v-else-if="e.status === 'in_review'" status="warn">
+                                <Bilingual k="worker_expenses.in_review" inline />
+                            </VBadge>
                             <span v-else class="text-xs text-muted">
                                 {{ e.approved_by ? `${$t('worker_expenses.by')} ${e.approved_by}` : '—' }}
                             </span>

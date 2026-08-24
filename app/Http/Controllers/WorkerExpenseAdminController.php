@@ -131,6 +131,26 @@ class WorkerExpenseAdminController extends Controller
         return back()->with('success', __('ui.worker_expenses.approved'));
     }
 
+    /**
+     * Send a worker expense to the Super-Admin review queue (Part C) instead of
+     * approving/rejecting. Creates the mirror Expense in the in_review state; the
+     * Super Admin makes the final call there.
+     */
+    public function sendToReview(WorkerExpense $workerExpense): RedirectResponse
+    {
+        Gate::authorize('expenses.approve');
+
+        $workerExpense->status = WorkerExpenseStatus::InReview;
+        $workerExpense->approved_by = Auth::id();
+        $workerExpense->approved_at = now();
+        $workerExpense->rejection_reason = null;
+        $workerExpense->save();
+
+        app(WorkerFuelExpenseService::class)->mirrorForReview($workerExpense);
+
+        return back()->with('success', __('ui.worker_expenses.sent_to_review'));
+    }
+
     public function reject(Request $request, WorkerExpense $workerExpense): RedirectResponse
     {
         Gate::authorize('expenses.approve');

@@ -169,6 +169,10 @@ function approve(row, value) {
     router.post(`/expenses/${row.id}/approve`, { approved: value }, { preserveScroll: true });
 }
 
+function sendToReview(row) {
+    router.post(`/expenses/${row.id}/review`, {}, { preserveScroll: true });
+}
+
 const confirm = ref({ open: false, message: '', fn: null });
 function askDelete(message, fn) { confirm.value = { open: true, message, fn }; }
 function runDelete() { confirm.value.fn?.(); confirm.value.open = false; }
@@ -354,7 +358,10 @@ const columns = [
                 </td>
                 <td class="tabular-nums px-3 py-2.5 text-end text-sm font-semibold">{{ eur(r.total) }}</td>
                 <td class="px-3 py-2.5">
-                    <VBadge :status="r.approved ? 'ok' : 'warn'">
+                    <VBadge v-if="r.review_status === 'in_review'" status="info">
+                        <Bilingual k="expenses.in_review" inline />
+                    </VBadge>
+                    <VBadge v-else :status="r.approved ? 'ok' : 'warn'">
                         <Bilingual :k="r.approved ? 'expenses.is_approved' : 'expenses.pending'" inline />
                     </VBadge>
                 </td>
@@ -369,12 +376,17 @@ const columns = [
                             @click="openEdit(r)">
                             <AppIcon name="edit" class="h-3.5 w-3.5" />
                         </button>
-                        <VButton v-if="can.approve && !r.approved" variant="ghost" size="sm" @click="approve(r, true)">
-                            <Bilingual k="expenses.approve" inline />
-                        </VButton>
-                        <VButton v-if="can.approve && r.approved" variant="ghost" size="sm" @click="approve(r, false)">
-                            <Bilingual k="expenses.reject" inline />
-                        </VButton>
+                        <template v-if="can.approve_final && r.review_status !== 'in_review'">
+                            <VButton v-if="!r.approved" variant="ghost" size="sm" @click="approve(r, true)">
+                                <Bilingual k="expenses.approve" inline />
+                            </VButton>
+                            <VButton v-else variant="ghost" size="sm" @click="approve(r, false)">
+                                <Bilingual k="expenses.reject" inline />
+                            </VButton>
+                            <VButton v-if="!r.approved" variant="ghost" size="sm" @click="sendToReview(r)">
+                                <Bilingual k="expenses.send_to_review" inline />
+                            </VButton>
+                        </template>
                         <VButton v-if="can.delete && !r.approved" variant="ghost" size="sm" icon="trash" @click="destroy(r)" />
                     </span>
                 </td>

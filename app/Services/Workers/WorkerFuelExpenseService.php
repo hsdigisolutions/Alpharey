@@ -49,6 +49,22 @@ class WorkerFuelExpenseService
         if ($workerExpense->status !== WorkerExpenseStatus::Approved) {
             return null;
         }
+
+        return $this->createMirror($workerExpense, null);
+    }
+
+    /**
+     * Create the mirror Expense in the "in review" state — the manager sent the
+     * worker expense to the Super-Admin review queue instead of approving it.
+     * The mirror is unapproved with review_status = in_review.
+     */
+    public function mirrorForReview(WorkerExpense $workerExpense): ?Expense
+    {
+        return $this->createMirror($workerExpense, 'in_review');
+    }
+
+    private function createMirror(WorkerExpense $workerExpense, ?string $reviewStatus): ?Expense
+    {
         if ($workerExpense->auto_expense_id !== null) {
             return null; // idempotent — already mirrored
         }
@@ -80,6 +96,7 @@ class WorkerFuelExpenseService
         $expense->vehicle_id = $workerExpense->vehicle_id;
         $expense->source = $isFuel ? self::SOURCE : self::SOURCE_GENERAL;
         $expense->source_id = $workerExpense->id;
+        $expense->review_status = $reviewStatus;
         // Reference the SAME receipt file (not copied).
         if ($workerExpense->receipt_path !== null) {
             $expense->file_path = $workerExpense->receipt_path;

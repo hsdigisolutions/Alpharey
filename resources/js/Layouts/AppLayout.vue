@@ -22,6 +22,7 @@ const page = usePage();
 const primaryNav = [
     { key: 'dashboard', icon: 'dashboard', href: '/dashboard' },
     { key: 'companies', icon: 'companies', href: '/companies', superAdminOnly: true },
+    { key: 'expense_review', icon: 'expenses', href: '/expense-review', superAdminOnly: true },
     { key: 'employees', icon: 'employees', href: '/employees' },
     { key: 'clients', icon: 'clients', href: '/clients' },
     { key: 'projects', icon: 'projects', href: '/projects' },
