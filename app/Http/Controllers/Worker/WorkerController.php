@@ -389,7 +389,7 @@ class WorkerController extends Controller
     {
         return Employee::query()
             ->withoutGlobalScope(CompanyScope::class)
-            ->with('company:id,name')
+            ->with('company:id,name,brand_name')
             ->where('user_id', $request->user()?->id)
             ->firstOrFail();
     }

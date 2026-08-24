@@ -58,7 +58,7 @@ class HandleInertiaRequests extends Middleware
             'company' => $user === null ? null : (function () {
                 $company = app(CurrentCompany::class)->get();
 
-                return $company === null ? null : ['id' => $company->id, 'name' => $company->name];
+                return $company === null ? null : ['id' => $company->id, 'name' => $company->displayName()];
             })(),
             // Companies the user may switch between (id + name only).
             // SA gets ALL companies for the inline header dropdown.
@@ -66,14 +66,14 @@ class HandleInertiaRequests extends Middleware
             // Workers have no CRM session at all.
             'companies' => $user instanceof User && ! $user->isWorker()
                 ? ($user->isSuperAdmin()
-                    ? Company::query()->orderBy('name')->get(['id', 'name'])
-                        ->map(fn ($c) => ['id' => $c->id, 'name' => $c->name])
+                    ? Company::query()->orderBy('name')->get(['id', 'name', 'brand_name'])
+                        ->map(fn ($c) => ['id' => $c->id, 'name' => $c->displayName()])
                         ->all()
                     : $user->companies
-                        ->map(fn ($c) => ['id' => $c->id, 'name' => $c->name])
+                        ->map(fn ($c) => ['id' => $c->id, 'name' => $c->displayName()])
                         ->when(
                             $user->company !== null && ! $user->companies->contains('id', $user->company_id),
-                            fn ($list) => $list->prepend(['id' => $user->company->id, 'name' => $user->company->name]),
+                            fn ($list) => $list->prepend(['id' => $user->company->id, 'name' => $user->company->displayName()]),
                         )
                         ->values()
                         ->all())

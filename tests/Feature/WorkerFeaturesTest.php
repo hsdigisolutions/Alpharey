@@ -425,6 +425,16 @@ describe('Feature 4 – vehicle sessions', function () {
             ->assertInertia(fn ($page) => $page->component('Worker/Vehicles')->has('vehicles', 1));
     });
 
+    it('shows the company brand name (not the legal name) in the vehicle header', function () {
+        [$user, , $company] = workerWithEmployee(['can_use_vehicles' => true]);
+        $company->update(['name' => 'Construcciones Y Proyectos Alovar Cinco, SL', 'brand_name' => 'Alovar']);
+
+        $this->actingAs($user)
+            ->get('/worker/vehicles')
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page->where('worker.company', 'Alovar'));
+    });
+
     it('worker can take an available vehicle', function () {
         [$user, $employee, $company] = workerWithEmployee(['can_use_vehicles' => true]);
         $vehicle = Vehicle::factory()->for($company)->create([

@@ -135,3 +135,16 @@ it('blocks workers from the switch endpoint entirely', function (): void {
         ->post("/company/{$this->companyA->id}/switch")
         ->assertRedirect(route('worker.home'));
 });
+
+it('shows the company brand name (not the legal name) in the SA switcher dropdown', function (): void {
+    $this->companyA->update(['name' => 'Construcciones Y Proyectos Alovar Cinco, SL', 'brand_name' => 'Alovar']);
+    $sa = User::factory()->create(['role' => UserRole::SuperAdmin]);
+
+    $this->actingAs($sa)->post("/company/{$this->companyB->id}/switch");
+
+    $this->get('/dashboard')
+        ->assertInertia(fn (Assert $page) => $page->where(
+            'companies',
+            fn ($companies) => collect($companies)->firstWhere('id', $this->companyA->id)['name'] === 'Alovar',
+        ));
+});

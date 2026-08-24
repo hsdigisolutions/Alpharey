@@ -112,7 +112,7 @@ class WorkerVehicleController extends Controller
             'worker' => [
                 'name' => $employee->full_name,
                 'code' => $employee->employee_code,
-                'company' => $employee->company?->name,
+                'company' => $employee->company?->displayName(),
             ],
         ]);
     }
@@ -232,7 +232,7 @@ class WorkerVehicleController extends Controller
     {
         return Employee::query()
             ->withoutGlobalScope(CompanyScope::class)
-            ->with('company:id,name')
+            ->with('company:id,name,brand_name')
             ->where('user_id', $request->user()?->id)
             ->firstOrFail();
     }
