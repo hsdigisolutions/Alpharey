@@ -4,6 +4,70 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Status: Phase 9 in progress — hardening (2026-08-01)
 
+### Employee transfer — SINGLE-RECORD model (2026-08-25, DONE, deployed to prod)
+
+**The authoritative design for transferring an employee between companies.** It
+REPLACES an earlier "new record per transfer" model, which is gone — do not
+reintroduce it (see the incident note below for why it was wrong).
+
+**The model: ONE employee record per person, always.** A transfer flips that
+record's `company_id` **in place** — it never creates a second record. So a
+worker keeps their `employee_id`, their login, their documents, their attendance,
+and their wage history across any number of transfers (including round trips),
+and nothing is ever stranded or duplicated.
+
+**`EmployeeTransferService::transfer($employee, $toCompanyId, $date)`** (single
+writer, in a DB transaction):
+- **Attendance is NEVER touched.** The service physically does not write to the
+  `attendance` table. Every attendance row keeps the `company_id` it was logged
+  under, permanently — that is how "attendance up to the transfer date stays with
+  the old company" is guaranteed by construction, not by convention.
+- **`employee_company_history`** (migration `2026_08_25_000001`) logs each
+  company STINT: `employee_id` · `company_id` · `started_at` · `ended_at`
+  (nullable — NULL = the current stint). On transfer the open stint is closed
+  (`ended_at` = transfer date) and a new one opened. A same-day / on-or-before
+  transfer just retags the still-open stint (never a zero-length row) — this is
+  what keeps round-trip transfers from proliferating stint rows. Cross-company by
+  design (no `BelongsToCompany`, like `employee_deployments`); NOT Auditable (the
+  transfer is audited on the employee). An initial current stint is opened for
+  every employee by an `Employee::created` hook (covers form / factory / importer)
+  and was backfilled for all existing employees in the migration.
+- **Wage** (`WageRateService::openTransferStint`): the open rate period is carried
+  into the new company from the transfer date (same amount, new `company_id`);
+  older periods keep their own company — mirroring attendance.
+- `transferred_at` is stamped (floors absence-counting at the new company via
+  `AttendanceAbsence`); `documents_pending_reupload` flags the new company's
+  paperwork; `previous_company_id` is set. Login + documents stay on the record.
+- Guards (unchanged): blocked while equipment is outstanding, or the current
+  month's payroll for this employee is already PAID.
+
+**Employment History tab** (`EmployeeController::employmentHistoryPayload`) reads
+`employee_company_history` (via `Employee::companyHistory()`), newest stint first;
+the open stint is the current company. `can_view` marks stints at a company the
+viewer may see (own, or any for a Super Admin) — there is no per-record drill-in
+(there is only one record). Tests: `EmployeeTransferTest` (rewritten for the
+single-record model, incl. a round-trip regression — A→B→A→B→A must never create a
+duplicate record and never lose attendance) + `TransferAbsenceTest` (the
+`transferred_at` absence floor). All five gates green.
+
+**⚠️ Incident (2026-08-24/25) — the old design lost visibility of history.** Under
+the earlier "new record per transfer" model, each transfer created a NEW employee
+record (new `employee_id`) sharing a `person_uuid`. A worker's attendance stayed
+bonded to the ORIGINAL record, while the currently-active record was a fresh empty
+one — so the active view showed no history, and transferring back created yet
+another empty record instead of reconnecting the original. Two production workers
+(Arslan #302 · Abdullah #470) were transferred several times and their Alovar
+history "disappeared" from the active view. **No data was ever lost** — the
+attendance rows were intact the whole time (all still `company_id=1`/Alovar, never
+deleted, never reassigned); they were only stranded on superseded records. Fixed
+by a read-only investigation → a reviewed, per-person recovery that reactivated
+each ORIGINAL record and soft-deleted the empty duplicates (no attendance writes)
+→ then this single-record redesign so it cannot recur. **Why the old design was
+wrong:** splitting one person across many records made attendance history a
+function of which record you were looking at, and made a round trip create records
+without bound. A person is ONE employee; their company over time is an attribute of
+that one record plus a stint log — not a reason to fork the record.
+
 ### Smart Expense Split — one expense across many categories (2026-08-19, DONE)
 
 An expense's TOTAL can now be split across several categories (Materials 40 /
