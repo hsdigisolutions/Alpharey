@@ -20,6 +20,7 @@ use App\Models\Vendor;
 use App\Rules\OwnCompanyEmployee;
 use App\Rules\OwnCompanyProject;
 use App\Services\Audit\AuditLogger;
+use App\Services\Vehicles\VehicleExpenseSyncService;
 use App\Services\Workers\WorkerFuelExpenseService;
 use App\Support\CompanyBranding;
 use App\Support\CurrentCompany;
@@ -291,6 +292,13 @@ class ExpenseController extends Controller
         $expense->approved_by = $validated['approved'] ? Auth::id() : null;
         $expense->approved_at = $validated['approved'] ? now() : null;
         $expense->save();
+
+        // Part E — on final approval, mirror a vehicle-linked expense into the
+        // matching vehicle_* table so it shows on the vehicle's Fuel/Fine/
+        // Maintenance tab (idempotent).
+        if ($expense->approved) {
+            app(VehicleExpenseSyncService::class)->syncOnFinalApproval($expense);
+        }
 
         return back()->with('success', __('ui.expenses.'.($validated['approved'] ? 'approved' : 'rejected')));
     }
