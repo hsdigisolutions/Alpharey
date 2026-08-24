@@ -118,8 +118,10 @@ class ExpenseController extends Controller
             'stats' => $this->expenseStats(),
             'filters' => (object) $request->only(['search', 'project_id', 'vendor_id', 'type', 'expense_category_id', 'payment_status', 'approval', 'from', 'to']),
             'vendors' => Vendor::query()->orderBy('name')->get(['id', 'name']),
+            // Filter dropdown = all projects; create form uses active-only `formProjects`.
             'projects' => Project::query()->orderBy('name')->get(['id', 'name']),
-            'employees' => Employee::query()->where('active', true)->orderBy('full_name')->get(['id', 'full_name']),
+            'formProjects' => Project::query()->active()->orderBy('name')->get(['id', 'name']),
+            'employees' => Employee::query()->active()->orderBy('full_name')->get(['id', 'full_name']),
             // All own-company + group-wide categories (active and inactive) so the
             // management modal can show them; the form/filter show only active ones.
             'categories' => ExpenseCategory::query()

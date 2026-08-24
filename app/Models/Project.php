@@ -9,6 +9,7 @@ use App\Enums\VatRate;
 use App\Models\Concerns\Auditable;
 use App\Models\Concerns\BelongsToCompany;
 use Database\Factories\ProjectFactory;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -86,6 +87,18 @@ class Project extends Model
             'geofence_radius' => 'integer',
             'outsourced' => 'boolean',
         ];
+    }
+
+    /**
+     * Selectable (ongoing) projects only — the single source for selection
+     * dropdowns (create/edit forms). Excludes Completed / Cancelled / OnHold.
+     * Index-page list filters keep showing all statuses.
+     *
+     * @param  Builder<Project>  $query
+     */
+    public function scopeActive(Builder $query): void
+    {
+        $query->whereIn('status', [ProjectStatus::Active, ProjectStatus::InProgress]);
     }
 
     /**

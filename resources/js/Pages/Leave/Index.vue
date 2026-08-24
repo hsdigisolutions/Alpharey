@@ -4,7 +4,7 @@
  * balances table. Approving books the days into the attendance grid, which is
  * why the confirm copy says so rather than just "approve".
  */
-import { reactive, ref, watch } from 'vue';
+import { computed, reactive, ref, watch } from 'vue';
 import { Head, router, useForm } from '@inertiajs/vue3';
 import { ensureCompanySelected } from '@/composables/useCompanyGate';
 import AppLayout from '@/Layouts/AppLayout.vue';
@@ -27,6 +27,7 @@ const props = defineProps({
     leaves: { type: Object, required: true },
     filters: { type: Object, required: true },
     employees: { type: Array, required: true },
+    formEmployees: { type: Array, default: () => [] },
     categories: { type: Array, required: true },
     statuses: { type: Array, required: true },
     balances: { type: Array, required: true },
@@ -56,6 +57,18 @@ const blank = {
     total_days: null, reason: '', attachment: null,
 };
 const form = useForm({ ...blank });
+
+/* Create-form employee options: active only, plus the current employee when
+   editing a leave whose worker has since gone inactive (Change 4). */
+const employeeOptions = computed(() => {
+    const list = [...props.formEmployees];
+    const cur = form.employee_id;
+    if (cur && !list.some((e) => String(e.id) === String(cur))) {
+        const found = props.employees.find((e) => String(e.id) === String(cur));
+        if (found) list.push(found);
+    }
+    return list;
+});
 
 function open() {
     if (!ensureCompanySelected()) return;
@@ -246,7 +259,7 @@ const balanceColumns = [
                 <FormField k="leave.employee" :error="form.errors.employee_id" required>
                     <VSelect v-model="form.employee_id">
                         <option value="">—</option>
-                        <option v-for="e in employees" :key="e.id" :value="e.id">{{ e.full_name }}</option>
+                        <option v-for="e in employeeOptions" :key="e.id" :value="e.id">{{ e.full_name }}</option>
                     </VSelect>
                 </FormField>
                 <FormField k="leave.category" :error="form.errors.leave_category_id" required>

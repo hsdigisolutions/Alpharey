@@ -48,7 +48,9 @@ class MeasurementController extends Controller
         return Inertia::render('Measurements/Index', [
             'measurements' => $measurements,
             'filters' => (object) $request->only(['project_id', 'employee_id', 'status', 'date_from', 'date_to', 'per_page']),
+            // Filter dropdown = all projects; create form uses active-only `formProjects`.
             'projects' => Project::query()->orderBy('name')->get(['id', 'name']),
+            'formProjects' => Project::query()->active()->orderBy('name')->get(['id', 'name']),
             // A2 — the standalone page can now set the employee.
             'employees' => $this->employees(),
             'types' => array_map(fn (MeasurementType $t) => $t->value, MeasurementType::cases()),

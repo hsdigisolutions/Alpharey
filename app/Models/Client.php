@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Enums\ClientType;
 use App\Models\Concerns\Auditable;
 use Database\Factories\ClientFactory;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -45,6 +46,17 @@ class Client extends Model
             'client_type' => ClientType::class,
             'active' => 'boolean',
         ];
+    }
+
+    /**
+     * Active clients only — the single source for selection dropdowns
+     * (create/edit forms). Index-page list filters keep showing all.
+     *
+     * @param  Builder<Client>  $query
+     */
+    public function scopeActive(Builder $query): void
+    {
+        $query->where('active', true);
     }
 
     /**

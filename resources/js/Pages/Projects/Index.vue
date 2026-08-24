@@ -25,6 +25,9 @@ const props = defineProps({
     view: { type: String, required: true },
     filters: { type: Object, required: true },
     filterOptions: { type: Object, required: true },
+    // Active clients only, for the create-project form (Change 4). The list
+    // filter above keeps filterOptions.clients (all).
+    activeClients: { type: Array, default: () => [] },
     can: { type: Object, required: true },
     // vatOptions comes from a shared page prop when needed; fetch via the modal below
     vatOptions: { type: Array, default: () => ([{ value: null, label_es: 'No aplica', label_en: 'Not applicable' }]) },
@@ -145,6 +148,6 @@ const columns = [
             </div>
         </div>
 
-        <ProjectFormModal :open="showForm" :clients="filterOptions.clients" :employees="filterOptions.employees" :vat-options="vatOptions" @close="showForm = false" />
+        <ProjectFormModal :open="showForm" :clients="activeClients" :employees="filterOptions.employees" :vat-options="vatOptions" @close="showForm = false" />
     </AppLayout>
 </template>

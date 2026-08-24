@@ -62,7 +62,7 @@ class ProposalController extends Controller
             'proposals' => $proposals,
             'filters' => (object) $request->only(['search', 'status', 'per_page']),
             'statuses' => array_map(fn (ProposalStatus $s) => $s->value, ProposalStatus::cases()),
-            'clients' => Client::query()->orderBy('name')->get(['id', 'name']),
+            'clients' => Client::query()->active()->orderBy('name')->get(['id', 'name']),
             'vatOptions' => VatRate::options(),
             'can' => [
                 'create' => Gate::allows('proposals.create'),

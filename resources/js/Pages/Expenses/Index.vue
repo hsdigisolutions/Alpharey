@@ -37,6 +37,7 @@ const props = defineProps({
     filters: { type: Object, required: true },
     vendors: { type: Array, required: true },
     projects: { type: Array, required: true },
+    formProjects: { type: Array, default: () => [] },
     employees: { type: Array, required: true },
     categories: { type: Array, required: true },
     cards: { type: Array, required: true },
@@ -197,6 +198,18 @@ function deleteCategory(c) {
 
 /* A worker project expense is paid back through payroll — say so in the form. */
 const isWorkerProjectExpense = computed(() => Boolean(form.employee_id && form.project_id));
+
+/* Create-form project options: active only, but keep the currently-selected
+   project when editing an expense whose project has since completed (Change 4). */
+const projectOptions = computed(() => {
+    const list = [...props.formProjects];
+    const cur = form.project_id;
+    if (cur && !list.some((p) => String(p.id) === String(cur))) {
+        const found = props.projects.find((p) => String(p.id) === String(cur));
+        if (found) list.push(found);
+    }
+    return list;
+});
 
 const preview = computed(() => {
     const subtotal = Number(form.subtotal) || 0;
@@ -416,7 +429,7 @@ const columns = [
                 <FormField k="expenses.project" :error="form.errors.project_id">
                     <VSelect v-model="form.project_id">
                         <option value="">—</option>
-                        <option v-for="p in projects" :key="p.id" :value="p.id">{{ p.name }}</option>
+                        <option v-for="p in projectOptions" :key="p.id" :value="p.id">{{ p.name }}</option>
                     </VSelect>
                 </FormField>
                 <FormField k="expenses.employee" :error="form.errors.employee_id">

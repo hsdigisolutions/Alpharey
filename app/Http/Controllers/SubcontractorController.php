@@ -263,7 +263,7 @@ class SubcontractorController extends Controller
      */
     private function projects(): array
     {
-        return Project::query()->orderBy('name')->get(['id', 'name'])
+        return Project::query()->active()->orderBy('name')->get(['id', 'name'])
             ->map(fn (Project $p): array => ['id' => $p->id, 'name' => $p->name])->all();
     }
 

@@ -3,7 +3,7 @@
  * Screen 24 — Measurements. Approve/reject workflow; approved rows feed
  * project billing (Phase 6). Create/edit in a modal.
  */
-import { reactive, ref } from 'vue';
+import { computed, reactive, ref } from 'vue';
 import { Head, router, useForm } from '@inertiajs/vue3';
 import { ensureCompanySelected } from '@/composables/useCompanyGate';
 import AppLayout from '@/Layouts/AppLayout.vue';
@@ -26,6 +26,7 @@ const props = defineProps({
     measurements: { type: Object, required: true },
     filters: { type: Object, required: true },
     projects: { type: Array, required: true },
+    formProjects: { type: Array, default: () => [] },
     employees: { type: Array, default: () => [] },
     types: { type: Array, required: true },
     can: { type: Object, required: true },
@@ -45,6 +46,18 @@ const showModal = ref(false);
 const editing = ref(null);
 const blank = { project_id: '', employee_id: '', date: null, quantity: null, unit: '', measurement_type: 'length', notes: '' };
 const form = useForm({ ...blank });
+
+/* Create-form project options: active only, plus the current project when
+   editing a measurement whose project has since completed (Change 4). */
+const projectOptions = computed(() => {
+    const list = [...props.formProjects];
+    const cur = form.project_id;
+    if (cur && !list.some((p) => String(p.id) === String(cur))) {
+        const found = props.projects.find((p) => String(p.id) === String(cur));
+        if (found) list.push(found);
+    }
+    return list;
+});
 
 function open(m = null) {
     // Only creating needs a company context; editing an existing row is fine.
@@ -157,7 +170,7 @@ const columns = [
                 <FormField k="measurements.project" :error="form.errors.project_id" required>
                     <VSelect v-model="form.project_id">
                         <option value="">—</option>
-                        <option v-for="p in projects" :key="p.id" :value="p.id">{{ p.name }}</option>
+                        <option v-for="p in projectOptions" :key="p.id" :value="p.id">{{ p.name }}</option>
                     </VSelect>
                 </FormField>
                 <FormField k="measurements.employee" :error="form.errors.employee_id">

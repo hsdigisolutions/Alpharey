@@ -70,7 +70,7 @@ class DeploymentController extends Controller
             'homeCompanies' => Company::query()
                 ->when($companyId !== null, fn ($q) => $q->whereKeyNot($companyId))
                 ->orderBy('name')->get(['id', 'name']),
-            'projects' => Project::query()->orderBy('name')->get(['id', 'name']),
+            'projects' => Project::query()->active()->orderBy('name')->get(['id', 'name']),
             'rateTypes' => array_map(fn ($c) => $c->value, DeploymentRateType::cases()),
             'statuses' => array_map(fn ($c) => $c->value, DeploymentStatus::cases()),
             'can' => [

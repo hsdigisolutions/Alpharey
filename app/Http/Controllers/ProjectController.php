@@ -97,6 +97,8 @@ class ProjectController extends Controller
             'view' => $request->string('view')->value() === 'kanban' ? 'kanban' : 'table',
             'filters' => (object) $request->only(['search', 'client_id', 'status', 'priority', 'sort', 'dir', 'per_page']),
             'filterOptions' => [
+                // List filter = all clients (browse projects of any client, incl.
+                // inactive); the create form uses `activeClients` below.
                 'clients' => Client::query()->orderBy('name')->get(['id', 'name']),
                 'statuses' => array_map(fn (ProjectStatus $s) => $s->value, ProjectStatus::cases()),
                 'priorities' => array_map(fn (ProjectPriority $p) => $p->value, ProjectPriority::cases()),
@@ -104,6 +106,8 @@ class ProjectController extends Controller
                 // /safety/coordinator dropdowns on the create form.
                 'employees' => self::employeeOptionsFor(app(CurrentCompany::class)->id()),
             ],
+            // Selection list for the create-project form (Change 4): active only.
+            'activeClients' => Client::query()->active()->orderBy('name')->get(['id', 'name']),
             'vatOptions' => VatRate::options(),
             'can' => [
                 // Permission-only: shown to anyone who may create. The Vue gate
@@ -264,7 +268,12 @@ class ProjectController extends Controller
             'availableEmployees' => Employee::query()->where('active', true)
                 ->whereNotIn('id', $project->employeeRates()->pluck('employee_id'))
                 ->orderBy('full_name')->get(['id', 'full_name']),
-            'clients' => Client::query()->orderBy('name')->get(['id', 'name']),
+            // Edit-form client list: active only (Change 4), but always include
+            // this project's current client even if it has since gone inactive,
+            // so editing never silently drops the assigned client.
+            'clients' => Client::query()
+                ->where(fn ($q) => $q->where('active', true)->orWhere('id', $project->client_id))
+                ->orderBy('name')->get(['id', 'name']),
             'vatOptions' => VatRate::options(),
             // Facturas / Gastos tabs — the standalone screens stay canonical;
             // these are a read-only view of the same rows scoped to the project,

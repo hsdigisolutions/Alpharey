@@ -138,10 +138,15 @@ class InvoiceController extends Controller
             'invoices' => $invoices,
             'stats' => $this->invoiceStats($tab),
             'filters' => (object) $request->only(['search', 'payment_status', 'status', 'project_id', 'from', 'to']),
+            // `clients` = all (so editing an invoice keeps a since-inactive client);
+            // the create form selects from active-only `formClients` (Change 4).
             'clients' => Client::query()->orderBy('name')->get(['id', 'name']),
+            'formClients' => Client::query()->active()->orderBy('name')->get(['id', 'name']),
             'vendors' => Vendor::query()->orderBy('name')->get(['id', 'name']),
-            // client_id lets the form show only the selected client's projects.
+            // Filter dropdown = all projects (browse any); the create form uses the
+            // active-only `formProjects` below (Change 4 — selection = active only).
             'projects' => Project::query()->orderBy('name')->get(['id', 'name', 'client_id']),
+            'formProjects' => Project::query()->active()->orderBy('name')->get(['id', 'name', 'client_id']),
             'vatOptions' => VatRate::options(),
             'paymentMethods' => array_map(fn ($m) => $m->value, PaymentMethod::cases()),
             'paymentStatuses' => array_map(fn ($s) => $s->value, PaymentStatus::cases()),

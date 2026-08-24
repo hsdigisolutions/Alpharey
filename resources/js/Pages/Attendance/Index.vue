@@ -25,6 +25,7 @@ const props = defineProps({
     grid: { type: Object, required: true },
     summary: { type: Object, required: true },
     projects: { type: Array, required: true },
+    formProjects: { type: Array, default: () => [] },
     projectAssignments: { type: Object, default: () => ({}) },
     projectPanel: { type: Object, default: null },
     canSeeWage: { type: Boolean, default: false },
@@ -142,6 +143,19 @@ function openOffer() {
 const showModal = ref(false);
 const modalRecord = ref(null);
 const preset = ref({ employee: null, date: null });
+
+/* The attendance modals select from ACTIVE projects only (Change 4). When
+   editing a cell whose project has since completed, keep that project in the
+   list so it still shows. The roster filter (above) keeps ALL projects. */
+const modalProjects = computed(() => {
+    const list = [...props.formProjects];
+    const cur = modalRecord.value?.project_id;
+    if (cur && !list.some((p) => Number(p.id) === Number(cur))) {
+        const found = props.projects.find((p) => Number(p.id) === Number(cur));
+        if (found) list.push(found);
+    }
+    return list;
+});
 
 function openCreate() {
     // Attendance is logged against the acting company; pick one first.
@@ -381,20 +395,20 @@ const monthLabel = computed(() => {
 
         <AttendanceModal :open="showModal" :record="modalRecord"
             :preset-employee="preset.employee" :preset-date="preset.date"
-            :employees="employees" :projects="projects"
+            :employees="employees" :projects="modalProjects"
             :project-assignments="projectAssignments"
             :can-see-wage="canSeeWage"
             @close="showModal = false" />
 
         <BulkAttendanceModal :open="showBulkModal"
-            :employees="employees" :projects="projects"
+            :employees="employees" :projects="formProjects"
             :project-assignments="projectAssignments"
             :can-see-wage="canSeeWage"
             :month="month"
             @close="showBulkModal = false" />
 
         <WeekendOfferModal :open="showOfferModal"
-            :employees="employees" :projects="projects"
+            :employees="employees" :projects="formProjects"
             @close="showOfferModal = false" />
     </AppLayout>
 </template>

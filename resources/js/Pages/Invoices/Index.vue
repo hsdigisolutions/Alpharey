@@ -37,8 +37,10 @@ const props = defineProps({
     stats: { type: Object, default: () => ({ total: { count: 0, amount: 0 }, draft: { count: 0, amount: 0 }, sent: { count: 0, amount: 0 }, paid: { count: 0, amount: 0 } }) },
     filters: { type: Object, required: true },
     clients: { type: Array, required: true },
+    formClients: { type: Array, default: () => [] },
     vendors: { type: Array, required: true },
     projects: { type: Array, required: true },
+    formProjects: { type: Array, default: () => [] },
     vatOptions: { type: Array, required: true },
     paymentMethods: { type: Array, required: true },
     paymentStatuses: { type: Array, required: true },
@@ -93,12 +95,33 @@ const blank = {
 const form = useForm({ ...structuredClone(blank) });
 
 // A sale invoice's project list is filtered to the chosen client's projects;
-// expense invoices (no client) keep the full list.
-const availableProjects = computed(() => {
-    if (form.type === 'sale' && form.client_id) {
-        return props.projects.filter((p) => Number(p.client_id) === Number(form.client_id));
+// expense invoices (no client) keep the full list. Selection = ACTIVE projects
+// only (Change 4), but the currently-selected project is always kept so editing
+// an invoice for a since-completed project never drops it (invoices are often
+// raised against completed projects).
+// Create-form client options: active only, keeping the current client when
+// editing a sale invoice whose client has since gone inactive (Change 4).
+const clientOptions = computed(() => {
+    const list = [...props.formClients];
+    const cur = form.client_id;
+    if (cur && !list.some((c) => Number(c.id) === Number(cur))) {
+        const found = props.clients.find((c) => Number(c.id) === Number(cur));
+        if (found) list.push(found);
     }
-    return props.projects;
+    return list;
+});
+
+const availableProjects = computed(() => {
+    const base = props.formProjects;
+    let list = (form.type === 'sale' && form.client_id)
+        ? base.filter((p) => Number(p.client_id) === Number(form.client_id))
+        : [...base];
+    const cur = form.project_id;
+    if (cur && !list.some((p) => Number(p.id) === Number(cur))) {
+        const found = props.projects.find((p) => Number(p.id) === Number(cur));
+        if (found) list = [...list, found];
+    }
+    return list;
 });
 
 // Changing the client drops a project that no longer belongs to them.
@@ -427,7 +450,7 @@ const columns = computed(() => [
                     <FormField v-if="form.type === 'sale'" k="invoices.client" :error="form.errors.client_id" required>
                         <VSelect v-model="form.client_id" :disabled="lockedClient">
                             <option value="">—</option>
-                            <option v-for="c in clients" :key="c.id" :value="c.id">{{ c.name }}</option>
+                            <option v-for="c in clientOptions" :key="c.id" :value="c.id">{{ c.name }}</option>
                         </VSelect>
                     </FormField>
                     <FormField v-else k="invoices.vendor" :error="form.errors.vendor_id" required>

@@ -602,7 +602,7 @@ class EmployeeController extends Controller
      */
     private function attendanceProjects(): array
     {
-        return Project::query()->with('client:id,company_name')->orderBy('name')
+        return Project::query()->active()->with('client:id,company_name')->orderBy('name')
             ->get(['id', 'name', 'client_id'])
             ->map(fn (Project $p): array => [
                 'id' => $p->id,

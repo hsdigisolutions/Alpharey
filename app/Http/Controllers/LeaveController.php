@@ -50,7 +50,9 @@ class LeaveController extends Controller
         return Inertia::render('Leave/Index', [
             'leaves' => $leaves,
             'filters' => (object) $request->only(['employee_id', 'status', 'leave_category_id', 'date_from', 'date_to', 'per_page']),
+            // Filter dropdown = all employees; create form uses active-only `formEmployees`.
             'employees' => Employee::query()->orderBy('full_name')->get(['id', 'full_name']),
+            'formEmployees' => Employee::query()->active()->orderBy('full_name')->get(['id', 'full_name']),
             'categories' => $this->availableCategories(),
             'statuses' => array_map(fn (LeaveStatus $s): string => $s->value, LeaveStatus::cases()),
             'balances' => $this->balances($request),

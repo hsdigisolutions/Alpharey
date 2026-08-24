@@ -115,7 +115,7 @@ class VehicleController extends Controller
             'activeSessions' => $activeSessions,
             'recentSessions' => $recentSessions,
             'filters' => (object) $request->only(['search', 'ownership', 'active', 'compliance', 'per_page']),
-            'employees' => Employee::query()->orderBy('full_name')->get(['id', 'full_name']),
+            'employees' => Employee::query()->active()->orderBy('full_name')->get(['id', 'full_name']),
             'ownerships' => array_map(fn (VehicleOwnership $o): string => $o->value, VehicleOwnership::cases()),
             'fuelTypes' => array_map(fn (FuelType $f): string => $f->value, FuelType::cases()),
             'vehicleTypes' => array_map(fn (VehicleType $t): string => $t->value, VehicleType::cases()),
@@ -239,7 +239,7 @@ class VehicleController extends Controller
                 $fuelByEmployee[$s->employee_id] ?? collect(),
                 $vehicle->fines,
             ))->values(),
-            'employees' => Employee::query()->orderBy('full_name')->get(['id', 'full_name']),
+            'employees' => Employee::query()->active()->orderBy('full_name')->get(['id', 'full_name']),
             'can' => [
                 'edit' => Gate::allows('vehicles.edit'),
                 'delete' => Gate::allows('vehicles.delete'),

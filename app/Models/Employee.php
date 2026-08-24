@@ -8,6 +8,7 @@ use App\Models\Concerns\Auditable;
 use App\Models\Concerns\BelongsToCompany;
 use App\Services\Workers\WorkerConsentService;
 use Database\Factories\EmployeeFactory;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -106,6 +107,18 @@ class Employee extends Model
             'works_at_height' => 'boolean',
             'commission_percent' => 'decimal:2',
         ];
+    }
+
+    /**
+     * Active employees only — the single source for selection dropdowns
+     * (create/edit forms). SoftDeletes already excludes deleted rows.
+     * Index-page list filters keep showing all.
+     *
+     * @param  Builder<Employee>  $query
+     */
+    public function scopeActive(Builder $query): void
+    {
+        $query->where('active', true);
     }
 
     protected static function booted(): void

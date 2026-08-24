@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Enums\DeploymentStatus;
+use App\Enums\ProjectStatus;
 use App\Enums\WageType;
 use App\Http\Requests\Attendance\StoreAttendanceRequest;
 use App\Http\Requests\Attendance\StoreBulkAttendanceRequest;
@@ -22,6 +23,7 @@ use App\Support\Geo;
 use App\Support\PeriodLock;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Gate;
@@ -244,13 +246,19 @@ class AttendanceController extends Controller
         }
 
         // Load projects with their client name for the searchable dropdown.
-        $projects = Project::query()->with('client:id,company_name')->orderBy('name')
-            ->get(['id', 'name', 'client_id'])
+        // `projects` (all) feeds the roster filter; `formProjects` (active only)
+        // feeds the create/edit attendance modals (Change 4).
+        $projectRows = Project::query()->with('client:id,company_name')->orderBy('name')
+            ->get(['id', 'name', 'client_id', 'status'])
             ->map(fn (Project $p): array => [
                 'id' => $p->id,
                 'name' => $p->name,
                 'client_name' => $p->client?->company_name,
+                'selectable' => in_array($p->status, [ProjectStatus::Active, ProjectStatus::InProgress], true),
             ]);
+        $projects = $projectRows->map(fn (array $p): array => Arr::except($p, ['selectable']))->all();
+        $formProjects = $projectRows->where('selectable', true)
+            ->map(fn (array $p): array => Arr::except($p, ['selectable']))->values()->all();
 
         return Inertia::render('Attendance/Index', [
             'month' => $month->format('Y-m'),
@@ -259,6 +267,7 @@ class AttendanceController extends Controller
             'grid' => $grid,
             'summary' => $summary,
             'projects' => $projects,
+            'formProjects' => $formProjects,
             'projectAssignments' => $projectAssignments,
             // Feature 1 — the day's roster for a selected project (partial reload
             // via ?project + ?panel_date). Null unless a project is chosen.
