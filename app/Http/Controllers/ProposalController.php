@@ -9,6 +9,7 @@ use App\Http\Requests\Proposals\UpdateProposalRequest;
 use App\Models\Client;
 use App\Models\Proposal;
 use App\Services\Audit\AuditLogger;
+use App\Support\CompanyBranding;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
@@ -106,7 +107,7 @@ class ProposalController extends Controller
         $proposal->load('client', 'project');
         $audit->log('exported', $proposal, null, null, 'Proposal PDF', 'proposals');
 
-        $pdf = Pdf::loadView('exports.proposal-pdf', ['proposal' => $proposal]);
+        $pdf = Pdf::loadView('exports.proposal-pdf', ['proposal' => $proposal, 'logo' => CompanyBranding::currentLogo()]);
 
         return $pdf->download('propuesta-'.$proposal->number.'.pdf');
     }

@@ -22,6 +22,7 @@
     </style>
 </head>
 <body>
+    @include('exports.partials.logo-header')
     <h1>{{ $module }}</h1>
     <p class="muted">
         {{ $company }} · {{ $filters['from'] ?? '—' }} → {{ $filters['to'] ?? '—' }}

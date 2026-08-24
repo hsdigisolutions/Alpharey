@@ -13,6 +13,7 @@
     </style>
 </head>
 <body>
+    @include('exports.partials.logo-header')
     <h1>Tareas de producción / Production tasks — AlphaRey</h1>
     <p class="sub">{{ count($rows) }} tareas / tasks · seguimiento interno (no factura al cliente) / internal tracking (not client billing)</p>
 

@@ -13,6 +13,7 @@
     </style>
 </head>
 <body>
+    @include('exports.partials.logo-header')
     <h1>Empleados / Employees — AlphaRey</h1>
     <p class="sub">{{ now()->format('d/m/Y H:i') }} · {{ $employees->count() }} registros / records</p>
 

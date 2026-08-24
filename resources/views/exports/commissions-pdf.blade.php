@@ -19,6 +19,7 @@
     </style>
 </head>
 <body>
+    @include('exports.partials.logo-header')
     <h1>Comisiones / Commissions — {{ $month }}</h1>
 
     <table>

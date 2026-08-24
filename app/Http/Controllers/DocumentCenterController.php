@@ -8,6 +8,7 @@ use App\Models\Document;
 use App\Models\User;
 use App\Services\Audit\AuditLogger;
 use App\Services\Documents\DocumentCenterService;
+use App\Support\CompanyBranding;
 use App\Support\CurrentCompany;
 use App\Support\DocumentPanelPayload;
 use App\Support\DocumentTypes;
@@ -140,7 +141,7 @@ class DocumentCenterController extends Controller
 
         if ($format === 'pdf') {
             /** @var \Barryvdh\DomPDF\PDF $pdf */
-            $pdf = Pdf::loadView('exports.document-center-pdf', ['rows' => $export->displayRows()]);
+            $pdf = Pdf::loadView('exports.document-center-pdf', ['rows' => $export->displayRows(), 'logo' => CompanyBranding::currentLogo()]);
 
             return $pdf->download('document-center.pdf');
         }

@@ -28,6 +28,7 @@ use App\Services\Employees\WageRateService;
 use App\Services\Inventory\PpeComplianceService;
 use App\Services\Workers\WorkerConsentService;
 use App\Support\AttendanceAbsence;
+use App\Support\CompanyBranding;
 use App\Support\CurrentCompany;
 use App\Support\DocumentPanelPayload;
 use App\Support\DocumentTypes;
@@ -417,6 +418,7 @@ class EmployeeController extends Controller
         return Pdf::loadView('exports.worker-consent', [
             'employee' => $employee,
             'consent' => $consent,
+            'logo' => CompanyBranding::logoDataUri($employee->company),
         ])->download("consent-{$employee->employee_code}-{$consent->id}.pdf");
     }
 

@@ -10,6 +10,7 @@ use App\Models\Employee;
 use App\Models\Project;
 use App\Services\Audit\AuditLogger;
 use App\Services\Commissions\CommissionService;
+use App\Support\CompanyBranding;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -137,7 +138,7 @@ class CommissionController extends Controller
 
         $audit->log('exported', new CommissionReportEntry, null, null, 'Commission PDF '.$month, 'commission_reports');
 
-        $pdf = Pdf::loadView('exports.commissions-pdf', ['entries' => $entries, 'month' => $month]);
+        $pdf = Pdf::loadView('exports.commissions-pdf', ['entries' => $entries, 'month' => $month, 'logo' => CompanyBranding::currentLogo()]);
 
         return $pdf->download('comisiones-'.$month.'.pdf');
     }

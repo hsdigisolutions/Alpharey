@@ -16,6 +16,7 @@
     </style>
 </head>
 <body>
+    @include('exports.partials.logo-header')
     <div class="head">
         <h1>Propuesta / Proposal {{ $proposal->number }}</h1>
         <p class="muted">AlphaRey · {{ $proposal->proposal_date?->format('d/m/Y') }}

@@ -21,6 +21,7 @@
     </style>
 </head>
 <body>
+    @include('exports.partials.logo-header')
     <h1>Registro de consentimiento / Consent record</h1>
     <div class="sub">
         AlphaRey &middot; {{ $employee->company?->name }} &middot; #{{ $consent->id }} &middot;

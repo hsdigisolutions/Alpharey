@@ -7,6 +7,7 @@ use App\Imports\EmployeesImport;
 use App\Services\Audit\AuditLogger;
 use App\Services\Employees\EmployeeQueryFilter;
 use App\Services\Employees\EmployeeService;
+use App\Support\CompanyBranding;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -33,6 +34,7 @@ class EmployeeImportExportController extends Controller
             $pdf = Pdf::loadView('exports.employees-pdf', [
                 'employees' => $employees,
                 'withWages' => $withWages,
+                'logo' => CompanyBranding::currentLogo(),
             ])->setPaper('a4', 'landscape');
 
             return $pdf->download('empleados-'.now()->format('Ymd-His').'.pdf');

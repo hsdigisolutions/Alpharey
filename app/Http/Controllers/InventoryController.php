@@ -20,6 +20,7 @@ use App\Models\Project;
 use App\Services\Audit\AuditLogger;
 use App\Services\Inventory\PpeComplianceService;
 use App\Services\Inventory\StockMovementService;
+use App\Support\CompanyBranding;
 use App\Support\CurrentCompany;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Database\Eloquent\Builder;
@@ -281,6 +282,7 @@ class InventoryController extends Controller
             return Pdf::loadView('exports.inventory-pdf', [
                 'title' => $title, 'headings' => $headings, 'rows' => $rows,
                 'generated_at' => now()->toDayDateTimeString(),
+                'logo' => CompanyBranding::currentLogo(),
             ])->download("inventario-{$report}.pdf");
         }
 

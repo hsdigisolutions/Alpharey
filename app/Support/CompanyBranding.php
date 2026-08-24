@@ -39,4 +39,14 @@ class CompanyBranding
 
         return null;
     }
+
+    /**
+     * The ACTING company's logo as a data URI — the one-call helper every
+     * company-scoped PDF export uses (Change 3). Null when a Super Admin is
+     * browsing all companies or the company has no logo.
+     */
+    public static function currentLogo(): ?string
+    {
+        return self::logoDataUri(app(CurrentCompany::class)->get());
+    }
 }

@@ -11,6 +11,7 @@ use App\Models\ProductionTask;
 use App\Models\Project;
 use App\Services\Audit\AuditLogger;
 use App\Services\ProductionTasks\TaskProgressService;
+use App\Support\CompanyBranding;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
@@ -68,7 +69,7 @@ class ProductionTaskController extends Controller
 
         $rows = $this->filteredQuery($request)->get()->map(fn (ProductionTask $t): array => $this->row($t))->all();
 
-        return Pdf::loadView('exports.production-tasks-pdf', ['rows' => $rows])->download('production-tasks.pdf');
+        return Pdf::loadView('exports.production-tasks-pdf', ['rows' => $rows, 'logo' => CompanyBranding::currentLogo()])->download('production-tasks.pdf');
     }
 
     public function store(StoreProductionTaskRequest $request, Project $project, TaskProgressService $progress): RedirectResponse

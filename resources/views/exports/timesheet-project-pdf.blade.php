@@ -15,6 +15,7 @@
     </style>
 </head>
 <body>
+    @include('exports.partials.logo-header')
     <h1>{{ $project }}</h1>
     <p class="muted">{{ $start }} → {{ $end }}</p>
 

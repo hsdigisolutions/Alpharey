@@ -21,6 +21,7 @@ use App\Rules\OwnCompanyEmployee;
 use App\Rules\OwnCompanyProject;
 use App\Services\Audit\AuditLogger;
 use App\Services\Workers\WorkerFuelExpenseService;
+use App\Support\CompanyBranding;
 use App\Support\CurrentCompany;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Database\Eloquent\Builder;
@@ -319,7 +320,7 @@ class ExpenseController extends Controller
         $rows = $this->filteredQuery($request)->get();
         $audit->log('exported', new Expense, null, null, 'Expenses PDF', 'expenses');
 
-        $pdf = Pdf::loadView('exports.expenses-pdf', ['expenses' => $rows])->setPaper('a4', 'landscape');
+        $pdf = Pdf::loadView('exports.expenses-pdf', ['expenses' => $rows, 'logo' => CompanyBranding::currentLogo()])->setPaper('a4', 'landscape');
 
         return $pdf->download('gastos.pdf');
     }

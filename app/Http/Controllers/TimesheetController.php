@@ -11,6 +11,7 @@ use App\Models\Employee;
 use App\Models\Project;
 use App\Models\Scopes\CompanyScope;
 use App\Services\Audit\AuditLogger;
+use App\Support\CompanyBranding;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response as HttpResponse;
@@ -140,6 +141,7 @@ class TimesheetController extends Controller
                 return Pdf::loadView('exports.timesheet-project-pdf', [
                     'project' => $project->name, 'start' => $start->toDateString(),
                     'end' => $end->toDateString(), 'sheet' => $sheet,
+                    'logo' => CompanyBranding::currentLogo(),
                 ])->download('timesheet-project.pdf');
             }
 
@@ -159,6 +161,7 @@ class TimesheetController extends Controller
                 'start' => $start->toDateString(),
                 'end' => $end->toDateString(),
                 'sheet' => $sheet,
+                'logo' => CompanyBranding::currentLogo(),
             ])->download('timesheet.pdf');
         }
 

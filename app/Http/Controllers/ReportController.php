@@ -7,6 +7,7 @@ use App\Http\Controllers\Admin\Concerns\ResolvesCompanyContext;
 use App\Models\Client;
 use App\Models\Project;
 use App\Services\Reports\ReportService;
+use App\Support\CompanyBranding;
 use App\Support\CurrentCompany;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
@@ -105,6 +106,7 @@ class ReportController extends Controller
             'filters' => $pdfFilters,
             'report' => $report,
             'company' => app(CurrentCompany::class)->get()?->name,
+            'logo' => CompanyBranding::currentLogo(),
         ])->download("report-{$module}-".now()->format('Ymd').'.pdf');
     }
 

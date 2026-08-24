@@ -14,6 +14,7 @@
     </style>
 </head>
 <body>
+    @include('exports.partials.logo-header')
     <h1>Today's Report / Informe de Hoy</h1>
     <p class="muted">{{ $generated_at }}</p>
 

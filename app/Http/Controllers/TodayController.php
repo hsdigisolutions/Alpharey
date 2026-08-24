@@ -7,6 +7,7 @@ use App\Exports\TodayExport;
 use App\Http\Controllers\Admin\Concerns\ResolvesCompanyContext;
 use App\Services\Audit\AuditLogger;
 use App\Services\Dashboard\TodayService;
+use App\Support\CompanyBranding;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response as HttpResponse;
@@ -103,6 +104,7 @@ class TodayController extends Controller
             return Pdf::loadView('exports.today-pdf', [
                 'rows' => $rows,
                 'generated_at' => (string) $data['generated_at'],
+                'logo' => CompanyBranding::currentLogo(),
             ])->download('informe-hoy.pdf');
         }
 

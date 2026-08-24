@@ -12,6 +12,7 @@
     </style>
 </head>
 <body>
+    @include('exports.partials.logo-header')
     <h1>{{ $title }} — AlphaRey</h1>
     <p class="sub">{{ $generated_at }} · {{ count($rows) }} registros / records</p>
 

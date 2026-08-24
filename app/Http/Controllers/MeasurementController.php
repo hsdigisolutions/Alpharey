@@ -11,6 +11,7 @@ use App\Models\Project;
 use App\Rules\OwnCompanyEmployee;
 use App\Rules\OwnCompanyProject;
 use App\Services\Audit\AuditLogger;
+use App\Support\CompanyBranding;
 use App\Support\CurrentCompany;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Database\Eloquent\Builder;
@@ -177,6 +178,7 @@ class MeasurementController extends Controller
         return Pdf::loadView('exports.measurements-pdf', [
             'measurements' => $rows,
             'generated_at' => now()->toDayDateTimeString(),
+            'logo' => CompanyBranding::currentLogo(),
         ])->download('mediciones.pdf');
     }
 

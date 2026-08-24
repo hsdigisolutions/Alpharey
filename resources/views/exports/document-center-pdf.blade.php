@@ -12,6 +12,7 @@
     </style>
 </head>
 <body>
+    @include('exports.partials.logo-header')
     <h1>Centro de Documentos / Document Center — AlphaRey</h1>
     <p class="sub">{{ now()->format('d/m/Y H:i') }} · {{ count($rows) }} registros / records</p>
 
