@@ -11,6 +11,7 @@ use App\Models\Company;
 use App\Models\Employee;
 use App\Models\EmployeeDeployment;
 use App\Models\Project;
+use App\Models\ProjectEmployeeRate;
 use App\Models\User;
 use App\Services\Dashboard\TodayService;
 
@@ -77,6 +78,112 @@ it('counts presence, leave and absence against the active headcount', function (
         ->and($kpis['active_today'])->toBe(2)
         ->and($kpis['on_leave_today'])->toBe(1)
         ->and($kpis['absent_today'])->toBe(2);
+});
+
+function assignWorkerToProject(Project $project, Employee $employee): void
+{
+    $rate = new ProjectEmployeeRate(['employee_id' => $employee->id, 'wage_type' => 'daily', 'project_rate' => '50']);
+    $rate->project_id = $project->id;
+    $rate->company_id = $project->company_id;
+    $rate->save();
+}
+
+it('shows REAL clock hours for a clerk full-day row, not the hours_worked pay field', function (): void {
+    $e = Employee::factory()->forCompany($this->company)->create();
+    // The production bug: a clerk-entered full day (project_based mode) carries
+    // real 09:00–17:00 times but hours_worked stays 0 (only hourly mode computes it).
+    Attendance::factory()->create([
+        'company_id' => $this->company->id, 'employee_id' => $e->id,
+        'date' => now()->toDateString(), 'status' => 'present',
+        'mode' => 'project_based', 'day_type' => 'full',
+        'check_in' => '09:00', 'check_out' => '17:00', 'hours_worked' => '0',
+    ]);
+
+    $this->actingAs($this->admin);
+    $data = app(TodayService::class)->for($this->company->id);
+
+    expect($data['attendance'][0]['hours'])->toBe(8.0)
+        ->and($data['attendance'][0]['still_working'])->toBeFalse()
+        ->and($data['kpis']['hours_today'])->toBe(8.0);
+});
+
+it('shows real hours for half-day and hourly rows from the clock', function (): void {
+    $half = Employee::factory()->forCompany($this->company)->create();
+    $hourly = Employee::factory()->forCompany($this->company)->create();
+    Attendance::factory()->create([
+        'company_id' => $this->company->id, 'employee_id' => $half->id, 'date' => now()->toDateString(),
+        'status' => 'present', 'mode' => 'project_based', 'day_type' => 'half',
+        'check_in' => '09:00', 'check_out' => '13:00', 'hours_worked' => '0',
+    ]);
+    Attendance::factory()->create([
+        'company_id' => $this->company->id, 'employee_id' => $hourly->id, 'date' => now()->toDateString(),
+        'status' => 'present', 'mode' => 'hourly', 'day_type' => 'hourly',
+        'check_in' => '09:00', 'check_out' => '14:30', 'hours_worked' => '5.5',
+    ]);
+
+    $this->actingAs($this->admin);
+    $hours = collect(app(TodayService::class)->for($this->company->id)['attendance'])->pluck('hours')->all();
+
+    expect($hours)->toContain(4.0)->toContain(5.5);
+});
+
+it('marks an open shift as still working with hours elapsed so far', function (): void {
+    $e = Employee::factory()->forCompany($this->company)->create();
+    Attendance::factory()->create([
+        'company_id' => $this->company->id, 'employee_id' => $e->id, 'date' => now()->toDateString(),
+        'status' => 'present', 'check_in' => '09:00', 'check_out' => null,
+        'check_in_at' => now()->subHours(3), 'check_out_at' => null, 'hours_worked' => '0',
+    ]);
+
+    $this->actingAs($this->admin);
+    $row = app(TodayService::class)->for($this->company->id)['attendance'][0];
+
+    expect($row['still_working'])->toBeTrue()
+        ->and($row['hours'])->toBeGreaterThan(2.5);
+});
+
+it('lists active, staffed projects with nobody working today (excludes the rest)', function (): void {
+    $today = now()->toDateString();
+    $worker = Employee::factory()->forCompany($this->company)->create();
+
+    // A — active, staffed, NO activity today, last worked 3 days ago → shown.
+    $a = Project::factory()->forCompany($this->company)->create(['name' => 'Villa', 'status' => 'active']);
+    assignWorkerToProject($a, $worker);
+    Attendance::factory()->create(['company_id' => $this->company->id, 'employee_id' => $worker->id, 'project_id' => $a->id, 'date' => now()->subDays(3)->toDateString(), 'status' => 'present']);
+
+    // B — active, staffed, HAS activity today → excluded.
+    $b = Project::factory()->forCompany($this->company)->create(['name' => 'Edificio', 'status' => 'in_progress']);
+    assignWorkerToProject($b, $worker);
+    Attendance::factory()->create(['company_id' => $this->company->id, 'employee_id' => $worker->id, 'project_id' => $b->id, 'date' => $today, 'status' => 'present']);
+
+    // C — active, NO assigned workers → excluded (staffing issue, not this).
+    Project::factory()->forCompany($this->company)->create(['name' => 'Solar', 'status' => 'active']);
+
+    // D — completed, staffed, no activity → excluded (not active).
+    $d = Project::factory()->forCompany($this->company)->create(['name' => 'Antiguo', 'status' => 'completed']);
+    assignWorkerToProject($d, $worker);
+
+    $this->actingAs($this->admin);
+    $list = collect(app(TodayService::class)->for($this->company->id)['projects_no_activity']);
+
+    expect($list->pluck('project')->all())
+        ->toContain('Villa')->not->toContain('Edificio')->not->toContain('Solar')->not->toContain('Antiguo');
+    $villa = $list->firstWhere('project', 'Villa');
+    expect($villa['assigned'])->toBe(1)
+        ->and($villa['last_activity'])->toBe(now()->subDays(3)->toDateString());
+});
+
+it('shows Never when a staffed active project has no past attendance', function (): void {
+    $worker = Employee::factory()->forCompany($this->company)->create();
+    $p = Project::factory()->forCompany($this->company)->create(['name' => 'Nueva', 'status' => 'active']);
+    assignWorkerToProject($p, $worker);
+
+    $this->actingAs($this->admin);
+    $row = collect(app(TodayService::class)->for($this->company->id)['projects_no_activity'])->firstWhere('project', 'Nueva');
+
+    expect($row)->not->toBeNull()
+        ->and($row['last_activity'])->toBeNull()
+        ->and($row['days_ago'])->toBeNull();
 });
 
 it('shows the home company for a worker deployed into us', function (): void {

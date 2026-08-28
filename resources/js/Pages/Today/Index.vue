@@ -38,6 +38,14 @@ function statusLabel(s) {
 /* ── Filters (server-side, preserved across auto-refresh) ── */
 const STATUS_ORDER = ['present', 'late', 'early_leave', 'leave', 'absent'];
 
+// "Last activity" label for the no-activity section: Never / Yesterday / N days ago.
+function lastActivityLabel(p) {
+    if (p.last_activity == null) return t('today.na_never');
+    const d = p.days_ago ?? 0;
+    if (d <= 1) return t('today.na_yesterday');
+    return t('today.na_days_ago', { count: d });
+}
+
 function todayIso() { return new Date().toISOString().slice(0, 10); }
 function isoDaysAgo(n) { const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString().slice(0, 10); }
 
@@ -203,6 +211,33 @@ onBeforeUnmount(() => {
             </div>
         </VCard>
 
+        <!-- Projects with no activity today -->
+        <VCard v-if="data.projects_no_activity && data.projects_no_activity.length" class="mt-6">
+            <h2 class="mb-1 text-sm font-semibold text-ink"><Bilingual k="today.no_activity_title" inline /></h2>
+            <p class="mb-3 text-xs text-muted">{{ $t('today.no_activity_hint') }}</p>
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="border-b border-line text-xs uppercase text-muted">
+                            <th class="px-2 py-2 text-start font-medium">{{ $t('today.project') }}</th>
+                            <th class="px-2 py-2 text-end font-medium">{{ $t('today.na_assigned') }}</th>
+                            <th class="px-2 py-2 text-end font-medium">{{ $t('today.na_last_activity') }}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr v-for="p in data.projects_no_activity" :key="p.project_id" class="border-b border-line">
+                            <td class="px-2 py-2 text-ink">{{ p.project }}</td>
+                            <td class="tabular-nums px-2 py-2 text-end">{{ p.assigned }}</td>
+                            <td class="px-2 py-2 text-end"
+                                :class="p.last_activity == null ? 'text-status-danger' : 'text-ink-soft'">
+                                {{ lastActivityLabel(p) }}
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </VCard>
+
         <!-- Attendance table -->
         <VCard class="mt-6">
             <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
@@ -268,7 +303,9 @@ onBeforeUnmount(() => {
                             <td class="px-2 py-2 text-ink-soft">{{ row.project ?? '—' }}</td>
                             <td class="tabular-nums px-2 py-2 text-ink-soft">{{ row.check_in ?? '—' }}</td>
                             <td class="tabular-nums px-2 py-2 text-ink-soft">{{ row.check_out ?? '—' }}</td>
-                            <td class="tabular-nums px-2 py-2 text-end text-ink">{{ row.hours }}</td>
+                            <td class="tabular-nums px-2 py-2 text-end text-ink">
+                                {{ row.hours }}h<span v-if="row.still_working" class="ms-1 text-xs text-status-info">· {{ $t('today.still_working') }}</span>
+                            </td>
                             <td class="tabular-nums px-2 py-2 text-end text-ink-soft">{{ row.distance != null ? `${Math.round(row.distance)}m` : '—' }}</td>
                         </tr>
                     </tbody>

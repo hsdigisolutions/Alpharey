@@ -148,4 +148,50 @@ class Attendance extends Model
     {
         return $this->hasOne(AttendanceVoiceNote::class);
     }
+
+    /**
+     * REAL hours on site, for DISPLAY — the authoritative clock span, not the
+     * pay field `hours_worked`. `hours_worked` is only computed from the clock
+     * for hourly-mode rows (AttendanceService::recompute), so a clerk-entered
+     * full/half day — the common case — keeps `hours_worked = 0` even though it
+     * carries real check-in/out times. So the honest displayed hours must be
+     * derived from the clock:
+     *   - both times present → the gross span check_out − check_in (matches the
+     *     existing correctly-filled full-day rows, which read 8h for 09:00–17:00);
+     *   - checked in but not out yet (open PWA shift) → hours elapsed so far;
+     *   - neither → the stored `hours_worked` as a last resort.
+     * Break is NOT deducted here — this is time-on-site for an operational view,
+     * consistent with the full-day rows that already read the gross span.
+     */
+    public function displayHours(): float
+    {
+        if ($this->check_in !== null && $this->check_out !== null) {
+            return self::clockSpanHours($this->check_in, $this->check_out);
+        }
+
+        if ($this->isOpenShift()) {
+            $start = $this->check_in_at
+                ?? Carbon::parse($this->date->toDateString().' '.$this->check_in);
+
+            return round(max(0.0, $start->diffInMinutes(Carbon::now()) / 60), 2);
+        }
+
+        return round((float) $this->hours_worked, 2);
+    }
+
+    /** Checked in but with no check-out yet — still working. */
+    public function isOpenShift(): bool
+    {
+        return $this->check_in !== null && $this->check_out === null;
+    }
+
+    /** Gross span between two "HH:MM" clock strings, in hours, floored at 0. */
+    public static function clockSpanHours(string $in, string $out): float
+    {
+        [$inH, $inM] = array_map('intval', explode(':', $in));
+        [$outH, $outM] = array_map('intval', explode(':', $out));
+        $minutes = ($outH * 60 + $outM) - ($inH * 60 + $inM);
+
+        return round(max(0, $minutes) / 60, 2);
+    }
 }

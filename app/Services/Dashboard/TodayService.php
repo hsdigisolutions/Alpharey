@@ -13,6 +13,7 @@ use App\Models\Employee;
 use App\Models\EmployeeCallLog;
 use App\Models\EmployeeDeployment;
 use App\Models\Payroll;
+use App\Models\Project;
 use App\Models\ProjectEmployeeRate;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
@@ -60,8 +61,11 @@ class TodayService
         $rows = $this->applyAttendanceFilters($allRows, $filters);
 
         return [
-            'kpis' => $this->kpis($companyId, $from, $to, $today),
+            'kpis' => $this->kpis($companyId, $from, $to, $today, $allRows),
             'project_breakdown' => $this->projectBreakdown($allRows),
+            'projects_no_activity' => ($from <= $today && $today <= $to)
+                ? $this->projectsWithNoActivity($today)
+                : [],
             'attendance' => $rows->values()->all(),
             'attendance_total' => $allRows->count(),
             'single_day' => $from === $to,
@@ -117,9 +121,10 @@ class TodayService
      * range that is meaningless, so it counts distinct employees with a recorded
      * absence in the window.
      *
+     * @param  Collection<int, array<string, mixed>>  $allRows
      * @return array<string, int|float>
      */
-    private function kpis(int $companyId, string $from, string $to, string $today): array
+    private function kpis(int $companyId, string $from, string $to, string $today, Collection $allRows): array
     {
         $totalWorkers = Employee::query()->where('active', true)->count();
 
@@ -135,9 +140,10 @@ class TodayService
             ->distinct('employee_id')
             ->count('employee_id');
 
-        $hours = (float) Attendance::query()
-            ->whereBetween('date', [$from, $to])
-            ->sum('hours_worked');
+        // Sum REAL clock hours from the mapped rows (Attendance::displayHours),
+        // so the KPI agrees with the per-row and project-breakdown figures and
+        // isn't thrown off by clerk-entered full days left at hours_worked=0.
+        $hours = (float) $allRows->sum(fn (array $r): float => (float) $r['hours']);
 
         // Currently checked in only makes sense for today (open PWA punch).
         $checkedInNow = ($from <= $today && $today <= $to)
@@ -197,7 +203,10 @@ class TodayService
                 'date' => $a->date->toDateString(),
                 'check_in' => $a->check_in,
                 'check_out' => $a->check_out,
-                'hours' => (float) $a->hours_worked,
+                // REAL clock hours (see Attendance::displayHours) — not the pay
+                // field, which is 0 on clerk-entered full/half days.
+                'hours' => $a->displayHours(),
+                'still_working' => $a->isOpenShift(),
                 'status' => $a->status->value,
                 // GPS distance from the project site (metres), when captured.
                 'distance' => $a->distance_from_project !== null ? (float) $a->distance_from_project : null,
@@ -240,6 +249,78 @@ class TodayService
                 'hours' => round($rows->sum(fn (array $r): float => (float) $r['hours']), 2),
             ];
         })->values()->sortByDesc('present')->values()->all();
+    }
+
+    /**
+     * ACTIVE, STAFFED projects with nobody working today — the admin's "who's
+     * quiet?" list. A project qualifies when it is active/in-progress, HAS at
+     * least one assigned worker (project_employee_rates), and has ZERO worked
+     * attendance today. Projects with no assigned workers are a staffing gap, a
+     * different problem, and are excluded. `last_activity` is the most recent
+     * worked day BEFORE today (null → "Never"). Most-stale first.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function projectsWithNoActivity(string $today): array
+    {
+        // Active + in-progress projects of the acting company (scopeActive).
+        $projects = Project::query()->active()->get(['id', 'name']);
+        if ($projects->isEmpty()) {
+            return [];
+        }
+        $projectIds = $projects->pluck('id')->all();
+
+        // Assigned worker count per project (the roster).
+        $assigned = ProjectEmployeeRate::query()
+            ->whereIn('project_id', $projectIds)
+            ->selectRaw('project_id, COUNT(DISTINCT employee_id) as c')
+            ->groupBy('project_id')
+            ->pluck('c', 'project_id');
+
+        // Projects that DO have someone working today → excluded.
+        $activeToday = Attendance::query()
+            ->whereDate('date', $today)
+            ->whereIn('status', self::WORKED)
+            ->whereIn('project_id', $projectIds)
+            ->distinct()
+            ->pluck('project_id')
+            ->all();
+
+        // Most recent worked day BEFORE today, per project.
+        $lastActivity = Attendance::query()
+            ->whereIn('status', self::WORKED)
+            ->whereIn('project_id', $projectIds)
+            ->whereDate('date', '<', $today)
+            ->selectRaw('project_id, MAX(date) as last')
+            ->groupBy('project_id')
+            ->pluck('last', 'project_id');
+
+        $out = [];
+        foreach ($projects as $project) {
+            $assignedCount = (int) ($assigned[$project->id] ?? 0);
+            if ($assignedCount === 0) {
+                continue; // unstaffed — a staffing issue, not "no activity"
+            }
+            if (in_array($project->id, $activeToday, true)) {
+                continue; // someone is working today
+            }
+
+            $last = $lastActivity[$project->id] ?? null;
+            $last = $last !== null ? Carbon::parse((string) $last)->toDateString() : null;
+
+            $out[] = [
+                'project_id' => $project->id,
+                'project' => $project->name,
+                'assigned' => $assignedCount,
+                'last_activity' => $last,
+                'days_ago' => $last !== null ? Carbon::parse($last)->diffInDays(Carbon::parse($today)) : null,
+            ];
+        }
+
+        // Most concerning first: "Never" (null) at the top, then the oldest.
+        usort($out, fn (array $a, array $b): int => ($a['last_activity'] ?? '') <=> ($b['last_activity'] ?? ''));
+
+        return $out;
     }
 
     /**
