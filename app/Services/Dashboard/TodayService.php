@@ -60,9 +60,7 @@ class TodayService
 
         $rows = $this->applyAttendanceFilters($allRows, $filters);
 
-        $projectsNoActivity = ($from <= $today && $today <= $to)
-            ? $this->projectsWithNoActivity($today)
-            : [];
+        $projectsNoActivity = $this->projectsWithNoActivity($from, $to);
 
         return [
             'kpis' => $this->kpis($companyId, $from, $to, $today, $allRows, count($projectsNoActivity)),
@@ -261,21 +259,24 @@ class TodayService
     private const RECENT_ACTIVITY_DAYS = 30;
 
     /**
-     * ACTIVE, STAFFED projects with nobody working today — the admin's "who's
-     * quiet?" list. A project qualifies when it is active/in-progress, HAS at
-     * least one assigned worker, and has ZERO worked attendance today.
+     * ACTIVE, STAFFED projects with nobody working in the SELECTED period — the
+     * admin's "who's quiet?" list, honouring the same date range as the rest of
+     * the page (today, yesterday, last 7/30 days, or a custom range). A project
+     * qualifies when it is active/in-progress, HAS at least one assigned worker,
+     * and has ZERO worked attendance across [from, to].
      *
      * "Assigned" is a formal rate-roster worker (project_employee_rates) OR any
-     * worker with worked attendance in the last 30 days — because in practice
-     * crews are assigned to a site through attendance, not the rate roster, so a
-     * roster-only test would hide almost every real project. A project with no
-     * roster AND no recent attendance is a staffing gap (excluded).
-     * `last_activity` is the most recent worked day BEFORE today (null →
-     * "Never"). Most-stale first.
+     * worker with worked attendance in the 30 days up to the period end —
+     * because in practice crews are assigned to a site through attendance, not
+     * the rate roster, so a roster-only test would hide almost every real
+     * project. A project with no roster AND no recent attendance is a staffing
+     * gap (excluded). `last_activity` is the most recent worked day BEFORE the
+     * period (null → "Never"); `days_ago` is measured from the period end.
+     * Most-stale first.
      *
      * @return list<array<string, mixed>>
      */
-    private function projectsWithNoActivity(string $today): array
+    private function projectsWithNoActivity(string $from, string $to): array
     {
         // Active + in-progress projects of the acting company (scopeActive).
         $projects = Project::query()->active()->get(['id', 'name']);
@@ -283,7 +284,7 @@ class TodayService
             return [];
         }
         $projectIds = $projects->pluck('id')->all();
-        $window = Carbon::parse($today)->subDays(self::RECENT_ACTIVITY_DAYS)->toDateString();
+        $window = Carbon::parse($to)->subDays(self::RECENT_ACTIVITY_DAYS)->toDateString();
 
         // Assigned workers, source 1 — the formal rate roster.
         $rosterByProject = ProjectEmployeeRate::query()
@@ -292,29 +293,30 @@ class TodayService
             ->groupBy('project_id')
             ->map(fn (Collection $rows): Collection => $rows->pluck('employee_id')->unique());
 
-        // Assigned workers, source 2 — anyone who WORKED here in the last 30 days.
+        // Assigned workers, source 2 — anyone who WORKED here in the 30 days up
+        // to the period end.
         $recentByProject = Attendance::query()
             ->whereIn('project_id', $projectIds)
             ->whereIn('status', self::WORKED)
-            ->whereBetween('date', [$window, $today])
+            ->whereBetween('date', [$window, $to])
             ->get(['project_id', 'employee_id'])
             ->groupBy('project_id')
             ->map(fn (Collection $rows): Collection => $rows->pluck('employee_id')->unique());
 
-        // Projects that DO have someone working today → excluded.
-        $activeToday = Attendance::query()
-            ->whereDate('date', $today)
+        // Projects that DO have someone working IN the selected period → excluded.
+        $activeInPeriod = Attendance::query()
+            ->whereBetween('date', [$from, $to])
             ->whereIn('status', self::WORKED)
             ->whereIn('project_id', $projectIds)
             ->distinct()
             ->pluck('project_id')
             ->all();
 
-        // Most recent worked day BEFORE today, per project.
+        // Most recent worked day BEFORE the period, per project.
         $lastActivity = Attendance::query()
             ->whereIn('status', self::WORKED)
             ->whereIn('project_id', $projectIds)
-            ->whereDate('date', '<', $today)
+            ->whereDate('date', '<', $from)
             ->selectRaw('project_id, MAX(date) as last')
             ->groupBy('project_id')
             ->pluck('last', 'project_id');
@@ -329,8 +331,8 @@ class TodayService
             if ($assignedCount === 0) {
                 continue; // no roster and nobody worked here recently — a staffing gap
             }
-            if (in_array($project->id, $activeToday, true)) {
-                continue; // someone is working today
+            if (in_array($project->id, $activeInPeriod, true)) {
+                continue; // someone is working during the selected period
             }
 
             $last = $lastActivity[$project->id] ?? null;
@@ -341,7 +343,7 @@ class TodayService
                 'project' => $project->name,
                 'assigned' => $assignedCount,
                 'last_activity' => $last,
-                'days_ago' => $last !== null ? Carbon::parse($last)->diffInDays(Carbon::parse($today)) : null,
+                'days_ago' => $last !== null ? Carbon::parse($last)->diffInDays(Carbon::parse($to)) : null,
             ];
         }
 

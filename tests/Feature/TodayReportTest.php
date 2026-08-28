@@ -232,6 +232,29 @@ it('treats recent attendance (last 30 days) as staffing, even with no rate roste
     expect($list->pluck('project')->all())->not->toContain('Vieja');
 });
 
+it('honours the selected date range for the no-activity section', function (): void {
+    $worker = Employee::factory()->forCompany($this->company)->create();
+    $yesterday = now()->subDay()->toDateString();
+    $twoDaysAgo = now()->subDays(2)->toDateString();
+
+    // Quiet: staffed (roster), last worked 2 days ago → for a "yesterday" view it
+    // had no activity yesterday → shown.
+    $quiet = Project::factory()->forCompany($this->company)->create(['name' => 'Quiet', 'status' => 'active']);
+    assignWorkerToProject($quiet, $worker);
+    Attendance::factory()->create(['company_id' => $this->company->id, 'employee_id' => $worker->id, 'project_id' => $quiet->id, 'date' => $twoDaysAgo, 'status' => 'present']);
+
+    // Busy: worked yesterday → for the "yesterday" view it HAS activity → excluded.
+    $busy = Project::factory()->forCompany($this->company)->create(['name' => 'Busy', 'status' => 'active']);
+    assignWorkerToProject($busy, $worker);
+    Attendance::factory()->create(['company_id' => $this->company->id, 'employee_id' => $worker->id, 'project_id' => $busy->id, 'date' => $yesterday, 'status' => 'present']);
+
+    $this->actingAs($this->admin);
+    $list = collect(app(TodayService::class)->for($this->company->id, ['from' => $yesterday, 'to' => $yesterday])['projects_no_activity']);
+
+    expect($list->pluck('project')->all())->toContain('Quiet')->not->toContain('Busy');
+    expect($list->firstWhere('project', 'Quiet')['last_activity'])->toBe($twoDaysAgo);
+});
+
 it('shows Never when a staffed active project has no past attendance', function (): void {
     $worker = Employee::factory()->forCompany($this->company)->create();
     $p = Project::factory()->forCompany($this->company)->create(['name' => 'Nueva', 'status' => 'active']);

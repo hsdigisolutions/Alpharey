@@ -15,7 +15,7 @@
 </head>
 <body>
     @include('exports.partials.logo-header')
-    <h1>Projects with no activity today / Proyectos sin actividad hoy</h1>
+    <h1>Projects with no activity / Proyectos sin actividad</h1>
     <p class="muted">{{ $generated_at }}</p>
 
     <table class="data">
