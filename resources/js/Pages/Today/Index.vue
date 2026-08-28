@@ -170,7 +170,7 @@ onBeforeUnmount(() => {
         </div>
 
         <!-- KPI cards -->
-        <div class="grid grid-cols-2 gap-4 lg:grid-cols-4 xl:grid-cols-7">
+        <div class="grid grid-cols-2 gap-4 lg:grid-cols-4 xl:grid-cols-8">
             <VKpiCard k="today.total_workers" icon="employees" :value="data.kpis.total_workers" />
             <VKpiCard k="today.active_today" icon="attendance" :value="data.kpis.active_today" status="ok" />
             <VKpiCard k="today.checked_in_now" icon="attendance" :value="data.kpis.checked_in_now"
@@ -182,6 +182,8 @@ onBeforeUnmount(() => {
             <VKpiCard k="today.hours_today" icon="attendance" :value="data.kpis.hours_today" />
             <VKpiCard k="today.pending_calls" icon="calls" :value="data.kpis.pending_calls"
                 :status="data.kpis.pending_calls > 0 ? 'warn' : null" />
+            <VKpiCard k="today.kpi_no_activity" icon="projects" :value="data.kpis.projects_no_activity"
+                :status="data.kpis.projects_no_activity > 0 ? 'warn' : null" />
         </div>
 
         <!-- Project breakdown -->

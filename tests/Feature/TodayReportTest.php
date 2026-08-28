@@ -189,13 +189,16 @@ it('lists active, staffed projects with nobody working today (excludes the rest)
     assignWorkerToProject($d, $worker);
 
     $this->actingAs($this->admin);
-    $list = collect(app(TodayService::class)->for($this->company->id)['projects_no_activity']);
+    $data = app(TodayService::class)->for($this->company->id);
+    $list = collect($data['projects_no_activity']);
 
     expect($list->pluck('project')->all())
         ->toContain('Villa')->not->toContain('Edificio')->not->toContain('Solar')->not->toContain('Antiguo');
     $villa = $list->firstWhere('project', 'Villa');
     expect($villa['assigned'])->toBe(1)
         ->and($villa['last_activity'])->toBe(now()->subDays(3)->toDateString());
+    // KPI count matches the list length (Villa only).
+    expect($data['kpis']['projects_no_activity'])->toBe(1);
 });
 
 it('treats recent attendance (last 30 days) as staffing, even with no rate roster', function (): void {

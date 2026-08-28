@@ -1705,6 +1705,7 @@ return [
         'absent_today' => 'Absent Today',
         'hours_today' => 'Hours Logged Today',
         'pending_calls' => 'Pending Follow-up Calls',
+        'kpi_no_activity' => 'Projects with no activity today',
         'project_breakdown' => 'Project Breakdown',
         'pb_assigned' => 'Assigned',
         'pb_present' => 'Present',

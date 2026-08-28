@@ -60,12 +60,14 @@ class TodayService
 
         $rows = $this->applyAttendanceFilters($allRows, $filters);
 
+        $projectsNoActivity = ($from <= $today && $today <= $to)
+            ? $this->projectsWithNoActivity($today)
+            : [];
+
         return [
-            'kpis' => $this->kpis($companyId, $from, $to, $today, $allRows),
+            'kpis' => $this->kpis($companyId, $from, $to, $today, $allRows, count($projectsNoActivity)),
             'project_breakdown' => $this->projectBreakdown($allRows),
-            'projects_no_activity' => ($from <= $today && $today <= $to)
-                ? $this->projectsWithNoActivity($today)
-                : [],
+            'projects_no_activity' => $projectsNoActivity,
             'attendance' => $rows->values()->all(),
             'attendance_total' => $allRows->count(),
             'single_day' => $from === $to,
@@ -124,7 +126,7 @@ class TodayService
      * @param  Collection<int, array<string, mixed>>  $allRows
      * @return array<string, int|float>
      */
-    private function kpis(int $companyId, string $from, string $to, string $today, Collection $allRows): array
+    private function kpis(int $companyId, string $from, string $to, string $today, Collection $allRows, int $projectsNoActivity = 0): array
     {
         $totalWorkers = Employee::query()->where('active', true)->count();
 
@@ -166,6 +168,7 @@ class TodayService
             'checked_in_now' => $checkedInNow,
             'hours_today' => round($hours, 2),
             'pending_calls' => $this->pendingCallsCount($companyId),
+            'projects_no_activity' => $projectsNoActivity,
         ];
     }
 
