@@ -1710,7 +1710,7 @@ return [
         'absent_today' => 'Ausentes Hoy',
         'hours_today' => 'Horas Registradas Hoy',
         'pending_calls' => 'Llamadas de Seguimiento',
-        'kpi_no_activity' => 'Proyectos sin actividad hoy',
+        'kpi_no_activity' => 'Proyectos sin actividad',
         'project_breakdown' => 'Desglose por Proyecto',
         'pb_assigned' => 'Asignados',
         'pb_present' => 'Presentes',
