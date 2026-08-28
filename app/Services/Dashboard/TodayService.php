@@ -254,13 +254,21 @@ class TodayService
         })->values()->sortByDesc('present')->values()->all();
     }
 
+    /** A project counts as "worked recently" within this many days. */
+    private const RECENT_ACTIVITY_DAYS = 30;
+
     /**
      * ACTIVE, STAFFED projects with nobody working today — the admin's "who's
      * quiet?" list. A project qualifies when it is active/in-progress, HAS at
-     * least one assigned worker (project_employee_rates), and has ZERO worked
-     * attendance today. Projects with no assigned workers are a staffing gap, a
-     * different problem, and are excluded. `last_activity` is the most recent
-     * worked day BEFORE today (null → "Never"). Most-stale first.
+     * least one assigned worker, and has ZERO worked attendance today.
+     *
+     * "Assigned" is a formal rate-roster worker (project_employee_rates) OR any
+     * worker with worked attendance in the last 30 days — because in practice
+     * crews are assigned to a site through attendance, not the rate roster, so a
+     * roster-only test would hide almost every real project. A project with no
+     * roster AND no recent attendance is a staffing gap (excluded).
+     * `last_activity` is the most recent worked day BEFORE today (null →
+     * "Never"). Most-stale first.
      *
      * @return list<array<string, mixed>>
      */
@@ -272,13 +280,23 @@ class TodayService
             return [];
         }
         $projectIds = $projects->pluck('id')->all();
+        $window = Carbon::parse($today)->subDays(self::RECENT_ACTIVITY_DAYS)->toDateString();
 
-        // Assigned worker count per project (the roster).
-        $assigned = ProjectEmployeeRate::query()
+        // Assigned workers, source 1 — the formal rate roster.
+        $rosterByProject = ProjectEmployeeRate::query()
             ->whereIn('project_id', $projectIds)
-            ->selectRaw('project_id, COUNT(DISTINCT employee_id) as c')
+            ->get(['project_id', 'employee_id'])
             ->groupBy('project_id')
-            ->pluck('c', 'project_id');
+            ->map(fn (Collection $rows): Collection => $rows->pluck('employee_id')->unique());
+
+        // Assigned workers, source 2 — anyone who WORKED here in the last 30 days.
+        $recentByProject = Attendance::query()
+            ->whereIn('project_id', $projectIds)
+            ->whereIn('status', self::WORKED)
+            ->whereBetween('date', [$window, $today])
+            ->get(['project_id', 'employee_id'])
+            ->groupBy('project_id')
+            ->map(fn (Collection $rows): Collection => $rows->pluck('employee_id')->unique());
 
         // Projects that DO have someone working today → excluded.
         $activeToday = Attendance::query()
@@ -300,9 +318,13 @@ class TodayService
 
         $out = [];
         foreach ($projects as $project) {
-            $assignedCount = (int) ($assigned[$project->id] ?? 0);
+            // Effective roster = formal roster ∪ recent workers.
+            $assignedCount = collect($rosterByProject[$project->id] ?? [])
+                ->merge($recentByProject[$project->id] ?? [])
+                ->unique()
+                ->count();
             if ($assignedCount === 0) {
-                continue; // unstaffed — a staffing issue, not "no activity"
+                continue; // no roster and nobody worked here recently — a staffing gap
             }
             if (in_array($project->id, $activeToday, true)) {
                 continue; // someone is working today
