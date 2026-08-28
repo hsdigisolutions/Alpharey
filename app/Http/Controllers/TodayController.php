@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Enums\AttendanceStatus;
 use App\Exports\TodayExport;
+use App\Exports\TodayProjectsExport;
 use App\Http\Controllers\Admin\Concerns\ResolvesCompanyContext;
 use App\Services\Audit\AuditLogger;
 use App\Services\Dashboard\TodayService;
@@ -109,5 +110,29 @@ class TodayController extends Controller
         }
 
         return Excel::download(new TodayExport($rows), 'informe-hoy.xlsx');
+    }
+
+    /**
+     * Export ONLY the "Projects with no activity today" section (Excel or PDF).
+     */
+    public function exportProjects(Request $request, AuditLogger $audit): BinaryFileResponse|HttpResponse
+    {
+        $companyId = $this->contextCompanyId();
+        $data = $this->today->for($companyId, $this->resolveFilters($request));
+        /** @var list<array<string, mixed>> $rows */
+        $rows = $data['projects_no_activity'];
+        $format = $request->query('format') === 'pdf' ? 'pdf' : 'excel';
+
+        $audit->log('exported', null, null, null, 'Today no-activity projects '.strtoupper($format), 'other');
+
+        if ($format === 'pdf') {
+            return Pdf::loadView('exports.today-projects-pdf', [
+                'rows' => $rows,
+                'generated_at' => (string) $data['generated_at'],
+                'logo' => CompanyBranding::currentLogo(),
+            ])->download('proyectos-sin-actividad.pdf');
+        }
+
+        return Excel::download(new TodayProjectsExport($rows), 'proyectos-sin-actividad.xlsx');
     }
 }

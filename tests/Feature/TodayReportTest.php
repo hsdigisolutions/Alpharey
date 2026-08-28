@@ -56,6 +56,16 @@ it('exports the filtered worker view as Excel and PDF', function (): void {
     $this->actingAs($this->admin)->get('/today/export?format=pdf')->assertOk();
 });
 
+it('exports the "projects with no activity" section as Excel and PDF', function (): void {
+    $worker = Employee::factory()->forCompany($this->company)->create();
+    $p = Project::factory()->forCompany($this->company)->create(['name' => 'Villa', 'status' => 'active']);
+    assignWorkerToProject($p, $worker);
+
+    $this->actingAs($this->admin)->get('/today/projects-export?format=excel')->assertOk();
+    $this->actingAs($this->admin)->get('/today/projects-export?format=pdf')->assertOk();
+    $this->assertDatabaseHas('audit_logs', ['action' => 'exported']);
+});
+
 it('sends a Super Admin with no company selected to Welcome', function (): void {
     $sa = User::factory()->create(['role' => UserRole::SuperAdmin, 'company_id' => null]);
 

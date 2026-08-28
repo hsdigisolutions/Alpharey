@@ -128,6 +128,15 @@ function exportToday(format) {
     window.location.href = `/today/export?${params.toString()}`;
 }
 
+// Export ONLY the "Projects with no activity today" section (Excel or PDF).
+function exportProjectsNoActivity(format) {
+    const params = new URLSearchParams();
+    if (filters.from) params.append('from', filters.from);
+    if (filters.to) params.append('to', filters.to);
+    params.append('format', format);
+    window.location.href = `/today/projects-export?${params.toString()}`;
+}
+
 onMounted(() => {
     timer = setInterval(() => {
         // Partial reload of just the data prop — keeps scroll + the active
@@ -215,7 +224,13 @@ onBeforeUnmount(() => {
 
         <!-- Projects with no activity today -->
         <VCard v-if="data.projects_no_activity && data.projects_no_activity.length" class="mt-6">
-            <h2 class="mb-1 text-sm font-semibold text-ink"><Bilingual k="today.no_activity_title" inline /></h2>
+            <div class="mb-1 flex flex-wrap items-start justify-between gap-2">
+                <h2 class="text-sm font-semibold text-ink"><Bilingual k="today.no_activity_title" inline /></h2>
+                <div class="flex items-center gap-2">
+                    <VButton variant="secondary" size="sm" icon="download" @click="exportProjectsNoActivity('excel')">Excel</VButton>
+                    <VButton variant="secondary" size="sm" icon="download" @click="exportProjectsNoActivity('pdf')">PDF</VButton>
+                </div>
+            </div>
             <p class="mb-3 text-xs text-muted">{{ $t('today.no_activity_hint') }}</p>
             <div class="overflow-x-auto">
                 <table class="w-full text-sm">
