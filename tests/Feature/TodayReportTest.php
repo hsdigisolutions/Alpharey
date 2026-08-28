@@ -142,6 +142,31 @@ it('marks an open shift as still working with hours elapsed so far', function ()
         ->and($row['hours'])->toBeGreaterThan(2.5);
 });
 
+it('never shows hours for an absent row with stale check-in/out times', function (): void {
+    $present = Employee::factory()->forCompany($this->company)->create();
+    $absent = Employee::factory()->forCompany($this->company)->create();
+
+    Attendance::factory()->create([
+        'company_id' => $this->company->id, 'employee_id' => $present->id, 'date' => now()->toDateString(),
+        'status' => 'present', 'mode' => 'project_based', 'day_type' => 'full',
+        'check_in' => '09:00', 'check_out' => '17:00', 'hours_worked' => '0',
+    ]);
+    // Absent, but carries leftover 09:00–17:00 times (was present, then changed).
+    Attendance::factory()->create([
+        'company_id' => $this->company->id, 'employee_id' => $absent->id, 'date' => now()->toDateString(),
+        'status' => 'absent', 'check_in' => '09:00', 'check_out' => '17:00', 'hours_worked' => '0',
+    ]);
+
+    $this->actingAs($this->admin);
+    $data = app(TodayService::class)->for($this->company->id);
+
+    $absentRow = collect($data['attendance'])->firstWhere('status', 'absent');
+    expect($absentRow['hours'])->toBe(0.0)
+        ->and($absentRow['worked'])->toBeFalse();
+    // Only the present worker's 8h counts toward the KPI — the absent row is out.
+    expect($data['kpis']['hours_today'])->toBe(8.0);
+});
+
 it('lists active, staffed projects with nobody working today (excludes the rest)', function (): void {
     $today = now()->toDateString();
     $worker = Employee::factory()->forCompany($this->company)->create();

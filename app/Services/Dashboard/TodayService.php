@@ -203,10 +203,13 @@ class TodayService
                 'date' => $a->date->toDateString(),
                 'check_in' => $a->check_in,
                 'check_out' => $a->check_out,
-                // REAL clock hours (see Attendance::displayHours) — not the pay
-                // field, which is 0 on clerk-entered full/half days.
-                'hours' => $a->displayHours(),
-                'still_working' => $a->isOpenShift(),
+                // REAL clock hours (see Attendance::displayHours) — but ONLY for a
+                // WORKED status. An absent/leave row must never show hours, even
+                // if it carries stale check_in/out times from a since-changed
+                // present state (that also kept them out of the hours KPI).
+                'hours' => in_array($a->status->value, self::WORKED, true) ? $a->displayHours() : 0.0,
+                'worked' => in_array($a->status->value, self::WORKED, true),
+                'still_working' => in_array($a->status->value, self::WORKED, true) && $a->isOpenShift(),
                 'status' => $a->status->value,
                 // GPS distance from the project site (metres), when captured.
                 'distance' => $a->distance_from_project !== null ? (float) $a->distance_from_project : null,

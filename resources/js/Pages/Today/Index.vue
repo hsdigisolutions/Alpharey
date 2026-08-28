@@ -301,10 +301,11 @@ onBeforeUnmount(() => {
                                 <span v-else class="text-muted">—</span>
                             </td>
                             <td class="px-2 py-2 text-ink-soft">{{ row.project ?? '—' }}</td>
-                            <td class="tabular-nums px-2 py-2 text-ink-soft">{{ row.check_in ?? '—' }}</td>
-                            <td class="tabular-nums px-2 py-2 text-ink-soft">{{ row.check_out ?? '—' }}</td>
+                            <td class="tabular-nums px-2 py-2 text-ink-soft">{{ row.worked ? (row.check_in ?? '—') : '—' }}</td>
+                            <td class="tabular-nums px-2 py-2 text-ink-soft">{{ row.worked ? (row.check_out ?? '—') : '—' }}</td>
                             <td class="tabular-nums px-2 py-2 text-end text-ink">
-                                {{ row.hours }}h<span v-if="row.still_working" class="ms-1 text-xs text-status-info">· {{ $t('today.still_working') }}</span>
+                                <template v-if="row.worked">{{ row.hours }}h<span v-if="row.still_working" class="ms-1 text-xs text-status-info">· {{ $t('today.still_working') }}</span></template>
+                                <span v-else class="text-muted">—</span>
                             </td>
                             <td class="tabular-nums px-2 py-2 text-end text-ink-soft">{{ row.distance != null ? `${Math.round(row.distance)}m` : '—' }}</td>
                         </tr>
