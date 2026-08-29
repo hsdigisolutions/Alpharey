@@ -34,6 +34,12 @@ const state = reactive({
     to: props.filters.to ?? props.period.end,
 });
 
+// Which By-Project worker rows are expanded to show their worked dates.
+const expanded = reactive({});
+function toggleDates(id) {
+    expanded[id] = !expanded[id];
+}
+
 function go(date) {
     router.get('/timesheet', {
         view: state.view,
@@ -201,12 +207,48 @@ function exportSheet(format) {
                         </tr>
                     </thead>
                     <tbody>
-                        <tr v-for="row in sheet.rows" :key="row.employee_id" class="border-b border-line">
-                            <td class="px-2 py-2 text-ink">{{ row.employee }}</td>
-                            <td class="px-2 py-2 text-ink-soft">{{ row.designation ?? '—' }}</td>
-                            <td class="tabular-nums px-2 py-2 text-end">{{ row.days_present }}</td>
-                            <td class="tabular-nums px-2 py-2 text-end text-ink">{{ row.hours }}h</td>
-                        </tr>
+                        <template v-for="row in sheet.rows" :key="row.employee_id">
+                            <tr class="border-b border-line" :class="expanded[row.employee_id] ? 'bg-surface-sunken' : ''">
+                                <td class="px-2 py-2 text-ink">
+                                    <button type="button" class="inline-flex items-center gap-1.5 text-start hover:text-accent"
+                                        @click="toggleDates(row.employee_id)">
+                                        <AppIcon :name="expanded[row.employee_id] ? 'chevron-down' : 'chevron-right'" class="h-3.5 w-3.5 shrink-0 text-muted" />
+                                        <span>{{ row.employee }}</span>
+                                    </button>
+                                </td>
+                                <td class="px-2 py-2 text-ink-soft">{{ row.designation ?? '—' }}</td>
+                                <td class="tabular-nums px-2 py-2 text-end">{{ row.days_present }}</td>
+                                <td class="tabular-nums px-2 py-2 text-end text-ink">{{ row.hours }}h</td>
+                            </tr>
+                            <!-- Expanded: the specific worked dates for this worker -->
+                            <tr v-if="expanded[row.employee_id]" class="border-b border-line">
+                                <td colspan="4" class="bg-surface-sunken px-2 pb-3 pt-1">
+                                    <div class="ms-5 overflow-x-auto rounded-md border border-line bg-surface-raised">
+                                        <table class="w-full text-xs">
+                                            <thead>
+                                                <tr class="border-b border-line text-[10px] uppercase text-muted">
+                                                    <th class="px-2 py-1.5 text-start font-medium">{{ $t('timesheet.col_date') }}</th>
+                                                    <th class="px-2 py-1.5 text-start font-medium">{{ $t('timesheet.col_weekday') }}</th>
+                                                    <th class="px-2 py-1.5 text-start font-medium">{{ $t('timesheet.col_day_type') }}</th>
+                                                    <th class="px-2 py-1.5 text-end font-medium">{{ $t('timesheet.hours') }}</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <tr v-for="d in row.days" :key="d.date" class="border-b border-line last:border-0">
+                                                    <td class="tabular-nums px-2 py-1 text-ink-soft">{{ d.date_fmt }}</td>
+                                                    <td class="px-2 py-1 text-ink-soft">{{ d.weekday }}</td>
+                                                    <td class="px-2 py-1 text-ink-soft">{{ d.day_type_label }}</td>
+                                                    <td class="tabular-nums px-2 py-1 text-end text-ink">{{ d.hours }}h</td>
+                                                </tr>
+                                                <tr v-if="!row.days || row.days.length === 0">
+                                                    <td colspan="4" class="px-2 py-2 text-center text-muted">{{ $t('timesheet.no_rows') }}</td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </td>
+                            </tr>
+                        </template>
                         <tr v-if="sheet.rows.length === 0">
                             <td colspan="4" class="py-6 text-center text-sm text-muted">{{ $t('timesheet.no_rows') }}</td>
                         </tr>

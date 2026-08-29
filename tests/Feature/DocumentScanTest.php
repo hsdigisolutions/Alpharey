@@ -74,12 +74,17 @@ it('alerts once for a document that already expired on a missed day', function (
 });
 
 it('does not re-alert an already-notified expired document', function (): void {
+    // Pin to mid-month so the monthly-document cadence (which fires near the
+    // month boundary and is not guarded by expiry_notified_at) can't add a
+    // separate alert — same guard the exempt-document test below uses.
+    Carbon::setTestNow(now()->setDay(15));
     $document = scanDoc($this->employee, ['expiry_date' => now()->subDays(5)->toDateString()]);
     $document->forceFill(['expiry_notified_at' => now()->subDay()])->saveQuietly();
 
     $this->artisan('verto:scan-documents');
 
     Notification::assertNothingSent();
+    Carbon::setTestNow();
 });
 
 it('never alerts on an exempt document', function (): void {

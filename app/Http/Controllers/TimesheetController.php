@@ -3,8 +3,9 @@
 namespace App\Http\Controllers;
 
 use App\Enums\AttendanceStatus;
-use App\Exports\GenericRowsExport;
+use App\Enums\DayType;
 use App\Exports\TimesheetExport;
+use App\Exports\TimesheetProjectDetailExport;
 use App\Http\Controllers\Admin\Concerns\ResolvesCompanyContext;
 use App\Models\Attendance;
 use App\Models\Employee;
@@ -33,6 +34,9 @@ class TimesheetController extends Controller
     use ResolvesCompanyContext;
 
     private const WORKED = [AttendanceStatus::Present->value, AttendanceStatus::Late->value, AttendanceStatus::EarlyLeave->value];
+
+    /** Spanish weekday abbreviations, keyed by ISO weekday (1=Mon…7=Sun). */
+    private const WEEKDAYS_ES = [1 => 'lun', 2 => 'mar', 3 => 'mié', 4 => 'jue', 5 => 'vie', 6 => 'sáb', 7 => 'dom'];
 
     public function index(Request $request): Response
     {
@@ -96,12 +100,30 @@ class TimesheetController extends Controller
                 $first = $group->first();
                 $worked = $group->filter(fn (Attendance $a): bool => in_array($a->status->value, self::WORKED, true));
 
+                // The specific worked days (the "which dates" detail) — ordered,
+                // each carrying its day type + hours. Summary totals are summed
+                // FROM these rounded per-day values so the detail reconciles to
+                // the summary exactly (audit requirement).
+                $days = $worked
+                    ->sortBy(fn (Attendance $a): string => $a->date->toDateString())
+                    ->map(fn (Attendance $a): array => [
+                        'date' => $a->date->toDateString(),
+                        'date_fmt' => $a->date->format('d/m/Y'),
+                        'weekday' => self::WEEKDAYS_ES[$a->date->dayOfWeekIso] ?? '',
+                        'day_type' => $a->day_type?->value,
+                        'day_type_label' => $this->dayTypeLabel($a->day_type),
+                        'hours' => round((float) $a->hours_worked, 2),
+                    ])
+                    ->values()
+                    ->all();
+
                 return [
                     'employee_id' => $first?->employee_id,
                     'employee' => $first?->employee?->full_name,
                     'designation' => $first?->employee?->designation,
-                    'days_present' => $worked->count(),
-                    'hours' => round((float) $worked->sum(fn (Attendance $a): float => (float) $a->hours_worked), 2),
+                    'days_present' => count($days),
+                    'hours' => round(array_sum(array_column($days, 'hours')), 2),
+                    'days' => $days,
                 ];
             })
             ->sortByDesc('hours')
@@ -111,8 +133,21 @@ class TimesheetController extends Controller
         return [
             'rows' => $rows,
             'total_hours' => round(array_sum(array_map(fn (array $r): float => (float) $r['hours'], $rows)), 2),
+            'total_days' => array_sum(array_map(fn (array $r): int => (int) $r['days_present'], $rows)),
             'workers' => count($rows),
         ];
+    }
+
+    /** Spanish day-type label for the timesheet detail. */
+    private function dayTypeLabel(?DayType $type): string
+    {
+        return match ($type) {
+            DayType::Full => 'Jornada completa',
+            DayType::Half => 'Media jornada',
+            DayType::Hourly => 'Por horas',
+            DayType::PerMeter => 'Por metros',
+            default => '—',
+        };
     }
 
     public function export(Request $request, AuditLogger $audit): BinaryFileResponse|HttpResponse
@@ -131,21 +166,42 @@ class TimesheetController extends Controller
             $sheet = $this->buildProjectTimesheet($projectId, $start, $end);
             $audit->log('exported', $project, null, null, 'Timesheet project '.strtoupper($format), 'attendance');
 
-            $heading = ['Employee', 'Designation', 'Days present', 'Hours'];
-            $rows = array_map(fn (array $r): array => [
-                (string) ($r['employee'] ?? ''), (string) ($r['designation'] ?? '—'),
-                (int) $r['days_present'], (float) $r['hours'],
-            ], $sheet['rows']);
-
             if ($format === 'pdf') {
                 return Pdf::loadView('exports.timesheet-project-pdf', [
-                    'project' => $project->name, 'start' => $start->toDateString(),
-                    'end' => $end->toDateString(), 'sheet' => $sheet,
+                    'project' => $project->name,
+                    'start' => $start->format('d/m/Y'),
+                    'end' => $end->format('d/m/Y'),
+                    'sheet' => $sheet,
                     'logo' => CompanyBranding::currentLogo(),
-                ])->download('timesheet-project.pdf');
+                ])->download('parte-horas-'.$project->id.'.pdf');
             }
 
-            return Excel::download(new GenericRowsExport($heading, $rows), 'timesheet-project.xlsx');
+            // Excel: two sheets — Resumen (per-worker totals) + Detalle (per
+            // worker, per day). Built from the same $sheet so they reconcile.
+            $summaryRows = array_map(fn (array $r): array => [
+                (string) ($r['employee'] ?? ''),
+                (string) ($r['designation'] ?? '—'),
+                (int) $r['days_present'],
+                (float) $r['hours'],
+            ], $sheet['rows']);
+
+            $detailRows = [];
+            foreach ($sheet['rows'] as $r) {
+                foreach ($r['days'] as $d) {
+                    $detailRows[] = [
+                        (string) ($r['employee'] ?? ''),
+                        (string) $d['date_fmt'],
+                        (string) $d['weekday'],
+                        (string) $d['day_type_label'],
+                        (float) $d['hours'],
+                    ];
+                }
+            }
+
+            return Excel::download(
+                new TimesheetProjectDetailExport($summaryRows, $detailRows),
+                'parte-horas-'.$project->id.'.xlsx',
+            );
         }
 
         $employeeId = $this->resolveEmployeeId($request, Employee::query()->pluck('id')->all());
