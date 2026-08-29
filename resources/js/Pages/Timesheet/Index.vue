@@ -40,6 +40,17 @@ function toggleDates(id) {
     expanded[id] = !expanded[id];
 }
 
+// On-screen labels follow the ES/EN toggle (the EXPORT stays Spanish by design).
+function weekdayLabel(dateStr) {
+    const w = new Date(`${dateStr}T00:00:00`)
+        .toLocaleDateString(locale.value, { weekday: 'short' })
+        .replace('.', '');
+    return w.charAt(0).toUpperCase() + w.slice(1);
+}
+function dayTypeStatus(dt) {
+    return { full: 'ok', half: 'warn', hourly: 'info', per_meter: 'neutral' }[dt] ?? 'neutral';
+}
+
 function go(date) {
     router.get('/timesheet', {
         view: state.view,
@@ -221,29 +232,43 @@ function exportSheet(format) {
                                 <td class="tabular-nums px-2 py-2 text-end text-ink">{{ row.hours }}h</td>
                             </tr>
                             <!-- Expanded: the specific worked dates for this worker -->
-                            <tr v-if="expanded[row.employee_id]" class="border-b border-line">
-                                <td colspan="4" class="bg-surface-sunken px-2 pb-3 pt-1">
-                                    <div class="ms-5 overflow-x-auto rounded-md border border-line bg-surface-raised">
+                            <tr v-if="expanded[row.employee_id]">
+                                <td colspan="4" class="bg-surface-sunken px-3 pb-4 pt-2 sm:px-6">
+                                    <div class="overflow-hidden rounded-lg border border-line bg-surface-raised shadow-card">
                                         <table class="w-full text-xs">
                                             <thead>
-                                                <tr class="border-b border-line text-[10px] uppercase text-muted">
-                                                    <th class="px-2 py-1.5 text-start font-medium">{{ $t('timesheet.col_date') }}</th>
-                                                    <th class="px-2 py-1.5 text-start font-medium">{{ $t('timesheet.col_weekday') }}</th>
-                                                    <th class="px-2 py-1.5 text-start font-medium">{{ $t('timesheet.col_day_type') }}</th>
-                                                    <th class="px-2 py-1.5 text-end font-medium">{{ $t('timesheet.hours') }}</th>
+                                                <tr class="border-b border-line bg-surface-sunken/60 text-[10px] uppercase tracking-wide text-muted">
+                                                    <th class="px-3 py-2 text-start font-medium">{{ $t('timesheet.col_date') }}</th>
+                                                    <th class="px-3 py-2 text-start font-medium">{{ $t('timesheet.col_weekday') }}</th>
+                                                    <th class="px-3 py-2 text-start font-medium">{{ $t('timesheet.col_day_type') }}</th>
+                                                    <th class="px-3 py-2 text-end font-medium">{{ $t('timesheet.hours') }}</th>
                                                 </tr>
                                             </thead>
                                             <tbody>
-                                                <tr v-for="d in row.days" :key="d.date" class="border-b border-line last:border-0">
-                                                    <td class="tabular-nums px-2 py-1 text-ink-soft">{{ d.date_fmt }}</td>
-                                                    <td class="px-2 py-1 text-ink-soft">{{ d.weekday }}</td>
-                                                    <td class="px-2 py-1 text-ink-soft">{{ d.day_type_label }}</td>
-                                                    <td class="tabular-nums px-2 py-1 text-end text-ink">{{ d.hours }}h</td>
+                                                <tr v-for="d in row.days" :key="d.date"
+                                                    class="border-b border-line/70 last:border-0 hover:bg-surface-hover">
+                                                    <td class="tabular-nums px-3 py-1.5 font-medium text-ink">{{ d.date_fmt }}</td>
+                                                    <td class="px-3 py-1.5 text-ink-soft">{{ weekdayLabel(d.date) }}</td>
+                                                    <td class="px-3 py-1.5">
+                                                        <VBadge v-if="d.day_type" :status="dayTypeStatus(d.day_type)">
+                                                            {{ $t('timesheet.dt_' + d.day_type) }}
+                                                        </VBadge>
+                                                        <span v-else class="text-muted">—</span>
+                                                    </td>
+                                                    <td class="tabular-nums px-3 py-1.5 text-end font-semibold text-ink">{{ d.hours }}h</td>
                                                 </tr>
                                                 <tr v-if="!row.days || row.days.length === 0">
-                                                    <td colspan="4" class="px-2 py-2 text-center text-muted">{{ $t('timesheet.no_rows') }}</td>
+                                                    <td colspan="4" class="px-3 py-2 text-center text-muted">{{ $t('timesheet.no_rows') }}</td>
                                                 </tr>
                                             </tbody>
+                                            <tfoot>
+                                                <tr class="border-t border-line bg-surface-sunken/40 text-[11px]">
+                                                    <td class="px-3 py-2 font-medium text-ink-soft" colspan="3">
+                                                        {{ row.days_present }} {{ $t('timesheet.days_present') }}
+                                                    </td>
+                                                    <td class="tabular-nums px-3 py-2 text-end font-semibold text-ink">{{ row.hours }}h</td>
+                                                </tr>
+                                            </tfoot>
                                         </table>
                                     </div>
                                 </td>
