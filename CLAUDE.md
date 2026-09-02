@@ -4,6 +4,48 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Status: Phase 9 in progress — hardening (2026-08-01)
 
+### Standard working hours 08:00–17:00 + 1 h break — DISPLAY ONLY (2026-09, DONE, deployed to prod)
+
+Default working hours moved **09:00 → 08:00** (end stays 17:00, a 9 h gross
+span) and displayed attendance hours now show the **NET** day (a full
+08:00–17:00 day reads **8 h**, the 1 h lunch break taken off). **This is a
+DISPLAY change with ZERO money impact — verified payroll byte-identical on real
+production data (351 payslips over the 3 busiest months, gross €108,079.67,
+identical SHA-256 before/after).** Do NOT route any pay path through the display
+helper.
+
+**Why no money impact:** full/half days are paid a **fixed daily rate**
+independent of hours (`PayrollService::rowAmount`), and there are **no hourly
+workers** in prod (all 278 are daily-wage). Hourly pay = `hours_worked × rate`;
+`hours_worked` is **never rewritten** by any of this.
+
+**`Attendance::displayHoursNet(?int $breakMinutes)`** is the single display
+authority (DISPLAY ONLY, mirrors `displayHours` but net). Precedence: non-worked
+status → 0; open shift → elapsed; **recorded `hours_worked` when > 0** (worker
+punches + legacy imports carry real net hours; hourly is already net via
+`deduct_break`); else clock-derived — a clerk **full** day (`hours_worked` 0 but
+an 08:00–17:00 span) takes off the break **only when the span − break ≥ 8 h**
+(`STANDARD_FULL_DAY_HOURS`), so a 9 h span → 8 h while an 8 h 09:00–17:00 or an
+8.5 h span is already net and unchanged (this is the client-confirmed
+"deduct only when span ≥ 9 h" rule — it keeps ~5,741 historical rows byte-stable
+and only lands the ~36 genuine 9 h-span rows on 8 h); clerk **half/per_meter** →
+the real clock span. Break = per-company Setting
+`attendance.break_duration_minutes` (default 60, Screen 26,
+`AttendanceService::breakDurationMinutes`), resolved **once per request** and
+passed in (no per-row settings read; the grid query-count guard stays green).
+
+**Every hours DISPLAY routes through it** (never a raw `hours_worked` sum):
+attendance grid + summary + roster, employee Asistencia tab, project attendance
+tab, both timesheets, Today's Report + KPI, worker PWA calendar + today, Excel
+export, and the Reports module (attendance/projects/timesheet sum
+`displayHoursNet` in PHP, not `SUM(hours_worked)`). Entry defaults (Attendance/
+Bulk modals, employee `default_check_in`, import template) moved to 08:00. Tests:
+`AttendanceDisplayHoursTest` (12), plus net-hours assertions in `TodayReportTest`
+/ `TimesheetTest` / `WorkerDashboardTest` / `AutoDayTypeTest` / `ReportsTest` /
+`SettingsScreenTest`. **Open follow-up (deferred by client, do NOT build): the
+PWA self-punch never asks "did you take a break?" — `deduct_break` defaults true
+for worker rows; harmless while no hourly workers exist.**
+
 ### Employee transfer — SINGLE-RECORD model (2026-08-25, DONE, deployed to prod)
 
 **The authoritative design for transferring an employee between companies.** It
