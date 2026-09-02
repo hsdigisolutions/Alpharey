@@ -48,6 +48,25 @@ it('lists assigned workers present and absent with a present tally', function ()
             ->has('projectPanel.rows', 2));
 });
 
+it('includes a worker present via attendance even with no rate roster', function (): void {
+    // No ProjectEmployeeRate, no deployment — the worker is "assigned" to the
+    // site purely by having worked there (how this client staffs projects).
+    $worker = Employee::factory()->forCompany($this->company)->create(['full_name' => 'Abdullah']);
+    $date = now()->toDateString();
+    Attendance::factory()->create([
+        'company_id' => $this->company->id, 'employee_id' => $worker->id, 'project_id' => $this->project->id,
+        'date' => $date, 'status' => 'present', 'hours_worked' => '8',
+    ]);
+
+    $this->actingAs($this->admin)
+        ->get("/attendance?project={$this->project->id}&panel_date={$date}")
+        ->assertOk()
+        ->assertInertia(fn (Assert $p) => $p
+            ->where('projectPanel.assigned', 1)
+            ->where('projectPanel.present', 1)
+            ->has('projectPanel.rows', 1));
+});
+
 it('ships no panel when no project is selected', function (): void {
     $this->actingAs($this->admin)->get('/attendance')
         ->assertInertia(fn (Assert $p) => $p->where('projectPanel', null));

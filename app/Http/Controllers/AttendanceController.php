@@ -526,10 +526,22 @@ class AttendanceController extends Controller
             ? Carbon::parse((string) $request->query('panel_date'))->toDateString()
             : now()->toDateString();
 
-        // Assigned = project rate rows + workers actively deployed into the project.
+        $worked = ['present', 'late', 'early_leave'];
+
+        // Assigned = the crew expected on this project: rate-roster workers +
+        // workers actively deployed in + anyone who WORKED here in the last 30
+        // days up to the panel date. The last source matters because crews here
+        // are assigned to a site through attendance, not the rate roster — a
+        // roster-only test showed "0 assigned" for a busy project.
+        $window = Carbon::parse($date)->copy()->subDays(30)->toDateString();
         $assignedIds = ProjectEmployeeRate::query()->where('project_id', $projectId)->pluck('employee_id')
             ->merge(EmployeeDeployment::query()->where('project_id', $projectId)
                 ->where('status', DeploymentStatus::Active)->pluck('employee_id'))
+            ->merge(Attendance::query()->withoutGlobalScopes()
+                ->where('project_id', $projectId)
+                ->whereIn('status', $worked)
+                ->whereBetween('date', [$window, $date])
+                ->pluck('employee_id'))
             ->filter()->unique()->values();
 
         $employees = Employee::query()->withoutGlobalScope(CompanyScope::class)
@@ -543,7 +555,6 @@ class AttendanceController extends Controller
             ->with('project:id,name,latitude,longitude,geofence_radius')
             ->get()->keyBy('employee_id');
 
-        $worked = ['present', 'late', 'early_leave'];
         $present = 0;
 
         $rows = $employees->map(function (Employee $e) use ($records, $worked, &$present, $offSiteThreshold): array {
