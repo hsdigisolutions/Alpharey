@@ -329,6 +329,7 @@ Route::middleware(['auth', 'active', 'two_factor', 'not_worker'])->group(functio
     Route::get('/timesheet', [TimesheetController::class, 'index'])->name('timesheet.index');
 
     Route::get('/attendance/export', [AttendanceImportExportController::class, 'export'])->name('attendance.export');
+    Route::get('/attendance/panel-export', [AttendanceController::class, 'exportPanel'])->name('attendance.panel-export');
     Route::get('/attendance/template', [AttendanceImportExportController::class, 'template'])->name('attendance.template');
     Route::get('/attendance', [AttendanceController::class, 'index'])->name('attendance.index');
     Route::post('/attendance', [AttendanceController::class, 'store'])->name('attendance.store');

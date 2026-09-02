@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Enums\DeploymentStatus;
 use App\Enums\ProjectStatus;
 use App\Enums\WageType;
+use App\Exports\GenericRowsExport;
 use App\Http\Requests\Attendance\StoreAttendanceRequest;
 use App\Http\Requests\Attendance\StoreBulkAttendanceRequest;
 use App\Http\Requests\Attendance\UpdateAttendanceRequest;
@@ -18,11 +19,14 @@ use App\Models\Scopes\CompanyScope;
 use App\Services\Attendance\AttendanceService;
 use App\Services\Audit\AuditLogger;
 use App\Support\AttendanceAbsence;
+use App\Support\CompanyBranding;
 use App\Support\CurrentCompany;
 use App\Support\Geo;
 use App\Support\PeriodLock;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response as HttpResponse;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
@@ -30,6 +34,8 @@ use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 use Inertia\Response;
+use Maatwebsite\Excel\Facades\Excel;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
@@ -574,8 +580,11 @@ class AttendanceController extends Controller
             return [
                 'employee' => $e->full_name,
                 'designation' => $e->designation,
-                'check_in' => $r?->check_in_at?->format('H:i'),
-                'check_out' => $r?->check_out_at?->format('H:i'),
+                // Prefer the precise PWA punch time; fall back to the manual
+                // time string a clerk/admin entered, so a full/half/hourly day
+                // (or an admin edit) always shows a check-in/out, not "—".
+                'check_in' => $r?->check_in_at?->format('H:i') ?? $r?->check_in,
+                'check_out' => $r?->check_out_at?->format('H:i') ?? $r?->check_out,
                 'hours' => $isWorked ? (float) $r->hours_worked : null,
                 'status' => $status,
                 'distance' => $r !== null && $r->distance_from_project !== null ? (float) $r->distance_from_project : null,
@@ -590,6 +599,47 @@ class AttendanceController extends Controller
             'present' => $present,
             'assigned' => $employees->count(),
         ];
+    }
+
+    /** Spanish status labels for the roster export. */
+    private const ROSTER_STATUS_ES = [
+        'present' => 'Presente', 'working' => 'Trabajando', 'absent' => 'Ausente',
+        'late' => 'Tarde', 'early_leave' => 'Salida anticipada', 'leave' => 'Permiso',
+    ];
+
+    /**
+     * Export the project roster panel (the chosen project + date) as Excel or PDF.
+     */
+    public function exportPanel(Request $request, AuditLogger $audit): BinaryFileResponse|HttpResponse
+    {
+        Gate::authorize('attendance.export');
+
+        $offSiteThreshold = app(AttendanceService::class)->offSiteAlertDistance(app(CurrentCompany::class)->id() ?? 0);
+        $panel = $this->projectPanel($request, $offSiteThreshold);
+        abort_if($panel === null, 404);
+
+        $format = $request->query('format') === 'pdf' ? 'pdf' : 'excel';
+        $audit->log('exported', null, null, null, 'Attendance roster '.strtoupper($format), 'attendance');
+
+        if ($format === 'pdf') {
+            return Pdf::loadView('exports.attendance-roster-pdf', [
+                'panel' => $panel,
+                'logo' => CompanyBranding::currentLogo(),
+            ])->download('asistencia-'.$panel['date'].'.pdf');
+        }
+
+        $heading = ['Trabajador', 'Designación', 'Entrada', 'Salida', 'Horas', 'Estado', 'Distancia'];
+        $rows = array_map(fn (array $r): array => [
+            (string) ($r['employee'] ?? ''),
+            (string) ($r['designation'] ?? '—'),
+            (string) ($r['check_in'] ?? '—'),
+            (string) ($r['check_out'] ?? '—'),
+            $r['hours'] !== null ? (float) $r['hours'] : '—',
+            self::ROSTER_STATUS_ES[$r['status']] ?? (string) $r['status'],
+            $r['distance'] !== null ? round((float) $r['distance']).' m' : '—',
+        ], $panel['rows']);
+
+        return Excel::download(new GenericRowsExport($heading, $rows), 'asistencia-'.$panel['date'].'.xlsx');
     }
 
     private function distanceBand(Attendance $record, int $offSiteThreshold): ?string

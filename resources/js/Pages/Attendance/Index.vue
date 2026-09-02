@@ -43,6 +43,15 @@ function reloadPanel() {
         { month: props.month, project: panelProject.value || undefined, panel_date: panelDate.value },
         { only: ['projectPanel'], preserveScroll: true, preserveState: true });
 }
+// Download the project roster panel (Excel or PDF) for the picked project + date.
+function exportPanel(format) {
+    const params = new URLSearchParams({
+        project: props.projectPanel.project.id,
+        panel_date: props.projectPanel.date,
+        format,
+    });
+    window.location.href = `/attendance/panel-export?${params.toString()}`;
+}
 const panelStatusStyle = {
     present: 'text-status-ok', working: 'text-status-info', late: 'text-status-warn',
     early_leave: 'text-status-warn', absent: 'text-status-danger', leave: 'text-status-info',
@@ -315,11 +324,17 @@ const monthLabel = computed(() => {
                     <h2 class="text-[15px] font-semibold text-ink">{{ projectPanel.project.name }}</h2>
                     <p class="text-xs text-ink-soft">{{ projectPanel.date }}</p>
                 </div>
-                <p class="text-sm font-semibold">
-                    <span class="text-status-ok">{{ projectPanel.present }}</span>
-                    <span class="text-ink-soft"> / {{ projectPanel.assigned }} </span>
-                    <Bilingual k="attendance.roster_present_of" inline />
-                </p>
+                <div class="flex items-center gap-3">
+                    <p class="text-sm font-semibold">
+                        <span class="text-status-ok">{{ projectPanel.present }}</span>
+                        <span class="text-ink-soft"> / {{ projectPanel.assigned }} </span>
+                        <Bilingual k="attendance.roster_present_of" inline />
+                    </p>
+                    <div v-if="can.export && projectPanel.rows.length" class="flex items-center gap-2">
+                        <VButton variant="secondary" size="sm" icon="download" @click="exportPanel('excel')">Excel</VButton>
+                        <VButton variant="secondary" size="sm" icon="download" @click="exportPanel('pdf')">PDF</VButton>
+                    </div>
+                </div>
             </div>
             <div class="overflow-x-auto rounded-md border border-line">
                 <table class="w-full min-w-max text-sm">
