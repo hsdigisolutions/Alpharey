@@ -39,7 +39,7 @@ const blank = {
     employee_code: '',
     full_name: '', nif: '', email: '', mobile: '', phone: '', city: '', address: '',
     department: '', department_id: '', designation: '', designation_id: '', joining_date: null, leaving_date: null,
-    active: true, is_contracted: false, default_check_in: '09:00', default_check_out: '17:00',
+    active: true, is_contracted: false, default_check_in: '08:00', default_check_out: '17:00',
     wage_type: '', wage_rate: null, base_salary: null, daily_wage: null, per_meter_rate: null,
     commission_percent: null, payment_method: '', iban: '', bank_name: '',
     has_driving_license: false, has_company_vehicle: false, can_use_vehicles: false, works_at_height: false, notes: '',

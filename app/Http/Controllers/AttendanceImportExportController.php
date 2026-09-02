@@ -49,7 +49,7 @@ class AttendanceImportExportController extends Controller
             {
                 return [
                     ['employee_code', 'fecha', 'entrada', 'salida', 'estado'],
-                    ['E1-0001', '2026-07-01', '09:00', '17:00', 'present'],
+                    ['E1-0001', '2026-07-01', '08:00', '17:00', 'present'],
                 ];
             }
         }, 'plantilla-asistencia.xlsx');

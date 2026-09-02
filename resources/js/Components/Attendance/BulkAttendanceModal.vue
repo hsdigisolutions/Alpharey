@@ -38,7 +38,7 @@ const form = useForm({
     date: null,
     mode: 'project_based',
     day_type: 'full',
-    check_in: '09:00',
+    check_in: '08:00',
     check_out: '17:00',
     break_hours: 1,
     deduct_break: true,
@@ -62,7 +62,7 @@ watch(() => props.open, (v) => {
     form.date = `${props.month}-01`;
     form.mode = 'project_based';
     form.day_type = 'full';
-    form.check_in = '09:00';
+    form.check_in = '08:00';
     form.check_out = '17:00';
     form.break_hours = 1;
     form.deduct_break = true;

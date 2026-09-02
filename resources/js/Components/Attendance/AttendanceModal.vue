@@ -38,7 +38,7 @@ const emit = defineEmits(['close']);
 
 const blank = {
     employee_id: '', project_id: '', date: null, mode: 'project_based', day_type: 'full',
-    check_in: '09:00', check_out: '17:00', break_hours: 1, deduct_break: true,
+    check_in: '08:00', check_out: '17:00', break_hours: 1, deduct_break: true,
     hours_worked: 0, quantity: null, overtime_hours: 0, status: 'present', total_amount: null,
     weekend_rate_type: 'normal', weekend_rate_amount: null,
     manual_wage_override: false, override_reason: '', is_paid: false, is_exception: false,
