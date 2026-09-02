@@ -26,6 +26,7 @@ use App\Models\ProjectDesignationRate;
 use App\Models\Scopes\CompanyScope;
 use App\Models\TaskProgress;
 use App\Models\TaskTemplate;
+use App\Services\Attendance\AttendanceService;
 use App\Services\Documents\DocumentStatus;
 use App\Services\ProductionTasks\ProductionReportService;
 use App\Services\Reports\ProfitabilityService;
@@ -487,6 +488,9 @@ class ProjectController extends Controller
 
         $worked = $rows->filter(fn (Attendance $r) => in_array($r->status->value, ['present', 'late', 'early_leave'], true));
 
+        // NET worked hours for this project's company (full 08:00–17:00 → 8 h).
+        $breakMinutes = app(AttendanceService::class)->breakDurationMinutes((int) $project->company_id);
+
         return [
             'records' => $rows->map(fn (Attendance $r): array => [
                 'id' => $r->id,
@@ -496,7 +500,7 @@ class ProjectController extends Controller
                 'day_type' => $r->day_type?->value,
                 'check_in' => $r->check_in,
                 'check_out' => $r->check_out,
-                'hours' => (float) $r->hours_worked,
+                'hours' => $r->displayHoursNet($breakMinutes),
                 'status' => $r->status->value,
                 'rate' => $canSeeWages ? (float) ($r->wage_rate_snapshot ?? 0) : null,
                 'total' => $canSeeWages ? (float) $r->total_amount : null,
@@ -504,7 +508,7 @@ class ProjectController extends Controller
             'summary' => [
                 'workers' => $worked->pluck('employee_id')->unique()->count(),
                 'days' => $worked->count(),
-                'hours' => round((float) $worked->sum(fn (Attendance $r) => (float) $r->hours_worked), 2),
+                'hours' => round((float) $worked->sum(fn (Attendance $r) => $r->displayHoursNet($breakMinutes)), 2),
                 'labour_cost' => $canSeeWages ? round((float) $worked->sum(fn (Attendance $r) => (float) $r->total_amount), 2) : null,
             ],
         ];

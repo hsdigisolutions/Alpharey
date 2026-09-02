@@ -100,6 +100,11 @@ class AttendanceController extends Controller
         // check-in distance into a traffic-light band with it (computed once).
         $offSiteThreshold = app(AttendanceService::class)->offSiteAlertDistance(app(CurrentCompany::class)->id());
 
+        // Standard unpaid break for this company — the grid shows NET worked
+        // hours (a full 08:00–17:00 day reads 8 h), resolved once here so the
+        // per-cell Attendance::displayHoursNet() never reads settings per row.
+        $breakMinutes = app(AttendanceService::class)->breakDurationMinutes(app(CurrentCompany::class)->id());
+
         // Which of these attendance rows carry a worker note — one query, keyed
         // by attendance_id so the grid can mark it without an N+1. We also track
         // whether the note has AUDIO, so the cell can show a mic for a voice note
@@ -123,7 +128,7 @@ class AttendanceController extends Controller
                 // stands, 'edit' once an admin has overridden a detected day.
                 'is_auto_detected' => (bool) $record->is_auto_detected,
                 'is_overridden' => ! $record->is_auto_detected && $record->auto_day_type !== null,
-                'hours' => (float) $record->hours_worked,
+                'hours' => $record->displayHoursNet($breakMinutes),
                 'quantity' => $record->quantity !== null ? (float) $record->quantity : null,
                 'project' => $record->project?->name,
                 'has_voice_note' => $noteHasAudio->has($record->id),
@@ -220,14 +225,14 @@ class AttendanceController extends Controller
         // Monthly summary per employee. The wage total is gated exactly like
         // the cell payload below — hours are attendance data, money is pay data.
 
-        $summary = $records->groupBy('employee_id')->map(function ($rows) use ($canSeeWage) {
+        $summary = $records->groupBy('employee_id')->map(function ($rows) use ($canSeeWage, $breakMinutes) {
             // status is an AttendanceStatus enum cast — compare on ->value
             $countStatus = fn (array $statuses): int => $rows
                 ->filter(fn ($r) => in_array($r->status->value, $statuses, true))->count();
 
             return [
                 'days_present' => $countStatus(['present', 'late', 'early_leave']),
-                'hours' => round((float) $rows->sum(fn ($r) => (float) $r->hours_worked), 2),
+                'hours' => round((float) $rows->sum(fn ($r) => $r->displayHoursNet($breakMinutes)), 2),
                 'overtime' => round((float) $rows->sum(fn ($r) => (float) $r->overtime_hours), 2),
                 'absences' => $countStatus(['absent']),
                 'leave' => $countStatus(['leave']),
@@ -537,7 +542,7 @@ class AttendanceController extends Controller
             return null;
         }
 
-        $project = Project::query()->where('id', $projectId)->first(['id', 'name', 'latitude', 'longitude', 'geofence_radius']);
+        $project = Project::query()->where('id', $projectId)->first(['id', 'company_id', 'name', 'latitude', 'longitude', 'geofence_radius']);
         if ($project === null) {
             return null;
         }
@@ -545,6 +550,9 @@ class AttendanceController extends Controller
         $date = $request->filled('panel_date')
             ? Carbon::parse((string) $request->query('panel_date'))->toDateString()
             : now()->toDateString();
+
+        // NET worked hours for the roster (a full 08:00–17:00 day reads 8 h).
+        $breakMinutes = app(AttendanceService::class)->breakDurationMinutes((int) $project->company_id);
 
         $worked = ['present', 'late', 'early_leave'];
 
@@ -577,7 +585,7 @@ class AttendanceController extends Controller
 
         $present = 0;
 
-        $rows = $employees->map(function (Employee $e) use ($records, $worked, &$present, $offSiteThreshold): array {
+        $rows = $employees->map(function (Employee $e) use ($records, $worked, &$present, $offSiteThreshold, $breakMinutes): array {
             $r = $records->get($e->id);
             $status = 'absent';
             if ($r !== null) {
@@ -599,7 +607,7 @@ class AttendanceController extends Controller
                 // (or an admin edit) always shows a check-in/out, not "—".
                 'check_in' => $r?->check_in_at?->format('H:i') ?? $r?->check_in,
                 'check_out' => $r?->check_out_at?->format('H:i') ?? $r?->check_out,
-                'hours' => $isWorked ? (float) $r->hours_worked : null,
+                'hours' => $isWorked ? $r->displayHoursNet($breakMinutes) : null,
                 'status' => $status,
                 'distance' => $r !== null && $r->distance_from_project !== null ? (float) $r->distance_from_project : null,
                 'distance_band' => $r !== null ? $this->distanceBand($r, $offSiteThreshold) : null,

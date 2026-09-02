@@ -4,7 +4,9 @@ namespace App\Http\Controllers;
 
 use App\Exports\AttendanceExport;
 use App\Models\Attendance;
+use App\Services\Attendance\AttendanceService;
 use App\Services\Audit\AuditLogger;
+use App\Support\CurrentCompany;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Gate;
@@ -30,10 +32,13 @@ class AttendanceImportExportController extends Controller
 
         $withWages = Gate::allows('payroll.view') || Gate::allows('employees.edit');
 
+        // NET worked hours in the sheet (a full 08:00–17:00 day reads 8 h).
+        $breakMinutes = app(AttendanceService::class)->breakDurationMinutes(app(CurrentCompany::class)->id() ?? 0);
+
         $audit->log('exported', null, null, null, 'Attendance export ('.$records->count().' rows)', 'attendance');
 
         return Excel::download(
-            new AttendanceExport($records, $withWages),
+            new AttendanceExport($records, $withWages, $breakMinutes),
             'asistencia-'.$month->format('Y-m').'.xlsx',
         );
     }

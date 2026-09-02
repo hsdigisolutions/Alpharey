@@ -121,10 +121,12 @@ it('resolves the per-company break from settings for displayHoursNet when no bre
     $employee = Employee::factory()->forCompany($this->company)->create([
         'wage_type' => 'daily', 'daily_wage' => '80',
     ]);
+    // A clerk full day (no recorded hours) so the span-net path runs; the
+    // factory default hours_worked is cleared to 0.
     $att = Attendance::factory()->create([
         'company_id' => $this->company->id, 'employee_id' => $employee->id,
         'date' => '2026-08-10', 'status' => 'present', 'day_type' => 'full',
-        'check_in' => '08:00', 'check_out' => '17:00',
+        'check_in' => '08:00', 'check_out' => '17:00', 'hours_worked' => '0',
     ]);
 
     expect($att->displayHoursNet())->toBe(8.25); // 9 h − 0.75 h break

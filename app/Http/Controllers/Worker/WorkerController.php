@@ -353,7 +353,11 @@ class WorkerController extends Controller
             // "HH:mm" label parsed in the phone's own timezone (that was off by
             // the phone↔server offset).
             'check_in_at' => $today->check_in_at?->toIso8601String(),
-            'hours' => $today->check_out !== null ? (float) $today->hours_worked : null,
+            // NET worked hours (a full 08:00–17:00 day reads 8 h) — consistent
+            // with the admin grid and this worker's calendar.
+            'hours' => $today->check_out !== null
+                ? $today->displayHoursNet(app(AttendanceService::class)->breakDurationMinutes((int) $today->company_id))
+                : null,
             // The full-day target (hours) so the check-out button can turn green
             // once the worker has put in a full day, amber before that.
             'full_day_threshold' => $fullDayThreshold,

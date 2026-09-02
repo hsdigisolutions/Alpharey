@@ -496,6 +496,9 @@ class EmployeeController extends Controller
             ->with('project:id,name')
             ->get();
 
+        // NET worked hours for this employee's company (full 08:00–17:00 → 8 h).
+        $breakMinutes = app(AttendanceService::class)->breakDurationMinutes((int) $employee->company_id);
+
         $grid = [];
         foreach ($records as $r) {
             $grid[(int) $r->date->format('j')] = [
@@ -503,7 +506,7 @@ class EmployeeController extends Controller
                 'status' => $r->status->value,
                 'day_type' => $r->day_type?->value,
                 'is_auto' => (bool) $r->is_auto_generated,
-                'hours' => (float) $r->hours_worked,
+                'hours' => $r->displayHoursNet($breakMinutes),
                 'quantity' => $r->quantity !== null ? (float) $r->quantity : null,
                 'project' => $r->project?->name,
                 'total' => $canSeeWages ? (float) $r->total_amount : null,
@@ -554,7 +557,7 @@ class EmployeeController extends Controller
             'summary' => [
                 'present' => $worked->count(),
                 'half_days' => $worked->filter(fn (Attendance $r) => $r->day_type?->value === 'half')->count(),
-                'hours' => round((float) $records->sum(fn (Attendance $r) => (float) $r->hours_worked), 2),
+                'hours' => round((float) $records->sum(fn (Attendance $r) => $r->displayHoursNet($breakMinutes)), 2),
                 'overtime' => round((float) $records->sum(fn (Attendance $r) => (float) $r->overtime_hours), 2),
                 'absences' => $realAbsences + $virtualAbsences,
                 'auto_absences' => $realAutoAbsences + $virtualAbsences,

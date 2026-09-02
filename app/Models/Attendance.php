@@ -190,25 +190,28 @@ class Attendance extends Model
 
     /**
      * Day-type-aware NET hours for DISPLAY. Unlike displayHours() (raw time on
-     * site), this takes the standard unpaid lunch break off a FULL day whose
-     * clock span actually contains it — the new 08:00–17:00 shift — so it reads
-     * 8 h, while leaving every other day type, and all historical rows, exactly
-     * as they are:
-     *   - full      → the clock span, minus the break ONLY when the span is the
-     *                 new long shift (removing the break still leaves a normal
-     *                 full working day, ≥ STANDARD_FULL_DAY_HOURS). So a 9 h
-     *                 08:00–17:00 span → 8 h, but an 8 h 09:00–17:00 span, an
-     *                 8.5 h span, or an imported no-clock row is already a net
-     *                 day and is shown unchanged. The break lived inside the
-     *                 span only for the new convention, and the per-company
-     *                 `break_duration_minutes` setting (Step 1) sizes it.
-     *   - half      → the real span; a break is never taken off half a day
-     *   - hourly    → the pay field `hours_worked` as-is — it already reflects
-     *                 the per-record `deduct_break` flag
-     *                 (AttendanceService::hoursFromClock), so the break is not
-     *                 deducted a second time here
-     *   - per_meter → the real span (time on site; hours are not the pay basis)
-     * A row with no clock times falls back to `hours_worked` with no deduction.
+     * site), this takes the standard unpaid lunch break off a clerk-entered
+     * FULL day whose clock span contains it — the new 08:00–17:00 shift — so it
+     * reads 8 h, while leaving every recorded figure and all history honest.
+     * The precedence, top to bottom:
+     *   - absent / leave  → 0 h (a non-worked row has no hours, even if it
+     *                       carries stray clock times).
+     *   - open shift      → elapsed time so far (a worker still on site).
+     *   - recorded hours  → `hours_worked` verbatim whenever it is set (> 0): a
+     *                       worker punch and a legacy import carry their real
+     *                       net hours, and an hourly day is already net of the
+     *                       break (deduct_break), so it is never deducted twice.
+     *   - clerk FULL day  → with `hours_worked` 0 but a real clock span: the
+     *                       span, minus the break ONLY when removing it still
+     *                       leaves a normal full working day (span − break ≥
+     *                       STANDARD_FULL_DAY_HOURS). A 9 h 08:00–17:00 span → 8
+     *                       h; an 8 h 09:00–17:00 or 8.5 h span is already net.
+     *                       The per-company `break_duration_minutes` setting
+     *                       (Step 1) sizes the break.
+     *   - clerk half /
+     *     per_meter        → the real clock span (a genuine short half day reads
+     *                       its span), or the stored hours when there is no
+     *                       clock either. No break, ever.
      *
      * DISPLAY ONLY. This never feeds pay and never rewrites `hours_worked`;
      * full/half pay is a fixed daily-rate formula independent of hours, and
@@ -220,36 +223,52 @@ class Attendance extends Model
      */
     public function displayHoursNet(?int $breakMinutes = null): float
     {
-        $type = $this->displayDayType();
-
-        // Hourly pay hours are already net of the break where the record opts
-        // in via deduct_break — show them verbatim, never re-deducting.
-        if ($type === DayType::Hourly) {
-            return round((float) $this->hours_worked, 2);
+        // Only a WORKED day has hours to show: an absent or leave row reads 0 h,
+        // even if it carries stray clock times (a since-changed status, or a
+        // factory default). Callers that sum over every row in a month therefore
+        // count only worked hours without pre-filtering.
+        if (! in_array($this->status->value, ['present', 'late', 'early_leave'], true)) {
+            return 0.0;
         }
 
-        $gross = $this->displayHours();
+        // Still on site (an open PWA shift) → elapsed time, like displayHours().
+        if ($this->isOpenShift()) {
+            return $this->displayHours();
+        }
 
-        // A full day loses the break ONLY when it is a real clock span long
-        // enough to be the new 08:00–17:00 shift that contains the break;
-        // deducting it must still leave a normal full working day. Every
-        // historical row (an 8 h 09:00–17:00 span, or a no-clock imported row)
-        // is already net, so it is shown unchanged.
-        if ($type === DayType::Full
+        // Recorded worked hours win whenever present: a worker punch and a
+        // legacy import both carry their real net hours here, and an hourly
+        // day's hours are already net of the break (deduct_break), so it is
+        // never deducted a second time. This keeps every surface agreeing with
+        // the stored figure and never rewrites it.
+        $recorded = round((float) $this->hours_worked, 2);
+        if ($recorded > 0.0) {
+            return $recorded;
+        }
+
+        // No recorded hours (a clerk-entered full/half day) — derive them from
+        // the clock. A FULL day takes off the break ONLY when the span is the
+        // new 08:00–17:00 shift that contains it (removing it still leaves a
+        // normal full working day, ≥ STANDARD_FULL_DAY_HOURS); an 8 h 09:00–17:00
+        // span or an 8.5 h span is already net. This is why a clerk full day,
+        // whose hours_worked is 0 but which carries an 08:00–17:00 span, reads
+        // 8 h. The per-company `break_duration_minutes` setting sizes the break.
+        if ($this->displayDayType() === DayType::Full
             && $this->check_in !== null
             && $this->check_out !== null
         ) {
+            $gross = self::clockSpanHours($this->check_in, $this->check_out);
             $minutes = $breakMinutes ?? app(AttendanceService::class)
                 ->breakDurationMinutes((int) $this->company_id);
             $net = $gross - $minutes / 60;
 
-            if ($net >= self::STANDARD_FULL_DAY_HOURS) {
-                return round($net, 2);
-            }
+            return round($net >= self::STANDARD_FULL_DAY_HOURS ? $net : $gross, 2);
         }
 
-        // half / per_meter / already-net full days → real time on site.
-        return round($gross, 2);
+        // half / per_meter with no recorded hours → the real clock span (a
+        // genuine short half day reads its span), no break ever; or the stored
+        // hours as a last resort when there is no clock either.
+        return $this->displayHours();
     }
 
     /**

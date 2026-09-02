@@ -22,6 +22,7 @@ class AttendanceExport implements FromCollection, WithHeadings, WithMapping
     public function __construct(
         private Collection $records,
         private bool $withWages,
+        private int $breakMinutes = 60,
     ) {}
 
     /**
@@ -62,7 +63,7 @@ class AttendanceExport implements FromCollection, WithHeadings, WithMapping
             $record->project?->name,
             $record->check_in,
             $record->check_out,
-            (float) $record->hours_worked,
+            $record->displayHoursNet($this->breakMinutes),
             (float) $record->overtime_hours,
             $record->status->value,
         ];

@@ -48,6 +48,10 @@ class WorkerDashboardService
         $end = $start->copy()->endOfMonth();
         $today = Carbon::now()->startOfDay();
 
+        // NET worked hours (a full 08:00–17:00 day reads 8 h) — one lookup for
+        // this worker's company; passed per-row so no per-cell settings read.
+        $breakMinutes = app(AttendanceService::class)->breakDurationMinutes((int) $employee->company_id);
+
         // date-string => status, for the month, this employee only.
         $rows = Attendance::query()
             ->withoutGlobalScope(CompanyScope::class)
@@ -56,7 +60,10 @@ class WorkerDashboardService
             // The worker has no company session, so the project's tenant scope
             // would resolve to null — drop it (the row already pins to them).
             ->with(['project' => fn ($q) => $q->withoutGlobalScope(CompanyScope::class)->select('id', 'name')])
-            ->get(['id', 'date', 'status', 'day_type', 'hours_worked', 'quantity', 'project_id', 'is_auto_generated']);
+            // check_in/out + wage_type_snapshot are needed by displayHoursNet so
+            // a clerk-entered full day (hours_worked = 0, but an 08:00–17:00 span)
+            // reads 8 h here too, not 0 h.
+            ->get(['id', 'date', 'status', 'day_type', 'wage_type_snapshot', 'check_in', 'check_out', 'hours_worked', 'quantity', 'project_id', 'is_auto_generated']);
 
         $byDate = $rows->keyBy(fn (Attendance $r): string => $r->date->toDateString());
 
@@ -84,7 +91,7 @@ class WorkerDashboardService
                 'status' => $status,
                 // Detail for the tap-a-day view (the worker's own numbers).
                 'day_type' => $row?->day_type?->value,
-                'hours' => $row !== null ? (float) $row->hours_worked : null,
+                'hours' => $row !== null ? $row->displayHoursNet($breakMinutes) : null,
                 'quantity' => $row !== null && $row->quantity !== null ? (float) $row->quantity : null,
                 'project' => $row?->project?->name,
                 // A manual absence is solid red; a nightly auto-absence AND a
@@ -101,7 +108,7 @@ class WorkerDashboardService
         // Hours only — the same attendance figure the grid shows. No earnings:
         // workers must never see money amounts (client rule 2026-08-08).
         foreach ($rows as $row) {
-            $hours += (float) $row->hours_worked;
+            $hours += $row->displayHoursNet($breakMinutes);
         }
 
         return [

@@ -15,6 +15,7 @@ use App\Models\EmployeeDeployment;
 use App\Models\Payroll;
 use App\Models\Project;
 use App\Models\ProjectEmployeeRate;
+use App\Services\Attendance\AttendanceService;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -190,6 +191,10 @@ class TodayService
             ->keyBy('employee_id')
             ->map(fn (EmployeeDeployment $d): ?string => $d->homeCompany?->name);
 
+        // NET worked hours (a full 08:00–17:00 day reads 8 h); one lookup for
+        // the company whose rows this report shows.
+        $breakMinutes = app(AttendanceService::class)->breakDurationMinutes($companyId);
+
         return Attendance::query()
             ->whereBetween('date', [$from, $to])
             ->with(['employee:id,full_name', 'project:id,name'])
@@ -208,7 +213,7 @@ class TodayService
                 // WORKED status. An absent/leave row must never show hours, even
                 // if it carries stale check_in/out times from a since-changed
                 // present state (that also kept them out of the hours KPI).
-                'hours' => in_array($a->status->value, self::WORKED, true) ? $a->displayHours() : 0.0,
+                'hours' => in_array($a->status->value, self::WORKED, true) ? $a->displayHoursNet($breakMinutes) : 0.0,
                 'worked' => in_array($a->status->value, self::WORKED, true),
                 'still_working' => in_array($a->status->value, self::WORKED, true) && $a->isOpenShift(),
                 'status' => $a->status->value,

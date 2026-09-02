@@ -11,6 +11,7 @@ use App\Models\Attendance;
 use App\Models\Employee;
 use App\Models\Project;
 use App\Models\Scopes\CompanyScope;
+use App\Services\Attendance\AttendanceService;
 use App\Services\Audit\AuditLogger;
 use App\Support\CompanyBranding;
 use Barryvdh\DomPDF\Facade\Pdf;
@@ -89,13 +90,17 @@ class TimesheetController extends Controller
      */
     private function buildProjectTimesheet(int $projectId, Carbon $start, Carbon $end): array
     {
+        // NET worked hours (a full 08:00–17:00 day reads 8 h) for the acting
+        // company's timesheet.
+        $breakMinutes = app(AttendanceService::class)->breakDurationMinutes($this->contextCompanyId());
+
         $rows = Attendance::query()->withoutGlobalScope(CompanyScope::class)
             ->where('project_id', $projectId)
             ->whereBetween('date', [$start->toDateString(), $end->toDateString()])
             ->with('employee:id,full_name,designation')
             ->get()
             ->groupBy('employee_id')
-            ->map(function ($group) {
+            ->map(function ($group) use ($breakMinutes) {
                 /** @var Collection<int, Attendance> $group */
                 $first = $group->first();
                 $worked = $group->filter(fn (Attendance $a): bool => in_array($a->status->value, self::WORKED, true));
@@ -112,7 +117,7 @@ class TimesheetController extends Controller
                         'weekday' => self::WEEKDAYS_ES[$a->date->dayOfWeekIso] ?? '',
                         'day_type' => $a->day_type?->value,
                         'day_type_label' => $this->dayTypeLabel($a->day_type),
-                        'hours' => round((float) $a->hours_worked, 2),
+                        'hours' => $a->displayHoursNet($breakMinutes),
                     ])
                     ->values()
                     ->all();
@@ -271,6 +276,10 @@ class TimesheetController extends Controller
      */
     private function buildTimesheet(int $employeeId, Carbon $start, Carbon $end, ?int $projectId): array
     {
+        // NET worked hours (a full 08:00–17:00 day reads 8 h) for the acting
+        // company's timesheet.
+        $breakMinutes = app(AttendanceService::class)->breakDurationMinutes($this->contextCompanyId());
+
         // Pinned to the employee, scope dropped — a deployed worker's host rows
         // count too (same rule as the employee attendance tab).
         $byDate = Attendance::query()->withoutGlobalScope(CompanyScope::class)
@@ -294,7 +303,7 @@ class TimesheetController extends Controller
             }
 
             $worked = $r !== null && in_array($r->status->value, self::WORKED, true);
-            $hours = $r !== null ? (float) $r->hours_worked : 0.0;
+            $hours = $r !== null ? $r->displayHoursNet($breakMinutes) : 0.0;
             if ($worked) {
                 $daysPresent++;
                 $totalHours += $hours;

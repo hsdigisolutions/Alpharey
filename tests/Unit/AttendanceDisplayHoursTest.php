@@ -18,7 +18,8 @@ use App\Models\Attendance;
  */
 function att(array $attrs): Attendance
 {
-    $a = new Attendance;
+    // Worked status by default — displayHoursNet reads 0 h for a non-worked row.
+    $a = new Attendance(['status' => 'present']);
 
     foreach ($attrs as $key => $value) {
         $a->{$key} = $value;
@@ -59,8 +60,18 @@ it('never deducts a break when the configured break is zero', function (): void 
     expect($row->displayHoursNet(0))->toBe(9.0);
 });
 
-it('never deducts a break from a half day', function (): void {
-    $row = att(['day_type' => DayType::Half, 'check_in' => '08:00', 'check_out' => '12:00']);
+it('shows a genuine short half day at its clock span, no break', function (): void {
+    $row = att(['day_type' => DayType::Half, 'check_in' => '09:00', 'check_out' => '13:00']);
+
+    expect($row->displayHoursNet(60))->toBe(4.0);
+});
+
+it('shows a half day at its recorded hours when a full-span default clock is present', function (): void {
+    // A half day marked 09:00–17:00 (the form default) but with hours_worked 4
+    // reads 4 h — the recorded worked hours, not the 8 h span.
+    // (The open-shift → elapsed-time path is covered in TodayReportTest, which
+    // boots the container these pure-arithmetic unit cases deliberately avoid.)
+    $row = att(['day_type' => DayType::Half, 'check_in' => '09:00', 'check_out' => '17:00', 'hours_worked' => '4.00']);
 
     expect($row->displayHoursNet(60))->toBe(4.0);
 });
