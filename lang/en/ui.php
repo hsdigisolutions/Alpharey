@@ -286,6 +286,8 @@ return [
         'session_timeout' => 'Session timeout (minutes)',
         'off_site_alert_distance' => 'Off-site alert distance (metres)',
         'off_site_alert_hint' => 'A check-in further than this from the site raises an alert (never blocks).',
+        'break_duration_minutes' => 'Standard break (minutes)',
+        'break_duration_hint' => 'Deducted from a full-day shift\'s displayed hours (08:00–17:00 → 8 h). Does not affect pay.',
         'saved' => 'Configuración guardada / Settings saved',
         'legal_section' => 'Legal — privacy consent',
         'legal_hint' => 'Version of the notice shown to workers. Changing it forces everyone to accept again.',

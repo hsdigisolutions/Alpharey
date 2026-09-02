@@ -60,6 +60,10 @@ class SettingsController extends Controller
                 ->maxLocationDistance(app(CurrentCompany::class)->id() ?? 0),
             'offSiteAlertDistance' => app(AttendanceService::class)
                 ->offSiteAlertDistance(app(CurrentCompany::class)->id() ?? 0),
+            // Standard unpaid break (minutes) deducted from a full-day shift's
+            // displayed hours (08:00–17:00 → 8 h). Display only.
+            'breakDurationMinutes' => app(AttendanceService::class)
+                ->breakDurationMinutes(app(CurrentCompany::class)->id() ?? 0),
             // Company profile (name / CIF / address / logo) of the acting company
             // — feeds invoices + payslips. Null when no single company is selected.
             'companyProfile' => $this->companyProfilePayload(),
@@ -242,12 +246,15 @@ class SettingsController extends Controller
             'max_location_distance' => ['required', 'numeric', 'min:50', 'max:100000'],
             // Distance from the PROJECT site (metres) above which a check-in is off site.
             'off_site_alert_distance' => ['required', 'integer', 'min:100', 'max:100000'],
+            // Standard unpaid break (minutes) deducted from a full-day's displayed hours.
+            'break_duration_minutes' => ['required', 'integer', 'min:0', 'max:240'],
         ]);
 
         $settings->set("attendance.full_day_threshold.{$companyId}", (float) $validated['full_day_threshold']);
         $settings->set("attendance.half_day_threshold.{$companyId}", (float) $validated['half_day_threshold']);
         $settings->set("attendance.max_location_distance.{$companyId}", (float) $validated['max_location_distance']);
         $settings->set("attendance.off_site_alert_distance.{$companyId}", (int) $validated['off_site_alert_distance']);
+        $settings->set("attendance.break_duration_minutes.{$companyId}", (int) $validated['break_duration_minutes']);
 
         return back()->with('success', __('ui.settings.saved'));
     }

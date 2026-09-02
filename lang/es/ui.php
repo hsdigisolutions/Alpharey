@@ -288,6 +288,8 @@ return [
         'session_timeout' => 'Tiempo de sesión (minutos)',
         'off_site_alert_distance' => 'Distancia de alerta fuera de obra (metros)',
         'off_site_alert_hint' => 'Un fichaje a más de esta distancia de la obra genera una alerta (no bloquea).',
+        'break_duration_minutes' => 'Descanso estándar (minutos)',
+        'break_duration_hint' => 'Se descuenta de las horas mostradas de una jornada completa (08:00–17:00 → 8 h). No afecta al salario.',
         'saved' => 'Configuración guardada / Settings saved',
         'legal_section' => 'Legal — consentimiento de privacidad',
         'legal_hint' => 'Versión del aviso mostrado a los trabajadores. Al cambiarla, todos deberán aceptarlo de nuevo.',

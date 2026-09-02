@@ -47,6 +47,9 @@ class AttendanceService
     /** Max check-out distance (metres) from check-in before an alert — per company. */
     public const DEFAULT_MAX_LOCATION_DISTANCE = 500.0;
 
+    /** Standard unpaid break (minutes) deducted from a full-day shift's displayed hours. */
+    public const DEFAULT_BREAK_MINUTES = 60;
+
     /** Distance (metres) from the PROJECT site above which a check-in is "off site" — per company. */
     public const DEFAULT_OFF_SITE_ALERT_DISTANCE = 2000;
 
@@ -284,6 +287,20 @@ class AttendanceService
         return (int) $this->settings->get(
             "attendance.off_site_alert_distance.{$companyId}",
             $this->settings->get('attendance.off_site_alert_distance', self::DEFAULT_OFF_SITE_ALERT_DISTANCE),
+        );
+    }
+
+    /**
+     * The standard unpaid break (minutes) deducted from a full-day shift's
+     * DISPLAYED hours (an 08:00–17:00 jornada shows 8 h, not 9). Per company,
+     * Settings-driven. DISPLAY ONLY — it never rewrites hours_worked or touches
+     * pay (full/half days are paid a fixed daily rate regardless of hours).
+     */
+    public function breakDurationMinutes(int $companyId): int
+    {
+        return (int) $this->settings->get(
+            "attendance.break_duration_minutes.{$companyId}",
+            $this->settings->get('attendance.break_duration_minutes', self::DEFAULT_BREAK_MINUTES),
         );
     }
 

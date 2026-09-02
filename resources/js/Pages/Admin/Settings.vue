@@ -28,6 +28,7 @@ const props = defineProps({
     dayTypeThresholds: { type: Object, default: () => ({ full: 6, half: 3 }) },
     maxLocationDistance: { type: Number, default: 500 },
     offSiteAlertDistance: { type: Number, default: 2000 },
+    breakDurationMinutes: { type: Number, default: 60 },
     consentVersion: { type: String, default: '' },
     companyProfile: { type: Object, default: null },
     workingDays: { type: Array, default: () => [1, 2, 3, 4, 5] },
@@ -89,6 +90,7 @@ const thresholdForm = useForm({
     half_day_threshold: props.dayTypeThresholds.half,
     max_location_distance: props.maxLocationDistance,
     off_site_alert_distance: props.offSiteAlertDistance,
+    break_duration_minutes: props.breakDurationMinutes,
 });
 
 const legalForm = useForm({ consent_version: props.consentVersion });
@@ -346,6 +348,13 @@ function deletePolicy(p) {
                             class="w-40 rounded-md border border-line-strong bg-surface-sunken px-3 py-1.5 text-sm text-ink focus:border-accent focus:outline-none" />
                         <span class="text-xs text-muted">{{ $t('settings.off_site_alert_hint') }}</span>
                         <span v-if="thresholdForm.errors.off_site_alert_distance" class="text-xs text-status-danger">{{ thresholdForm.errors.off_site_alert_distance }}</span>
+                    </label>
+                    <label class="flex flex-col gap-1">
+                        <span class="text-xs font-medium text-ink-soft">{{ $t('settings.break_duration_minutes') }}</span>
+                        <input v-model="thresholdForm.break_duration_minutes" type="number" step="5" min="0" max="240"
+                            class="w-40 rounded-md border border-line-strong bg-surface-sunken px-3 py-1.5 text-sm text-ink focus:border-accent focus:outline-none" />
+                        <span class="text-xs text-muted">{{ $t('settings.break_duration_hint') }}</span>
+                        <span v-if="thresholdForm.errors.break_duration_minutes" class="text-xs text-status-danger">{{ thresholdForm.errors.break_duration_minutes }}</span>
                     </label>
                     <VButton type="submit" :loading="thresholdForm.processing"><Bilingual k="common.save" inline /></VButton>
                 </form>
