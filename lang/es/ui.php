@@ -1992,10 +1992,14 @@ return [
         'legend_half' => 'Media',
         'legend_leave' => 'Permiso',
         'legend_weekend' => 'Fin de semana',
+        'install_title' => 'Instala la app',
         'install' => 'Instalar la aplicación',
-        'install_hint' => 'Instálela en su teléfono para abrirla como una app.',
+        'install_hint' => 'Instálala en tu teléfono para abrirla como una app.',
         // iOS has no install API — the manual route is the only honest option.
         'install_ios' => 'Para instalarla: pulse Compartir y luego «Añadir a pantalla de inicio».',
+        'install_ios_1' => 'Para instalar esta app: toca el botón compartir',
+        'install_ios_2' => 'y luego «Añadir a pantalla de inicio».',
+        'install_open_safari' => 'Ábrela en Safari para instalarla en tu teléfono.',
         // Privacy notice — shown once (per version) before the first punch.
         // Information duty, NOT consent (LOPDGDD art. 90 / RD-ley 8/2019);
         // see docs/GDPR_WORKER_NOTICE.md. Retention/contact wording is

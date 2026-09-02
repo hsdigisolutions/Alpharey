@@ -17,7 +17,7 @@
  */
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { router, usePage } from '@inertiajs/vue3';
-import { canPromptInstall, isIos, isStandalone, promptInstall } from '@/pwa';
+import { canPromptInstall, isIos, isIosSafari, isStandalone, promptInstall } from '@/pwa';
 import VButton from '@/Components/ui/VButton.vue';
 
 defineProps({
@@ -52,18 +52,36 @@ const dateLine = computed(() =>
 );
 
 // --- Install prompt ---------------------------------------------------------
+// showInstall = Android native prompt available. iosMode: 'safari' (show the
+// Add-to-Home-Screen steps), 'other' (in-app/other iOS browser → open in
+// Safari), or null. A worker can close the banner for the SESSION only
+// (sessionStorage) — it returns next time they open the tab, and never at all
+// once the app is installed (standalone).
+const DISMISS_KEY = 'pwa_install_dismissed';
 const showInstall = ref(false);
-const showIosHint = ref(false);
+const iosMode = ref(null);
+const bannerDismissed = ref(sessionStorageGet(DISMISS_KEY) === '1');
+
+function sessionStorageGet(k) {
+    try { return window.sessionStorage.getItem(k); } catch { return null; }
+}
+function dismissBanner() {
+    bannerDismissed.value = true;
+    try { window.sessionStorage.setItem(DISMISS_KEY, '1'); } catch { /* private mode: session-only in memory */ }
+}
+
+const showInstallBanner = computed(() =>
+    ! bannerDismissed.value && (showInstall.value || iosMode.value !== null));
 
 function refreshInstallState() {
-    if (isStandalone()) {
+    if (isStandalone()) { // installed → never nag
         showInstall.value = false;
-        showIosHint.value = false;
+        iosMode.value = null;
 
         return;
     }
     showInstall.value = canPromptInstall();
-    showIosHint.value = isIos();
+    iosMode.value = isIos() ? (isIosSafari() ? 'safari' : 'other') : null;
 }
 
 onMounted(() => {
@@ -143,15 +161,49 @@ function logout() {
                 <p class="mt-1 text-sm capitalize text-white/70">{{ dateLine }}</p>
             </div>
 
-            <!-- Install: a real prompt on Android, the manual route on iOS -->
-            <div v-if="showInstall" class="mb-4 rounded-xl border border-line bg-surface-raised p-3 shadow-card">
-                <p class="mb-2 text-sm text-ink-soft">{{ $t('worker.install_hint') }}</p>
-                <VButton class="w-full" @click="install">{{ $t('worker.install') }}</VButton>
-            </div>
+            <!-- Install banner — prominent, returns each session until installed -->
+            <div v-if="showInstallBanner" class="mb-4 overflow-hidden rounded-2xl border border-accent/40 bg-accent-soft shadow-card">
+                <div class="flex items-start gap-3 p-4">
+                    <span class="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-accent text-on-accent shadow-sm">
+                        <!-- app / install glyph -->
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="h-6 w-6">
+                            <path d="M12 3v12" /><path d="m7 10 5 5 5-5" /><path d="M5 21h14" />
+                        </svg>
+                    </span>
+                    <div class="min-w-0 flex-1">
+                        <p class="text-sm font-semibold text-ink">{{ $t('worker.install_title') }}</p>
 
-            <div v-else-if="showIosHint"
-                class="mb-4 rounded-xl border border-line bg-surface-raised p-3 text-xs text-ink-soft shadow-card">
-                {{ $t('worker.install_ios') }}
+                        <!-- Android: one-tap native install -->
+                        <template v-if="showInstall">
+                            <p class="mt-0.5 text-xs text-ink-soft">{{ $t('worker.install_hint') }}</p>
+                            <VButton class="mt-2 w-full" @click="install">{{ $t('worker.install') }}</VButton>
+                        </template>
+
+                        <!-- iOS Safari: manual Add to Home Screen, with the share glyph inline -->
+                        <template v-else-if="iosMode === 'safari'">
+                            <p class="mt-1 flex flex-wrap items-center gap-1 text-xs text-ink-soft">
+                                <span>{{ $t('worker.install_ios_1') }}</span>
+                                <!-- iOS share icon: box with up arrow -->
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" class="inline h-4 w-4 align-text-bottom text-accent">
+                                    <path d="M12 15V4" /><path d="m8 8 4-4 4 4" /><path d="M8 11H6a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2h-2" />
+                                </svg>
+                                <span>{{ $t('worker.install_ios_2') }}</span>
+                            </p>
+                        </template>
+
+                        <!-- iOS but NOT Safari (in-app webview / other browser): can't install here -->
+                        <template v-else-if="iosMode === 'other'">
+                            <p class="mt-0.5 text-xs text-ink-soft">{{ $t('worker.install_open_safari') }}</p>
+                        </template>
+                    </div>
+
+                    <button type="button" class="shrink-0 rounded-lg p-1 text-ink-soft transition active:scale-95 active:bg-surface-hover"
+                        :aria-label="$t('common.close')" @click="dismissBanner">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" class="h-4 w-4">
+                            <path d="M18 6 6 18M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
             </div>
 
             <main>

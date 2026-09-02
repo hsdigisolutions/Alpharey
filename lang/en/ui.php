@@ -1987,10 +1987,14 @@ return [
         'legend_half' => 'Half day',
         'legend_leave' => 'Leave',
         'legend_weekend' => 'Weekend',
+        'install_title' => 'Install the app',
         'install' => 'Install the app',
         'install_hint' => 'Install it on your phone to open it like an app.',
         // iOS has no install API — the manual route is the only honest option.
         'install_ios' => 'To install: tap Share, then "Add to Home Screen".',
+        'install_ios_1' => 'To install this app: tap the share button',
+        'install_ios_2' => 'then "Add to Home Screen".',
+        'install_open_safari' => 'Open it in Safari to install it on your phone.',
         // Privacy notice — shown once (per version) before the first punch.
         // Information duty, NOT consent (LOPDGDD art. 90 / RD-ley 8/2019);
         // see docs/GDPR_WORKER_NOTICE.md. Retention/contact wording is

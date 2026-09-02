@@ -65,3 +65,18 @@ export function isStandalone() {
 export function isIos() {
     return /iphone|ipad|ipod/i.test(window.navigator.userAgent);
 }
+
+/**
+ * On iOS, "Add to Home Screen" exists ONLY in real Safari. Chrome/Firefox/Edge
+ * on iOS (CriOS/FxiOS/EdgiOS/OPiOS) and in-app webviews (WhatsApp, Instagram,
+ * Facebook, Gmail…) cannot install — a worker following the instructions there
+ * finds no option, which is the usual "it doesn't work on iPhone" report. Real
+ * Safari's UA has both "Version/" and "Safari" and none of the other-browser
+ * tokens.
+ */
+export function isIosSafari() {
+    if (!isIos()) return false;
+    const ua = window.navigator.userAgent || '';
+    const otherBrowser = /CriOS|FxiOS|EdgiOS|EdgA|OPiOS|mercury/i.test(ua);
+    return /Version\//i.test(ua) && /Safari/i.test(ua) && ! otherBrowser;
+}
