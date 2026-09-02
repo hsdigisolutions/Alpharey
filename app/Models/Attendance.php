@@ -9,6 +9,7 @@ use App\Enums\WageType;
 use App\Enums\WeekendRateType;
 use App\Models\Concerns\Auditable;
 use App\Models\Concerns\BelongsToCompany;
+use App\Services\Attendance\AttendanceService;
 use Database\Factories\AttendanceFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -177,6 +178,96 @@ class Attendance extends Model
         }
 
         return round((float) $this->hours_worked, 2);
+    }
+
+    /**
+     * The standard NET full working day, in hours — 08:00–17:00 minus the 1 h
+     * lunch break. Used only by displayHoursNet() to decide WHEN a full day's
+     * clock span is long enough to contain the break (see below). It is a
+     * DISPLAY threshold, never a pay figure.
+     */
+    public const STANDARD_FULL_DAY_HOURS = 8.0;
+
+    /**
+     * Day-type-aware NET hours for DISPLAY. Unlike displayHours() (raw time on
+     * site), this takes the standard unpaid lunch break off a FULL day whose
+     * clock span actually contains it — the new 08:00–17:00 shift — so it reads
+     * 8 h, while leaving every other day type, and all historical rows, exactly
+     * as they are:
+     *   - full      → the clock span, minus the break ONLY when the span is the
+     *                 new long shift (removing the break still leaves a normal
+     *                 full working day, ≥ STANDARD_FULL_DAY_HOURS). So a 9 h
+     *                 08:00–17:00 span → 8 h, but an 8 h 09:00–17:00 span, an
+     *                 8.5 h span, or an imported no-clock row is already a net
+     *                 day and is shown unchanged. The break lived inside the
+     *                 span only for the new convention, and the per-company
+     *                 `break_duration_minutes` setting (Step 1) sizes it.
+     *   - half      → the real span; a break is never taken off half a day
+     *   - hourly    → the pay field `hours_worked` as-is — it already reflects
+     *                 the per-record `deduct_break` flag
+     *                 (AttendanceService::hoursFromClock), so the break is not
+     *                 deducted a second time here
+     *   - per_meter → the real span (time on site; hours are not the pay basis)
+     * A row with no clock times falls back to `hours_worked` with no deduction.
+     *
+     * DISPLAY ONLY. This never feeds pay and never rewrites `hours_worked`;
+     * full/half pay is a fixed daily-rate formula independent of hours, and
+     * hourly pay is computed from `hours_worked`, which this method never sets.
+     *
+     * @param  int|null  $breakMinutes  the company's break, if the caller has
+     *                                  already resolved it once (avoids a per-row settings read when rendering
+     *                                  a whole grid); null resolves it from this row's company.
+     */
+    public function displayHoursNet(?int $breakMinutes = null): float
+    {
+        $type = $this->displayDayType();
+
+        // Hourly pay hours are already net of the break where the record opts
+        // in via deduct_break — show them verbatim, never re-deducting.
+        if ($type === DayType::Hourly) {
+            return round((float) $this->hours_worked, 2);
+        }
+
+        $gross = $this->displayHours();
+
+        // A full day loses the break ONLY when it is a real clock span long
+        // enough to be the new 08:00–17:00 shift that contains the break;
+        // deducting it must still leave a normal full working day. Every
+        // historical row (an 8 h 09:00–17:00 span, or a no-clock imported row)
+        // is already net, so it is shown unchanged.
+        if ($type === DayType::Full
+            && $this->check_in !== null
+            && $this->check_out !== null
+        ) {
+            $minutes = $breakMinutes ?? app(AttendanceService::class)
+                ->breakDurationMinutes((int) $this->company_id);
+            $net = $gross - $minutes / 60;
+
+            if ($net >= self::STANDARD_FULL_DAY_HOURS) {
+                return round($net, 2);
+            }
+        }
+
+        // half / per_meter / already-net full days → real time on site.
+        return round($gross, 2);
+    }
+
+    /**
+     * The day type used for the display math, mirroring the payroll fallback
+     * (PayrollService::effectiveDayType) so a legacy row with a null day_type
+     * is graded the same way here as it is when it is paid.
+     */
+    private function displayDayType(): DayType
+    {
+        if ($this->day_type !== null) {
+            return $this->day_type;
+        }
+
+        return match ($this->wage_type_snapshot) {
+            WageType::Daily => DayType::Full,
+            WageType::PerMeter => DayType::PerMeter,
+            default => DayType::Hourly,
+        };
     }
 
     /** Checked in but with no check-out yet — still working. */

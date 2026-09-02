@@ -112,3 +112,20 @@ it('marks an admin day-type edit as a manual override', function (): void {
         ->and($att->day_type)->toBe(DayType::Half)
         ->and($att->auto_day_type)->toBe(DayType::Full); // detection record kept
 });
+
+it('resolves the per-company break from settings for displayHoursNet when no break is passed', function (): void {
+    // Step 2: the model helper reads break_duration_minutes through the service
+    // when the caller does not supply it. 45 min off an 08:00–17:00 full day.
+    app(SettingsService::class)->set("attendance.break_duration_minutes.{$this->company->id}", 45);
+
+    $employee = Employee::factory()->forCompany($this->company)->create([
+        'wage_type' => 'daily', 'daily_wage' => '80',
+    ]);
+    $att = Attendance::factory()->create([
+        'company_id' => $this->company->id, 'employee_id' => $employee->id,
+        'date' => '2026-08-10', 'status' => 'present', 'day_type' => 'full',
+        'check_in' => '08:00', 'check_out' => '17:00',
+    ]);
+
+    expect($att->displayHoursNet())->toBe(8.25); // 9 h − 0.75 h break
+});
