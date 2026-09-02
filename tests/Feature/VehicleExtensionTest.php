@@ -13,6 +13,7 @@ use App\Models\VehicleFine;
 use App\Models\VehicleFuelRecord;
 use App\Models\VehicleMaintenanceHistory;
 use App\Notifications\DocumentAlertNotification;
+use App\Services\Payroll\PayrollService;
 use App\Services\Vehicles\VehicleCompliance;
 use App\Services\Vehicles\VehicleService;
 use Illuminate\Support\Facades\Notification;
@@ -418,6 +419,48 @@ it('fuel record company_id follows the vehicle, not request input', function ():
     expect(VehicleFuelRecord::query()->withoutGlobalScopes()
         ->where('vehicle_id', $vehicle->id)->first()->company_id)
         ->toBe($this->company->id);
+});
+
+// C1 (audit) — a reimburse fuel record feeds the named employee's payroll, so a
+// foreign employee_id must be rejected at input AND never summed cross-company.
+it('rejects a fuel record for an employee from another company', function (): void {
+    $vehicle = Vehicle::factory()->create(['company_id' => $this->company->id]);
+    $foreign = Employee::factory()->create(['company_id' => Company::factory()->create()->id]);
+
+    $this->post("/vehicles/{$vehicle->id}/fuel", [
+        'fuel_date' => '2026-07-20', 'litres' => '40', 'cost_per_litre' => '1.5',
+        'total_cost' => '60', 'payment_method' => 'reimburse', 'employee_id' => $foreign->id,
+    ])->assertSessionHasErrors('employee_id');
+
+    expect(VehicleFuelRecord::query()->withoutGlobalScopes()->count())->toBe(0);
+});
+
+it('never folds another company reimburse fuel into this company payroll', function (): void {
+    $employee = Employee::factory()->create([
+        'company_id' => $this->company->id, 'wage_type' => 'daily', 'daily_wage' => '80',
+    ]);
+
+    // Legitimate own-company reimburse fuel — counts.
+    VehicleFuelRecord::factory()->create([
+        'company_id' => $this->company->id,
+        'vehicle_id' => Vehicle::factory()->create(['company_id' => $this->company->id])->id,
+        'employee_id' => $employee->id, 'payment_method' => 'reimburse',
+        'total_cost' => '50', 'fuel_date' => '2026-08-10',
+    ]);
+
+    // A stray record under ANOTHER company referencing the same employee (the
+    // injection artifact) — the read-side guard must exclude it.
+    $other = Company::factory()->create();
+    VehicleFuelRecord::factory()->create([
+        'company_id' => $other->id,
+        'vehicle_id' => Vehicle::factory()->create(['company_id' => $other->id])->id,
+        'employee_id' => $employee->id, 'payment_method' => 'reimburse',
+        'total_cost' => '999', 'fuel_date' => '2026-08-10',
+    ]);
+
+    $payroll = app(PayrollService::class)->calculateFor($employee, $this->company->id, '2026-08');
+
+    expect((float) $payroll->reimbursements)->toBe(50.0); // 50 own-company, never 1049
 });
 
 // ---------------------------------------------------------------------------

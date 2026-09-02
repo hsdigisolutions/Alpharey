@@ -172,7 +172,7 @@ class PayrollService
 
         $reimbursements = $this->reimbursementsFor($employee->id, $month)
             + $this->pwaExpensesFor($employee->id, $month)
-            + $this->fuelReimbursementsFor($employee->id, $month);
+            + $this->fuelReimbursementsFor($employee->id, $companyId, $month);
         $projectExpenses = $this->projectExpensesFor($employee->id, $month);
 
         $gross = $baseSalary + $daysAmount + $hoursAmount + $overtimePay
@@ -595,13 +595,19 @@ class PayrollService
      * Fuel a worker paid out of pocket in a company vehicle and asked to be paid
      * back — a fuel record marked `payment_method = 'reimburse'`. Fuel put on the
      * company card (any other method) is a company cost and never touches pay.
+     *
+     * Scoped to the paying company (defense-in-depth): the input rule on
+     * StoreFuelRequest already blocks a foreign employee_id, and this read-side
+     * `company_id` filter means even a stray cross-company record can never be
+     * folded into another tenant's payslip.
      */
-    private function fuelReimbursementsFor(int $employeeId, string $month): float
+    private function fuelReimbursementsFor(int $employeeId, int $companyId, string $month): float
     {
         [$start, $end] = $this->bounds($month);
 
         return round((float) VehicleFuelRecord::query()->withoutGlobalScopes()
             ->where('employee_id', $employeeId)
+            ->where('company_id', $companyId)
             ->where('payment_method', 'reimburse')
             ->whereBetween('fuel_date', [$start, $end])
             ->sum('total_cost'), 2);
