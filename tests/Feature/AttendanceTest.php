@@ -23,6 +23,30 @@ it('renders the calendar grid for the current month', function (): void {
         ->assertInertia(fn (Assert $page) => $page->component('Attendance/Index')->has('employees', 2)->has('grid'));
 });
 
+it('filters the grid by employee status (active default / inactive / all)', function (): void {
+    $active = Employee::factory()->forCompany($this->companyA)->create(['full_name' => 'Activo', 'active' => true]);
+    $inactive = Employee::factory()->forCompany($this->companyA)->create(['full_name' => 'Inactivo', 'active' => false]);
+    // The inactive worker still has recorded history.
+    Attendance::factory()->create(['company_id' => $this->companyA->id, 'employee_id' => $inactive->id, 'date' => now()->startOfMonth()->toDateString(), 'status' => 'present']);
+
+    // Default = active only.
+    $this->actingAs($this->admin)->get('/attendance')
+        ->assertInertia(fn (Assert $p) => $p->where('empStatus', 'active')
+            ->where('employees', fn ($e) => collect($e)->pluck('full_name')->contains('Activo')
+                && ! collect($e)->pluck('full_name')->contains('Inactivo')));
+
+    // Inactive only — the inactive worker's history is now visible.
+    $this->actingAs($this->admin)->get('/attendance?emp_status=inactive')
+        ->assertInertia(fn (Assert $p) => $p->where('empStatus', 'inactive')
+            ->where('employees', fn ($e) => collect($e)->pluck('full_name')->contains('Inactivo')
+                && ! collect($e)->pluck('full_name')->contains('Activo')
+                && collect($e)->firstWhere('full_name', 'Inactivo')['active'] === false));
+
+    // All — both.
+    $this->actingAs($this->admin)->get('/attendance?emp_status=all')
+        ->assertInertia(fn (Assert $p) => $p->where('empStatus', 'all')->has('employees', 2));
+});
+
 it('counts present days in the monthly summary (enum-cast status)', function (): void {
     // Fixed clock: today = Thu 4 Jun 2026. Mon 1 / Tue 2 / Wed 3 are all
     // recorded, so there are no unrecorded gap weekdays to live-mark absent.

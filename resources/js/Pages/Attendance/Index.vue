@@ -20,6 +20,7 @@ import VSelect from '@/Components/ui/VSelect.vue';
 
 const props = defineProps({
     month: { type: String, required: true },
+    empStatus: { type: String, default: 'active' },
     daysInMonth: { type: Number, required: true },
     employees: { type: Array, required: true },
     grid: { type: Object, required: true },
@@ -112,10 +113,17 @@ function cellContent(cell) {
     }
 }
 
+const empStatus = ref(props.empStatus ?? 'active');
 function changeMonth(delta) {
     const [y, m] = props.month.split('-').map(Number);
     const d = new Date(y, m - 1 + delta, 1);
-    router.get('/attendance', { month: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` },
+    router.get('/attendance',
+        { month: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`, emp_status: empStatus.value },
+        { preserveScroll: true, preserveState: true });
+}
+// Switch the Active / Inactive / All employee-status filter.
+function changeEmpStatus() {
+    router.get('/attendance', { month: props.month, emp_status: empStatus.value },
         { preserveScroll: true, preserveState: true });
 }
 
@@ -238,8 +246,13 @@ const monthLabel = computed(() => {
                 <AppIcon name="chevron-right" class="h-4 w-4" />
             </button>
 
-            <!-- Feature 1 — project roster filter -->
+            <!-- Employee status filter (Active default / Inactive / All) -->
             <div class="ms-auto flex flex-wrap items-center gap-2">
+                <VSelect v-model="empStatus" class="w-40" @update:model-value="changeEmpStatus">
+                    <option value="active">{{ $t('attendance.emp_status_active') }}</option>
+                    <option value="inactive">{{ $t('attendance.emp_status_inactive') }}</option>
+                    <option value="all">{{ $t('attendance.emp_status_all') }}</option>
+                </VSelect>
                 <VSelect v-model="panelProject" class="w-56" @update:model-value="reloadPanel">
                     <option value="">{{ $t('attendance.roster_pick_project') }}</option>
                     <option v-for="p in projects" :key="p.id" :value="p.id">{{ p.name }}</option>
@@ -272,6 +285,9 @@ const monthLabel = computed(() => {
                                 {{ emp.full_name }}
                                 <VBadge v-if="emp.deployed" status="info" class="shrink-0">
                                     <Bilingual k="attendance.deployed" inline />
+                                </VBadge>
+                                <VBadge v-if="emp.active === false" status="neutral" class="shrink-0">
+                                    <Bilingual k="attendance.emp_status_inactive" inline />
                                 </VBadge>
                             </span>
                             <span class="block truncate text-[10px] text-muted">

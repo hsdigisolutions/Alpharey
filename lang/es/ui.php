@@ -1059,6 +1059,9 @@ return [
     'attendance' => [
         'title' => 'Asistencia',
         'deployed' => 'Desplegado',
+        'emp_status_active' => 'Activos',
+        'emp_status_inactive' => 'Inactivos',
+        'emp_status_all' => 'Todos',
         'new' => 'Nueva Entrada',
         'edit' => 'Editar Asistencia',
         'saved' => 'Asistencia guardada / Attendance saved',

@@ -53,24 +53,37 @@ class AttendanceController extends Controller
         $start = $month->copy()->startOfMonth();
         $end = $month->copy()->endOfMonth();
 
-        // Own active employees… (joining_date kept for the live-absence sweep).
-        $ownEmployees = Employee::query()->where('active', true)->orderBy('full_name')
+        // Status filter (default active) — inactive workers keep their history,
+        // so an admin can review it by switching to Inactive or All.
+        $empStatus = in_array($request->query('emp_status'), ['inactive', 'all'], true)
+            ? (string) $request->query('emp_status')
+            : 'active';
+
+        // Own employees (joining_date kept for the live-absence sweep).
+        $ownEmployees = Employee::query()
+            ->when($empStatus === 'active', fn ($q) => $q->where('active', true))
+            ->when($empStatus === 'inactive', fn ($q) => $q->where('active', false))
+            ->orderBy('full_name')
             ->get(['id', 'full_name', 'designation', 'joining_date', 'active', 'active_since', 'transferred_at']);
 
         $employees = $ownEmployees->map(fn (Employee $e): array => [
             'id' => $e->id,
             'full_name' => $e->full_name,
             'designation' => $e->designation,
+            'active' => (bool) $e->active,
             'deployed' => false,
             'home_company' => null,
         ]);
 
         // …plus employees from OTHER companies deployed INTO this one whose
         // deployment overlaps the shown month (Phase 5 — they log hours against
-        // the host project and appear with a "Desplegado" badge).
-        $employees = $employees
-            ->concat($this->deployedInEmployees($start, $end))
-            ->values();
+        // the host project and appear with a "Desplegado" badge). Deployed-in
+        // workers are active by definition, so they're skipped in the
+        // inactive-only view.
+        if ($empStatus !== 'inactive') {
+            $employees = $employees->concat($this->deployedInEmployees($start, $end));
+        }
+        $employees = $employees->values();
 
         // Attendance rows for exactly the employees on the grid (own + deployed).
         $employeeIds = $employees->pluck('id')->all();
@@ -269,6 +282,7 @@ class AttendanceController extends Controller
         return Inertia::render('Attendance/Index', [
             'month' => $month->format('Y-m'),
             'daysInMonth' => $end->day,
+            'empStatus' => $empStatus,
             'employees' => $employees,
             'grid' => $grid,
             'summary' => $summary,
