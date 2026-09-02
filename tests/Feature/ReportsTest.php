@@ -2,6 +2,7 @@
 
 use App\Enums\InvoiceType;
 use App\Enums\UserRole;
+use App\Models\Attendance;
 use App\Models\Company;
 use App\Models\Employee;
 use App\Models\Invoice;
@@ -41,6 +42,30 @@ it('counts employees for the active company only', function (): void {
     expect($report['figures']['total'])->toBe(4)
         ->and($report['figures']['active'])->toBe(3)
         ->and($report['figures']['inactive'])->toBe(1);
+});
+
+it('reports NET worked hours: a clerk full 08:00-17:00 day counts as 8 h, not 0 or 9', function (): void {
+    $full = Employee::factory()->forCompany($this->company)->create();
+    $hourly = Employee::factory()->forCompany($this->company)->create();
+
+    // Clerk full day: project_based, hours_worked stays 0, but the 08:00–17:00
+    // span nets to 8 h after the 1 h break.
+    Attendance::factory()->create([
+        'company_id' => $this->company->id, 'employee_id' => $full->id,
+        'date' => now()->toDateString(), 'status' => 'present', 'mode' => 'project_based',
+        'day_type' => 'full', 'check_in' => '08:00', 'check_out' => '17:00', 'hours_worked' => '0',
+    ]);
+    // Hourly day: 5.5 recorded hours shown verbatim.
+    Attendance::factory()->create([
+        'company_id' => $this->company->id, 'employee_id' => $hourly->id,
+        'date' => now()->toDateString(), 'status' => 'present', 'mode' => 'hourly',
+        'day_type' => 'hourly', 'check_in' => '09:00', 'check_out' => '14:30', 'hours_worked' => '5.5',
+    ]);
+
+    $this->actingAs($this->admin);
+    $report = app(ReportService::class)->for('attendance', []);
+
+    expect($report['figures']['total_hours'])->toBe(13.5); // 8 + 5.5, not 9 + 5.5
 });
 
 it('computes the financial net position from sales minus expenses', function (): void {

@@ -19,6 +19,7 @@ use App\Models\Invoice;
 use App\Models\Leave;
 use App\Models\Payroll;
 use App\Models\Project;
+use App\Services\Attendance\AttendanceService;
 use App\Services\Documents\DocumentStatus;
 use App\Support\CurrentCompany;
 use Illuminate\Support\Carbon;
@@ -48,6 +49,28 @@ class ReportService
         private readonly ProfitabilityService $profitability,
         private readonly CurrentCompany $currentCompany,
     ) {}
+
+    private ?int $breakMinutesMemo = null;
+
+    /**
+     * Columns displayHoursNet() needs, so the report rows can be summed as NET
+     * worked hours in PHP (a full 08:00–17:00 day reads 8 h) — SQL SUM() can't
+     * call the helper. Grouping/eager-load keys (employee_id, project_id) are
+     * added per query.
+     *
+     * @var list<string>
+     */
+    private const HOURS_COLUMNS = [
+        'id', 'date', 'status', 'day_type', 'wage_type_snapshot',
+        'check_in', 'check_out', 'check_in_at', 'hours_worked',
+    ];
+
+    /** Standard unpaid break for the report's company, resolved once. */
+    private function breakMinutes(): int
+    {
+        return $this->breakMinutesMemo ??= app(AttendanceService::class)
+            ->breakDurationMinutes($this->currentCompany->id() ?? 0);
+    }
 
     /**
      * @param  array{from?: string|null, to?: string|null}  $filters
@@ -115,26 +138,27 @@ class ReportService
      */
     private function attendance(string $from, string $to): array
     {
-        $rows = Attendance::query()->whereBetween('date', [$from, $to]);
+        $break = $this->breakMinutes();
+        $rows = Attendance::query()->whereBetween('date', [$from, $to])
+            ->with('employee:id,full_name')
+            ->get([...self::HOURS_COLUMNS, 'employee_id', 'overtime_hours']);
 
         return [
             'figures' => [
-                'total_records' => (clone $rows)->count(),
-                'total_hours' => round((float) (clone $rows)->sum('hours_worked'), 2),
-                'overtime_hours' => round((float) (clone $rows)->sum('overtime_hours'), 2),
-                'absences' => (clone $rows)->where('status', 'absent')->count(),
+                'total_records' => $rows->count(),
+                // NET worked hours in PHP (displayHoursNet reads 0 for a
+                // non-worked row, so summing over every row is correct).
+                'total_hours' => round((float) $rows->sum(fn (Attendance $a): float => $a->displayHoursNet($break)), 2),
+                'overtime_hours' => round((float) $rows->sum(fn (Attendance $a): float => (float) $a->overtime_hours), 2),
+                'absences' => $rows->filter(fn (Attendance $a): bool => $a->status->value === 'absent')->count(),
             ],
-            'by_employee' => Attendance::query()
-                ->whereBetween('date', [$from, $to])
-                ->selectRaw('employee_id, COUNT(*) as days, SUM(hours_worked) as hours')
-                ->groupBy('employee_id')
-                ->with('employee:id,full_name')
-                ->get()
-                ->map(fn (Attendance $a): array => [
-                    'employee' => $a->employee?->full_name,
-                    'days' => (int) $a->getAttribute('days'),
-                    'hours' => round((float) $a->getAttribute('hours'), 2),
+            'by_employee' => $rows->groupBy('employee_id')
+                ->map(fn ($group): array => [
+                    'employee' => $group->first()?->employee?->full_name,
+                    'days' => $group->count(),
+                    'hours' => round((float) $group->sum(fn (Attendance $a): float => $a->displayHoursNet($break)), 2),
                 ])
+                ->values()
                 ->all(),
         ];
     }
@@ -277,6 +301,7 @@ class ReportService
      */
     private function projects(): array
     {
+        $break = $this->breakMinutes();
         $byStatus = [];
         foreach (ProjectStatus::cases() as $status) {
             $byStatus[$status->value] = Project::query()->where('status', $status->value)->count();
@@ -292,14 +317,15 @@ class ReportService
             'by_status' => $byStatus,
             'hours_per_project' => Attendance::query()
                 ->whereNotNull('project_id')
-                ->selectRaw('project_id, SUM(hours_worked) as hours')
-                ->groupBy('project_id')
                 ->with('project:id,name')
-                ->get()
-                ->map(fn (Attendance $a): array => [
-                    'project' => $a->project?->name,
-                    'hours' => round((float) $a->getAttribute('hours'), 2),
+                ->get([...self::HOURS_COLUMNS, 'project_id'])
+                ->groupBy('project_id')
+                ->map(fn ($group): array => [
+                    'project' => $group->first()?->project?->name,
+                    // NET worked hours in PHP.
+                    'hours' => round((float) $group->sum(fn (Attendance $a): float => $a->displayHoursNet($break)), 2),
                 ])
+                ->values()
                 ->all(),
         ];
     }
@@ -339,21 +365,30 @@ class ReportService
      */
     private function timesheet(string $from, string $to): array
     {
+        $break = $this->breakMinutes();
+        $rows = Attendance::query()
+            ->whereBetween('date', [$from, $to])
+            ->with(['employee:id,full_name', 'project:id,name'])
+            ->get([...self::HOURS_COLUMNS, 'employee_id', 'project_id']);
+
         return [
             'figures' => [
-                'total_hours' => round((float) Attendance::query()->whereBetween('date', [$from, $to])->sum('hours_worked'), 2),
+                // NET worked hours in PHP.
+                'total_hours' => round((float) $rows->sum(fn (Attendance $a): float => $a->displayHoursNet($break)), 2),
             ],
-            'rows' => Attendance::query()
-                ->whereBetween('date', [$from, $to])
-                ->selectRaw('employee_id, project_id, SUM(hours_worked) as hours')
-                ->groupBy('employee_id', 'project_id')
-                ->with(['employee:id,full_name', 'project:id,name'])
-                ->get()
-                ->map(fn (Attendance $a): array => [
-                    'employee' => $a->employee?->full_name,
-                    'project' => $a->project !== null ? $a->project->name : '—',
-                    'hours' => round((float) $a->getAttribute('hours'), 2),
-                ])
+            'rows' => $rows
+                ->groupBy(fn (Attendance $a): string => $a->employee_id.'|'.($a->project_id ?? '0'))
+                ->map(function ($group) use ($break): array {
+                    $first = $group->first();
+                    $project = $first?->project;
+
+                    return [
+                        'employee' => $first?->employee?->full_name,
+                        'project' => $project !== null ? $project->name : '—',
+                        'hours' => round((float) $group->sum(fn (Attendance $a): float => $a->displayHoursNet($break)), 2),
+                    ];
+                })
+                ->values()
                 ->all(),
         ];
     }
