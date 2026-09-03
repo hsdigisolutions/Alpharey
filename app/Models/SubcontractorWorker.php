@@ -31,8 +31,10 @@ class SubcontractorWorker extends Model
 
     /** @var list<string> */
     protected $fillable = [
+        // total_agreed is computed by SubcontractorService (days × rate) and set
+        // by direct assignment — never mass-assigned, so NOT fillable.
         'name', 'is_our_employee', 'employee_id', 'days_worked',
-        'agreed_rate', 'total_agreed', 'payment_status', 'notes',
+        'agreed_rate', 'payment_status', 'notes',
     ];
 
     protected function casts(): array

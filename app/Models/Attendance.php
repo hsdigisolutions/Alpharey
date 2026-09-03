@@ -77,9 +77,11 @@ class Attendance extends Model
         'employee_id', 'project_id', 'date', 'mode', 'day_type', 'check_in', 'check_out',
         'break_hours', 'deduct_break', 'hours_worked', 'quantity', 'overtime_hours', 'status',
         'weekend_rate_type', 'weekend_rate_amount',
-        'wage_type_snapshot', 'wage_rate_snapshot', 'hourly_rate_snapshot',
-        // is_paid is server-owned (set by the importer / payroll flows only) —
-        // a client must never be able to flip a row's paid flag.
+        // wage_type_snapshot / wage_rate_snapshot / hourly_rate_snapshot are the
+        // frozen pay basis — set ONLY by AttendanceService/LeaveService/importer
+        // via direct assignment, never mass-assigned, so they are deliberately
+        // NOT fillable (a client must never set its own frozen rate). is_paid is
+        // likewise server-owned (importer / payroll flows only).
         'total_amount', 'manual_wage_override', 'override_reason', 'is_exception',
         'exception_reason', 'work_mode', 'notes',
     ];

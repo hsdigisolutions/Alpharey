@@ -45,11 +45,17 @@ function subAttendance(Company $company, Employee $employee, int $projectId, str
 /** Link one of OUR employees (Section A) or an external worker (Section B). */
 function linkWorker(Subcontractor $s, array $attrs): SubcontractorWorker
 {
+    // total_agreed is server-computed and NOT mass-assignable (the real service
+    // sets it directly via days × rate) — set it directly here too.
+    $total = $attrs['total_agreed'] ?? '0';
+    unset($attrs['total_agreed']);
+
     $w = new SubcontractorWorker(array_merge([
         'name' => 'Worker', 'is_our_employee' => false, 'days_worked' => '0',
-        'agreed_rate' => '0', 'total_agreed' => '0', 'payment_status' => 'pending',
+        'agreed_rate' => '0', 'payment_status' => 'pending',
     ], $attrs));
     $w->subcontractor_id = $s->id;
+    $w->total_agreed = (string) $total;
     $w->saveQuietly();
 
     return $w;

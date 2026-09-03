@@ -36,9 +36,11 @@ class CommissionReportEntry extends Model
 
     /** @var list<string> */
     protected $fillable = [
+        // original_amount (write-once) and adjusted_amount are set by
+        // CommissionService via direct assignment — never mass-assigned — so
+        // they are NOT fillable; the audit story is (original, adjusted+reason).
         'employee_id', 'project_id', 'invoice_id', 'month', 'base_amount',
-        'commission_percent', 'original_amount', 'adjusted_amount',
-        'adjustment_reason', 'notes',
+        'commission_percent', 'adjustment_reason', 'notes',
     ];
 
     protected function casts(): array
