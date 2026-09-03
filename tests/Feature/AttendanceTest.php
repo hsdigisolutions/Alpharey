@@ -157,6 +157,75 @@ it('applies a percentage overtime policy to OT hours', function (): void {
     expect((float) $record->total_amount)->toBe(210.0);
 });
 
+it('pays overtime at a fixed hourly rate under a fixed_hourly policy', function (): void {
+    $policy = new OvertimePolicy([
+        'name' => '€30/h OT', 'type' => OvertimePolicyType::FixedHourly->value,
+        'rate' => 30, 'daily_threshold_hours' => 8, 'accumulate_hours_per_day' => 8,
+    ]);
+    $policy->company_id = $this->companyA->id;
+    $policy->save();
+    $employee = Employee::factory()->forCompany($this->companyA)->create([
+        'wage_type' => 'hourly', 'wage_rate' => '20', 'overtime_policy_id' => $policy->id,
+    ]);
+
+    $this->actingAs($this->admin)->post('/attendance', [
+        'employee_id' => $employee->id, 'date' => '2026-07-02', 'mode' => 'hourly',
+        'check_in' => '08:00', 'check_out' => '16:00', 'break_hours' => 0, 'deduct_break' => false,
+        'overtime_hours' => 2, 'status' => 'present',
+    ])->assertRedirect();
+
+    $record = Attendance::withoutGlobalScopes()->where('employee_id', $employee->id)->firstOrFail();
+
+    // 8h × 20 = 160 base; 2h OT paid at the fixed €30/h = 60; total 220.
+    expect((float) $record->total_amount)->toBe(220.0);
+});
+
+it('never pays overtime as cash under an accumulate_days policy', function (): void {
+    $policy = new OvertimePolicy([
+        'name' => 'TOIL', 'type' => OvertimePolicyType::AccumulateDays->value,
+        'rate' => 0, 'daily_threshold_hours' => 8, 'accumulate_hours_per_day' => 8,
+    ]);
+    $policy->company_id = $this->companyA->id;
+    $policy->save();
+    $employee = Employee::factory()->forCompany($this->companyA)->create([
+        'wage_type' => 'hourly', 'wage_rate' => '20', 'overtime_policy_id' => $policy->id,
+    ]);
+
+    $this->actingAs($this->admin)->post('/attendance', [
+        'employee_id' => $employee->id, 'date' => '2026-07-02', 'mode' => 'hourly',
+        'check_in' => '08:00', 'check_out' => '16:00', 'break_hours' => 0, 'deduct_break' => false,
+        'overtime_hours' => 2, 'status' => 'present',
+    ])->assertRedirect();
+
+    $record = Attendance::withoutGlobalScopes()->where('employee_id', $employee->id)->firstOrFail();
+
+    // 8h × 20 = 160 base; OT accrues as time off, never cash → total stays 160.
+    expect((float) $record->total_amount)->toBe(160.0);
+});
+
+it('never pays overtime as cash under a none policy', function (): void {
+    $policy = new OvertimePolicy([
+        'name' => 'No OT pay', 'type' => OvertimePolicyType::None->value,
+        'rate' => 0, 'daily_threshold_hours' => 8, 'accumulate_hours_per_day' => 8,
+    ]);
+    $policy->company_id = $this->companyA->id;
+    $policy->save();
+    $employee = Employee::factory()->forCompany($this->companyA)->create([
+        'wage_type' => 'hourly', 'wage_rate' => '20', 'overtime_policy_id' => $policy->id,
+    ]);
+
+    $this->actingAs($this->admin)->post('/attendance', [
+        'employee_id' => $employee->id, 'date' => '2026-07-02', 'mode' => 'hourly',
+        'check_in' => '08:00', 'check_out' => '16:00', 'break_hours' => 0, 'deduct_break' => false,
+        'overtime_hours' => 2, 'status' => 'present',
+    ])->assertRedirect();
+
+    $record = Attendance::withoutGlobalScopes()->where('employee_id', $employee->id)->firstOrFail();
+
+    // 8h × 20 = 160 base; a 'none' policy pays no OT cash → total stays 160.
+    expect((float) $record->total_amount)->toBe(160.0);
+});
+
 it('respects a manual wage override', function (): void {
     $employee = Employee::factory()->forCompany($this->companyA)->create(['wage_type' => 'hourly', 'wage_rate' => '20']);
 
