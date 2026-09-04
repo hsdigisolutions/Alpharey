@@ -17,8 +17,8 @@
  */
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { router, usePage } from '@inertiajs/vue3';
-import { canPromptInstall, isIos, isIosSafari, isStandalone, promptInstall } from '@/pwa';
-import VButton from '@/Components/ui/VButton.vue';
+import { isStandalone } from '@/pwa';
+import InstallGate from '@/Components/Worker/InstallGate.vue';
 
 defineProps({
     worker: { type: Object, required: true },
@@ -52,36 +52,14 @@ const dateLine = computed(() =>
 );
 
 // --- Install prompt ---------------------------------------------------------
-// showInstall = Android native prompt available. iosMode: 'safari' (show the
-// Add-to-Home-Screen steps), 'other' (in-app/other iOS browser → open in
-// Safari), or null. A worker can close the banner for the SESSION only
-// (sessionStorage) — it returns next time they open the tab, and never at all
-// once the app is installed (standalone).
-const DISMISS_KEY = 'pwa_install_dismissed';
-const showInstall = ref(false);
-const iosMode = ref(null);
-const bannerDismissed = ref(sessionStorageGet(DISMISS_KEY) === '1');
+// Install is MANDATORY: until the app runs from the home screen (standalone),
+// a full-screen blocking gate (InstallGate) covers the whole app — the worker
+// cannot use it in a browser tab. No dismiss. Once installed and launched
+// standalone, isStandalone() is true and the gate never renders.
+const isStandaloneApp = ref(isStandalone());
 
-function sessionStorageGet(k) {
-    try { return window.sessionStorage.getItem(k); } catch { return null; }
-}
-function dismissBanner() {
-    bannerDismissed.value = true;
-    try { window.sessionStorage.setItem(DISMISS_KEY, '1'); } catch { /* private mode: session-only in memory */ }
-}
-
-const showInstallBanner = computed(() =>
-    ! bannerDismissed.value && (showInstall.value || iosMode.value !== null));
-
-function refreshInstallState() {
-    if (isStandalone()) { // installed → never nag
-        showInstall.value = false;
-        iosMode.value = null;
-
-        return;
-    }
-    showInstall.value = canPromptInstall();
-    iosMode.value = isIos() ? (isIosSafari() ? 'safari' : 'other') : null;
+function refreshStandalone() {
+    isStandaloneApp.value = isStandalone();
 }
 
 onMounted(() => {
@@ -93,21 +71,18 @@ onMounted(() => {
     // plain 1s interval keeps the seconds-free display honest with no drift.
     clock = window.setInterval(() => { now.value = new Date(); }, 1000);
 
-    refreshInstallState();
-    window.addEventListener('pwa:installable', refreshInstallState);
-    window.addEventListener('pwa:installed', refreshInstallState);
+    refreshStandalone();
+    window.addEventListener('pwa:installed', refreshStandalone);
+    // A standalone launch can resolve display-mode a beat after mount, and iOS
+    // fires no install event — re-check when the app regains focus.
+    document.addEventListener('visibilitychange', refreshStandalone);
 });
 
 onUnmounted(() => {
     window.clearInterval(clock);
-    window.removeEventListener('pwa:installable', refreshInstallState);
-    window.removeEventListener('pwa:installed', refreshInstallState);
+    window.removeEventListener('pwa:installed', refreshStandalone);
+    document.removeEventListener('visibilitychange', refreshStandalone);
 });
-
-async function install() {
-    await promptInstall();
-    refreshInstallState();
-}
 
 function logout() {
     // replace:true so the signed-out state takes the current history entry —
@@ -161,50 +136,9 @@ function logout() {
                 <p class="mt-1 text-sm capitalize text-white/70">{{ dateLine }}</p>
             </div>
 
-            <!-- Install banner — prominent, returns each session until installed -->
-            <div v-if="showInstallBanner" class="mb-4 overflow-hidden rounded-2xl border border-accent/40 bg-accent-soft shadow-card">
-                <div class="flex items-start gap-3 p-4">
-                    <span class="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-accent text-on-accent shadow-sm">
-                        <!-- app / install glyph -->
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="h-6 w-6">
-                            <path d="M12 3v12" /><path d="m7 10 5 5 5-5" /><path d="M5 21h14" />
-                        </svg>
-                    </span>
-                    <div class="min-w-0 flex-1">
-                        <p class="text-sm font-semibold text-ink">{{ $t('worker.install_title') }}</p>
-
-                        <!-- Android: one-tap native install -->
-                        <template v-if="showInstall">
-                            <p class="mt-0.5 text-xs text-ink-soft">{{ $t('worker.install_hint') }}</p>
-                            <VButton class="mt-2 w-full" @click="install">{{ $t('worker.install') }}</VButton>
-                        </template>
-
-                        <!-- iOS Safari: manual Add to Home Screen, with the share glyph inline -->
-                        <template v-else-if="iosMode === 'safari'">
-                            <p class="mt-1 flex flex-wrap items-center gap-1 text-xs text-ink-soft">
-                                <span>{{ $t('worker.install_ios_1') }}</span>
-                                <!-- iOS share icon: box with up arrow -->
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" class="inline h-4 w-4 align-text-bottom text-accent">
-                                    <path d="M12 15V4" /><path d="m8 8 4-4 4 4" /><path d="M8 11H6a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2h-2" />
-                                </svg>
-                                <span>{{ $t('worker.install_ios_2') }}</span>
-                            </p>
-                        </template>
-
-                        <!-- iOS but NOT Safari (in-app webview / other browser): can't install here -->
-                        <template v-else-if="iosMode === 'other'">
-                            <p class="mt-0.5 text-xs text-ink-soft">{{ $t('worker.install_open_safari') }}</p>
-                        </template>
-                    </div>
-
-                    <button type="button" class="shrink-0 rounded-lg p-1 text-ink-soft transition active:scale-95 active:bg-surface-hover"
-                        :aria-label="$t('common.close')" @click="dismissBanner">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" class="h-4 w-4">
-                            <path d="M18 6 6 18M6 6l12 12" />
-                        </svg>
-                    </button>
-                </div>
-            </div>
+            <!-- MANDATORY install: a full-screen blocking gate until the app runs
+                 from the home screen. No dismiss — no browser-tab usage. -->
+            <InstallGate v-if="!isStandaloneApp" />
 
             <main>
                 <slot />

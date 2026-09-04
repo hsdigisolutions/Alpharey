@@ -2000,6 +2000,11 @@ return [
         'install_ios_1' => 'To install this app: tap the share button',
         'install_ios_2' => 'then "Add to Home Screen".',
         'install_open_safari' => 'Open it in Safari to install it on your phone.',
+        'install_required_title' => 'Install the app to continue',
+        'install_required_body' => 'For the app to work reliably on site, install it on your phone. You can\'t use it in a browser tab.',
+        'install_copy_link' => 'Copy link',
+        'install_copied' => 'Link copied ✓',
+        'install_generic' => 'Open your browser menu and choose “Install app” or “Add to Home Screen”.',
         // Privacy notice — shown once (per version) before the first punch.
         // Information duty, NOT consent (LOPDGDD art. 90 / RD-ley 8/2019);
         // see docs/GDPR_WORKER_NOTICE.md. Retention/contact wording is

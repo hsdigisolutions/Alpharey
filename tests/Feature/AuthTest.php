@@ -2,8 +2,10 @@
 
 use App\Models\AuditLog;
 use App\Models\Company;
+use App\Models\Employee;
 use App\Models\User;
 use App\Notifications\BilingualResetPassword;
+use App\Services\Workers\WorkerAccountService;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Facades\RateLimiter;
@@ -105,6 +107,35 @@ it('issues a remember cookie when requested', function (): void {
 
     $guard = auth()->guard('web');
     $response->assertCookie($guard->getRecallerName());
+});
+
+it('forces a long-lived remember-me session for a worker, no box ticked', function (): void {
+    $company = Company::factory()->create();
+    $employee = Employee::factory()->forCompany($company)->create();
+    $admin = User::factory()->companyAdmin()->forCompany($company)->create();
+    $this->actingAs($admin);
+    app(WorkerAccountService::class)->grant($employee, 'crew@example.com', 'site-pass-123');
+    auth()->logout();
+
+    // A worker logs in WITHOUT ticking "remember me".
+    $response = $this->post('/login', ['email' => 'crew@example.com', 'password' => 'site-pass-123'])
+        ->assertRedirect(route('worker.home'));
+
+    // The 30-day recaller (remember-me) cookie is set anyway, and the token is
+    // persisted — so a phone left idle on site re-authenticates silently.
+    $response->assertCookie(auth()->guard('web')->getRecallerName());
+    expect($employee->fresh()->user->remember_token)->not->toBeNull();
+});
+
+it('does not force remember-me for a non-worker login', function (): void {
+    $user = User::factory()->forCompany(Company::factory()->create())->create();
+
+    // A CRM user without ticking remember: no recaller cookie is issued (the
+    // factory seeds a remember_token, so the cookie — not the column — is the
+    // signal that remember-me was actually applied).
+    $response = $this->post('/login', ['email' => $user->email, 'password' => 'password']);
+
+    $response->assertCookieMissing(auth()->guard('web')->getRecallerName());
 });
 
 it('audits login and logout', function (): void {

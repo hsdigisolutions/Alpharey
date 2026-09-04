@@ -12,6 +12,7 @@
     <link rel="manifest" href="/manifest.webmanifest">
     <meta name="theme-color" content="#1F1E1B">
     <link rel="icon" href="/favicon.ico" sizes="any">
+    <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png">
     <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
 
     {{-- iOS has no install API: it only honours these meta tags plus a manual

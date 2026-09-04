@@ -2005,6 +2005,11 @@ return [
         'install_ios_1' => 'Para instalar esta app: toca el botón compartir',
         'install_ios_2' => 'y luego «Añadir a pantalla de inicio».',
         'install_open_safari' => 'Ábrela en Safari para instalarla en tu teléfono.',
+        'install_required_title' => 'Instala la app para continuar',
+        'install_required_body' => 'Para que funcione bien en la obra, instálala en tu teléfono. No se puede usar en una pestaña del navegador.',
+        'install_copy_link' => 'Copiar enlace',
+        'install_copied' => 'Enlace copiado ✓',
+        'install_generic' => 'Abre el menú del navegador y elige «Instalar app» o «Añadir a pantalla de inicio».',
         // Privacy notice — shown once (per version) before the first punch.
         // Information duty, NOT consent (LOPDGDD art. 90 / RD-ley 8/2019);
         // see docs/GDPR_WORKER_NOTICE.md. Retention/contact wording is

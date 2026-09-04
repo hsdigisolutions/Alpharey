@@ -80,3 +80,16 @@ export function isIosSafari() {
     const otherBrowser = /CriOS|FxiOS|EdgiOS|EdgA|OPiOS|mercury/i.test(ua);
     return /Version\//i.test(ua) && /Safari/i.test(ua) && ! otherBrowser;
 }
+
+/**
+ * Running inside an in-app webview (WhatsApp, Instagram, Facebook, Messenger,
+ * Line, Gmail…) rather than a real browser. These cannot install a PWA on
+ * EITHER platform — the only path is "open in the real browser first". Used to
+ * show the copy-link / open-in-Safari branch of the install gate.
+ */
+export function isInAppBrowser() {
+    const ua = window.navigator.userAgent || '';
+    return /FBAN|FBAV|FB_IAB|Instagram|Line\/|MicroMessenger|WhatsApp|GSA\/|EdgiOS/i.test(ua)
+        // A generic iOS webview: iOS, not standalone, and lacks Safari's own tokens.
+        || (isIos() && ! isIosSafari() && ! /CriOS|FxiOS|OPiOS/i.test(ua));
+}
