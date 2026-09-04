@@ -4,32 +4,35 @@
     <meta charset="utf-8">
     <title>Parte de horas (calendario) — {{ $project }}</title>
     <style>
-        @page { margin: 14px; }
+        @page { margin: 12px; }
         body { font-family: DejaVu Sans, sans-serif; font-size: 9px; color: #1A1A17; }
-        h1 { font-size: 14px; margin: 0 0 2px; }
+        h1 { font-size: 13px; margin: 0 0 2px; }
         .muted { color: #5C5C56; font-size: 9px; margin: 0 0 8px; }
-        table.grid { width: 100%; border-collapse: collapse; table-layout: fixed; }
+        /* Column widths come from the <colgroup> in explicit px + an explicit
+           table width — DomPDF honours absolute px under table-layout:fixed far
+           more reliably than percentages or per-cell widths. */
+        table.grid { border-collapse: collapse; table-layout: fixed; }
         table.grid th, table.grid td { border: 0.5px solid #E2DED8; text-align: center; }
-        /* Worker column */
-        th.emp, td.emp { text-align: left; width: 118px; padding: 3px 5px; }
-        td.emp .name { font-weight: bold; font-size: 9px; }
-        td.emp .desig { color: #9C9A92; font-size: 7px; }
+        /* Worker column — wide enough that names never truncate. */
+        th.emp, td.emp { text-align: left; padding: 3px 4px; }
+        td.emp .name { font-weight: bold; font-size: 8.5px; line-height: 1.15; }
+        td.emp .desig { color: #9C9A92; font-size: 7px; line-height: 1.1; }
         /* Day columns */
-        th.day { padding: 2px 0; font-size: 7px; line-height: 1.15; }
-        th.day .num { font-size: 9px; font-weight: bold; }
+        th.day { padding: 2px 0; font-size: 6.5px; line-height: 1.1; }
+        th.day .num { font-size: 8.5px; font-weight: bold; }
         td.cell { padding: 2px 0; height: 15px; }
         /* Total columns */
-        th.tot, td.tot { width: 30px; padding: 3px 2px; }
-        td.tot .d { font-weight: bold; font-size: 9px; }
-        td.tot .h { color: #C4845A; font-size: 8px; }
+        th.tot, td.tot { padding: 3px 1px; }
+        td.tot .d { font-weight: bold; font-size: 8.5px; }
+        td.tot .h { color: #C4845A; font-size: 7.5px; }
         thead th { background: #ECEAE5; color: #5C5C56; }
         .weekend { background: #F1EFEA; }
-        .mark { display: inline-block; min-width: 13px; padding: 1px 2px; border-radius: 3px; font-size: 8px; font-weight: bold; }
+        .mark { display: inline-block; min-width: 12px; padding: 1px 1px; border-radius: 3px; font-size: 7.5px; font-weight: bold; }
         .m-full { background: #D8F0E4; color: #2D6A4F; }
         .m-half { background: #FEF3CD; color: #92620A; }
         .m-hours { background: #D8EAF5; color: #1A4E6B; }
-        tfoot th, tfoot td { background: #ECEAE5; font-size: 8px; }
-        tfoot .lbl { text-align: left; font-weight: bold; text-transform: uppercase; letter-spacing: .03em; color: #5C5C56; padding: 3px 5px; }
+        tfoot th, tfoot td { background: #ECEAE5; font-size: 7px; }
+        tfoot .lbl { text-align: left; font-weight: bold; text-transform: uppercase; letter-spacing: .02em; color: #5C5C56; padding: 3px 4px; }
         tfoot .h { color: #C4845A; }
         tfoot .grand { background: #F5E6D8; color: #C4845A; font-weight: bold; }
     </style>
@@ -44,19 +47,28 @@
         // Mark → colour class, mirroring the on-screen grid tile.
         $markClass = fn (string $m): string => $m === 'F' ? 'm-full' : ($m === 'H' ? 'm-half' : 'm-hours');
         $fmtHours = fn ($h): string => (float) $h == (float) (int) $h ? (string) (int) $h : number_format((float) $h, 1);
+        // Column widths as INLINE widths on the first row (thead) — the one
+        // signal DomPDF reads for table-layout:fixed. The table stays width:100%
+        // so DomPDF scales these ratios to fill the landscape page; they sum to
+        // ~795px (< the ~818px usable) so all days fit on one page for any month.
+        $nDays = max(count($calendar['day_cols']), 1);
+        $nameW = 140;
+        $dayW = 19;
+        $diasW = 30;
+        $horasW = 34;
     @endphp
 
-    <table class="grid">
+    <table class="grid" style="width: 100%">
         <thead>
             <tr>
-                <th class="emp">Trabajador / Worker</th>
+                <th class="emp" style="width: {{ $nameW }}px">Trabajador / Worker</th>
                 @foreach ($calendar['day_cols'] as $d)
-                    <th class="day {{ $d['weekend'] ? 'weekend' : '' }}">
+                    <th class="day {{ $d['weekend'] ? 'weekend' : '' }}" style="width: {{ $dayW }}px">
                         <span class="num">{{ $d['day'] }}</span><br>{{ $d['weekday'] }}
                     </th>
                 @endforeach
-                <th class="tot">Días</th>
-                <th class="tot">Horas</th>
+                <th class="tot" style="width: {{ $diasW }}px">Días</th>
+                <th class="tot" style="width: {{ $horasW }}px">Horas</th>
             </tr>
         </thead>
         <tbody>
@@ -87,7 +99,7 @@
         </tbody>
         <tfoot>
             <tr>
-                <th class="lbl">Trabajadores/día / Workers/day</th>
+                <th class="lbl">Trabaj./día · Workers</th>
                 @foreach ($calendar['day_cols'] as $d)
                     <td class="{{ $d['weekend'] ? 'weekend' : '' }}">{{ $calendar['daily_present'][$d['date']] ?? 0 }}</td>
                 @endforeach
@@ -95,7 +107,7 @@
                 <td class="grand"></td>
             </tr>
             <tr>
-                <th class="lbl">Horas/día / Hours/day</th>
+                <th class="lbl">Horas/día · Hours</th>
                 @foreach ($calendar['day_cols'] as $d)
                     <td class="h {{ $d['weekend'] ? 'weekend' : '' }}">{{ ($calendar['daily_hours'][$d['date']] ?? 0) > 0 ? $fmtHours($calendar['daily_hours'][$d['date']]) : '' }}</td>
                 @endforeach
