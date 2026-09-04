@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Attendance;
+use App\Models\AuditLog;
 use App\Models\Company;
 use App\Models\Employee;
 use App\Models\Project;
@@ -141,6 +142,22 @@ it('ships a calendar grid block whose per-day + grand totals reconcile with the 
         ->and((float) $cal['grand_total_hours'])->toBe((float) $sheet['total_hours'])
         ->and($cal['grand_total_days'])->toBe(3)
         ->and($cal['grand_total_days'])->toBe($sheet['total_days']);
+});
+
+it('exports the by-project CALENDAR layout in both formats and audits the layout', function (): void {
+    $project = Project::factory()->create(['company_id' => $this->company->id]);
+    $w1 = Employee::factory()->forCompany($this->company)->create();
+    Attendance::factory()->create(['company_id' => $this->company->id, 'employee_id' => $w1->id, 'project_id' => $project->id, 'date' => '2026-08-03', 'status' => 'present', 'day_type' => 'full', 'hours_worked' => '8']);
+
+    $q = "view=project&project={$project->id}&mode=custom&from=2026-08-01&to=2026-08-31&display=calendar";
+
+    $this->actingAs($this->admin)->get("/timesheet/export?{$q}&format=excel")->assertOk();
+    $this->actingAs($this->admin)->get("/timesheet/export?{$q}&format=pdf")->assertOk();
+
+    // The audit records the CALENDAR layout (not the table export).
+    $this->assertDatabaseHas('audit_logs', ['action' => 'exported', 'module' => 'attendance']);
+    expect(AuditLog::query()->where('action', 'exported')
+        ->get()->contains(fn ($l): bool => str_contains((string) $l->description, 'CALENDAR')))->toBeTrue();
 });
 
 it('denies the timesheet without attendance.view', function (): void {

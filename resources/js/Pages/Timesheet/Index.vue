@@ -95,6 +95,9 @@ function exportSheet(format) {
     params.append('date', props.period.start);
     if (state.mode === 'custom') { params.append('from', state.from); params.append('to', state.to); }
     if (state.project) params.append('project', state.project);
+    // By-Project: export whichever layout is on screen — the Calendar grid or the
+    // summary Table. (The By-Employee view has only one layout, so it's ignored.)
+    if (state.view === 'project' && state.project) params.append('display', projectView.value);
     params.append('format', format);
     window.location.href = `/timesheet/export?${params.toString()}`;
 }

@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Enums\AttendanceStatus;
 use App\Enums\DayType;
 use App\Exports\TimesheetExport;
+use App\Exports\TimesheetProjectCalendarExport;
 use App\Exports\TimesheetProjectDetailExport;
 use App\Http\Controllers\Admin\Concerns\ResolvesCompanyContext;
 use App\Models\Attendance;
@@ -192,6 +193,142 @@ class TimesheetController extends Controller
         };
     }
 
+    /**
+     * By-project CALENDAR export — the workers × days matrix from the on-screen
+     * grid, in PDF (landscape) or Excel. Both are built from the same $sheet the
+     * grid renders, so they reconcile to the table view to the cent.
+     *
+     * @param  array<string, mixed>  $sheet
+     */
+    private function exportProjectCalendar(Project $project, Carbon $start, Carbon $end, array $sheet, string $format): BinaryFileResponse|HttpResponse
+    {
+        $calendar = $this->buildCalendarExport($sheet);
+
+        if ($format === 'pdf') {
+            return Pdf::loadView('exports.timesheet-project-calendar-pdf', [
+                'project' => $project->name,
+                'start' => $start->format('d/m/Y'),
+                'end' => $end->format('d/m/Y'),
+                'calendar' => $calendar,
+                'logo' => CompanyBranding::currentLogo(),
+            ])->setPaper('a4', 'landscape')->download('parte-horas-calendario-'.$project->id.'.pdf');
+        }
+
+        // Excel: one "Calendario" sheet — a header row of day columns, one row per
+        // worker with the day mark per day, then the workers/día and horas/día
+        // footer rows. The right-hand Días / Horas columns carry the per-worker
+        // totals so the sheet stays analytically complete.
+        $headings = array_merge(
+            ['Trabajador', 'Designación'],
+            array_map(fn (array $d): string => $d['label'], $calendar['day_cols']),
+            ['Días', 'Horas'],
+        );
+
+        $rows = [];
+        foreach ($calendar['rows'] as $r) {
+            $line = [(string) $r['employee'], (string) $r['designation']];
+            foreach ($calendar['day_cols'] as $d) {
+                $line[] = (string) ($r['marks'][$d['date']] ?? '');
+            }
+            $line[] = (int) $r['days_present'];
+            $line[] = (float) $r['hours'];
+            $rows[] = $line;
+        }
+
+        // Two footer rows, aligned to the same columns.
+        $workersRow = ['Trabajadores/día', ''];
+        $hoursRow = ['Horas/día', ''];
+        foreach ($calendar['day_cols'] as $d) {
+            $workersRow[] = (int) ($calendar['daily_present'][$d['date']] ?? 0);
+            $hoursRow[] = (float) ($calendar['daily_hours'][$d['date']] ?? 0);
+        }
+        $workersRow[] = (int) $calendar['grand_days'];
+        $workersRow[] = '';
+        $hoursRow[] = '';
+        $hoursRow[] = (float) $calendar['grand_hours'];
+        $rows[] = $workersRow;
+        $rows[] = $hoursRow;
+
+        return Excel::download(
+            new TimesheetProjectCalendarExport($headings, $rows),
+            'parte-horas-calendario-'.$project->id.'.xlsx',
+        );
+    }
+
+    /**
+     * Reshape the project $sheet into a calendar-matrix payload for export: the
+     * day-column axis (label + weekend flag), one row per worker carrying a
+     * date→mark map (F / H / hours, mirroring the grid tile), the per-day
+     * aggregates and the grand totals.
+     *
+     * @param  array<string, mixed>  $sheet
+     * @return array{day_cols: list<array{date: string, day: int, weekday: string, label: string, weekend: bool}>, rows: list<array{employee: string, designation: string, days_present: int, hours: float, marks: array<string, string>}>, daily_present: array<string, int>, daily_hours: array<string, float>, grand_days: int, grand_hours: float}
+     */
+    private function buildCalendarExport(array $sheet): array
+    {
+        /** @var array<string, mixed> $cal */
+        $cal = $sheet['calendar'] ?? ['days' => [], 'daily_present' => [], 'daily_hours' => [], 'grand_total_days' => 0, 'grand_total_hours' => 0.0];
+
+        $dayCols = array_map(function (array $d): array {
+            $weekday = self::WEEKDAYS_ES[Carbon::parse((string) $d['date'])->dayOfWeekIso] ?? '';
+
+            return [
+                'date' => (string) $d['date'],
+                'day' => (int) $d['day'],
+                'weekday' => $weekday,
+                'label' => $d['day'].' '.$weekday,
+                'weekend' => (bool) $d['weekend'],
+            ];
+        }, $cal['days']);
+
+        $rows = array_map(function (array $r): array {
+            $marks = [];
+            foreach ($r['days'] as $day) {
+                $marks[(string) $day['date']] = $this->calendarMark($day['day_type'] ?? null, (float) $day['hours']);
+            }
+
+            return [
+                'employee' => (string) ($r['employee'] ?? ''),
+                'designation' => (string) ($r['designation'] ?? '—'),
+                'days_present' => (int) $r['days_present'],
+                'hours' => (float) $r['hours'],
+                'marks' => $marks,
+            ];
+        }, $sheet['rows']);
+
+        return [
+            'day_cols' => $dayCols,
+            'rows' => $rows,
+            'daily_present' => $cal['daily_present'],
+            'daily_hours' => $cal['daily_hours'],
+            'grand_days' => (int) $cal['grand_total_days'],
+            'grand_hours' => (float) $cal['grand_total_hours'],
+        ];
+    }
+
+    /**
+     * The calendar cell mark, mirroring the grid tile: full → F, half → H,
+     * hourly / per-meter → the net hours (blank when zero).
+     */
+    private function calendarMark(?string $dayType, float $hours): string
+    {
+        return match ($dayType) {
+            DayType::Full->value => 'F',
+            DayType::Half->value => 'H',
+            default => $this->fmtCalendarHours($hours),
+        };
+    }
+
+    /** Compact hours for a calendar cell: integer when whole, else one decimal. */
+    private function fmtCalendarHours(float $hours): string
+    {
+        if ($hours <= 0.0) {
+            return '';
+        }
+
+        return $hours == (float) (int) $hours ? (string) (int) $hours : number_format(round($hours, 1), 1);
+    }
+
     public function export(Request $request, AuditLogger $audit): BinaryFileResponse|HttpResponse
     {
         Gate::authorize('attendance.export');
@@ -201,12 +338,18 @@ class TimesheetController extends Controller
         $projectId = is_numeric($request->query('project')) ? (int) $request->query('project') : null;
         $format = $request->query('format') === 'pdf' ? 'pdf' : 'excel';
 
-        // By-project view — export the per-employee summary for the project.
+        // By-project view — export whichever layout is on screen: the Calendar
+        // grid (workers × days matrix) or the summary + detail Table.
         if ($request->query('view') === 'project') {
             abort_if($projectId === null, 404);
             $project = Project::query()->findOrFail($projectId);
             $sheet = $this->buildProjectTimesheet($projectId, $start, $end);
-            $audit->log('exported', $project, null, null, 'Timesheet project '.strtoupper($format), 'attendance');
+            $display = $request->query('display') === 'calendar' ? 'calendar' : 'table';
+            $audit->log('exported', $project, null, null, 'Timesheet project '.strtoupper($display).' '.strtoupper($format), 'attendance');
+
+            if ($display === 'calendar') {
+                return $this->exportProjectCalendar($project, $start, $end, $sheet, $format);
+            }
 
             if ($format === 'pdf') {
                 return Pdf::loadView('exports.timesheet-project-pdf', [
