@@ -59,6 +59,11 @@ class WorkerController extends Controller
             // nearest-first (the browser sorts by distance once it has a fix).
             // Coords drive the on-device distance hint; NO money is shipped.
             'assignedProjects' => $this->assignedProjectsPayload($employee),
+            // Coordinates of the active projects the worker could be AT (own
+            // company + deployed) so the app can confirm "You're at [Project]"
+            // before the punch. The server independently auto-assigns the nearest
+            // on check-in — this is the pre-punch preview. Coords/name only, no money.
+            'detectableProjects' => $this->detectableProjectsPayload($employee),
             // Weekend gating: a Sat/Sun is a rest day unless an admin offer
             // invites this worker (then the offer's project is shown + check-in
             // is allowed). Weekdays are always workable.
@@ -102,6 +107,28 @@ class WorkerController extends Controller
                 'name' => $p->name,
                 'latitude' => $p->latitude !== null ? (float) $p->latitude : null,
                 'longitude' => $p->longitude !== null ? (float) $p->longitude : null,
+                'geofence_radius' => $p->geofence_radius,
+            ])
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Coordinates of the projects GPS auto-detect can assign this worker to (own
+     * company + deployed, active, with coordinates) — for the pre-punch "You're
+     * at [Project]" confirmation. Name + coords only; never any money. The
+     * authoritative auto-assign happens server-side in WorkerAttendanceService.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function detectableProjectsPayload(Employee $employee): array
+    {
+        return $this->attendance->detectableProjects($employee)
+            ->map(fn (Project $p): array => [
+                'id' => $p->id,
+                'name' => $p->name,
+                'latitude' => (float) $p->latitude,
+                'longitude' => (float) $p->longitude,
                 'geofence_radius' => $p->geofence_radius,
             ])
             ->values()

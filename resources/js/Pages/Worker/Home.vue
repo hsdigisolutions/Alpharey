@@ -37,6 +37,9 @@ const props = defineProps({
     // Active projects this worker may punch into (own + deployed). Coords only —
     // no money. Drives the check-in project picker + on-device distance hint.
     assignedProjects: { type: Array, default: () => [] },
+    // Projects GPS auto-detect can assign (own company + deployed, with coords) —
+    // drives the pre-punch "You're at [Project] ✓" confirmation. Coords/name only.
+    detectableProjects: { type: Array, default: () => [] },
 });
 
 const page = usePage();
@@ -139,6 +142,27 @@ function mapsUrl(p) {
     return `https://www.google.com/maps/dir/?api=1&destination=${p.latitude},${p.longitude}`;
 }
 
+// GPS auto-assign PREVIEW: when the worker hasn't picked a project, the nearest
+// detectable project (own company + deployed) their fix is inside — the same
+// one the server will auto-assign on check-in. Nearest wins on overlap.
+const detectableProjects = computed(() => props.detectableProjects ?? []);
+const autoDetectedProject = computed(() => {
+    if (selectedProjectId.value != null && selectedProjectId.value !== '') return null;
+    if (!deviceLoc.value) return null;
+    let best = null;
+    let bestD = null;
+    for (const p of detectableProjects.value) {
+        if (p.latitude == null || p.longitude == null) continue;
+        const d = haversineM(deviceLoc.value.lat, deviceLoc.value.lng, p.latitude, p.longitude);
+        const threshold = p.geofence_radius > 0 ? p.geofence_radius : 150;
+        if (d <= threshold && (bestD == null || d < bestD)) {
+            bestD = d;
+            best = p;
+        }
+    }
+    return best;
+});
+
 // Best-effort silent fix on load — only to order the picker and show a distance
 // hint; the punch fetches its own fix. A refusal just leaves name order (GPS is
 // evidence, not a gate). Skipped when no project carries coordinates.
@@ -147,7 +171,9 @@ onMounted(async () => {
     // Only when a check-in is actually possible — don't prompt for GPS on a day
     // that's already checked in / out, or on a weekend rest day.
     if (props.today.state !== 'none' || props.weekend.rest_day) return;
-    if (!assignedProjects.value.some((p) => p.latitude != null && p.longitude != null)) return;
+    const anyCoords = assignedProjects.value.some((p) => p.latitude != null && p.longitude != null)
+        || detectableProjects.value.some((p) => p.latitude != null && p.longitude != null);
+    if (!anyCoords) return;
     try {
         const loc = await getLocation();
         if (loc && loc.lat != null && loc.lng != null) {
@@ -524,6 +550,17 @@ const noteTextForm = useForm({ attendance_id: null, text_note: '', duration_seco
                     <p v-if="distanceWarn" class="mt-2 rounded-md bg-status-warn-soft px-3 py-2 text-xs text-status-warn">
                         {{ $t('worker.distance_warning') }}
                     </p>
+                </div>
+
+                <!-- GPS auto-assign preview: the site the system will attach on
+                     check-in (own company + deployed), when the worker hasn't
+                     picked one and their fix is inside a project's radius.
+                     Evidence, not a gate — the punch always succeeds. -->
+                <div v-if="!weekend.is_weekend && autoDetectedProject"
+                    class="mb-3 rounded-lg border border-status-ok/40 bg-status-ok-soft p-4 text-center shadow-card">
+                    <p class="text-sm font-semibold text-status-ok">{{ $t('worker.at_project_confirm') }}</p>
+                    <p class="mt-1 text-base font-semibold text-ink">{{ autoDetectedProject.name }} ✓</p>
+                    <p class="mt-0.5 text-xs text-ink-soft">{{ $t('worker.at_project_hint') }}</p>
                 </div>
 
                 <div v-if="!cameraOpen" class="space-y-3">

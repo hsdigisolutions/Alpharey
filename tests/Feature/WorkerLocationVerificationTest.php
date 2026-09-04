@@ -63,6 +63,17 @@ function assignedProject(Company $company, Employee $employee, ?float $lat, ?flo
     return $project;
 }
 
+/** An ACTIVE project with coordinates that the worker is NOT formally assigned to. */
+function unassignedProject(Company $company, ?float $lat, ?float $lng, ?int $radius = 100): Project
+{
+    return Project::factory()->forCompany($company)->create([
+        'status' => 'active',
+        'latitude' => $lat,
+        'longitude' => $lng,
+        'geofence_radius' => $radius,
+    ]);
+}
+
 it('saves the distance and bands an accurate on-site check-in', function (): void {
     $project = assignedProject($this->company, $this->employee, $this->siteLat, $this->siteLng);
 
@@ -229,4 +240,130 @@ it('honours a wider per-company off-site threshold before alerting', function ()
     ])->assertRedirect();
 
     Notification::assertNotSentTo(User::where('role', 'admin')->get(), SystemNotification::class);
+});
+
+// ---------------------------------------------------------------------------
+// GPS auto-detect: the server assigns the nearest own-company/deployed project
+// the worker is inside, even when they are not formally assigned and pick none.
+// ---------------------------------------------------------------------------
+
+it('auto-assigns the nearest own-company project when the worker is inside its geofence and picks none', function (): void {
+    $project = unassignedProject($this->company, $this->siteLat, $this->siteLng, 100);
+
+    // No project_id in the payload — the worker just punches in ON the site.
+    $this->actingAs($this->worker)->post('/worker/check-in', [
+        'lat' => $this->siteLat, 'lng' => $this->siteLng, 'accuracy' => 12, 'denied' => false,
+    ])->assertRedirect()->assertSessionHasNoErrors();
+
+    $row = Attendance::withoutGlobalScopes()->where('employee_id', $this->employee->id)->firstOrFail();
+    expect($row->project_id)->toBe($project->id);
+});
+
+it('leaves the punch project-less when the worker is outside every geofence', function (): void {
+    unassignedProject($this->company, $this->siteLat, $this->siteLng, 100);
+
+    // ~4.2 km east — well outside the 100 m radius.
+    $this->actingAs($this->worker)->post('/worker/check-in', [
+        'lat' => $this->siteLat, 'lng' => $this->siteLng + 0.05, 'accuracy' => 12, 'denied' => false,
+    ])->assertRedirect();
+
+    $row = Attendance::withoutGlobalScopes()->where('employee_id', $this->employee->id)->firstOrFail();
+    expect($row->project_id)->toBeNull();
+});
+
+it('picks the NEAREST project when two are in range', function (): void {
+    // Near = worker's exact spot; far = ~80 m away, both within a 500 m radius.
+    $near = unassignedProject($this->company, $this->siteLat, $this->siteLng, 500);
+    $far = unassignedProject($this->company, $this->siteLat + 0.00072, $this->siteLng, 500);
+
+    $this->actingAs($this->worker)->post('/worker/check-in', [
+        'lat' => $this->siteLat, 'lng' => $this->siteLng, 'accuracy' => 10, 'denied' => false,
+    ])->assertRedirect();
+
+    $row = Attendance::withoutGlobalScopes()->where('employee_id', $this->employee->id)->firstOrFail();
+    expect($row->project_id)->toBe($near->id)->not->toBe($far->id);
+});
+
+it('never auto-assigns a sister company project the worker is standing on', function (): void {
+    $other = Company::factory()->create();
+    // A DIFFERENT company's active project at the worker's exact location.
+    unassignedProject($other, $this->siteLat, $this->siteLng, 500);
+
+    $this->actingAs($this->worker)->post('/worker/check-in', [
+        'lat' => $this->siteLat, 'lng' => $this->siteLng, 'accuracy' => 10, 'denied' => false,
+    ])->assertRedirect();
+
+    $row = Attendance::withoutGlobalScopes()->where('employee_id', $this->employee->id)->firstOrFail();
+    expect($row->project_id)->toBeNull(); // own company + deployed only
+});
+
+it('auto-assigns a project the worker is actively deployed to', function (): void {
+    $host = Company::factory()->create();
+    $hostProject = unassignedProject($host, $this->siteLat, $this->siteLng, 200);
+
+    $deployment = new EmployeeDeployment([
+        'employee_id' => $this->employee->id,
+        'home_company_id' => $this->company->id,
+        'host_company_id' => $host->id,
+        'project_id' => $hostProject->id,
+        'deployment_start' => '2026-08-01',
+        'status' => DeploymentStatus::Active->value,
+        'billing_method' => 'option_a',
+    ]);
+    $deployment->save();
+
+    $this->actingAs($this->worker)->post('/worker/check-in', [
+        'lat' => $this->siteLat, 'lng' => $this->siteLng, 'accuracy' => 10, 'denied' => false,
+    ])->assertRedirect();
+
+    $row = Attendance::withoutGlobalScopes()->where('employee_id', $this->employee->id)->firstOrFail();
+    expect($row->project_id)->toBe($hostProject->id);
+});
+
+it('lets a worker-selected assigned project win over auto-detect', function (): void {
+    $assigned = assignedProject($this->company, $this->employee, $this->siteLat + 0.01, $this->siteLng, 500); // ~1.1 km away
+    unassignedProject($this->company, $this->siteLat, $this->siteLng, 500); // the one they are standing on
+
+    $this->actingAs($this->worker)->post('/worker/check-in', [
+        'lat' => $this->siteLat, 'lng' => $this->siteLng, 'accuracy' => 10, 'denied' => false,
+        'project_id' => $assigned->id,
+    ])->assertRedirect();
+
+    $row = Attendance::withoutGlobalScopes()->where('employee_id', $this->employee->id)->firstOrFail();
+    expect($row->project_id)->toBe($assigned->id); // explicit choice respected
+});
+
+it('does not auto-detect off an untrustworthy fix', function (): void {
+    unassignedProject($this->company, $this->siteLat, $this->siteLng, 100);
+
+    $this->actingAs($this->worker)->post('/worker/check-in', [
+        'lat' => $this->siteLat, 'lng' => $this->siteLng, 'accuracy' => 50000, 'denied' => false,
+    ])->assertRedirect();
+
+    $row = Attendance::withoutGlobalScopes()->where('employee_id', $this->employee->id)->firstOrFail();
+    expect($row->project_id)->toBeNull();
+});
+
+it('honours the project geofence_radius: inside is auto-assigned', function (): void {
+    // radius 150 m; worker ~100 m north is inside → assigned.
+    $project = unassignedProject($this->company, $this->siteLat, $this->siteLng, 150);
+
+    $this->actingAs($this->worker)->post('/worker/check-in', [
+        'lat' => $this->siteLat + 0.0009, 'lng' => $this->siteLng, 'accuracy' => 10, 'denied' => false,
+    ])->assertRedirect();
+
+    $row = Attendance::withoutGlobalScopes()->where('employee_id', $this->employee->id)->firstOrFail();
+    expect($row->project_id)->toBe($project->id);
+});
+
+it('does not auto-assign a project just beyond its geofence_radius', function (): void {
+    // radius 150 m; worker ~250 m north is outside → project-less.
+    unassignedProject($this->company, $this->siteLat, $this->siteLng, 150);
+
+    $this->actingAs($this->worker)->post('/worker/check-in', [
+        'lat' => $this->siteLat + 0.00225, 'lng' => $this->siteLng, 'accuracy' => 10, 'denied' => false,
+    ])->assertRedirect();
+
+    $row = Attendance::withoutGlobalScopes()->where('employee_id', $this->employee->id)->firstOrFail();
+    expect($row->project_id)->toBeNull();
 });

@@ -1977,6 +1977,8 @@ return [
         'distance_from_site' => 'Distancia a la obra',
         'navigate' => 'Cómo llegar',
         'distance_warning' => 'Parece que estás lejos de esta obra. Confirma que estás en el lugar correcto.',
+        'at_project_confirm' => 'Estás en la obra',
+        'at_project_hint' => 'Se asignará automáticamente al fichar.',
         'project_not_assigned' => 'No estás asignado a ese proyecto.',
         'detail_amount' => 'Importe',
         'detail_none' => 'Sin registro este día',

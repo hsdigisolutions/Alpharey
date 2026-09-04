@@ -1972,6 +1972,8 @@ return [
         'distance_from_site' => 'Distance from site',
         'navigate' => 'Navigate',
         'distance_warning' => 'You appear to be away from this site. Please confirm you are in the right place.',
+        'at_project_confirm' => 'You\'re at this site',
+        'at_project_hint' => 'It will be assigned automatically when you check in.',
         'project_not_assigned' => 'You are not assigned to that project.',
         'detail_amount' => 'Amount',
         'detail_none' => 'No record this day',

@@ -50,6 +50,13 @@ class WorkerAttendanceService
      */
     public const LOCATION_ACCURACY_LIMIT = 1000.0;
 
+    /**
+     * GPS auto-assign proximity (metres) for a project that has NO geofence_radius
+     * set. A project that DOES set a radius uses its own. This is the "reasonable
+     * proximity" fallback so auto-detect works before every site's radius is tuned.
+     */
+    public const AUTO_DETECT_FALLBACK_RADIUS = 150.0;
+
     public function __construct(
         private readonly AttendanceService $attendance,
         private readonly PeriodLock $lock,
@@ -93,10 +100,21 @@ class WorkerAttendanceService
         // project-less punch is always allowed; GPS never gates a punch).
         if ($offer !== null) {
             $projectId = $offer->project_id;
-        } elseif ($projectId !== null && ! $this->assignedProjects($employee)->contains('id', $projectId)) {
-            throw ValidationException::withMessages([
-                'project_id' => __('ui.worker.project_not_assigned'),
-            ]);
+        } elseif ($projectId !== null) {
+            // Worker-SUPPLIED project: must be one of their own assigned/deployed
+            // projects (anti-spoof — a phone must not post an arbitrary id).
+            if (! $this->assignedProjects($employee)->contains('id', $projectId)) {
+                throw ValidationException::withMessages([
+                    'project_id' => __('ui.worker.project_not_assigned'),
+                ]);
+            }
+        } else {
+            // No selection → GPS auto-assign: the nearest ACTIVE project (own
+            // company + any the worker is deployed to) whose site the fix is
+            // within. Server-DERIVED, so it attaches even without a formal
+            // assignment — that is the whole point. Null (no project near, or no
+            // trustworthy fix) just means a project-less punch, exactly as before.
+            $projectId = $this->autoDetectProject($employee, $location);
         }
 
         // Reject a punch into a month payroll has closed (system-wide lock).
@@ -418,6 +436,85 @@ class WorkerAttendanceService
             ->where('status', ProjectStatus::Active)
             ->orderBy('name')
             ->get(['id', 'name', 'latitude', 'longitude', 'geofence_radius']);
+    }
+
+    /**
+     * GPS auto-assign: the nearest ACTIVE project the worker could be at whose
+     * site coordinates the fix is within (its geofence_radius, or
+     * AUTO_DETECT_FALLBACK_RADIUS when no radius is set). Nearest wins on any
+     * overlap. Returns null — a project-less punch — when the fix is
+     * missing/untrustworthy or nothing is near enough. GPS is evidence, never a
+     * gate: a null result never blocks the punch.
+     *
+     * @param  array{lat: float|null, lng: float|null, accuracy: float|null, denied: bool}  $location
+     */
+    public function autoDetectProject(Employee $employee, array $location): ?int
+    {
+        if ($location['lat'] === null || $location['lng'] === null) {
+            return null;
+        }
+
+        // A coarse IP/network fix (±tens of km) cannot place the worker on a
+        // specific site — never auto-assign off an untrustworthy accuracy.
+        if ($location['accuracy'] !== null && $location['accuracy'] > self::LOCATION_ACCURACY_LIMIT) {
+            return null;
+        }
+
+        $bestId = null;
+        $bestDistance = null;
+
+        foreach ($this->detectableProjects($employee) as $project) {
+            $distance = Geo::haversine(
+                (float) $location['lat'],
+                (float) $location['lng'],
+                (float) $project->latitude,
+                (float) $project->longitude,
+            );
+            // Use the site's own radius; fall back to a reasonable proximity when
+            // it is not meaningfully set (the column is NOT NULL, so "unset" reads
+            // as 0). Nearest still wins on overlap.
+            $radius = (int) $project->geofence_radius;
+            $threshold = $radius > 0 ? (float) $radius : self::AUTO_DETECT_FALLBACK_RADIUS;
+
+            if ($distance <= $threshold && ($bestDistance === null || $distance < $bestDistance)) {
+                $bestDistance = $distance;
+                $bestId = $project->id;
+            }
+        }
+
+        return $bestId;
+    }
+
+    /**
+     * Candidate projects for GPS auto-assign: ACTIVE projects WITH coordinates
+     * that belong to the worker's own company, plus the specific projects they
+     * are actively deployed to (host-company sites). Scope dropped — a worker has
+     * no CRM session. Deliberately NOT the whole group: a nearby sister-company
+     * site must never auto-assign a worker who does not work there.
+     *
+     * @return Collection<int, Project>
+     */
+    public function detectableProjects(Employee $employee): Collection
+    {
+        $deployedIds = EmployeeDeployment::query()
+            ->where('employee_id', $employee->id)
+            ->where('status', DeploymentStatus::Active)
+            ->pluck('project_id')
+            ->filter()
+            ->all();
+
+        return Project::query()->withoutGlobalScope(CompanyScope::class)
+            ->where('status', ProjectStatus::Active)
+            ->whereNotNull('latitude')
+            ->whereNotNull('longitude')
+            ->where(function ($q) use ($employee, $deployedIds): void {
+                $q->where('company_id', $employee->company_id);
+                if ($deployedIds !== []) {
+                    $q->orWhereIn('id', $deployedIds);
+                }
+            })
+            ->orderBy('name')
+            ->get(['id', 'name', 'company_id', 'latitude', 'longitude', 'geofence_radius']);
     }
 
     /**
