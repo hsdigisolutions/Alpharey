@@ -291,8 +291,8 @@ const docDot = { ok: 'ok', warn: 'warn', danger: 'danger', neutral: 'neutral', e
                         </span>
                     </td>
                     <td v-else-if="column.key === 'active'" class="px-3 py-2.5">
-                        <VBadge v-if="employee.status === 'transferred'" status="info">
-                            <Bilingual k="employees.status_transferred" inline />
+                        <VBadge v-if="employee.transferred_away" status="info">
+                            {{ $t('employees.status_transferred') }} → {{ employee.company }}
                         </VBadge>
                         <VBadge v-else :status="employee.active ? 'ok' : 'neutral'">
                             <Bilingual :k="employee.active ? 'employees.active' : 'employees.inactive'" inline />

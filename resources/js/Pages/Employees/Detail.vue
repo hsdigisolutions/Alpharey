@@ -50,6 +50,11 @@ const props = defineProps({
     consent: { type: Object, default: () => ({ has_app_access: false, accepted: false, active: null, history: [], current_version: '' }) },
     transferCompanies: { type: Array, default: () => [] },
     can: { type: Object, required: true },
+    // Read-only historical view: an old company looking at a worker who
+    // transferred away. All write controls are already withheld via `can.*`;
+    // this drives the banner. { transferred_to, on } when set.
+    readOnly: { type: Boolean, default: false },
+    transferBanner: { type: Object, default: null },
 });
 
 // --- Feature 4: transfer to another company ---
@@ -317,7 +322,10 @@ function destroy() {
                     {{ employee.employee_code }} · {{ employee.company }} · {{ employee.designation ?? '—' }}
                 </p>
             </div>
-            <VBadge :status="employee.active ? 'ok' : 'neutral'">
+            <VBadge v-if="readOnly" status="info">
+                <Bilingual k="employees.status_transferred" inline />
+            </VBadge>
+            <VBadge v-else :status="employee.active ? 'ok' : 'neutral'">
                 <Bilingual :k="employee.active ? 'employees.active' : 'employees.inactive'" inline />
             </VBadge>
             <VButton v-if="can.edit" variant="secondary" icon="edit" @click="showEdit = true">
@@ -328,8 +336,15 @@ function destroy() {
             </VButton>
         </div>
 
+        <!-- Read-only historical view (worker transferred away from this company) -->
+        <div v-if="readOnly && transferBanner"
+            class="mt-4 flex items-start gap-2 rounded-lg border border-status-info/40 bg-status-info-soft px-4 py-3 text-sm text-status-info">
+            <AppIcon name="info" class="mt-0.5 h-4 w-4 shrink-0" />
+            <span>{{ $t('employees.transferred_readonly_banner', { company: transferBanner.transferred_to, date: transferBanner.on ?? '—' }) }}</span>
+        </div>
+
         <!-- Feature 4 — transferred-in notice: documents must be re-uploaded -->
-        <div v-if="employee.documents_pending_reupload"
+        <div v-if="!readOnly && employee.documents_pending_reupload"
             class="mt-4 flex items-start gap-2 rounded-lg border border-status-warn/40 bg-status-warn-soft px-4 py-3 text-sm text-status-warn">
             <AppIcon name="alert" class="mt-0.5 h-4 w-4 shrink-0" />
             <span>

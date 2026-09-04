@@ -30,7 +30,7 @@ use Illuminate\Support\Carbon;
  * @property string|null $person_uuid
  * @property int|null $previous_company_id
  * @property Carbon|null $transferred_at
- * @property Carbon|null $transferred_out_at
+ * @property Carbon|null $transferred_out_at DEPRECATED — a leftover of the pre-2026-08-25 "new record per transfer" model. The single-record model never sets it (always null); "transferred away" is a per-company view over employee_company_history, not a column. Kept only to avoid a production schema change; do not reintroduce logic that reads it.
  * @property bool $documents_pending_reupload
  * @property bool $active
  * @property Carbon|null $active_since
@@ -114,34 +114,28 @@ class Employee extends Model
 
     /**
      * Active employees only — the single source for selection dropdowns
-     * (create/edit forms). SoftDeletes already excludes deleted rows; a record
-     * transferred OUT to another company (transferred_out_at set) is likewise
-     * excluded — it is history, not a selectable worker (Change 2).
-     * Index-page list filters keep showing all.
+     * (create/edit forms). SoftDeletes already excludes deleted rows; the tenant
+     * scope already confines these to the acting company, so a worker who
+     * transferred AWAY (their company_id is now another company) is excluded by
+     * construction — no per-record flag needed.
      *
      * @param  Builder<Employee>  $query
      */
     public function scopeActive(Builder $query): void
     {
-        $query->where('active', true)->whereNull('transferred_out_at');
+        $query->where('active', true);
     }
 
     /**
-     * The distinct workforce state: 'transferred' takes precedence (a superseded
-     * record kept for history), else 'active' / 'inactive'.
+     * The workforce state of THIS record at its current company: active /
+     * inactive. "Transferred away" is not a per-record state under the
+     * single-record model — it is a per-COMPANY view (a closed stint in
+     * employee_company_history), computed where the acting company is known
+     * (EmployeeController / EmployeeQueryFilter), never from a column here.
      */
     public function status(): string
     {
-        if ($this->transferred_out_at !== null) {
-            return 'transferred';
-        }
-
         return $this->active ? 'active' : 'inactive';
-    }
-
-    public function isTransferredOut(): bool
-    {
-        return $this->transferred_out_at !== null;
     }
 
     protected static function booted(): void

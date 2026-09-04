@@ -507,6 +507,7 @@ return [
         'active' => 'Activo',
         'inactive' => 'Inactivo',
         'status_transferred' => 'Transferido',
+        'transferred_readonly_banner' => 'Este empleado se transfirió a :company el :date. Registro histórico — solo lectura.',
         'employment_history' => 'Historial laboral',
         'history_present' => 'Actual',
         'history_view' => 'Ver historial en esta empresa',

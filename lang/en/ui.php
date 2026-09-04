@@ -505,6 +505,7 @@ return [
         'active' => 'Active',
         'inactive' => 'Inactive',
         'status_transferred' => 'Transferred',
+        'transferred_readonly_banner' => 'This employee transferred to :company on :date. Historical record only.',
         'employment_history' => 'Employment History',
         'history_present' => 'Present',
         'history_view' => 'View history at this company',

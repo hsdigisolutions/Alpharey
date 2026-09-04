@@ -229,7 +229,11 @@ Route::middleware(['auth', 'active', 'two_factor', 'not_worker'])->group(functio
     Route::post('/employees/bulk-active', [EmployeeController::class, 'bulkActive'])->name('employees.bulk-active');
     Route::get('/employees', [EmployeeController::class, 'index'])->name('employees.index');
     Route::post('/employees', [EmployeeController::class, 'store'])->name('employees.store');
-    Route::get('/employees/{employee}', [EmployeeController::class, 'show'])->name('employees.show');
+    // NB: param is {employeeId} (not {employee}) so implicit binding does NOT
+    // apply here — show() resolves manually to allow an old company to open a
+    // worker who has since transferred away (read-only). update/destroy keep
+    // {employee} + the tenant-scoped binding, so writes still 404 cross-company.
+    Route::get('/employees/{employeeId}', [EmployeeController::class, 'show'])->name('employees.show');
     Route::put('/employees/{employee}', [EmployeeController::class, 'update'])->name('employees.update');
     Route::delete('/employees/{employee}', [EmployeeController::class, 'destroy'])->name('employees.destroy');
     Route::post('/employees/{employee}/transfer', [EmployeeController::class, 'transfer'])->name('employees.transfer');

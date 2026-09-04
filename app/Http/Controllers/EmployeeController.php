@@ -17,6 +17,7 @@ use App\Models\EmployeeWageRate;
 use App\Models\EquipmentIncident;
 use App\Models\Payroll;
 use App\Models\Project;
+use App\Models\Scopes\CompanyScope;
 use App\Models\UserColumnSetting;
 use App\Models\WorkerConsent;
 use App\Services\Attendance\AttendanceService;
@@ -71,6 +72,7 @@ class EmployeeController extends Controller
             : 25;
 
         $canSeeWages = Gate::allows('payroll.view') || Gate::allows('employees.edit');
+        $actingCompanyId = app(CurrentCompany::class)->id();
 
         // Resolved once, reused for both the list filter and the form dropdown.
         $departmentOptions = $this->departmentOptions();
@@ -97,6 +99,10 @@ class EmployeeController extends Controller
                 'base_salary' => $canSeeWages ? $employee->getAttribute('base_salary') : null,
                 'commission_percent' => $canSeeWages ? $employee->commission_percent : null,
                 'active' => $employee->active,
+                // A row surfaced by the 'transferred' filter lives at another
+                // company now — flag it so the list badges "Transferred to {company}"
+                // (its `company` above is that new company) and opens read-only.
+                'transferred_away' => $actingCompanyId !== null && (int) $employee->company_id !== $actingCompanyId,
                 'status' => $employee->status(),
                 'doc_status' => $status->worst($employee->documents),
             ]);
@@ -171,12 +177,53 @@ class EmployeeController extends Controller
         ];
     }
 
-    public function show(Request $request, Employee $employee, DocumentStatus $status, WageRateService $wageRates, DocumentPanelPayload $panel): Response
+    public function show(Request $request, int $employeeId, DocumentStatus $status, WageRateService $wageRates, DocumentPanelPayload $panel): Response
     {
         Gate::authorize('employees.view');
 
+        $actingCompanyId = app(CurrentCompany::class)->id();
+        $isSuperAdmin = $request->user()?->isSuperAdmin() ?? false;
+
+        // Resolve WITHOUT the tenant scope so the OLD company can open a worker
+        // who has since transferred away (their record's company_id is the new
+        // company now). SoftDeletes still applies, so pre-redesign orphan
+        // records stay hidden.
+        $employee = Employee::query()->withoutGlobalScope(CompanyScope::class)->findOrFail($employeeId);
+
+        $isOwn = $actingCompanyId !== null && (int) $employee->company_id === $actingCompanyId;
+        $hasStintHere = $actingCompanyId !== null
+            && $employee->companyHistory()->where('company_id', $actingCompanyId)->exists();
+
+        // A company may open a worker who is currently theirs, or who previously
+        // worked here (a closed stint in their history). Anyone else → 404, so
+        // cross-company privacy is unchanged. Super Admin sees all.
+        abort_unless($isSuperAdmin || $isOwn || $hasStintHere, 404);
+
+        // READ-ONLY when the acting company is not the worker's CURRENT company
+        // (they transferred away — this is a historical record). Every data tab
+        // below is then pinned to the acting company's own stint via
+        // $historyScope, so the new company's attendance/wages never leak here.
+        $readOnly = ! $isOwn && ! $isSuperAdmin;
+        $historyScope = $readOnly ? $actingCompanyId : null;
+
+        // Banner: where they went + the date they left here.
+        $transferBanner = null;
+        if ($readOnly) {
+            $leftStint = $employee->companyHistory()
+                ->where('company_id', $actingCompanyId)
+                ->whereNotNull('ended_at')
+                ->orderByDesc('ended_at')
+                ->first();
+            $transferBanner = [
+                'transferred_to' => $employee->company?->name,
+                'on' => $leftStint?->ended_at?->toDateString(),
+            ];
+        }
+
         $canSeeWages = Gate::allows('payroll.view') || Gate::allows('employees.edit');
         $canSeeBank = $canSeeWages;
+        // Write abilities collapse to false in the read-only historical view.
+        $canWrite = fn (string $ability): bool => ! $readOnly && Gate::allows($ability);
 
         return Inertia::render('Employees/Detail', [
             'employee' => array_merge($employee->only([
@@ -188,11 +235,11 @@ class EmployeeController extends Controller
                 'joining_date' => $employee->joining_date?->toDateString(),
                 'leaving_date' => $employee->leaving_date?->toDateString(),
                 'company' => $employee->company?->name,
-                // Feature 4 — transfer state for the docs banner + history note.
-                'status' => $employee->status(),
+                // Read-only historical view (transferred away) reads 'transferred';
+                // otherwise the record's own active/inactive state.
+                'status' => $readOnly ? 'transferred' : $employee->status(),
                 'documents_pending_reupload' => $employee->documents_pending_reupload,
                 'transferred_at' => $employee->transferred_at?->toDateString(),
-                'transferred_out_at' => $employee->transferred_out_at?->toDateString(),
                 'previous_company' => $employee->previousCompany?->name,
                 'team_leader' => $employee->teamLeader?->full_name,
                 'wage_type' => $employee->wage_type?->value,
@@ -206,6 +253,12 @@ class EmployeeController extends Controller
                 'daily_wage' => $canSeeWages ? $employee->getAttribute('daily_wage') : null,
                 'per_meter_rate' => $canSeeWages ? $employee->getAttribute('per_meter_rate') : null,
             ]),
+            // Read-only historical view: the acting company is not this worker's
+            // current company (they transferred away). Drives the banner + hides
+            // every write control; the server also enforces it (data is pinned
+            // to the acting company below, and writes 404 via the scoped routes).
+            'readOnly' => $readOnly,
+            'transferBanner' => $transferBanner,
             // Mobile PWA access (Worker PWA). Only whether a login exists and
             // which address it uses — never anything about the credential.
             'appAccess' => [
@@ -237,18 +290,20 @@ class EmployeeController extends Controller
                 ]),
             // Nómina tab — pay data, so only for a wage viewer; empty otherwise.
             'payroll' => $canSeeWages ? $this->payrollRows($employee) : [],
-            // Historial de Salario — the effective-dated wage timeline.
-            'wageHistory' => $canSeeWages ? $this->wageHistoryRows($employee, $wageRates) : [],
+            // Historial de Salario — the effective-dated wage timeline (pinned to
+            // the acting company's stint in the read-only historical view).
+            'wageHistory' => $canSeeWages ? $this->wageHistoryRows($employee, $wageRates, $historyScope) : [],
             // Asistencia tab — per-employee month grid + summary (attendance.view gated).
             'attendanceTab' => Gate::allows('attendance.view')
-                ? $this->attendanceTabPayload($employee, $request->string('att_month')->value() ?: now()->format('Y-m'), $canSeeWages)
+                ? $this->attendanceTabPayload($employee, $request->string('att_month')->value() ?: now()->format('Y-m'), $canSeeWages, $historyScope)
                 : null,
-            'attendanceEditing' => Gate::allows('attendance.view') && $request->filled('att_edit')
+            // No cell editing in the read-only historical view.
+            'attendanceEditing' => Gate::allows('attendance.view') && ! $readOnly && $request->filled('att_edit')
                 ? $this->attendanceEditingPayload($employee, (int) $request->integer('att_edit'), $canSeeWages)
                 : null,
             'attendanceProjects' => Gate::allows('attendance.view') ? $this->attendanceProjects() : [],
             'attendanceEmployee' => Gate::allows('attendance.view') ? $this->attendanceEmployeePayload($employee, $canSeeWages, $wageRates) : null,
-            'canManageAttendance' => Gate::allows('attendance.create'),
+            'canManageAttendance' => ! $readOnly && Gate::allows('attendance.create'),
             // Equipamiento tab — kit issued to this worker (inventory.view gated).
             // Items only, never any cost figure — a worker's equipment is not pay.
             'equipmentTab' => Gate::allows('inventory.view') ? $this->equipmentTab($employee) : null,
@@ -258,17 +313,22 @@ class EmployeeController extends Controller
             'canSeeWages' => $canSeeWages,
             'designationOptions' => ProjectDesignationRateController::optionsFor(app(CurrentCompany::class)->id()),
             'departmentOptions' => $this->departmentOptions(),
-            // Feature 4 — companies this employee could be transferred to (admins only).
-            'transferCompanies' => $this->transferCompanies($employee),
+            // Feature 4 — companies this employee could be transferred to (admins
+            // only). Never from the read-only historical view.
+            'transferCompanies' => $readOnly ? [] : $this->transferCompanies($employee),
+            // Every write ability collapses to false in the read-only historical
+            // view; download stays (viewing a past document is a read). The
+            // write ROUTES are also tenant-scoped, so a cross-company write 404s
+            // regardless of the UI — this is defence in depth, not the only gate.
             'can' => [
-                'edit' => Gate::allows('employees.edit'),
-                'delete' => Gate::allows('employees.delete'),
-                'transfer' => $this->canTransfer($request),
-                'manageWages' => Gate::allows('employees.edit'),
-                'upload' => Gate::allows('documents.upload'),
+                'edit' => $canWrite('employees.edit'),
+                'delete' => $canWrite('employees.delete'),
+                'transfer' => ! $readOnly && $this->canTransfer($request),
+                'manageWages' => $canWrite('employees.edit'),
+                'upload' => $canWrite('documents.upload'),
                 'download' => Gate::allows('documents.download'),
-                'deleteDocs' => Gate::allows('documents.delete'),
-                'editDocs' => Gate::allows('documents.edit'),
+                'deleteDocs' => $canWrite('documents.delete'),
+                'editDocs' => $canWrite('documents.edit'),
             ],
         ]);
     }
@@ -461,11 +521,14 @@ class EmployeeController extends Controller
      *
      * @return list<array<string, mixed>>
      */
-    private function wageHistoryRows(Employee $employee, WageRateService $wageRates): array
+    private function wageHistoryRows(Employee $employee, WageRateService $wageRates, ?int $scopeCompanyId = null): array
     {
         $currentId = $wageRates->rateForDate($employee->id, now()->toDateString())?->id;
 
         return $wageRates->history($employee)
+            // Read-only historical view: only the acting company's own rate
+            // periods (the new company's rates never leak to the old one).
+            ->when($scopeCompanyId !== null, fn ($rows) => $rows->where('company_id', $scopeCompanyId)->values())
             ->map(fn (EmployeeWageRate $r): array => [
                 'id' => $r->id,
                 'wage_type' => $r->wage_type?->value,
@@ -485,13 +548,17 @@ class EmployeeController extends Controller
      *
      * @return array<string, mixed>
      */
-    private function attendanceTabPayload(Employee $employee, string $month, bool $canSeeWages): array
+    private function attendanceTabPayload(Employee $employee, string $month, bool $canSeeWages, ?int $scopeCompanyId = null): array
     {
         $start = Carbon::createFromFormat('Y-m', $month)->startOfMonth();
         $end = $start->copy()->endOfMonth();
 
+        // $scopeCompanyId is set only for the read-only historical view (an old
+        // company looking at a worker who transferred away): pin the rows to
+        // THAT company's stint so the new company's attendance never leaks.
         $records = Attendance::query()->withoutGlobalScopes()
             ->where('employee_id', $employee->id)
+            ->when($scopeCompanyId !== null, fn ($q) => $q->where('company_id', $scopeCompanyId))
             ->whereBetween('date', [$start->toDateString(), $end->toDateString()])
             ->with('project:id,name')
             ->get();
@@ -521,7 +588,10 @@ class EmployeeController extends Controller
             ->workingDays((int) $employee->company_id);
         $virtualAbsences = 0;
         $cursor = $start->copy();
-        while ($cursor->lte($end)) {
+        // The read-only historical view ($scopeCompanyId set) shows ONLY the real
+        // recorded rows of that stint — it never fabricates auto-absences, which
+        // would otherwise mark every weekday after the worker left as "absent".
+        while ($scopeCompanyId === null && $cursor->lte($end)) {
             $day = (int) $cursor->format('j');
             if (! isset($grid[$day]) && AttendanceAbsence::isUnrecordedAbsence($cursor, $today, $employee->joining_date, $employee->active, $employee->active_since, $employee->transferred_at, $workingDays)) {
                 $grid[$day] = [
