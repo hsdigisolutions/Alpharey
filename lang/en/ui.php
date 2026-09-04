@@ -2002,20 +2002,12 @@ return [
         'install_title' => 'Install the app',
         'install' => 'Install the app',
         'install_hint' => 'Install it on your phone to open it like an app.',
-        // iOS has no install API — the manual route is the only honest option.
-        'install_ios_1' => 'In the Safari bar, tap the Share button.',
-        'install_ios_2_pre' => 'Scroll down and choose',
-        'install_ios_2_action' => 'Add to Home Screen',
-        'install_ios_share_caption' => 'the Share button',
-        'install_ios_note' => 'The Share button is in Safari\'s bar (at the bottom of the screen) — not on this page.',
-        'install_ios_chrome_banner' => 'You\'re in Chrome. Copy the link below, open Safari, and paste it there — the app can only be installed from Safari.',
-        'install_copy_manual' => 'Tap the link, then copy it.',
+        // iOS Safari tip (non-blocking) — Add to Home Screen is a standard iOS
+        // feature; we just point the way. The banner shows the share glyph
+        // between these two halves.
+        'install_ios_1' => 'To install this app: tap the share button',
+        'install_ios_2' => 'then "Add to Home Screen".',
         'install_open_safari' => 'Open it in Safari to install it on your phone.',
-        'install_required_title' => 'Install the app to continue',
-        'install_required_body' => 'For the app to work reliably on site, install it on your phone. You can\'t use it in a browser tab.',
-        'install_copy_link' => 'Copy link',
-        'install_copied' => 'Link copied ✓',
-        'install_generic' => 'Open your browser menu and choose “Install app” or “Add to Home Screen”.',
         // Privacy notice — shown once (per version) before the first punch.
         // Information duty, NOT consent (LOPDGDD art. 90 / RD-ley 8/2019);
         // see docs/GDPR_WORKER_NOTICE.md. Retention/contact wording is

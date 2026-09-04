@@ -2007,20 +2007,12 @@ return [
         'install_title' => 'Instala la app',
         'install' => 'Instalar la aplicación',
         'install_hint' => 'Instálala en tu teléfono para abrirla como una app.',
-        // iOS has no install API — the manual route is the only honest option.
-        'install_ios_1' => 'En la barra de Safari, toca el botón Compartir.',
-        'install_ios_2_pre' => 'Desliza y elige',
-        'install_ios_2_action' => 'Añadir a pantalla de inicio',
-        'install_ios_share_caption' => 'el botón Compartir',
-        'install_ios_note' => 'El botón Compartir está en la barra de Safari (abajo en la pantalla), no en esta página.',
-        'install_ios_chrome_banner' => 'Estás en Chrome. Copia el enlace de abajo, abre Safari y pégalo allí — la app solo se puede instalar desde Safari.',
-        'install_copy_manual' => 'Toca el enlace y cópialo.',
+        // Consejo iOS Safari (no bloqueante) — Añadir a pantalla de inicio es una
+        // función estándar de iOS; solo indicamos el camino. El banner muestra el
+        // icono de compartir entre las dos mitades.
+        'install_ios_1' => 'Para instalar esta app: toca el botón compartir',
+        'install_ios_2' => 'y luego «Añadir a pantalla de inicio».',
         'install_open_safari' => 'Ábrela en Safari para instalarla en tu teléfono.',
-        'install_required_title' => 'Instala la app para continuar',
-        'install_required_body' => 'Para que funcione bien en la obra, instálala en tu teléfono. No se puede usar en una pestaña del navegador.',
-        'install_copy_link' => 'Copiar enlace',
-        'install_copied' => 'Enlace copiado ✓',
-        'install_generic' => 'Abre el menú del navegador y elige «Instalar app» o «Añadir a pantalla de inicio».',
         // Privacy notice — shown once (per version) before the first punch.
         // Information duty, NOT consent (LOPDGDD art. 90 / RD-ley 8/2019);
         // see docs/GDPR_WORKER_NOTICE.md. Retention/contact wording is
