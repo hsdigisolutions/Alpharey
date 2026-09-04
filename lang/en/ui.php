@@ -2008,6 +2008,8 @@ return [
         'install_ios_2_action' => 'Add to Home Screen',
         'install_ios_share_caption' => 'the Share button',
         'install_ios_note' => 'The Share button is in Safari\'s bar (at the bottom of the screen) — not on this page.',
+        'install_ios_chrome_banner' => 'You\'re in Chrome. Copy the link below, open Safari, and paste it there — the app can only be installed from Safari.',
+        'install_copy_manual' => 'Tap the link, then copy it.',
         'install_open_safari' => 'Open it in Safari to install it on your phone.',
         'install_required_title' => 'Install the app to continue',
         'install_required_body' => 'For the app to work reliably on site, install it on your phone. You can\'t use it in a browser tab.',

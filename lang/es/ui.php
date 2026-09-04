@@ -2013,6 +2013,8 @@ return [
         'install_ios_2_action' => 'Añadir a pantalla de inicio',
         'install_ios_share_caption' => 'el botón Compartir',
         'install_ios_note' => 'El botón Compartir está en la barra de Safari (abajo en la pantalla), no en esta página.',
+        'install_ios_chrome_banner' => 'Estás en Chrome. Copia el enlace de abajo, abre Safari y pégalo allí — la app solo se puede instalar desde Safari.',
+        'install_copy_manual' => 'Toca el enlace y cópialo.',
         'install_open_safari' => 'Ábrela en Safari para instalarla en tu teléfono.',
         'install_required_title' => 'Instala la app para continuar',
         'install_required_body' => 'Para que funcione bien en la obra, instálala en tu teléfono. No se puede usar en una pestaña del navegador.',
