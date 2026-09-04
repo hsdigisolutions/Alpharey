@@ -1,34 +1,39 @@
 <script setup>
 /**
  * Full-screen BLOCKING install gate for the worker PWA. Shown whenever the app
- * is NOT running standalone (a browser tab), and it cannot be dismissed — the
- * crew must install the app to the home screen before they can use it. Once
- * installed and launched from the home screen, isStandalone() is true and this
- * never renders (WorkerLayout stops mounting it).
+ * is NOT running standalone (a browser tab); it cannot be dismissed — the crew
+ * install it to the home screen, then it opens standalone and this never renders.
  *
- * Per platform:
- *  - Android/Chrome (beforeinstallprompt fired) → a one-tap native Install button.
- *  - iOS Safari → the Share → "Add to Home Screen" steps (iOS has no install API).
- *  - iOS non-Safari / any in-app webview (WhatsApp, Gmail, Instagram…) → these
- *    cannot install; show "open in Safari" + a copy-link button.
- *  - Anything else → the generic "use the browser menu" fallback + copy link.
+ * ONE flow per environment, and NEVER a fake button:
+ *  - iOS Safari      → step-by-step INSTRUCTIONS pointing at Safari's own Share
+ *                      button (iOS has no install API — there is no button we can
+ *                      offer, so we don't pretend to). The only real control here
+ *                      is "Log out".
+ *  - Android/Chrome  → a real one-tap Install button (beforeinstallprompt).
+ *  - In-app webview  → cannot install anywhere; "open in Safari/Chrome" + Copy link.
+ *  - Anything else   → generic "use the browser menu" + Copy link.
+ *
+ * Every actionable control is a real <button> with a bound handler. The two-card
+ * "looks like a button" instruction layout that confused workers is gone.
  */
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { router } from '@inertiajs/vue3';
 import { canPromptInstall, isInAppBrowser, isIos, isIosSafari, promptInstall } from '@/pwa';
 import VButton from '@/Components/ui/VButton.vue';
 
-const canInstall = ref(canPromptInstall());
+// A native install prompt only ever exists off iOS — guard it so an install
+// button can never show on an iPhone, whatever the UA quirks.
+const canInstall = ref(canPromptInstall() && !isIos());
 const copied = ref(false);
 
 function refresh() {
-    canInstall.value = canPromptInstall();
+    canInstall.value = canPromptInstall() && !isIos();
 }
 
 const mode = computed(() => {
-    if (canInstall.value) return 'android';
-    if (isIosSafari()) return 'ios-safari';
-    if (isIos() || isInAppBrowser()) return 'open-browser';
+    if (isIosSafari()) return 'ios-safari';               // the one iOS path (instructions)
+    if (isIos() || isInAppBrowser()) return 'open-browser'; // cannot install here
+    if (canInstall.value) return 'android';               // real one-tap install
     return 'generic';
 });
 
@@ -37,8 +42,6 @@ async function install() {
     refresh();
 }
 
-// The gate blocks the whole app EXCEPT logout — so a worker on the wrong
-// device or account is never trapped and can always sign out.
 function logout() {
     router.post('/logout', {}, { replace: true });
 }
@@ -50,7 +53,6 @@ async function copyLink() {
         copied.value = true;
         setTimeout(() => { copied.value = false; }, 2500);
     } catch {
-        // Clipboard blocked (older webview): select-and-copy fallback via prompt.
         window.prompt(url, url);
     }
 }
@@ -66,72 +68,87 @@ onUnmounted(() => {
 </script>
 
 <template>
-    <div class="fixed inset-0 z-50 flex flex-col items-center justify-center overflow-y-auto bg-surface px-6 text-center"
-        style="padding-top: max(1.5rem, env(safe-area-inset-top)); padding-bottom: max(1.5rem, env(safe-area-inset-bottom));"
+    <div class="fixed inset-0 z-[100] overflow-y-auto bg-surface"
+        style="padding-top: max(2rem, env(safe-area-inset-top)); padding-bottom: max(2rem, env(safe-area-inset-bottom));"
         role="dialog" aria-modal="true">
-        <div class="w-full max-w-sm">
+        <div class="mx-auto flex min-h-full w-full max-w-sm flex-col items-center justify-center px-6 text-center">
+
             <img src="/icons/icon-192.png" alt="AlphaRey"
-                class="mx-auto h-20 w-20 rounded-2xl shadow-card" width="80" height="80">
+                class="h-[4.5rem] w-[4.5rem] rounded-[1.25rem] shadow-raised" width="72" height="72">
 
-            <h1 class="mt-5 text-title font-semibold text-ink">{{ $t('worker.install_required_title') }}</h1>
-            <p class="mt-2 text-sm text-ink-soft">{{ $t('worker.install_required_body') }}</p>
+            <h1 class="mt-6 text-title font-semibold tracking-tight text-ink">{{ $t('worker.install_required_title') }}</h1>
+            <p class="mt-2 text-sm leading-relaxed text-ink-soft">{{ $t('worker.install_required_body') }}</p>
 
-            <!-- Android / Chrome: one-tap native install -->
-            <div v-if="mode === 'android'" class="mt-6">
+            <!-- ============ iOS Safari: instructions only (no buttons) ============ -->
+            <div v-if="mode === 'ios-safari'" class="mt-7 w-full">
+                <!-- The share glyph, shown big and unmistakable, as the thing to look for. -->
+                <div class="flex flex-col items-center">
+                    <span class="flex h-14 w-14 items-center justify-center rounded-2xl bg-accent-soft text-accent">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" class="h-7 w-7" aria-hidden="true">
+                            <path d="M12 14V4" />
+                            <path d="m8.5 7.5 3.5-3.5 3.5 3.5" />
+                            <path d="M7 11H6a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2h-1" />
+                        </svg>
+                    </span>
+                    <p class="mt-2 text-xs font-medium text-muted">{{ $t('worker.install_ios_share_caption') }}</p>
+                </div>
+
+                <!-- Numbered steps — clearly informational, not tappable. -->
+                <ol class="mt-5 space-y-3 text-start">
+                    <li class="flex items-start gap-3">
+                        <span class="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-accent text-[13px] font-semibold text-on-accent">1</span>
+                        <span class="text-sm leading-relaxed text-ink">{{ $t('worker.install_ios_1') }}</span>
+                    </li>
+                    <li class="flex items-start gap-3">
+                        <span class="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-accent text-[13px] font-semibold text-on-accent">2</span>
+                        <span class="text-sm leading-relaxed text-ink">
+                            {{ $t('worker.install_ios_2_pre') }}
+                            <span class="font-semibold text-ink">{{ $t('worker.install_ios_2_action') }}</span>
+                        </span>
+                    </li>
+                </ol>
+
+                <p class="mt-5 rounded-xl bg-surface-sunken px-4 py-3 text-xs leading-relaxed text-ink-soft">
+                    {{ $t('worker.install_ios_note') }}
+                </p>
+            </div>
+
+            <!-- ============ Android/Chrome: one real Install button ============ -->
+            <div v-else-if="mode === 'android'" class="mt-7 w-full">
                 <VButton class="w-full rounded-xl text-base font-semibold" size="lg" @click="install">
                     {{ $t('worker.install') }}
                 </VButton>
-                <p class="mt-2 text-xs text-muted">{{ $t('worker.install_hint') }}</p>
+                <p class="mt-3 text-xs text-muted">{{ $t('worker.install_hint') }}</p>
             </div>
 
-            <!-- iOS Safari: manual Add to Home Screen, with visual steps -->
-            <div v-else-if="mode === 'ios-safari'" class="mt-6 space-y-3 text-left">
-                <div class="flex items-start gap-3 rounded-lg border border-line bg-surface-raised p-3">
-                    <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-accent text-sm font-semibold text-on-accent">1</span>
-                    <p class="text-sm text-ink">
-                        {{ $t('worker.install_ios_1') }}
-                        <span class="inline-flex items-center align-middle text-accent" aria-hidden="true">
-                            <!-- iOS Share glyph -->
-                            <svg class="ml-1 h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                                <path d="M12 15V4" /><path d="m8 8 4-4 4 4" /><path d="M6 12H5a2 2 0 0 0-2 2v5a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-5a2 2 0 0 0-2-2h-1" />
-                            </svg>
-                        </span>
-                    </p>
-                </div>
-                <div class="flex items-start gap-3 rounded-lg border border-line bg-surface-raised p-3">
-                    <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-accent text-sm font-semibold text-on-accent">2</span>
-                    <p class="text-sm text-ink">{{ $t('worker.install_ios_2') }}</p>
-                </div>
-            </div>
-
-            <!-- iOS non-Safari / in-app webview: must open in the real browser -->
-            <div v-else-if="mode === 'open-browser'" class="mt-6">
-                <p class="rounded-lg bg-status-warn-soft px-4 py-3 text-sm text-status-warn">
+            <!-- ============ In-app webview: open in the real browser ============ -->
+            <div v-else-if="mode === 'open-browser'" class="mt-7 w-full">
+                <p class="rounded-xl bg-status-warn-soft px-4 py-3 text-sm leading-relaxed text-status-warn">
                     {{ $t('worker.install_open_safari') }}
                 </p>
-                <VButton variant="secondary" class="mt-3 w-full" @click="copyLink">
+                <VButton variant="secondary" class="mt-3 w-full rounded-xl" @click="copyLink">
                     {{ copied ? $t('worker.install_copied') : $t('worker.install_copy_link') }}
                 </VButton>
             </div>
 
-            <!-- Anything else (desktop / other browser): generic guidance -->
-            <div v-else class="mt-6">
-                <p class="rounded-lg bg-surface-raised px-4 py-3 text-sm text-ink-soft">
+            <!-- ============ Generic (desktop / other) ============ -->
+            <div v-else class="mt-7 w-full">
+                <p class="rounded-xl bg-surface-sunken px-4 py-3 text-sm leading-relaxed text-ink-soft">
                     {{ $t('worker.install_generic') }}
                 </p>
-                <VButton variant="secondary" class="mt-3 w-full" @click="copyLink">
+                <VButton variant="secondary" class="mt-3 w-full rounded-xl" @click="copyLink">
                     {{ copied ? $t('worker.install_copied') : $t('worker.install_copy_link') }}
                 </VButton>
             </div>
 
-            <!-- Only escape hatch under the gate: sign out (switch account / recover). -->
+            <!-- The only escape hatch under the gate: sign out. -->
             <button type="button"
-                class="mt-6 text-sm font-medium text-ink-soft underline-offset-2 transition hover:text-ink hover:underline active:scale-95"
+                class="mt-8 rounded-lg px-3 py-1.5 text-sm font-medium text-ink-soft transition active:scale-95 active:bg-surface-hover hover:text-ink"
                 @click="logout">
                 {{ $t('common.logout') }}
             </button>
 
-            <p class="mt-4 text-xs text-muted">{{ $t('worker.powered_by') }}</p>
+            <p class="mt-3 text-xs text-muted">{{ $t('worker.powered_by') }}</p>
         </div>
     </div>
 </template>
