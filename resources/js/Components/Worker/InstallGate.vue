@@ -14,6 +14,7 @@
  *  - Anything else → the generic "use the browser menu" fallback + copy link.
  */
 import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { router } from '@inertiajs/vue3';
 import { canPromptInstall, isInAppBrowser, isIos, isIosSafari, promptInstall } from '@/pwa';
 import VButton from '@/Components/ui/VButton.vue';
 
@@ -34,6 +35,12 @@ const mode = computed(() => {
 async function install() {
     await promptInstall();
     refresh();
+}
+
+// The gate blocks the whole app EXCEPT logout — so a worker on the wrong
+// device or account is never trapped and can always sign out.
+function logout() {
+    router.post('/logout', {}, { replace: true });
 }
 
 async function copyLink() {
@@ -117,7 +124,14 @@ onUnmounted(() => {
                 </VButton>
             </div>
 
-            <p class="mt-6 text-xs text-muted">{{ $t('worker.powered_by') }}</p>
+            <!-- Only escape hatch under the gate: sign out (switch account / recover). -->
+            <button type="button"
+                class="mt-6 text-sm font-medium text-ink-soft underline-offset-2 transition hover:text-ink hover:underline active:scale-95"
+                @click="logout">
+                {{ $t('common.logout') }}
+            </button>
+
+            <p class="mt-4 text-xs text-muted">{{ $t('worker.powered_by') }}</p>
         </div>
     </div>
 </template>
