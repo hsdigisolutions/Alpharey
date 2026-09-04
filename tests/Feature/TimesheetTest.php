@@ -104,6 +104,45 @@ it('ships per-worker worked dates that reconcile to the summary, and exports bot
     $this->assertDatabaseHas('audit_logs', ['action' => 'exported', 'module' => 'attendance']);
 });
 
+it('ships a calendar grid block whose per-day + grand totals reconcile with the table', function (): void {
+    $project = Project::factory()->create(['company_id' => $this->company->id]);
+    $w1 = Employee::factory()->forCompany($this->company)->create();
+    $w2 = Employee::factory()->forCompany($this->company)->create();
+
+    // w1: full 8h on the 3rd, half 4h on the 5th. w2: hourly 5.5h on the 4th.
+    Attendance::factory()->create(['company_id' => $this->company->id, 'employee_id' => $w1->id, 'project_id' => $project->id, 'date' => '2026-08-03', 'status' => 'present', 'day_type' => 'full', 'hours_worked' => '8']);
+    Attendance::factory()->create(['company_id' => $this->company->id, 'employee_id' => $w1->id, 'project_id' => $project->id, 'date' => '2026-08-05', 'status' => 'present', 'day_type' => 'half', 'hours_worked' => '4']);
+    Attendance::factory()->create(['company_id' => $this->company->id, 'employee_id' => $w2->id, 'project_id' => $project->id, 'date' => '2026-08-04', 'status' => 'present', 'day_type' => 'hourly', 'hours_worked' => '5.5']);
+
+    $res = $this->actingAs($this->admin)
+        ->get("/timesheet?view=project&project={$project->id}&mode=custom&from=2026-08-01&to=2026-08-31")
+        ->assertOk();
+    $sheet = $res->viewData('page')['props']['sheet'];
+    $cal = $sheet['calendar'];
+
+    // Day axis covers the whole month, with weekend flags (2 Aug 2026 is a Sunday).
+    expect($cal['days'])->toHaveCount(31)
+        ->and(collect($cal['days'])->firstWhere('date', '2026-08-02')['weekend'])->toBeTrue()
+        ->and(collect($cal['days'])->firstWhere('date', '2026-08-03')['weekend'])->toBeFalse();
+
+    // Workers-present per day.
+    expect($cal['daily_present']['2026-08-03'])->toBe(1)
+        ->and($cal['daily_present']['2026-08-04'])->toBe(1)
+        ->and($cal['daily_present']['2026-08-05'])->toBe(1)
+        ->and($cal['daily_present']['2026-08-06'])->toBe(0);
+
+    // Net hours per day — the SAME displayHoursNet values as the table.
+    expect((float) $cal['daily_hours']['2026-08-03'])->toBe(8.0)
+        ->and((float) $cal['daily_hours']['2026-08-04'])->toBe(5.5)
+        ->and((float) $cal['daily_hours']['2026-08-05'])->toBe(4.0);
+
+    // Grand totals equal the table totals exactly (8 + 5.5 + 4 = 17.5, 3 days).
+    expect((float) $cal['grand_total_hours'])->toBe(17.5)
+        ->and((float) $cal['grand_total_hours'])->toBe((float) $sheet['total_hours'])
+        ->and($cal['grand_total_days'])->toBe(3)
+        ->and($cal['grand_total_days'])->toBe($sheet['total_days']);
+});
+
 it('denies the timesheet without attendance.view', function (): void {
     $user = User::factory()->forCompany($this->company)->create();
 

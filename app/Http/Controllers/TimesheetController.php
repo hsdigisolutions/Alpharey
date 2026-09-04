@@ -135,11 +135,48 @@ class TimesheetController extends Controller
             ->values()
             ->all();
 
+        // Calendar-grid axis + per-day aggregates. Built from the SAME per-day
+        // rows above (each day's `hours` is displayHoursNet), so the grid view
+        // reconciles to the table view and to the summary to the cent — never a
+        // second hours calculation. daily_present = workers on the project that
+        // day; daily_hours = the sum of their net hours that day.
+        $days = [];
+        $dailyPresent = [];
+        $dailyHours = [];
+        for ($cursor = $start->copy(); $cursor->lte($end); $cursor->addDay()) {
+            $key = $cursor->toDateString();
+            $days[] = ['day' => (int) $cursor->day, 'date' => $key, 'weekend' => $cursor->isWeekend()];
+            $dailyPresent[$key] = 0;
+            $dailyHours[$key] = 0.0;
+        }
+        foreach ($rows as $row) {
+            foreach ($row['days'] as $day) {
+                $key = $day['date'];
+                if (! array_key_exists($key, $dailyPresent)) {
+                    continue;
+                }
+                $dailyPresent[$key]++;
+                $dailyHours[$key] = round($dailyHours[$key] + (float) $day['hours'], 2);
+            }
+        }
+
+        $totalHours = round(array_sum(array_map(fn (array $r): float => (float) $r['hours'], $rows)), 2);
+        $totalDays = array_sum(array_map(fn (array $r): int => (int) $r['days_present'], $rows));
+
         return [
             'rows' => $rows,
-            'total_hours' => round(array_sum(array_map(fn (array $r): float => (float) $r['hours'], $rows)), 2),
-            'total_days' => array_sum(array_map(fn (array $r): int => (int) $r['days_present'], $rows)),
+            'total_hours' => $totalHours,
+            'total_days' => $totalDays,
             'workers' => count($rows),
+            // Everything the calendar/spreadsheet grid needs; the table view
+            // ignores it and keeps using rows + totals as before.
+            'calendar' => [
+                'days' => $days,
+                'daily_present' => $dailyPresent,
+                'daily_hours' => $dailyHours,
+                'grand_total_days' => $totalDays,
+                'grand_total_hours' => $totalHours,
+            ],
         ];
     }
 

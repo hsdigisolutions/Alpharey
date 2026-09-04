@@ -3,7 +3,7 @@
  * Timesheet — a weekly (or monthly) per-employee view of attendance. Admins
  * pick any employee, navigate by week/month, filter by project, and export.
  */
-import { computed, reactive } from 'vue';
+import { computed, reactive, ref } from 'vue';
 import { Head, router, usePage } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import VPageHeader from '@/Components/ui/VPageHeader.vue';
@@ -12,6 +12,7 @@ import VButton from '@/Components/ui/VButton.vue';
 import VSelect from '@/Components/ui/VSelect.vue';
 import VBadge from '@/Components/ui/VBadge.vue';
 import AppIcon from '@/Components/AppIcon.vue';
+import TimesheetCalendarGrid from '@/Components/Timesheet/TimesheetCalendarGrid.vue';
 
 const props = defineProps({
     employees: { type: Array, required: true },
@@ -33,6 +34,10 @@ const state = reactive({
     from: props.filters.from ?? props.period.start,
     to: props.filters.to ?? props.period.end,
 });
+
+// By-Project sub-view: the current summary Table, or the new Calendar grid.
+// Purely client-side — both render from the same `sheet` payload.
+const projectView = ref('table');
 
 // Which By-Project worker rows are expanded to show their worked dates.
 const expanded = reactive({});
@@ -158,9 +163,23 @@ function exportSheet(format) {
                         · {{ $t('timesheet.days_present') }}: <span class="tabular-nums">{{ sheet.days_present }}</span>
                     </template>
                 </p>
-                <div v-if="can.export" class="flex items-center gap-2">
-                    <VButton variant="secondary" size="sm" icon="download" @click="exportSheet('excel')">Excel</VButton>
-                    <VButton variant="secondary" size="sm" icon="download" @click="exportSheet('pdf')">PDF</VButton>
+                <div class="flex items-center gap-2">
+                    <!-- By-Project sub-view: Table (current) or Calendar grid. -->
+                    <div v-if="state.view === 'project' && state.project"
+                        class="inline-flex rounded-lg border border-line bg-surface-sunken p-0.5">
+                        <button type="button"
+                            class="rounded-md px-3 py-1 text-xs font-medium transition"
+                            :class="projectView === 'table' ? 'bg-surface-raised text-ink shadow-card' : 'text-ink-soft hover:text-ink'"
+                            @click="projectView = 'table'">{{ $t('timesheet.view_table') }}</button>
+                        <button type="button"
+                            class="rounded-md px-3 py-1 text-xs font-medium transition"
+                            :class="projectView === 'calendar' ? 'bg-surface-raised text-ink shadow-card' : 'text-ink-soft hover:text-ink'"
+                            @click="projectView = 'calendar'">{{ $t('timesheet.view_calendar') }}</button>
+                    </div>
+                    <div v-if="can.export" class="flex items-center gap-2">
+                        <VButton variant="secondary" size="sm" icon="download" @click="exportSheet('excel')">Excel</VButton>
+                        <VButton variant="secondary" size="sm" icon="download" @click="exportSheet('pdf')">PDF</VButton>
+                    </div>
                 </div>
             </div>
 
@@ -205,10 +224,14 @@ function exportSheet(format) {
                 </table>
             </div>
 
-            <!-- By project — all employees on the project, summarised -->
-            <div v-else class="overflow-x-auto">
+            <!-- By project — all employees on the project -->
+            <div v-else>
                 <p v-if="!state.project" class="py-6 text-center text-sm text-muted">{{ $t('timesheet.pick_project') }}</p>
-                <table v-else class="w-full text-sm">
+                <!-- Calendar / spreadsheet grid -->
+                <TimesheetCalendarGrid v-else-if="projectView === 'calendar'" :sheet="sheet" />
+                <!-- Table view (default; unchanged) -->
+                <div v-else class="overflow-x-auto">
+                <table class="w-full text-sm">
                     <thead>
                         <tr class="border-b border-line text-xs uppercase text-muted">
                             <th class="px-2 py-2 text-start font-medium">{{ $t('today.employee') }}</th>
@@ -279,6 +302,7 @@ function exportSheet(format) {
                         </tr>
                     </tbody>
                 </table>
+                </div>
             </div>
         </VCard>
     </AppLayout>
