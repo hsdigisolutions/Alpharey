@@ -173,17 +173,12 @@ function eur(n) {
                     </VBadge>
                 </td>
                 <td class="px-3 py-2.5 text-end">
-                    <span class="flex items-center justify-end gap-1.5">
-                        <VButton v-if="can.edit && d.status === 'active'" variant="ghost" size="sm" @click="openEdit(d)">
-                            <Bilingual k="deployments.edit_action" inline />
-                        </VButton>
-                        <VButton v-if="can.edit && d.status === 'active'" variant="ghost" size="sm" @click="complete(d)">
-                            <Bilingual k="deployments.complete" inline />
-                        </VButton>
-                        <VButton v-if="can.edit && d.status === 'active'" variant="ghost" size="sm" @click="cancel(d)">
-                            <Bilingual k="deployments.cancel_action" inline />
-                        </VButton>
+                    <span v-if="can.edit && d.status === 'active'" class="flex items-center justify-end gap-0.5">
+                        <VButton variant="ghost" size="sm" icon="edit" :title="$tPair('deployments.edit_action')" @click="openEdit(d)" />
+                        <VButton variant="ghost" size="sm" icon="check" :title="$tPair('deployments.complete')" @click="complete(d)" />
+                        <VButton variant="ghost" size="sm" icon="stop" :title="$tPair('deployments.cancel_action')" @click="cancel(d)" />
                     </span>
+                    <span v-else class="text-muted">—</span>
                 </td>
             </tr>
             <template v-if="deployments.data.length === 0" #empty><VEmptyState icon="deployments" /></template>
