@@ -10,10 +10,12 @@ import { computed, reactive, ref } from 'vue';
 import { Head, router, useForm } from '@inertiajs/vue3';
 import { ensureCompanySelected } from '@/composables/useCompanyGate';
 import AppLayout from '@/Layouts/AppLayout.vue';
+import AppIcon from '@/Components/AppIcon.vue';
 import FormField from '@/Components/ui/FormField.vue';
 import VBadge from '@/Components/ui/VBadge.vue';
 import VButton from '@/Components/ui/VButton.vue';
 import VDateInput from '@/Components/ui/VDateInput.vue';
+import VDropdown from '@/Components/ui/VDropdown.vue';
 import VEmptyState from '@/Components/ui/VEmptyState.vue';
 import VInput from '@/Components/ui/VInput.vue';
 import VModal from '@/Components/ui/VModal.vue';
@@ -173,11 +175,33 @@ function eur(n) {
                     </VBadge>
                 </td>
                 <td class="px-3 py-2.5 text-end">
-                    <span v-if="can.edit && d.status === 'active'" class="flex items-center justify-end gap-0.5">
-                        <VButton variant="ghost" size="sm" icon="edit" :title="$tPair('deployments.edit_action')" @click="openEdit(d)" />
-                        <VButton variant="ghost" size="sm" icon="check" :title="$tPair('deployments.complete')" @click="complete(d)" />
-                        <VButton variant="ghost" size="sm" icon="stop" :title="$tPair('deployments.cancel_action')" @click="cancel(d)" />
-                    </span>
+                    <div v-if="can.edit && d.status === 'active'" class="flex justify-end">
+                        <VDropdown align="end" width="w-44" teleport>
+                            <template #trigger="{ toggle }">
+                                <VButton variant="ghost" size="sm" icon="dots" :title="$tPair('common.actions')" @click="toggle" />
+                            </template>
+                            <template #default="{ close }">
+                                <button type="button"
+                                    class="flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-start text-sm text-ink transition-colors hover:bg-surface-sunken"
+                                    @click="openEdit(d); close()">
+                                    <AppIcon name="edit" class="h-4 w-4 shrink-0 text-ink-soft" />
+                                    <Bilingual k="deployments.edit_action" inline />
+                                </button>
+                                <button type="button"
+                                    class="flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-start text-sm text-ink transition-colors hover:bg-surface-sunken"
+                                    @click="complete(d); close()">
+                                    <AppIcon name="check" class="h-4 w-4 shrink-0 text-status-ok" />
+                                    <Bilingual k="deployments.complete" inline />
+                                </button>
+                                <button type="button"
+                                    class="flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-start text-sm text-status-danger transition-colors hover:bg-status-danger-soft"
+                                    @click="cancel(d); close()">
+                                    <AppIcon name="stop" class="h-4 w-4 shrink-0" />
+                                    <Bilingual k="deployments.cancel_action" inline />
+                                </button>
+                            </template>
+                        </VDropdown>
+                    </div>
                     <span v-else class="text-muted">—</span>
                 </td>
             </tr>
