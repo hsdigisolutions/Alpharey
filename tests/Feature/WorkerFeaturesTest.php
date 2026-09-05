@@ -14,6 +14,7 @@ use App\Models\User;
 use App\Models\Vehicle;
 use App\Models\VehicleSession;
 use App\Models\WorkerExpense;
+use App\Services\Employees\EmployeeTransferService;
 use App\Services\Payroll\PayrollService;
 use App\Services\Workers\VehicleSessionService;
 use Illuminate\Http\UploadedFile;
@@ -35,6 +36,25 @@ function workerWithEmployee(array $employeeOverrides = []): array
 
     return [$user, $employee, $company];
 }
+
+it('shows the CURRENT company branding on the worker home after a transfer', function () {
+    [$user, $employee, $companyA] = workerWithEmployee();
+    $companyB = Company::factory()->create();
+
+    // Before transfer — the worker home ships company A's branding.
+    $this->actingAs($user)->get('/worker')
+        ->assertOk()
+        ->assertInertia(fn ($p) => $p->where('worker.company', $companyA->displayName()));
+
+    // Transfer the employee to company B (flips company_id in place).
+    app(EmployeeTransferService::class)
+        ->transfer($employee, $companyB->id, now()->toDateString());
+
+    // The very next worker-home load ships company B's branding — no stale
+    // company. (The PWA re-fetches this prop when it regains focus.)
+    $this->actingAs($user)->get('/worker')
+        ->assertInertia(fn ($p) => $p->where('worker.company', $companyB->displayName()));
+});
 
 it('adds a worker expense from the CRM — payroll counts it only after FINAL approval', function () {
     [, $employee, $company] = workerWithEmployee(['daily_wage' => '50']);

@@ -96,13 +96,27 @@ onMounted(() => {
     refreshInstallState();
     window.addEventListener('pwa:installable', refreshInstallState);
     window.addEventListener('pwa:installed', refreshInstallState);
+    document.addEventListener('visibilitychange', refreshWorkerOnForeground);
 });
 
 onUnmounted(() => {
     window.clearInterval(clock);
     window.removeEventListener('pwa:installable', refreshInstallState);
     window.removeEventListener('pwa:installed', refreshInstallState);
+    document.removeEventListener('visibilitychange', refreshWorkerOnForeground);
 });
+
+// A standalone PWA (iOS especially) RESUMES rather than reloads when reopened,
+// so the page props loaded when the app first opened — including which company
+// the worker belongs to — can go stale after a transfer. Re-fetch just the
+// identity/branding prop when the app regains focus so "the next time they open
+// it" always shows the CURRENT company (the server already flips company_id on
+// transfer). Only `worker` is refetched, so an in-progress punch is untouched.
+function refreshWorkerOnForeground() {
+    if (document.visibilityState === 'visible') {
+        router.reload({ only: ['worker'], preserveScroll: true, preserveState: true });
+    }
+}
 
 async function install() {
     await promptInstall();
