@@ -441,6 +441,7 @@ Route::middleware(['auth', 'active', 'two_factor', 'not_worker'])->group(functio
     Route::get('/deployments', [DeploymentController::class, 'index'])->name('deployments.index');
     Route::get('/deployments/available-employees', [DeploymentController::class, 'availableEmployees'])->name('deployments.available-employees');
     Route::post('/deployments', [DeploymentController::class, 'store'])->name('deployments.store');
+    Route::put('/deployments/{deployment}', [DeploymentController::class, 'update'])->name('deployments.update');
     Route::post('/deployments/{deployment}/complete', [DeploymentController::class, 'complete'])->name('deployments.complete');
     Route::post('/deployments/{deployment}/cancel', [DeploymentController::class, 'cancel'])->name('deployments.cancel');
 

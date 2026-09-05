@@ -117,8 +117,15 @@ class WorkerAttendanceService
             $projectId = $this->autoDetectProject($employee, $location);
         }
 
+        // A punch on a project the worker is actively DEPLOYED to belongs to the
+        // HOST company (the project's company) — exactly like a host clerk's
+        // entry — so deployed work stays visible in the host's attendance grid,
+        // project reports and cross-charge. A normal own-project (or project-
+        // less) punch is unaffected: it resolves to the worker's own company.
+        $companyId = $this->deployedHostCompanyId($employee, $projectId, $today) ?? $employee->company_id;
+
         // Reject a punch into a month payroll has closed (system-wide lock).
-        $this->lock->assertOpen($employee->company_id, $today, 'check_in');
+        $this->lock->assertOpen($companyId, $today, 'check_in');
 
         // Store the selfie first, on the private disk, randomized name — the
         // exact handling as the documents engine. A stray file on a failed row
@@ -130,17 +137,19 @@ class WorkerAttendanceService
         // exist; otherwise the row's distance stays null ("not verified").
         $distanceInfo = $this->projectDistanceInfo($projectId, $location, $employee->company_id);
 
-        $attendance = DB::transaction(function () use ($employee, $today, $location, $photoPath, $offer, $projectId, $distanceInfo): Attendance {
+        $attendance = DB::transaction(function () use ($employee, $today, $location, $photoPath, $offer, $projectId, $distanceInfo, $companyId): Attendance {
             // createForWorker() bypasses resolveEmployee() which requires a CRM
             // session (CurrentCompany) that workers never have. The employee is
-            // already verified by WorkerController — pass it directly.
+            // already verified by WorkerController — pass it directly. The
+            // resolved company (HOST for a deployed-project punch, else the
+            // worker's own) is passed so the row lands under the right company.
             $attendance = $this->attendance->createForWorker($employee, [
                 'employee_id' => $employee->id,
                 'date' => $today,
                 'mode' => AttendanceMode::Hourly->value,
                 'check_in' => now()->format('H:i'),
                 'status' => AttendanceStatus::Present->value,
-            ]);
+            ], $companyId);
 
             $attendance->check_in_at = now();
             $attendance->project_id = $projectId;
@@ -401,6 +410,41 @@ class WorkerAttendanceService
 
             return $attendance;
         });
+    }
+
+    /**
+     * The HOST company id when the worker is punching on a project they are
+     * ACTIVELY deployed to on that date (the project's own company), else null.
+     * Null covers a project-less punch and a punch on the worker's OWN-company
+     * project — in both cases the row keeps the worker's own company. Only a
+     * genuine active deployment to that exact project, whose host company
+     * differs from the worker's, moves the row to the host. Tenant scope dropped
+     * (a worker has no CRM session).
+     */
+    private function deployedHostCompanyId(Employee $employee, ?int $projectId, string $date): ?int
+    {
+        if ($projectId === null) {
+            return null;
+        }
+
+        $deployed = EmployeeDeployment::query()
+            ->where('employee_id', $employee->id)
+            ->where('project_id', $projectId)
+            ->where('status', DeploymentStatus::Active)
+            ->where('deployment_start', '<=', $date)
+            ->where(fn ($q) => $q->whereNull('deployment_end')->orWhere('deployment_end', '>=', $date))
+            ->exists();
+
+        if (! $deployed) {
+            return null;
+        }
+
+        $hostCompanyId = Project::query()->withoutGlobalScope(CompanyScope::class)
+            ->whereKey($projectId)->value('company_id');
+
+        return $hostCompanyId !== null && (int) $hostCompanyId !== (int) $employee->company_id
+            ? (int) $hostCompanyId
+            : null;
     }
 
     /**

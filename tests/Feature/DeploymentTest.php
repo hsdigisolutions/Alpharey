@@ -225,3 +225,120 @@ it('refuses to cancel or re-complete a completed deployment', function (): void 
 
     expect($deployment->fresh()->status->value)->toBe('completed');
 });
+
+/**
+ * Change 2B — editing an ACTIVE deployment (employee, rate structure, end date).
+ */
+function activeDeployment(array $overrides = []): EmployeeDeployment
+{
+    return EmployeeDeployment::create(array_merge([
+        'employee_id' => test()->homeEmployee->id,
+        'home_company_id' => test()->home->id,
+        'host_company_id' => test()->host->id,
+        'project_id' => test()->hostProject->id,
+        'deployment_start' => '2026-07-01',
+        'deployment_end' => '2026-07-31',
+        'billing_method' => 'option_a',
+        'rate_during_deployment' => '18',
+        'rate_type' => 'hourly',
+        'split_pct' => 100,
+        'status' => 'active',
+        'approved_by' => test()->admin->id,
+    ], $overrides));
+}
+
+it('edits an active deployment — employee, rate structure and end date', function (): void {
+    $dep = activeDeployment();
+    $newEmployee = Employee::factory()->forCompany($this->home)->create(['full_name' => 'Luis Gómez']);
+
+    $this->actingAs($this->admin)->put("/deployments/{$dep->id}", [
+        'employee_id' => $newEmployee->id,
+        'rate_type' => 'daily',
+        'rate_during_deployment' => '90',
+        'split_pct' => 80,
+        'deployment_end' => '2026-08-15',
+        'notes' => 'Extended + repriced',
+    ])->assertRedirect();
+
+    $dep->refresh();
+    expect($dep->employee_id)->toBe($newEmployee->id)
+        ->and($dep->rate_type->value)->toBe('daily')
+        ->and((float) $dep->rate_during_deployment)->toBe(90.0)
+        ->and((float) $dep->split_pct)->toBe(80.0)
+        ->and($dep->deployment_end->toDateString())->toBe('2026-08-15')
+        ->and($dep->notes)->toBe('Extended + repriced')
+        ->and($dep->status->value)->toBe('active'); // still active
+});
+
+it('refuses to edit a completed or cancelled deployment (422)', function (): void {
+    foreach (['completed', 'cancelled'] as $status) {
+        $dep = activeDeployment(['status' => $status]);
+        $this->actingAs($this->admin)->put("/deployments/{$dep->id}", [
+            'employee_id' => $this->homeEmployee->id, 'rate_type' => 'daily',
+            'rate_during_deployment' => '90', 'split_pct' => 100,
+        ])->assertStatus(422);
+    }
+});
+
+it('blocks changing the employee once attendance is logged, but still allows a rate edit', function (): void {
+    $dep = activeDeployment();
+    Attendance::factory()->create([
+        'company_id' => $this->host->id, 'employee_id' => $this->homeEmployee->id,
+        'project_id' => $this->hostProject->id, 'date' => '2026-07-10', 'status' => 'present',
+    ]);
+    $other = Employee::factory()->forCompany($this->home)->create();
+
+    // Employee swap is blocked…
+    $this->actingAs($this->admin)->put("/deployments/{$dep->id}", [
+        'employee_id' => $other->id, 'rate_type' => 'hourly', 'rate_during_deployment' => '18', 'split_pct' => 100,
+    ])->assertSessionHasErrors('employee_id');
+    expect($dep->fresh()->employee_id)->toBe($this->homeEmployee->id);
+
+    // …but editing the rate (same employee) is fine.
+    $this->actingAs($this->admin)->put("/deployments/{$dep->id}", [
+        'employee_id' => $this->homeEmployee->id, 'rate_type' => 'daily', 'rate_during_deployment' => '75', 'split_pct' => 100,
+    ])->assertRedirect();
+    expect($dep->fresh()->rate_type->value)->toBe('daily')->and((float) $dep->fresh()->rate_during_deployment)->toBe(75.0);
+});
+
+it('blocks shortening the end date before a day already logged', function (): void {
+    $dep = activeDeployment();
+    Attendance::factory()->create([
+        'company_id' => $this->host->id, 'employee_id' => $this->homeEmployee->id,
+        'project_id' => $this->hostProject->id, 'date' => '2026-07-20', 'status' => 'present',
+    ]);
+
+    $this->actingAs($this->admin)->put("/deployments/{$dep->id}", [
+        'employee_id' => $this->homeEmployee->id, 'rate_type' => 'hourly', 'rate_during_deployment' => '18',
+        'split_pct' => 100, 'deployment_end' => '2026-07-15', // before the logged 20th
+    ])->assertSessionHasErrors('deployment_end');
+    expect($dep->fresh()->deployment_end->toDateString())->toBe('2026-07-31');
+});
+
+it('rejects a replacement employee from another company (422)', function (): void {
+    $dep = activeDeployment();
+    $foreign = Employee::factory()->forCompany(Company::factory()->create())->create();
+
+    $this->actingAs($this->admin)->put("/deployments/{$dep->id}", [
+        'employee_id' => $foreign->id, 'rate_type' => 'hourly', 'rate_during_deployment' => '18', 'split_pct' => 100,
+    ])->assertStatus(422);
+    expect($dep->fresh()->employee_id)->toBe($this->homeEmployee->id);
+});
+
+it('cannot edit a deployment when acting for a company that is neither home nor host (404)', function (): void {
+    $dep = activeDeployment();
+    $outsider = User::factory()->companyAdmin()->forCompany(Company::factory()->create())->create();
+
+    $this->actingAs($outsider)->put("/deployments/{$dep->id}", [
+        'employee_id' => $this->homeEmployee->id, 'rate_type' => 'hourly', 'rate_during_deployment' => '18', 'split_pct' => 100,
+    ])->assertNotFound();
+});
+
+it('denies editing without deployments.edit permission', function (): void {
+    $dep = activeDeployment();
+    $user = User::factory()->forCompany($this->host)->create();
+
+    $this->actingAs($user)->put("/deployments/{$dep->id}", [
+        'employee_id' => $this->homeEmployee->id, 'rate_type' => 'hourly', 'rate_during_deployment' => '18', 'split_pct' => 100,
+    ])->assertForbidden();
+});

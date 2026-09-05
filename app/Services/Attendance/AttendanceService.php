@@ -90,15 +90,24 @@ class AttendanceService
      * verified by the WorkerController — bypass resolveEmployee() which
      * requires a CRM session (CurrentCompany) that workers do not have.
      *
+     * $companyId defaults to the employee's own (home) company. It is passed
+     * explicitly as the HOST company for a punch on a project the worker is
+     * actively DEPLOYED to, so a PWA self-punch lands under the same company_id
+     * a host clerk would use — keeping deployed work visible in the host's grid,
+     * project reports and cross-charge, exactly like a clerk-entered row. The
+     * home company still pays (payroll reads by employee, scope-dropped).
+     *
      * @param  array<string, mixed>  $data
      */
-    public function createForWorker(Employee $employee, array $data): Attendance
+    public function createForWorker(Employee $employee, array $data, ?int $companyId = null): Attendance
     {
-        return DB::transaction(function () use ($employee, $data): Attendance {
-            $attendance = new Attendance($data);
-            $attendance->company_id = $employee->company_id;
+        return DB::transaction(function () use ($employee, $data, $companyId): Attendance {
+            $companyId ??= $employee->company_id;
 
-            $this->lock->assertOpen($employee->company_id, $attendance->date);
+            $attendance = new Attendance($data);
+            $attendance->company_id = $companyId;
+
+            $this->lock->assertOpen($companyId, $attendance->date);
             $this->assertMonthNotPaid($employee->id, $attendance->date);
 
             $this->applySnapshots($attendance, $employee);

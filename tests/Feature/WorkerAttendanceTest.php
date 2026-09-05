@@ -5,9 +5,14 @@ use App\Models\Attendance;
 use App\Models\AuditLog;
 use App\Models\Company;
 use App\Models\Employee;
+use App\Models\EmployeeDeployment;
 use App\Models\LockedPeriod;
+use App\Models\Payroll;
+use App\Models\Project;
+use App\Models\ProjectEmployeeRate;
 use App\Models\User;
 use App\Notifications\SystemNotification;
+use App\Services\Payroll\PayrollService;
 use App\Services\Workers\WorkerAccountService;
 use App\Support\PeriodLock;
 use Illuminate\Http\UploadedFile;
@@ -47,6 +52,104 @@ beforeEach(function (): void {
 });
 
 afterEach(fn () => $this->travelBack());
+
+it('logs a DEPLOYED-project self-punch under the HOST company (matches the clerk path)', function (): void {
+    $host = Company::factory()->create();
+    $project = Project::factory()->create(['company_id' => $host->id, 'status' => 'active']);
+    // Active deployment: this worker (home = $this->company) → host, on this project.
+    EmployeeDeployment::factory()->create([
+        'employee_id' => $this->employee->id,
+        'home_company_id' => $this->company->id,
+        'host_company_id' => $host->id,
+        'project_id' => $project->id,
+        'deployment_start' => '2026-08-01',
+        'deployment_end' => null,
+    ]);
+
+    $this->actingAs($this->worker)->post('/worker/check-in', [
+        'project_id' => $project->id, 'denied' => true,
+    ])->assertRedirect();
+
+    $att = Attendance::withoutGlobalScopes()->where('employee_id', $this->employee->id)->firstOrFail();
+    // The row belongs to the HOST company (so it shows in the host grid/reports)
+    // — NOT the worker's own/home company.
+    expect((int) $att->company_id)->toBe($host->id)
+        ->and($att->company_id)->not->toBe($this->company->id)
+        ->and((int) $att->project_id)->toBe($project->id);
+});
+
+it('keeps a NORMAL own-project self-punch under the worker own company (guard)', function (): void {
+    // The worker's own-company project, assigned via a project rate row.
+    $ownProject = Project::factory()->create(['company_id' => $this->company->id, 'status' => 'active']);
+    $rate = new ProjectEmployeeRate(['employee_id' => $this->employee->id, 'wage_type' => 'hourly']);
+    $rate->project_id = $ownProject->id;
+    $rate->company_id = $this->company->id;
+    $rate->save();
+
+    $this->actingAs($this->worker)->post('/worker/check-in', [
+        'project_id' => $ownProject->id, 'denied' => true,
+    ])->assertRedirect();
+
+    $att = Attendance::withoutGlobalScopes()->where('employee_id', $this->employee->id)->firstOrFail();
+    expect((int) $att->company_id)->toBe($this->company->id); // unchanged — own company
+});
+
+it('a project-less self-punch stays under the worker own company even with an active deployment', function (): void {
+    $host = Company::factory()->create();
+    $project = Project::factory()->create(['company_id' => $host->id, 'status' => 'active']);
+    EmployeeDeployment::factory()->create([
+        'employee_id' => $this->employee->id,
+        'home_company_id' => $this->company->id,
+        'host_company_id' => $host->id,
+        'project_id' => $project->id,
+        'deployment_start' => '2026-08-01', 'deployment_end' => null,
+    ]);
+
+    // No project supplied and no GPS → project-less punch: must NOT inherit the
+    // deployment's host company.
+    $this->actingAs($this->worker)->post('/worker/check-in', ['denied' => true])->assertRedirect();
+
+    $att = Attendance::withoutGlobalScopes()->where('employee_id', $this->employee->id)->firstOrFail();
+    expect($att->project_id)->toBeNull()
+        ->and((int) $att->company_id)->toBe($this->company->id);
+});
+
+it('Option A holds — the HOME company pays a deployed-under-host day, the host does not', function (): void {
+    $host = Company::factory()->create();
+    $project = Project::factory()->create(['company_id' => $host->id, 'status' => 'active']);
+    EmployeeDeployment::factory()->create([
+        'employee_id' => $this->employee->id,
+        'home_company_id' => $this->company->id,
+        'host_company_id' => $host->id,
+        'project_id' => $project->id,
+        'deployment_start' => '2026-08-01', 'deployment_end' => null,
+    ]);
+
+    // A full deployed day: check in at 09:00, out at 17:00 → real hours on a
+    // row that now belongs to the HOST company.
+    $this->actingAs($this->worker)->post('/worker/check-in', ['project_id' => $project->id, 'denied' => true])->assertRedirect();
+    $this->travelTo('2026-08-10 17:00');
+    $this->actingAs($this->worker)->post('/worker/check-out', [
+        'denied' => true, 'work_attachment' => UploadedFile::fake()->image('site.jpg'),
+    ])->assertRedirect();
+
+    $att = Attendance::withoutGlobalScopes()->where('employee_id', $this->employee->id)->firstOrFail();
+    expect((int) $att->company_id)->toBe($host->id)->and((float) $att->hours_worked)->toBeGreaterThan(0.0);
+
+    // HOME payroll counts the day (payroll reads by employee, scope-dropped).
+    app(PayrollService::class)->calculateMonth($this->company->id, '2026-08');
+    $homePayroll = Payroll::withoutGlobalScopes()
+        ->where('employee_id', $this->employee->id)->where('company_id', $this->company->id)->first();
+    expect($homePayroll)->not->toBeNull()
+        ->and((float) $homePayroll->attendance_hours)->toBeGreaterThan(0.0);
+
+    // HOST payroll does NOT pay this worker (they are not a host employee) — no
+    // double count.
+    app(PayrollService::class)->calculateMonth($host->id, '2026-08');
+    $hostPayroll = Payroll::withoutGlobalScopes()
+        ->where('employee_id', $this->employee->id)->where('company_id', $host->id)->first();
+    expect($hostPayroll)->toBeNull();
+});
 
 it('records the punch even with a very coarse fix — accuracy is evidence, not a gate', function (): void {
     // A network/IP fix can report accuracy in the hundreds of thousands of

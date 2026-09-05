@@ -6,6 +6,8 @@ use App\Enums\DeploymentRateType;
 use App\Enums\DeploymentStatus;
 use App\Enums\NotificationType;
 use App\Http\Requests\Deployments\StoreDeploymentRequest;
+use App\Http\Requests\Deployments\UpdateDeploymentRequest;
+use App\Models\Attendance;
 use App\Models\Company;
 use App\Models\Employee;
 use App\Models\EmployeeDeployment;
@@ -49,6 +51,9 @@ class DeploymentController extends Controller
             ->through(fn (EmployeeDeployment $d): array => [
                 'id' => $d->id,
                 'employee' => $d->employee?->full_name,
+                // For the edit modal (only shown for editable/active rows).
+                'employee_id' => $d->employee_id,
+                'home_company_id' => $d->home_company_id,
                 'home_company' => $d->homeCompany?->name,
                 'host_company' => $d->hostCompany?->name,
                 'project' => $d->project?->name,
@@ -56,6 +61,8 @@ class DeploymentController extends Controller
                 'end' => $d->deployment_end?->toDateString(),
                 'rate' => $d->rate_during_deployment,
                 'rate_type' => $d->rate_type->value,
+                'split_pct' => $d->split_pct,
+                'notes' => $d->notes,
                 'billing_method' => $d->billing_method->value,
                 'status' => $d->status->value,
                 'accrued_cost' => Gate::allows('payroll.view') || Gate::allows('deployments.approve')
@@ -88,7 +95,9 @@ class DeploymentController extends Controller
      */
     public function availableEmployees(Request $request): JsonResponse
     {
-        Gate::authorize('deployments.create');
+        // Used by both the create and the edit modal (changing the deployed
+        // worker), so either permission may reach it.
+        abort_unless(Gate::allows('deployments.create') || Gate::allows('deployments.edit'), 403);
 
         $validated = $request->validate([
             'home_company_id' => ['required', 'integer'],
@@ -139,6 +148,71 @@ class DeploymentController extends Controller
         $deployment->save();
 
         return back()->with('success', __('ui.deployments.saved'));
+    }
+
+    /**
+     * Edit an ACTIVE deployment. Only the fields that are safe to overwrite are
+     * editable — employee, rate structure (type / €value / split %), end date,
+     * notes. The deployment rate drives ONLY the host cross-charge (never the
+     * worker's payroll, which pays the worker's own frozen wage), and the charge
+     * is generated once on complete, so a simple overwrite is correct while the
+     * posting is still active (no charge exists yet). Completed / cancelled
+     * postings are frozen (their charge is already booked).
+     */
+    public function update(UpdateDeploymentRequest $request, EmployeeDeployment $deployment): RedirectResponse
+    {
+        $this->assertVisible($deployment);
+        abort_unless($deployment->status === DeploymentStatus::Active, 422, __('ui.deployments.only_active_editable'));
+
+        $data = $request->validated();
+        $start = $deployment->deployment_start->toDateString();
+        $newEnd = $data['deployment_end'] ?? null;
+        $windowEnd = $deployment->deployment_end?->toDateString() ?? now()->toDateString();
+
+        // Guard: never shorten the end date before a day already logged on the
+        // host project (that would drop real worked days out of the charge).
+        if ($newEnd !== null) {
+            abort_if($newEnd < $start, 422, __('ui.deployments.end_before_start'));
+            $lastLogged = Attendance::query()->withoutGlobalScopes()
+                ->where('employee_id', $deployment->employee_id)
+                ->where('project_id', $deployment->project_id)
+                ->whereBetween('date', [$start, $windowEnd])
+                ->max('date');
+            if ($lastLogged !== null && $newEnd < $lastLogged) {
+                throw ValidationException::withMessages(['deployment_end' => __('ui.deployments.end_before_attendance')]);
+            }
+        }
+
+        // Guard: only allow changing the employee while no attendance has been
+        // logged for the CURRENT worker on this posting — otherwise a swap would
+        // misattribute real worked days. The new worker must belong to the same
+        // (unchanged) home company, and must not overlap another active posting.
+        $newEmployeeId = (int) $data['employee_id'];
+        if ($newEmployeeId !== (int) $deployment->employee_id) {
+            $hasLogged = Attendance::query()->withoutGlobalScopes()
+                ->where('employee_id', $deployment->employee_id)
+                ->where('project_id', $deployment->project_id)
+                ->whereBetween('date', [$start, $windowEnd])
+                ->exists();
+            if ($hasLogged) {
+                throw ValidationException::withMessages(['employee_id' => __('ui.deployments.employee_locked_by_attendance')]);
+            }
+
+            $newEmployee = Employee::query()->withoutGlobalScope(CompanyScope::class)->findOrFail($newEmployeeId);
+            abort_unless($newEmployee->company_id === (int) $deployment->home_company_id, 422);
+            $this->assertNoOverlap($newEmployeeId, $start, $newEnd, $deployment->id);
+        }
+
+        $deployment->update([
+            'employee_id' => $newEmployeeId,
+            'rate_type' => $data['rate_type'],
+            'rate_during_deployment' => $data['rate_during_deployment'] ?? null,
+            'split_pct' => $data['split_pct'] ?? 100,
+            'deployment_end' => $newEnd,
+            'notes' => $data['notes'] ?? null,
+        ]);
+
+        return back()->with('success', __('ui.deployments.updated'));
     }
 
     /**
@@ -207,13 +281,15 @@ class DeploymentController extends Controller
     /**
      * No double-deployment: an active deployment for the same employee whose
      * dates overlap the requested window is rejected (open-ended counts as
-     * running to infinity).
+     * running to infinity). $exceptId skips the deployment being edited so an
+     * update never conflicts with itself.
      */
-    private function assertNoOverlap(int $employeeId, string $start, ?string $end): void
+    private function assertNoOverlap(int $employeeId, string $start, ?string $end, ?int $exceptId = null): void
     {
         $overlap = EmployeeDeployment::query()
             ->where('employee_id', $employeeId)
             ->where('status', DeploymentStatus::Active->value)
+            ->when($exceptId !== null, fn ($q) => $q->whereKeyNot($exceptId))
             ->where('deployment_start', '<=', $end ?? '9999-12-31')
             ->where(fn ($q) => $q->whereNull('deployment_end')->orWhere('deployment_end', '>=', $start))
             ->exists();

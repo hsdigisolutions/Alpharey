@@ -80,6 +80,42 @@ function submit() {
     form.post('/deployments', { preserveScroll: true, onSuccess: () => (showModal.value = false) });
 }
 
+// --- Edit (ACTIVE deployments only) — employee, rate structure, end date ---
+const showEditModal = ref(false);
+const editEmployees = ref([]);
+const editForm = useForm({
+    id: null, employee_id: '', rate_type: 'hourly', rate_during_deployment: null,
+    split_pct: 100, deployment_end: null, notes: '',
+});
+// Context shown read-only in the edit modal (home/host/project/start are fixed).
+const editContext = reactive({ home_company: '', host_company: '', project: '', start: '' });
+
+async function openEdit(d) {
+    editForm.clearErrors();
+    editForm.id = d.id;
+    editForm.employee_id = d.employee_id;
+    editForm.rate_type = d.rate_type;
+    editForm.rate_during_deployment = d.rate;
+    editForm.split_pct = d.split_pct;
+    editForm.deployment_end = d.end;
+    editForm.notes = d.notes ?? '';
+    Object.assign(editContext, { home_company: d.home_company, host_company: d.host_company, project: d.project, start: d.start });
+    // Always keep the current employee selectable, even if the lookup below
+    // is unavailable to an edit-only user.
+    editEmployees.value = [{ id: d.employee_id, full_name: d.employee }];
+    showEditModal.value = true;
+    try {
+        const res = await fetch(`/deployments/available-employees?home_company_id=${d.home_company_id}`, {
+            headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+        });
+        if (res.ok) editEmployees.value = await res.json();
+    } catch { /* keep the current-employee fallback */ }
+}
+
+function submitEdit() {
+    editForm.put(`/deployments/${editForm.id}`, { preserveScroll: true, onSuccess: () => (showEditModal.value = false) });
+}
+
 function complete(d) { router.post(`/deployments/${d.id}/complete`, {}, { preserveScroll: true }); }
 function cancel(d) { router.post(`/deployments/${d.id}/cancel`, {}, { preserveScroll: true }); }
 
@@ -138,6 +174,9 @@ function eur(n) {
                 </td>
                 <td class="px-3 py-2.5 text-end">
                     <span class="flex items-center justify-end gap-1.5">
+                        <VButton v-if="can.edit && d.status === 'active'" variant="ghost" size="sm" @click="openEdit(d)">
+                            <Bilingual k="deployments.edit_action" inline />
+                        </VButton>
                         <VButton v-if="can.edit && d.status === 'active'" variant="ghost" size="sm" @click="complete(d)">
                             <Bilingual k="deployments.complete" inline />
                         </VButton>
@@ -195,6 +234,37 @@ function eur(n) {
             <template #footer>
                 <VButton variant="ghost" @click="showModal = false"><Bilingual k="common.cancel" inline /></VButton>
                 <VButton type="submit" form="dep-form" :loading="form.processing"><Bilingual k="common.save" inline /></VButton>
+            </template>
+        </VModal>
+
+        <!-- Edit (ACTIVE only): employee, rate structure, end date. Home/host/
+             project/start are fixed once created and shown read-only. -->
+        <VModal :open="showEditModal" title-key="deployments.edit_title" @close="showEditModal = false">
+            <form id="dep-edit-form" class="grid gap-4 sm:grid-cols-2" @submit.prevent="submitEdit">
+                <div class="sm:col-span-2 rounded-md bg-surface-sunken px-3 py-2 text-xs text-ink-soft">
+                    <span class="font-medium">{{ editContext.home_company }} → {{ editContext.host_company }}</span>
+                    · {{ editContext.project }} · {{ $t('deployments.start') }}: {{ editContext.start }}
+                </div>
+                <FormField k="deployments.employee" :error="editForm.errors.employee_id" required>
+                    <VSelect v-model="editForm.employee_id">
+                        <option v-for="e in editEmployees" :key="e.id" :value="e.id">
+                            {{ e.full_name }}<template v-if="e.designation"> · {{ e.designation }}</template>
+                        </option>
+                    </VSelect>
+                </FormField>
+                <FormField k="deployments.rate_type" :error="editForm.errors.rate_type" required>
+                    <VSelect v-model="editForm.rate_type">
+                        <option v-for="t in rateTypes" :key="t" :value="t">{{ $t(`deployments.rate_${t}`) }}</option>
+                    </VSelect>
+                </FormField>
+                <FormField k="deployments.rate" :error="editForm.errors.rate_during_deployment"><VInput v-model="editForm.rate_during_deployment" type="number" step="0.01" min="0" /></FormField>
+                <FormField k="deployments.split_pct" :error="editForm.errors.split_pct"><VInput v-model="editForm.split_pct" type="number" step="1" min="0" max="100" /></FormField>
+                <FormField k="deployments.end" :error="editForm.errors.deployment_end"><VDateInput v-model="editForm.deployment_end" /></FormField>
+                <FormField k="deployments.notes" class="sm:col-span-2"><VTextarea v-model="editForm.notes" :rows="2" /></FormField>
+            </form>
+            <template #footer>
+                <VButton variant="ghost" @click="showEditModal = false"><Bilingual k="common.cancel" inline /></VButton>
+                <VButton type="submit" form="dep-edit-form" :loading="editForm.processing"><Bilingual k="common.save" inline /></VButton>
             </template>
         </VModal>
     </AppLayout>
