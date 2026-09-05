@@ -4,7 +4,7 @@
  * of the selected month. Each cell: status dot + hours + project. Click a
  * cell to edit that day in a modal. Monthly summary below the grid.
  */
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { Head, router, usePage } from '@inertiajs/vue3';
 import { t } from '@/translate';
 import { ensureCompanySelected } from '@/composables/useCompanyGate';
@@ -17,10 +17,12 @@ import VBadge from '@/Components/ui/VBadge.vue';
 import VButton from '@/Components/ui/VButton.vue';
 import VPageHeader from '@/Components/ui/VPageHeader.vue';
 import VSelect from '@/Components/ui/VSelect.vue';
+import VSearchInput from '@/Components/ui/VSearchInput.vue';
 
 const props = defineProps({
     month: { type: String, required: true },
     empStatus: { type: String, default: 'active' },
+    search: { type: String, default: '' },
     daysInMonth: { type: Number, required: true },
     employees: { type: Array, required: true },
     grid: { type: Object, required: true },
@@ -114,18 +116,32 @@ function cellContent(cell) {
 }
 
 const empStatus = ref(props.empStatus ?? 'active');
+const search = ref(props.search ?? '');
+
+// Every grid reload carries the month + status + search together so switching
+// one never drops the others.
+function reloadGrid(overrides = {}) {
+    router.get('/attendance',
+        { month: props.month, emp_status: empStatus.value, search: search.value || undefined, ...overrides },
+        { preserveScroll: true, preserveState: true });
+}
+
 function changeMonth(delta) {
     const [y, m] = props.month.split('-').map(Number);
     const d = new Date(y, m - 1 + delta, 1);
-    router.get('/attendance',
-        { month: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`, emp_status: empStatus.value },
-        { preserveScroll: true, preserveState: true });
+    reloadGrid({ month: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` });
 }
-// Switch the Active / Inactive / All employee-status filter.
+// Switch the Active / Inactive / Transferred / All employee-status filter.
 function changeEmpStatus() {
-    router.get('/attendance', { month: props.month, emp_status: empStatus.value },
-        { preserveScroll: true, preserveState: true });
+    reloadGrid();
 }
+
+// Live search by employee name / code — same debounce as the Employees list.
+let searchTimer = null;
+watch(search, () => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => reloadGrid(), 350);
+});
 
 function isWeekend(day) {
     const [y, m] = props.month.split('-').map(Number);
@@ -182,8 +198,12 @@ function openCreate() {
     showModal.value = true;
 }
 
-function openCell(employeeId, day) {
+function openCell(emp, day) {
+    // A transferred-away worker's history is read-only at this company — the
+    // cells still show their attendance, but never open for edit / new entry.
+    if (emp.transferred_away) return;
     if (!props.can.edit && !props.can.create) return;
+    const employeeId = emp.id;
     const cell = props.grid[employeeId]?.[day];
     const date = `${props.month}-${String(day).padStart(2, '0')}`;
 
@@ -246,11 +266,13 @@ const monthLabel = computed(() => {
                 <AppIcon name="chevron-right" class="h-4 w-4" />
             </button>
 
-            <!-- Employee status filter (Active default / Inactive / All) -->
+            <!-- Search + employee status filter (Active / Inactive / Transferred / All) -->
             <div class="ms-auto flex flex-wrap items-center gap-2">
+                <VSearchInput v-model="search" class="w-56" :placeholder="$tPair('attendance.search_placeholder')" />
                 <VSelect v-model="empStatus" class="w-40" @update:model-value="changeEmpStatus">
                     <option value="active">{{ $t('attendance.emp_status_active') }}</option>
                     <option value="inactive">{{ $t('attendance.emp_status_inactive') }}</option>
+                    <option value="transferred">{{ $t('attendance.emp_status_transferred') }}</option>
                     <option value="all">{{ $t('attendance.emp_status_all') }}</option>
                 </VSelect>
                 <VSelect v-model="panelProject" class="w-56" @update:model-value="reloadPanel">
@@ -286,7 +308,10 @@ const monthLabel = computed(() => {
                                 <VBadge v-if="emp.deployed" status="info" class="shrink-0">
                                     <Bilingual k="attendance.deployed" inline />
                                 </VBadge>
-                                <VBadge v-if="emp.active === false" status="neutral" class="shrink-0">
+                                <VBadge v-if="emp.transferred_away" status="warn" class="shrink-0">
+                                    <Bilingual k="attendance.emp_status_transferred" inline />
+                                </VBadge>
+                                <VBadge v-else-if="emp.active === false" status="neutral" class="shrink-0">
                                     <Bilingual k="attendance.emp_status_inactive" inline />
                                 </VBadge>
                             </span>
@@ -298,11 +323,12 @@ const monthLabel = computed(() => {
                         <td v-for="day in days" :key="day" class="relative p-0.5 text-center">
                             <button type="button"
                                 class="h-8 w-8 rounded-sm text-[10px] font-semibold transition-colors"
-                                :class="grid[emp.id]?.[day]
+                                :class="[grid[emp.id]?.[day]
                                     ? cellClass(grid[emp.id][day])
-                                    : (isWeekend(day) ? 'bg-surface-sunken/40' : 'hover:bg-surface-sunken')"
+                                    : (isWeekend(day) ? 'bg-surface-sunken/40' : (emp.transferred_away ? '' : 'hover:bg-surface-sunken')),
+                                    emp.transferred_away ? 'cursor-default' : '']"
                                 :title="grid[emp.id]?.[day]?.project ?? ''"
-                                @click="openCell(emp.id, day)">
+                                @click="openCell(emp, day)">
                                 {{ cellContent(grid[emp.id]?.[day]) }}
                             </button>
                             <!-- Worker left a note: a mic for a voice note, a plain

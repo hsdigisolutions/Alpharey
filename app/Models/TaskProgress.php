@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Models\Concerns\Auditable;
 use App\Models\Concerns\BelongsToCompany;
+use App\Models\Scopes\CompanyScope;
 use Database\Factories\TaskProgressFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -72,6 +73,8 @@ class TaskProgress extends Model
      */
     public function employee(): BelongsTo
     {
-        return $this->belongsTo(Employee::class);
+        // Tenant scope dropped so a transferred-away employee still resolves on
+        // this company's daily-production history (their name must not vanish).
+        return $this->belongsTo(Employee::class)->withoutGlobalScope(CompanyScope::class);
     }
 }

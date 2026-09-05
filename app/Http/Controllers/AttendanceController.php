@@ -18,6 +18,7 @@ use App\Models\ProjectEmployeeRate;
 use App\Models\Scopes\CompanyScope;
 use App\Services\Attendance\AttendanceService;
 use App\Services\Audit\AuditLogger;
+use App\Services\Employees\EmployeeQueryFilter;
 use App\Support\AttendanceAbsence;
 use App\Support\CompanyBranding;
 use App\Support\CurrentCompany;
@@ -45,7 +46,7 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
  */
 class AttendanceController extends Controller
 {
-    public function index(Request $request): Response
+    public function index(Request $request, EmployeeQueryFilter $filter): Response
     {
         Gate::authorize('attendance.view');
 
@@ -54,17 +55,27 @@ class AttendanceController extends Controller
         $end = $month->copy()->endOfMonth();
 
         // Status filter (default active) — inactive workers keep their history,
-        // so an admin can review it by switching to Inactive or All.
-        $empStatus = in_array($request->query('emp_status'), ['inactive', 'all'], true)
+        // and 'transferred' surfaces workers who LEFT this company (a closed
+        // stint in employee_company_history) so their historical attendance here
+        // stays findable, read-only. `search` filters the grid by name/code.
+        $empStatus = in_array($request->query('emp_status'), ['inactive', 'transferred', 'all'], true)
             ? (string) $request->query('emp_status')
             : 'active';
 
-        // Own employees (joining_date kept for the live-absence sweep).
-        $ownEmployees = Employee::query()
-            ->when($empStatus === 'active', fn ($q) => $q->where('active', true))
-            ->when($empStatus === 'inactive', fn ($q) => $q->where('active', false))
+        // Reuse the Employees-list filter (name/code search + the exact
+        // transferred-away closed-stint query) so the two can never drift. Bridge
+        // our `emp_status` param onto the filter's `status` key.
+        $request->merge(['status' => $empStatus]);
+        $search = $request->string('search')->value();
+
+        // Own employees (joining_date kept for the live-absence sweep). For the
+        // transferred view these are the departed workers, read from history with
+        // the tenant scope dropped (their record now lives at another company).
+        $ownEmployees = $filter->apply($request)
             ->orderBy('full_name')
-            ->get(['id', 'full_name', 'designation', 'joining_date', 'active', 'active_since', 'transferred_at']);
+            ->get(['id', 'full_name', 'designation', 'joining_date', 'active', 'active_since', 'transferred_at', 'company_id']);
+
+        $actingCompanyId = app(CurrentCompany::class)->id();
 
         $employees = $ownEmployees->map(fn (Employee $e): array => [
             'id' => $e->id,
@@ -73,14 +84,17 @@ class AttendanceController extends Controller
             'active' => (bool) $e->active,
             'deployed' => false,
             'home_company' => null,
+            // A row surfaced by the 'transferred' filter lives at another company
+            // now — flag it so the grid badges "Transferido" and treats the row
+            // as read-only historical (no cell editing / new entries).
+            'transferred_away' => $actingCompanyId !== null && (int) $e->company_id !== $actingCompanyId,
         ]);
 
         // …plus employees from OTHER companies deployed INTO this one whose
         // deployment overlaps the shown month (Phase 5 — they log hours against
-        // the host project and appear with a "Desplegado" badge). Deployed-in
-        // workers are active by definition, so they're skipped in the
-        // inactive-only view.
-        if ($empStatus !== 'inactive') {
+        // the host project and appear with a "Desplegado" badge). Only for the
+        // active/all views — never mixed into the inactive or transferred views.
+        if (in_array($empStatus, ['active', 'all'], true)) {
             $employees = $employees->concat($this->deployedInEmployees($start, $end));
         }
         $employees = $employees->values();
@@ -150,7 +164,10 @@ class AttendanceController extends Controller
         $workingDays = app(AttendanceService::class)
             ->workingDays(app(CurrentCompany::class)->id() ?? 0);
         $virtualAbsences = [];
-        foreach ($ownEmployees as $emp) {
+        // The transferred view is a read-only historical record: show only the
+        // real attendance rows, never invite adding an absence for a departed
+        // worker (a virtual absence cell opens "new entry").
+        foreach ($empStatus === 'transferred' ? collect() : $ownEmployees as $emp) {
             $cursor = $start->copy();
             while ($cursor->lte($end)) {
                 $day = (int) $cursor->format('j');
@@ -288,6 +305,7 @@ class AttendanceController extends Controller
             'month' => $month->format('Y-m'),
             'daysInMonth' => $end->day,
             'empStatus' => $empStatus,
+            'search' => $search,
             'employees' => $employees,
             'grid' => $grid,
             'summary' => $summary,

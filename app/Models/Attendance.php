@@ -9,6 +9,7 @@ use App\Enums\WageType;
 use App\Enums\WeekendRateType;
 use App\Models\Concerns\Auditable;
 use App\Models\Concerns\BelongsToCompany;
+use App\Models\Scopes\CompanyScope;
 use App\Services\Attendance\AttendanceService;
 use Database\Factories\AttendanceFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -133,7 +134,13 @@ class Attendance extends Model
      */
     public function employee(): BelongsTo
     {
-        return $this->belongsTo(Employee::class);
+        // Drop the tenant scope so a transferred-away employee (their single
+        // record now lives at another company) still resolves for this
+        // company's historical attendance — their name must not vanish from the
+        // grid, project attendance or timesheets after a transfer. SoftDeletes
+        // still applies; the parent row is company-owned, so this only names the
+        // employee a row the caller may already see refers to (like deployments).
+        return $this->belongsTo(Employee::class)->withoutGlobalScope(CompanyScope::class);
     }
 
     /**

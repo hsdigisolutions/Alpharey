@@ -6,6 +6,7 @@ use App\Enums\MeasurementStatus;
 use App\Enums\MeasurementType;
 use App\Models\Concerns\Auditable;
 use App\Models\Concerns\BelongsToCompany;
+use App\Models\Scopes\CompanyScope;
 use Database\Factories\MeasurementFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -84,6 +85,8 @@ class Measurement extends Model
      */
     public function employee(): BelongsTo
     {
-        return $this->belongsTo(Employee::class);
+        // Tenant scope dropped so a transferred-away employee still resolves on
+        // this company's project measurement history (their name must not vanish).
+        return $this->belongsTo(Employee::class)->withoutGlobalScope(CompanyScope::class);
     }
 }

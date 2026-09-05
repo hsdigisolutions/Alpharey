@@ -7,6 +7,7 @@ use App\Models\Employee;
 use App\Models\OvertimePolicy;
 use App\Models\User;
 use App\Models\UserModulePermission;
+use App\Services\Employees\EmployeeTransferService;
 use Inertia\Testing\AssertableInertia as Assert;
 
 beforeEach(function (): void {
@@ -45,6 +46,67 @@ it('filters the grid by employee status (active default / inactive / all)', func
     // All — both.
     $this->actingAs($this->admin)->get('/attendance?emp_status=all')
         ->assertInertia(fn (Assert $p) => $p->where('empStatus', 'all')->has('employees', 2));
+});
+
+it('live-searches the attendance grid by employee name and code', function (): void {
+    Employee::factory()->forCompany($this->companyA)->create(['full_name' => 'Habib Ur Rehman', 'employee_code' => 'VE-0551']);
+    Employee::factory()->forCompany($this->companyA)->create(['full_name' => 'Otro Trabajador', 'employee_code' => 'VE-0999']);
+
+    // By name.
+    $this->actingAs($this->admin)->get('/attendance?search=Habib')
+        ->assertInertia(fn (Assert $p) => $p->where('search', 'Habib')
+            ->where('employees', fn ($e) => collect($e)->pluck('full_name')->contains('Habib Ur Rehman')
+                && ! collect($e)->pluck('full_name')->contains('Otro Trabajador')));
+
+    // By code.
+    $this->actingAs($this->admin)->get('/attendance?search=VE-0999')
+        ->assertInertia(fn (Assert $p) => $p
+            ->where('employees', fn ($e) => collect($e)->pluck('full_name')->contains('Otro Trabajador')
+                && ! collect($e)->pluck('full_name')->contains('Habib Ur Rehman')));
+});
+
+it('surfaces a transferred-away employee and their historical attendance under the Transferred filter', function (): void {
+    $emp = Employee::factory()->forCompany($this->companyA)->create(['full_name' => 'Habib Ur Rehman']);
+    // Historical attendance at company A, before the transfer.
+    Attendance::factory()->create([
+        'company_id' => $this->companyA->id, 'employee_id' => $emp->id,
+        'date' => now()->startOfMonth()->toDateString(), 'status' => 'present',
+    ]);
+
+    app(EmployeeTransferService::class)
+        ->transfer($emp, $this->companyB->id, now()->toDateString());
+
+    // Active view (company A): the departed worker is no longer listed.
+    $this->actingAs($this->admin)->get('/attendance')
+        ->assertInertia(fn (Assert $p) => $p
+            ->where('employees', fn ($e) => ! collect($e)->pluck('full_name')->contains('Habib Ur Rehman')));
+
+    // Transferred view: they appear, flagged transferred_away, with their
+    // historical attendance rows present in the grid (keyed by employee id).
+    $this->actingAs($this->admin)->get('/attendance?emp_status=transferred')
+        ->assertOk()
+        ->assertInertia(fn (Assert $p) => $p->where('empStatus', 'transferred')
+            ->where('employees', fn ($e) => collect($e)
+                ->contains(fn ($r) => $r['full_name'] === 'Habib Ur Rehman' && $r['transferred_away'] === true))
+            ->has("grid.{$emp->id}"));
+});
+
+it('keeps a transferred employee name resolvable on this company historical rows', function (): void {
+    $emp = Employee::factory()->forCompany($this->companyA)->create(['full_name' => 'Habib Ur Rehman']);
+    $att = Attendance::factory()->create([
+        'company_id' => $this->companyA->id, 'employee_id' => $emp->id,
+        'date' => now()->startOfMonth()->toDateString(), 'status' => 'present',
+    ]);
+    app(EmployeeTransferService::class)
+        ->transfer($emp, $this->companyB->id, now()->toDateString());
+
+    // Acting in company A, the attendance→employee relation still resolves the
+    // name even though the record now lives at company B (tenant scope dropped).
+    $this->actingAs($this->admin);
+    $row = Attendance::query()->withoutGlobalScopes()
+        ->where('id', $att->id)->with('employee:id,full_name')->first();
+    expect($row->employee)->not->toBeNull()
+        ->and($row->employee->full_name)->toBe('Habib Ur Rehman');
 });
 
 it('counts present days in the monthly summary (enum-cast status)', function (): void {
