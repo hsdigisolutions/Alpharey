@@ -393,11 +393,21 @@ class DocumentTypes
                 // FECHA CONTRATO (an Employee field); the client wants the file
                 // too. Expiry carries the end date of a temporary contract.
                 'contrato_trabajo' => ['flag' => false, 'file' => true, 'expiry' => true],
+                // Alta — enrollment/registration record. Reuses the former
+                // `documento_alta_ss` key so the existing production upload stays
+                // linked; relabelled from the SS-specific name to a generic
+                // "Alta" (doc_types.documento_alta_ss). Event record, no expiry.
                 'documento_alta_ss' => ['flag' => false, 'file' => true, 'expiry' => false],
-                // Baja en la Seguridad Social — the deregistration filed (model
-                // TA.2/S) when the worker leaves. An event record, never expires.
-                'documento_baja_ss' => ['flag' => false, 'file' => true, 'expiry' => false],
+                // IDC Alta — the IDC-specific registration paired with the Alta.
+                // Reuses the former generic `documento_idc` key (0 prior uploads),
+                // relabelled to "IDC Alta". Event record, no expiry.
                 'documento_idc' => ['flag' => false, 'file' => true, 'expiry' => false],
+                // Baja — deregistration/exit record filed when a worker leaves.
+                // Replaces the cancelled "Social Security Deregistration"
+                // (documento_baja_ss, removed). Event record, no expiry.
+                'baja' => ['flag' => false, 'file' => true, 'expiry' => false],
+                // IDC Baja — the IDC-specific deregistration paired with the Baja.
+                'idc_baja' => ['flag' => false, 'file' => true, 'expiry' => false],
             ],
             'prevencion' => [
                 'aptitud_medica' => ['flag' => false, 'file' => true, 'expiry' => true],

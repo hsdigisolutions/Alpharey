@@ -75,23 +75,30 @@ it('gives every document type a label in both languages', function (): void {
     }
 });
 
-it('registers the new Spanish employee documents Baja SS and 20h PRL', function (): void {
+it('registers the Alta/IDC-Alta/Baja/IDC-Baja employee documents and the 20h PRL', function (): void {
     $employment = DocumentTypes::employee()['employment'];
     $prevencion = DocumentTypes::employee()['prevencion'];
 
-    // Baja SS — employment category, an event record (never expires).
-    expect($employment)->toHaveKey('documento_baja_ss')
-        ->and($employment['documento_baja_ss'])->toBe(['flag' => false, 'file' => true, 'expiry' => false]);
+    // The four employment event records — Alta (reuses documento_alta_ss),
+    // IDC Alta (reuses documento_idc), Baja and IDC Baja — file uploads that
+    // never expire, each exposing issue_date (+ contacts + version history)
+    // and NO expiry_date.
+    foreach (['documento_alta_ss', 'documento_idc', 'baja', 'idc_baja'] as $key) {
+        expect($employment)->toHaveKey($key)
+            ->and($employment[$key])->toBe(['flag' => false, 'file' => true, 'expiry' => false]);
+
+        $fields = collect(DocumentTypes::fieldsFor('employee', $key))->pluck('key')->all();
+        expect($fields)->toContain('issue_date')->not->toContain('expiry_date');
+    }
+
+    // The cancelled "Social Security Deregistration" is gone.
+    expect($employment)->not->toHaveKey('documento_baja_ss');
 
     // 20h construction PRL / TPC — prevención, expiry tracked for the renewal alerts.
     expect($prevencion)->toHaveKey('formacion_prl_20h')
         ->and($prevencion['formacion_prl_20h'])->toBe(['flag' => false, 'file' => true, 'expiry' => true]);
 
     // The expiry-tracked one exposes an expiry_date field via the generic date fields.
-    $fields = collect(DocumentTypes::fieldsFor('employee', 'formacion_prl_20h'))->pluck('key')->all();
-    expect($fields)->toContain('issue_date')->toContain('expiry_date');
-
-    // Baja has no expiry field.
-    $bajaFields = collect(DocumentTypes::fieldsFor('employee', 'documento_baja_ss'))->pluck('key')->all();
-    expect($bajaFields)->toContain('issue_date')->not->toContain('expiry_date');
+    $prlFields = collect(DocumentTypes::fieldsFor('employee', 'formacion_prl_20h'))->pluck('key')->all();
+    expect($prlFields)->toContain('issue_date')->toContain('expiry_date');
 });
