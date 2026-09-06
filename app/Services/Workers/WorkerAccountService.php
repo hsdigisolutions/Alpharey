@@ -4,6 +4,7 @@ namespace App\Services\Workers;
 
 use App\Enums\UserRole;
 use App\Models\Employee;
+use App\Models\Scopes\CompanyScope;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -38,6 +39,32 @@ class WorkerAccountService
                 return $existing;
             }
 
+            // Access is revoked by DEACTIVATING + unlinking the login, never
+            // deleting it (see revoke() — the audit trail and the attendance
+            // rows it authored must survive). So re-granting to a worker whose
+            // access was previously withdrawn finds an old, deactivated login
+            // still holding this email. Reclaim it — reactivate, re-point at
+            // this employee's company, reset the password — rather than trying
+            // to create a duplicate (which User's unique email would reject as
+            // "email already in use", the exact production block for VE-0003).
+            $reclaimed = $this->reclaimableLoginFor($email);
+
+            if ($reclaimed !== null) {
+                $reclaimed->forceFill([
+                    'name' => $employee->full_name,
+                    'password' => $password,
+                    // Follows the employee — a transferred worker's old login
+                    // was pointed at the previous company; re-home it here.
+                    'company_id' => $employee->company_id,
+                    'active' => true,
+                ])->save();
+
+                $employee->user_id = $reclaimed->id;
+                $employee->save();
+
+                return $reclaimed;
+            }
+
             $this->assertEmailIsFree($email);
 
             $user = User::query()->create([
@@ -58,6 +85,38 @@ class WorkerAccountService
 
             return $user;
         });
+    }
+
+    /**
+     * An old worker login that this grant may safely take over: a deactivated
+     * Worker account holding this email that no employee is linked to any more
+     * (its access was revoked). Anything else — an active account, a non-worker
+     * account, or a worker still linked to another employee — is a genuine
+     * collision and must fall through to assertEmailIsFree(), which rejects it.
+     */
+    private function reclaimableLoginFor(string $email): ?User
+    {
+        $candidate = User::query()
+            ->where('email', $email)
+            ->where('role', UserRole::Worker->value)
+            ->where('active', false)
+            ->first();
+
+        if ($candidate === null) {
+            return null;
+        }
+
+        // Never steal a login that is still another employee's. Only the tenant
+        // scope is dropped (a worker's employee may live in another company);
+        // trashed employees are included ON PURPOSE — a login a soft-deleted
+        // worker still points at is not orphaned, so it must not be reclaimed.
+        $stillLinked = Employee::query()
+            ->withoutGlobalScope(CompanyScope::class)
+            ->withTrashed()
+            ->where('user_id', $candidate->id)
+            ->exists();
+
+        return $stillLinked ? null : $candidate;
     }
 
     /**

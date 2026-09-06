@@ -99,6 +99,98 @@ it('deactivates rather than deletes the login when access is revoked', function 
         ->and(User::query()->whereKey($userId)->value('active'))->toBeFalsy();
 });
 
+it('re-grants access after a revoke by reclaiming the same deactivated login', function (): void {
+    // The real production block (worker VE-0003): access was granted, then
+    // revoked (login deactivated + unlinked, never deleted), then the admin
+    // tries to grant it back with the same email — and used to hit "email
+    // already in use" because the create path collided with the old login.
+    $grant = fn (string $password) => $this->actingAs($this->admin)
+        ->post("/employees/{$this->employee->id}/app-access", [
+            'email' => 'obrero@example.com',
+            'password' => $password,
+        ]);
+
+    $grant('first-pass-123')->assertRedirect();
+    $originalId = $this->employee->fresh()->user_id;
+
+    $this->actingAs($this->admin)->delete("/employees/{$this->employee->id}/app-access");
+    expect($this->employee->fresh()->user_id)->toBeNull();
+
+    // Re-grant: no error, and the SAME user row is reactivated + relinked —
+    // not a duplicate.
+    $grant('second-pass-123')->assertRedirect()->assertSessionHasNoErrors();
+
+    expect($this->employee->fresh()->user_id)->toBe($originalId)
+        ->and(User::query()->where('email', 'obrero@example.com')->count())->toBe(1)
+        ->and(User::query()->whereKey($originalId)->value('active'))->toBeTruthy();
+
+    // The reclaimed login works with the NEW password.
+    auth()->logout();
+    $this->post('/login', ['email' => 'obrero@example.com', 'password' => 'second-pass-123'])
+        ->assertRedirect(route('worker.home'));
+});
+
+it('re-homes a reclaimed login to the new company after a transfer', function (): void {
+    // Habib's exact shape: the old login was minted under the previous company
+    // (VE-0003 was transferred Malaga → Shizukani). Reclaiming it must move it
+    // to the employee's current company, or the worker would sign in scoped to
+    // a company they no longer belong to.
+    $previousCompany = Company::factory()->create();
+    $orphan = User::factory()->forCompany($previousCompany)->create([
+        'email' => 'habib@example.com',
+        'role' => UserRole::Worker,
+        'active' => false,
+    ]);
+
+    $this->actingAs($this->admin)
+        ->post("/employees/{$this->employee->id}/app-access", [
+            'email' => 'habib@example.com',
+            'password' => 'site-pass-123',
+        ])->assertRedirect()->assertSessionHasNoErrors();
+
+    expect($this->employee->fresh()->user_id)->toBe($orphan->id)
+        ->and($orphan->fresh()->company_id)->toBe($this->company->id)
+        ->and($orphan->fresh()->active)->toBeTruthy();
+});
+
+it('still refuses an email held by a deactivated NON-worker account', function (): void {
+    // Only a deactivated WORKER login is reclaimable. A deactivated admin/manager
+    // sharing the email is a genuine collision — never take it over.
+    User::factory()->companyAdmin()->forCompany($this->company)->create([
+        'email' => 'taken@example.com',
+        'active' => false,
+    ]);
+
+    $this->actingAs($this->admin)
+        ->post("/employees/{$this->employee->id}/app-access", [
+            'email' => 'taken@example.com',
+            'password' => 'site-pass-123',
+        ])->assertSessionHasErrors('email');
+
+    expect($this->employee->fresh()->user_id)->toBeNull();
+});
+
+it('still refuses an email held by a worker login already linked to someone else', function (): void {
+    // A deactivated worker login that is STILL linked to another employee is
+    // not orphaned — reclaiming it would hijack that person's account.
+    $other = Employee::factory()->forCompany($this->company)->create();
+    $linked = User::factory()->forCompany($this->company)->create([
+        'email' => 'shared@example.com',
+        'role' => UserRole::Worker,
+        'active' => false,
+    ]);
+    $other->forceFill(['user_id' => $linked->id])->save();
+
+    $this->actingAs($this->admin)
+        ->post("/employees/{$this->employee->id}/app-access", [
+            'email' => 'shared@example.com',
+            'password' => 'site-pass-123',
+        ])->assertSessionHasErrors('email');
+
+    expect($this->employee->fresh()->user_id)->toBeNull()
+        ->and($other->fresh()->user_id)->toBe($linked->id);
+});
+
 it('denies granting access without the employees edit right', function (): void {
     $viewer = User::factory()->forCompany($this->company)->create();
 
