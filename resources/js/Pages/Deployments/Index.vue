@@ -9,6 +9,7 @@
 import { reactive, ref } from 'vue';
 import { Head, router, useForm } from '@inertiajs/vue3';
 import { ensureCompanySelected } from '@/composables/useCompanyGate';
+import AppIcon from '@/Components/AppIcon.vue';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import FormField from '@/Components/ui/FormField.vue';
 import VBadge from '@/Components/ui/VBadge.vue';
@@ -38,6 +39,21 @@ function apply(extra = {}) {
 }
 
 const statusColor = { active: 'info', completed: 'ok', cancelled: 'neutral' };
+const railColor = { active: 'bg-status-info', completed: 'bg-status-ok', cancelled: 'bg-status-neutral' };
+
+// Card ↔ Table view toggle (mirrors the Timesheet segmented control). The
+// choice is a per-viewer convenience, kept in localStorage (guarded — a private
+// window or blocked storage must not break the page).
+function readView() {
+    try {
+        return localStorage.getItem('deployments_view') === 'table' ? 'table' : 'card';
+    } catch { return 'card'; }
+}
+const view = ref(readView());
+function setView(v) {
+    view.value = v;
+    try { localStorage.setItem('deployments_view', v); } catch { /* storage unavailable */ }
+}
 
 // ---- Create modal -------------------------------------------------------
 const showModal = ref(false);
@@ -130,75 +146,166 @@ function eur(n) {
             <VButton v-if="can.create" icon="plus" @click="open()"><Bilingual k="deployments.new" inline /></VButton>
         </VPageHeader>
 
-        <div class="flex flex-wrap items-end gap-2 pb-3">
+        <div class="flex flex-wrap items-center justify-between gap-2 pb-3">
             <VSelect v-model="filters.status" class="w-full sm:w-52" @update:model-value="apply()">
                 <option value="">{{ $t('deployments.all_statuses') }}</option>
                 <option v-for="s in statuses" :key="s" :value="s">{{ $t(`deployments.status_${s}`) }}</option>
             </VSelect>
-        </div>
 
-        <div v-if="deployments.data.length" class="grid gap-4 lg:grid-cols-2">
-            <div v-for="d in deployments.data" :key="d.id"
-                class="flex flex-col rounded-xl border border-line bg-surface-raised p-5 shadow-card">
-                <!-- Header: project + status -->
-                <div class="mb-3 flex items-start justify-between gap-3">
-                    <div class="min-w-0">
-                        <p class="truncate text-base font-semibold text-ink">{{ d.project ?? '—' }}</p>
-                        <p class="mt-0.5 truncate text-xs text-ink-soft">
-                            <!-- HOME sees the worker + host; HOST sees only "de {home}", never the worker. -->
-                            <template v-if="d.viewer === 'home'">{{ d.employee ?? '—' }} · → {{ d.host_company }}</template>
-                            <template v-else>{{ $t('employees.deployed_from', { company: d.home_company }) }}</template>
-                        </p>
-                    </div>
-                    <VBadge :status="statusColor[d.status] ?? 'neutral'" class="shrink-0">
-                        <Bilingual :k="`deployments.status_${d.status}`" inline />
-                    </VBadge>
-                </div>
-
-                <!-- Detail -->
-                <dl class="grid grid-cols-2 gap-x-4 gap-y-2.5 text-sm">
-                    <div>
-                        <dt class="text-xs text-muted">{{ $t('deployments.period') }}</dt>
-                        <dd class="tabular-nums text-ink">{{ d.start }} → {{ d.end ?? '…' }}</dd>
-                    </div>
-                    <div>
-                        <dt class="text-xs text-muted">{{ $t('deployments.days_present') }}</dt>
-                        <dd class="tabular-nums text-ink">{{ d.days_present }}</dd>
-                    </div>
-                    <template v-if="d.viewer === 'home'">
-                        <div>
-                            <dt class="text-xs text-muted">{{ $t('deployments.units') }}</dt>
-                            <dd class="tabular-nums text-ink">{{ d.units }} <Bilingual :k="`deployments.rate_${d.rate_type}`" inline /></dd>
-                        </div>
-                        <div>
-                            <dt class="text-xs text-muted">{{ $t('deployments.rate') }} <span class="text-muted">({{ $t('deployments.exact_cost') }})</span></dt>
-                            <dd class="tabular-nums text-ink">{{ d.rate ? eur(d.rate) : '—' }}</dd>
-                        </div>
-                    </template>
-                </dl>
-
-                <!-- HOME: the prominent cross-charge the host owes -->
-                <div v-if="d.viewer === 'home'"
-                    class="mt-4 flex items-center justify-between rounded-lg border border-accent/30 bg-accent-soft px-4 py-3">
-                    <div class="min-w-0">
-                        <p class="truncate text-xs font-medium uppercase tracking-wide text-ink-soft">{{ $t('deployments.owed_by', { company: d.host_company }) }}</p>
-                        <p class="text-[11px] text-muted">{{ d.status === 'active' ? $t('deployments.owed_live') : $t('deployments.owed_final') }}</p>
-                    </div>
-                    <p class="tabular-nums shrink-0 text-2xl font-semibold text-accent">{{ eur(d.accrued_cost ?? 0) }}</p>
-                </div>
-                <!-- HOST: minimal presence only — no worker, no money -->
-                <p v-else class="mt-4 rounded-lg bg-surface-sunken px-4 py-3 text-sm text-ink-soft">
-                    {{ $t('deployments.host_presence', { days: d.days_present }) }}
-                </p>
-
-                <!-- Lifecycle actions (manager) -->
-                <div v-if="can.edit && d.status === 'active'" class="mt-4 flex justify-end gap-2 border-t border-line pt-3">
-                    <VButton variant="secondary" size="sm" icon="edit" @click="openEdit(d)"><Bilingual k="deployments.edit_action" inline /></VButton>
-                    <VButton variant="secondary" size="sm" icon="check" @click="complete(d)"><Bilingual k="deployments.complete" inline /></VButton>
-                    <VButton variant="ghost" size="sm" icon="stop" @click="cancel(d)"><Bilingual k="deployments.cancel_action" inline /></VButton>
-                </div>
+            <div class="inline-flex rounded-lg border border-line bg-surface-sunken p-0.5">
+                <button type="button" class="rounded-md px-3 py-1 text-xs font-medium transition"
+                    :class="view === 'card' ? 'bg-surface-raised text-ink shadow-card' : 'text-ink-soft hover:text-ink'"
+                    @click="setView('card')">{{ $t('deployments.view_card') }}</button>
+                <button type="button" class="rounded-md px-3 py-1 text-xs font-medium transition"
+                    :class="view === 'table' ? 'bg-surface-raised text-ink shadow-card' : 'text-ink-soft hover:text-ink'"
+                    @click="setView('table')">{{ $t('deployments.view_table') }}</button>
             </div>
         </div>
+
+        <template v-if="deployments.data.length">
+            <!-- ============================ CARD VIEW ============================ -->
+            <div v-if="view === 'card'" class="grid gap-4 lg:grid-cols-2">
+                <div v-for="d in deployments.data" :key="d.id"
+                    class="group relative flex flex-col overflow-hidden rounded-xl border border-line bg-surface-raised p-5 shadow-card transition hover:shadow-raised">
+                    <!-- status-coloured top rail -->
+                    <span class="absolute inset-x-0 top-0 h-1" :class="railColor[d.status] ?? 'bg-status-neutral'" />
+
+                    <!-- Header: project + status -->
+                    <div class="mb-3 flex items-start justify-between gap-3">
+                        <div class="min-w-0">
+                            <p class="truncate text-[17px] font-semibold leading-tight text-ink">{{ d.project ?? '—' }}</p>
+                            <!-- Route chip: HOME sees worker + host; HOST sees only "de {home}". -->
+                            <span class="mt-2 inline-flex max-w-full items-center gap-1.5 rounded-full bg-surface-sunken px-2.5 py-1 text-xs text-ink-soft">
+                                <template v-if="d.viewer === 'home'">
+                                    <span class="truncate font-medium text-ink">{{ d.employee ?? '—' }}</span>
+                                    <span class="text-muted">·</span>
+                                    <span class="truncate">{{ d.home_company }}</span>
+                                    <AppIcon name="chevron-right" class="h-3 w-3 shrink-0 text-muted" />
+                                    <span class="truncate">{{ d.host_company }}</span>
+                                </template>
+                                <template v-else>
+                                    <AppIcon name="deployments" class="h-3 w-3 shrink-0 text-muted" />
+                                    <span class="truncate">{{ $t('employees.deployed_from', { company: d.home_company }) }}</span>
+                                </template>
+                            </span>
+                        </div>
+                        <VBadge :status="statusColor[d.status] ?? 'neutral'" class="shrink-0">
+                            <Bilingual :k="`deployments.status_${d.status}`" inline />
+                        </VBadge>
+                    </div>
+
+                    <!-- Detail -->
+                    <dl class="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
+                        <div>
+                            <dt class="text-[11px] font-medium uppercase tracking-wide text-muted">{{ $t('deployments.period') }}</dt>
+                            <dd class="mt-0.5 tabular-nums text-ink">{{ d.start }} → {{ d.end ?? $t('expenses.deployment_ongoing') }}</dd>
+                        </div>
+                        <div>
+                            <dt class="text-[11px] font-medium uppercase tracking-wide text-muted">{{ $t('deployments.days_present') }}</dt>
+                            <dd class="mt-0.5 tabular-nums text-ink">{{ d.days_present }}</dd>
+                        </div>
+                        <template v-if="d.viewer === 'home'">
+                            <div>
+                                <dt class="text-[11px] font-medium uppercase tracking-wide text-muted">{{ $t('deployments.units') }}</dt>
+                                <dd class="mt-0.5 tabular-nums text-ink">{{ d.units }} <Bilingual :k="`deployments.rate_${d.rate_type}`" inline /></dd>
+                            </div>
+                            <div>
+                                <dt class="text-[11px] font-medium uppercase tracking-wide text-muted">{{ $t('deployments.rate') }} <span class="normal-case text-muted">({{ $t('deployments.exact_cost') }})</span></dt>
+                                <dd class="mt-0.5 tabular-nums text-ink">{{ d.rate ? eur(d.rate) : '—' }}</dd>
+                            </div>
+                        </template>
+                    </dl>
+
+                    <div class="mt-auto pt-4">
+                        <!-- HOME: the prominent cross-charge the host owes -->
+                        <div v-if="d.viewer === 'home'"
+                            class="flex items-center justify-between rounded-lg border border-accent/30 bg-accent-soft px-4 py-3">
+                            <div class="min-w-0">
+                                <p class="truncate text-[11px] font-semibold uppercase tracking-wide text-ink-soft">{{ $t('deployments.owed_by', { company: d.host_company }) }}</p>
+                                <p class="mt-0.5 flex items-center gap-1.5 text-[11px] text-muted">
+                                    <span v-if="d.status === 'active'" class="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-accent" />
+                                    {{ d.status === 'active' ? $t('deployments.owed_live') : $t('deployments.owed_final') }}
+                                </p>
+                            </div>
+                            <p class="shrink-0 text-[26px] font-semibold tabular-nums leading-none text-accent">{{ eur(d.accrued_cost ?? 0) }}</p>
+                        </div>
+                        <!-- HOST: minimal presence only — no worker, no money -->
+                        <p v-else class="rounded-lg bg-surface-sunken px-4 py-3 text-sm text-ink-soft">
+                            {{ $t('deployments.host_presence', { days: d.days_present }) }}
+                        </p>
+                    </div>
+
+                    <!-- Lifecycle actions (manager) -->
+                    <div v-if="can.edit && d.status === 'active'" class="mt-4 flex justify-end gap-2 border-t border-line pt-3">
+                        <VButton variant="secondary" size="sm" icon="edit" @click="openEdit(d)"><Bilingual k="deployments.edit_action" inline /></VButton>
+                        <VButton variant="secondary" size="sm" icon="check" @click="complete(d)"><Bilingual k="deployments.complete" inline /></VButton>
+                        <VButton variant="ghost" size="sm" icon="stop" @click="cancel(d)"><Bilingual k="deployments.cancel_action" inline /></VButton>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ============================ TABLE VIEW =========================== -->
+            <div v-else class="overflow-x-auto rounded-xl border border-line bg-surface-raised shadow-card">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="border-b border-line bg-surface-sunken text-[11px] uppercase tracking-wide text-muted">
+                            <th class="px-3 py-2.5 text-start font-medium">{{ $t('deployments.employee') }}</th>
+                            <th class="px-3 py-2.5 text-start font-medium">{{ $t('deployments.route') }}</th>
+                            <th class="px-3 py-2.5 text-start font-medium">{{ $t('deployments.project') }}</th>
+                            <th class="px-3 py-2.5 text-start font-medium">{{ $t('deployments.period') }}</th>
+                            <th class="px-3 py-2.5 text-end font-medium">{{ $t('deployments.days_present') }}</th>
+                            <th class="px-3 py-2.5 text-end font-medium">{{ $t('deployments.accrued_cost') }}</th>
+                            <th class="px-3 py-2.5 text-start font-medium">{{ $t('deployments.status') }}</th>
+                            <th v-if="can.edit" class="px-3 py-2.5 text-end font-medium"><span class="sr-only">{{ $t('deployments.edit_action') }}</span></th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-line">
+                        <tr v-for="d in deployments.data" :key="d.id" class="hover:bg-surface-hover">
+                            <!-- HOME: real worker; HOST: anonymised. -->
+                            <td class="px-3 py-2.5 font-medium text-ink">
+                                <template v-if="d.viewer === 'home'">{{ d.employee ?? '—' }}</template>
+                                <span v-else class="text-muted">{{ $t('deployments.deployed_worker') }}</span>
+                            </td>
+                            <td class="px-3 py-2.5 text-ink-soft">
+                                <span class="inline-flex items-center gap-1.5">
+                                    <span class="truncate">{{ d.home_company }}</span>
+                                    <AppIcon name="chevron-right" class="h-3 w-3 shrink-0 text-muted" />
+                                    <span class="truncate">{{ d.host_company }}</span>
+                                </span>
+                            </td>
+                            <td class="px-3 py-2.5 text-ink">{{ d.project ?? '—' }}</td>
+                            <td class="px-3 py-2.5 tabular-nums text-ink-soft">{{ d.start }} → {{ d.end ?? $t('expenses.deployment_ongoing') }}</td>
+                            <td class="px-3 py-2.5 text-end tabular-nums text-ink">{{ d.days_present }}</td>
+                            <!-- HOME: exact cost owed (live/locked); HOST: hidden. -->
+                            <td class="px-3 py-2.5 text-end tabular-nums">
+                                <template v-if="d.viewer === 'home'">
+                                    <span class="font-semibold text-accent">{{ eur(d.accrued_cost ?? 0) }}</span>
+                                </template>
+                                <span v-else class="text-muted">—</span>
+                            </td>
+                            <td class="px-3 py-2.5">
+                                <VBadge :status="statusColor[d.status] ?? 'neutral'">
+                                    <Bilingual :k="`deployments.status_${d.status}`" inline />
+                                </VBadge>
+                            </td>
+                            <td v-if="can.edit" class="px-3 py-2.5 text-end">
+                                <span v-if="d.status === 'active'" class="flex items-center justify-end gap-1">
+                                    <button type="button" class="rounded-sm p-1.5 text-muted hover:text-ink" :title="$t('deployments.edit_action')" @click="openEdit(d)">
+                                        <AppIcon name="edit" class="h-3.5 w-3.5" />
+                                    </button>
+                                    <button type="button" class="rounded-sm p-1.5 text-muted hover:text-status-ok" :title="$t('deployments.complete')" @click="complete(d)">
+                                        <AppIcon name="check" class="h-3.5 w-3.5" />
+                                    </button>
+                                    <button type="button" class="rounded-sm p-1.5 text-muted hover:text-status-danger" :title="$t('deployments.cancel_action')" @click="cancel(d)">
+                                        <AppIcon name="stop" class="h-3.5 w-3.5" />
+                                    </button>
+                                </span>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </template>
         <VEmptyState v-else icon="deployments" />
 
         <VPagination :page="deployments.current_page" :pages="deployments.last_page"
