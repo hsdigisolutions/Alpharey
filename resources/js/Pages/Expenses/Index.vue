@@ -9,7 +9,7 @@
  *
  * VAT + total are derived server-side; the preview here mirrors that.
  */
-import { computed, reactive, ref } from 'vue';
+import { computed, reactive, ref, watch } from 'vue';
 import { Head, router, useForm } from '@inertiajs/vue3';
 import { ensureCompanySelected } from '@/composables/useCompanyGate';
 import AppIcon from '@/Components/AppIcon.vue';
@@ -87,6 +87,14 @@ const blank = {
 };
 const form = useForm({ ...blank });
 const currentFile = ref(null);
+
+// The specific company card only applies to the Company-card method — clear it
+// when the method changes so a stale card id is never saved against Cash etc.
+watch(() => form.payment_method, (method) => {
+    if (method !== 'company_card') {
+        form.company_card_id = '';
+    }
+});
 
 function onFilePicked(event) {
     form.file = event.target.files?.[0] ?? null;
@@ -480,17 +488,19 @@ const columns = [
                     <VSelect v-model="form.payment_method">
                         <option value="">—</option>
                         <option v-for="m in paymentMethods" :key="m" :value="m">
-                            {{ $t(`employees.payment_${m}`) ?? m }}
+                            {{ $t(`expenses.pm_${m}`) }}
                         </option>
                     </VSelect>
                 </FormField>
-                <FormField k="expenses.card" :error="form.errors.company_card_id">
+                <!-- Which company card was used — only relevant when the method is Company card. -->
+                <FormField v-if="form.payment_method === 'company_card'" k="expenses.card" :error="form.errors.company_card_id">
                     <VSelect v-model="form.company_card_id">
                         <option value="">—</option>
                         <option v-for="c in cards" :key="c.id" :value="c.id">
                             {{ c.label }}{{ c.last_four ? ` ••${c.last_four}` : '' }}
                         </option>
                     </VSelect>
+                    <p v-if="cards.length === 0" class="mt-1 text-xs text-muted">{{ $t('expenses.no_cards_hint') }}</p>
                 </FormField>
 
                 <FormField k="expenses.bearable_by" :error="form.errors.bearable_by" required>

@@ -4,6 +4,8 @@ namespace App\Models;
 
 use App\Models\Concerns\Auditable;
 use App\Models\Concerns\BelongsToCompany;
+use Database\Factories\CompanyCardFactory;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 /**
@@ -17,6 +19,9 @@ class CompanyCard extends Model
 {
     use Auditable;
     use BelongsToCompany;
+
+    /** @use HasFactory<CompanyCardFactory> */
+    use HasFactory;
 
     public string $auditModule = 'settings';
 

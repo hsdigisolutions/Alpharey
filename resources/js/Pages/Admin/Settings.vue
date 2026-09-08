@@ -33,6 +33,7 @@ const props = defineProps({
     companyProfile: { type: Object, default: null },
     workingDays: { type: Array, default: () => [1, 2, 3, 4, 5] },
     departments: { type: Array, default: () => [] },
+    companyCards: { type: Array, default: () => [] },
     notificationMatrix: { type: Array, default: null },
     systemHealth: { type: Object, default: null },
 });
@@ -176,6 +177,27 @@ function saveDept(d) {
 }
 function deleteDept(d) {
     askDelete(d.name ?? '', () => router.delete(`/admin/settings/departments/${d.id}`, { preserveScroll: true }));
+}
+
+/* --- Company payment cards (feed the expense form) --- */
+const cardForm = useForm({ label: '', last_four: '' });
+function addCard() {
+    cardForm.post('/admin/settings/company-cards', { preserveScroll: true, onSuccess: () => cardForm.reset('label', 'last_four') });
+}
+const editingCard = ref(null); // card id being edited inline
+const cardEditForm = useForm({ label: '', last_four: '', active: true });
+function startEditCard(c) {
+    editingCard.value = c.id;
+    cardEditForm.label = c.label;
+    cardEditForm.last_four = c.last_four ?? '';
+    cardEditForm.active = c.active;
+    cardEditForm.clearErrors();
+}
+function saveCard(c) {
+    cardEditForm.put(`/admin/settings/company-cards/${c.id}`, { preserveScroll: true, onSuccess: () => (editingCard.value = null) });
+}
+function deleteCard(c) {
+    askDelete(c.label ?? '', () => router.delete(`/admin/settings/company-cards/${c.id}`, { preserveScroll: true }));
 }
 
 function deletePolicy(p) {
@@ -451,6 +473,63 @@ function deletePolicy(p) {
                         <VInput v-model="deptForm.name" :placeholder="$t('settings.department_name')" />
                     </FormField>
                     <VButton type="submit" :disabled="deptForm.processing"><Bilingual k="settings.department_add" inline /></VButton>
+                </form>
+            </VCard>
+
+            <!-- Tarjetas de empresa — payment cards offered on the expense form -->
+            <VCard title-key="settings.cards_section" class="lg:col-span-2" :padded="false">
+                <p class="border-b border-line px-4 py-3 text-sm text-ink-soft">{{ $t('settings.cards_hint') }}</p>
+                <table v-if="companyCards.length" class="w-full text-sm">
+                    <thead class="bg-surface-sunken text-xs uppercase text-muted">
+                        <tr>
+                            <th class="px-4 py-2 text-start"><Bilingual k="settings.card_label" inline /></th>
+                            <th class="px-4 py-2 text-start"><Bilingual k="settings.card_last_four" inline /></th>
+                            <th class="px-4 py-2 text-start"><Bilingual k="employees.active" inline /></th>
+                            <th class="px-4 py-2 text-end"><Bilingual k="settings.card_expenses" inline /></th>
+                            <th class="px-4 py-2 text-end"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr v-for="c in companyCards" :key="c.id" class="border-t border-line hover:bg-surface-hover">
+                            <td class="px-4 py-2.5">
+                                <VInput v-if="editingCard === c.id" v-model="cardEditForm.label" :error="cardEditForm.errors.label" />
+                                <span v-else class="font-medium">{{ c.label }}</span>
+                            </td>
+                            <td class="px-4 py-2.5">
+                                <VInput v-if="editingCard === c.id" v-model="cardEditForm.last_four" :error="cardEditForm.errors.last_four" maxlength="4" class="w-20" :placeholder="$t('settings.card_last_four')" />
+                                <span v-else class="tabular-nums text-ink-soft">{{ c.last_four ? `•• ${c.last_four}` : '—' }}</span>
+                            </td>
+                            <td class="px-4 py-2.5">
+                                <label v-if="editingCard === c.id" class="flex items-center gap-2">
+                                    <input v-model="cardEditForm.active" type="checkbox" class="h-4 w-4 accent-accent" />
+                                </label>
+                                <VStatusDot v-else :status="c.active ? 'ok' : 'neutral'" />
+                            </td>
+                            <td class="px-4 py-2.5 text-end tabular-nums">{{ c.expense_count }}</td>
+                            <td class="px-4 py-2.5 text-end">
+                                <span class="flex items-center justify-end gap-1">
+                                    <template v-if="editingCard === c.id">
+                                        <VButton size="sm" @click="saveCard(c)"><Bilingual k="common.save" inline /></VButton>
+                                        <VButton variant="ghost" size="sm" @click="editingCard = null"><Bilingual k="common.cancel" inline /></VButton>
+                                    </template>
+                                    <template v-else>
+                                        <VButton variant="ghost" size="sm" icon="edit" @click="startEditCard(c)" />
+                                        <VButton variant="ghost" size="sm" icon="trash" @click="deleteCard(c)" />
+                                    </template>
+                                </span>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+                <p v-else class="px-4 py-4 text-sm text-muted">{{ $t('settings.cards_empty') }}</p>
+                <form class="flex flex-wrap items-end gap-3 border-t border-line px-4 py-3" @submit.prevent="addCard">
+                    <FormField k="settings.card_label" :error="cardForm.errors.label" class="flex-1">
+                        <VInput v-model="cardForm.label" :placeholder="$t('settings.card_label_placeholder')" />
+                    </FormField>
+                    <FormField k="settings.card_last_four" :error="cardForm.errors.last_four">
+                        <VInput v-model="cardForm.last_four" maxlength="4" class="w-24" placeholder="1234" />
+                    </FormField>
+                    <VButton type="submit" :disabled="cardForm.processing"><Bilingual k="settings.card_add" inline /></VButton>
                 </form>
             </VCard>
 

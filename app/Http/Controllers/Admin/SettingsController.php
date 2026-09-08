@@ -8,8 +8,10 @@ use App\Http\Requests\Admin\TestMailRequest;
 use App\Http\Requests\Admin\UpdateGeneralSettingsRequest;
 use App\Http\Requests\Admin\UpdateMailSettingsRequest;
 use App\Models\Company;
+use App\Models\CompanyCard;
 use App\Models\Department;
 use App\Models\Employee;
+use App\Models\Expense;
 use App\Models\OvertimePolicy;
 use App\Services\Attendance\AttendanceService;
 use App\Services\Notifications\NotificationRules;
@@ -75,6 +77,9 @@ class SettingsController extends Controller
             // live employee count per row for the delete guard). Empty when a
             // Super Admin has no single company selected (nothing to manage).
             'departments' => $this->departmentsPayload(),
+            // Company payment cards — the acting company's cards (with an in-use
+            // expense count per row for the delete guard). Feed the expense form.
+            'companyCards' => $this->companyCardsPayload(),
             // Legal → the current worker-consent notice version (brand-wide).
             'consentVersion' => WorkerPrivacyNotice::currentVersion(),
             // Notification matrix + system health are brand-level → Super Admin only
@@ -108,6 +113,36 @@ class SettingsController extends Controller
                 'name' => $d->name,
                 'active' => $d->active,
                 'employee_count' => (int) ($counts[$d->id] ?? 0),
+            ])->all();
+    }
+
+    /**
+     * The acting company's payment cards, with a live expense-usage count per
+     * row (drives the "deactivate, don't delete" guard in the UI).
+     *
+     * @return list<array{id: int, label: string, last_four: ?string, active: bool, expense_count: int}>
+     */
+    private function companyCardsPayload(): array
+    {
+        $companyId = app(CurrentCompany::class)->id();
+        if ($companyId === null) {
+            return [];
+        }
+
+        // Expenses-per-card in one grouped query, keyed by company_card_id.
+        $counts = Expense::query()
+            ->whereNotNull('company_card_id')
+            ->selectRaw('company_card_id, COUNT(*) as c')
+            ->groupBy('company_card_id')
+            ->pluck('c', 'company_card_id');
+
+        return CompanyCard::query()->orderBy('label')->get(['id', 'label', 'last_four', 'active'])
+            ->map(fn (CompanyCard $c): array => [
+                'id' => $c->id,
+                'label' => $c->label,
+                'last_four' => $c->last_four,
+                'active' => $c->active,
+                'expense_count' => (int) ($counts[$c->id] ?? 0),
             ])->all();
     }
 

@@ -3,6 +3,7 @@
 use App\Enums\VatRate;
 use App\Http\Controllers\Account\AccountController;
 use App\Http\Controllers\Admin\AuditLogController;
+use App\Http\Controllers\Admin\CompanyCardController;
 use App\Http\Controllers\Admin\DepartmentController;
 use App\Http\Controllers\Admin\ExpenseReviewController;
 use App\Http\Controllers\Admin\OvertimePolicyController;
@@ -586,6 +587,10 @@ Route::middleware(['auth', 'active', 'two_factor', 'not_worker'])->group(functio
         Route::post('/settings/departments', [DepartmentController::class, 'store'])->name('settings.departments.store');
         Route::put('/settings/departments/{department}', [DepartmentController::class, 'update'])->name('settings.departments.update');
         Route::delete('/settings/departments/{department}', [DepartmentController::class, 'destroy'])->name('settings.departments.destroy');
+        // Settings → Tarjetas de empresa (company payment cards for the expense form)
+        Route::post('/settings/company-cards', [CompanyCardController::class, 'store'])->name('settings.company-cards.store');
+        Route::put('/settings/company-cards/{companyCard}', [CompanyCardController::class, 'update'])->name('settings.company-cards.update');
+        Route::delete('/settings/company-cards/{companyCard}', [CompanyCardController::class, 'destroy'])->name('settings.company-cards.destroy');
         Route::put('/settings/mail', [SettingsController::class, 'updateMail'])->name('settings.mail');
         Route::post('/settings/mail/test', [SettingsController::class, 'testMail'])->name('settings.mail.test');
         // Screen 26 — notification rules matrix (Phase 8, Super Admin only)
