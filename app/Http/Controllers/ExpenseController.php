@@ -315,6 +315,9 @@ class ExpenseController extends Controller
         Gate::authorize('expenses.edit');
 
         abort_if($expense->approved, 422, 'Approved expenses cannot be edited.');
+        // Auto-generated cross-charge — the deployment engine owns it; a human
+        // edit would be overwritten on the next attendance refresh anyway.
+        abort_if($expense->type === ExpenseType::InternalDeployment, 422, 'Deployment cross-charges cannot be edited.');
 
         $expense->fill($this->validated($request));
         $this->applyTotals($expense);
@@ -420,6 +423,18 @@ class ExpenseController extends Controller
             ]);
         }
 
+        // The cross-charge engine's internal_deployment Gasto must never be
+        // APPROVED either: the deployed worker's attendance is logged under the
+        // HOST company_id, so the host project P&L already counts that labour
+        // once (ProfitabilityService::attendanceAggregate). Approving this
+        // expense would add the SAME cost a second time. Its non-approval is
+        // load-bearing — see PAYROLL_DEPLOYMENTS.md / the deployment redesign.
+        if ($validated['approved'] && $expense->type === ExpenseType::InternalDeployment) {
+            throw ValidationException::withMessages([
+                'approved' => __('ui.expenses.internal_deployment_locked'),
+            ]);
+        }
+
         // Not mass-assignable — set directly (Measurement/Document convention).
         // A worker-sourced mirror expense (source worker_fuel / worker_expense)
         // is NOW approvable here — this final approval is exactly what makes
@@ -507,6 +522,10 @@ class ExpenseController extends Controller
         Gate::authorize('expenses.delete');
 
         abort_if($expense->approved, 422, 'Approved expenses cannot be removed.');
+        // Auto-generated cross-charge — deleting it would only strand the
+        // DeploymentCharge's expense_id; the engine re-creates it on the next
+        // attendance refresh. It is not the host's to remove.
+        abort_if($expense->type === ExpenseType::InternalDeployment, 422, 'Deployment cross-charges cannot be removed.');
 
         // A worker-sourced mirror expense REFERENCES the worker expense's receipt
         // file (shared, not copied) — deleting it here would destroy the

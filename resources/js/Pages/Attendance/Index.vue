@@ -307,9 +307,11 @@ const monthLabel = computed(() => {
                     <tr v-for="emp in employees" :key="emp.id" class="hover:bg-surface-hover/50">
                         <td class="sticky start-0 z-10 bg-surface-raised px-3 py-1.5">
                             <span class="flex items-center gap-1.5 truncate text-sm font-medium">
-                                <!-- A deployed-in worker is anonymised: the host
-                                     never sees the home company's employee name. -->
-                                {{ emp.deployed ? $t('attendance.deployed_worker') : emp.full_name }}
+                                <!-- A deployed-in worker shows their REAL name +
+                                     a Deployed badge on the host grid (their WAGE
+                                     stays hidden; only the Deployments screen is
+                                     anonymised for the host viewer). -->
+                                {{ emp.full_name }}
                                 <VBadge v-if="emp.deployed" status="info" class="shrink-0">
                                     <Bilingual k="attendance.deployed" inline />
                                 </VBadge>
@@ -451,7 +453,14 @@ const monthLabel = computed(() => {
                 </thead>
                 <tbody class="divide-y divide-line">
                     <tr v-for="emp in employees" :key="emp.id" class="hover:bg-surface-hover">
-                        <td class="px-3 py-2 font-medium">{{ emp.deployed ? $t('attendance.deployed_worker') : emp.full_name }}</td>
+                        <td class="px-3 py-2 font-medium">
+                            <span class="inline-flex items-center gap-1.5">
+                                {{ emp.full_name }}
+                                <VBadge v-if="emp.deployed" status="info" class="shrink-0">
+                                    <Bilingual k="attendance.deployed" inline />
+                                </VBadge>
+                            </span>
+                        </td>
                         <td class="tabular-nums px-3 py-2 text-end">{{ summary[emp.id]?.days_present ?? 0 }}</td>
                         <td class="tabular-nums px-3 py-2 text-end">{{ summary[emp.id]?.hours ?? 0 }}</td>
                         <td class="tabular-nums px-3 py-2 text-end">{{ summary[emp.id]?.overtime ?? 0 }}</td>

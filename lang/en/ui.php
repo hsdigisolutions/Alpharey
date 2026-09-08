@@ -2689,6 +2689,7 @@ return [
         'type_factura' => 'Invoice',
         'type_ticket' => 'Receipt',
         'type_other' => 'Other',
+        'type_internal_deployment' => 'Deployed staff cost',
         'category' => 'Category',
         'vendor' => 'Vendor',
         'project' => 'Project',
@@ -2774,6 +2775,7 @@ return [
         'deduct_from_salary' => 'Deduct from worker salary',
         'approved_locked' => 'Approved expense — locked (un-approve to edit).',
         'subcontractor_expense_locked' => 'Gasto automático de subcontrata — no se aprueba: el pago ya cuenta en la rentabilidad / Automatic subcontractor expense — cannot be approved: the payment already counts in the P&L',
+        'internal_deployment_locked' => 'Coste de personal desplegado — no se aprueba: la mano de obra ya cuenta en la rentabilidad del proyecto / Deployed staff cost — cannot be approved: the labour already counts in the project P&L',
         'auto_fuel_locked' => 'Gasto automático de combustible — no se aprueba: ya se reembolsa al trabajador en nómina / Automatic fuel expense — cannot be approved: it is already reimbursed to the worker in payroll',
     ],
 

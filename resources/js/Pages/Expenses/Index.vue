@@ -182,7 +182,17 @@ function openCreate() {
     showModal.value = true;
 }
 
+// The cross-charge engine's internal_deployment Gasto is a system record — it
+// is read-only server-side (never editable/deletable/approvable) and must be
+// read-only here too.
+function isDeployment(row) {
+    return row.type === 'internal_deployment';
+}
+
 function openEdit(row) {
+    if (isDeployment(row)) {
+        return; // read-only system record
+    }
     editingId.value = row.id;
     editingApproved.value = row.approved;
     Object.assign(form, {
@@ -431,7 +441,8 @@ const columns = [
         </div>
 
         <VTable :columns="columns">
-            <tr v-for="r in expenses.data" :key="r.id" class="cursor-pointer hover:bg-surface-hover"
+            <tr v-for="r in expenses.data" :key="r.id" class="hover:bg-surface-hover"
+                :class="isDeployment(r) ? 'cursor-default' : 'cursor-pointer'"
                 @click="openEdit(r)">
                 <td class="tabular-nums px-3 py-2.5 text-sm">{{ r.date }}</td>
                 <td class="px-3 py-2.5 text-sm font-medium text-ink">
@@ -471,12 +482,12 @@ const columns = [
                             class="text-ink-soft hover:text-accent" :title="$t('expenses.download_receipt')">
                             <AppIcon name="file" class="h-4 w-4" />
                         </a>
-                        <button v-if="can.edit && !r.approved" type="button"
+                        <button v-if="can.edit && !r.approved && !isDeployment(r)" type="button"
                             class="rounded-sm p-1.5 text-muted hover:text-ink" :title="$t('expenses.edit')"
                             @click="openEdit(r)">
                             <AppIcon name="edit" class="h-3.5 w-3.5" />
                         </button>
-                        <template v-if="can.approve_final && r.review_status !== 'in_review'">
+                        <template v-if="can.approve_final && r.review_status !== 'in_review' && !isDeployment(r)">
                             <VButton v-if="!r.approved" variant="ghost" size="sm" @click="approve(r, true)">
                                 <Bilingual k="expenses.approve" inline />
                             </VButton>
@@ -487,7 +498,7 @@ const columns = [
                                 <Bilingual k="expenses.send_to_review" inline />
                             </VButton>
                         </template>
-                        <VButton v-if="can.delete && !r.approved" variant="ghost" size="sm" icon="trash" @click="destroy(r)" />
+                        <VButton v-if="can.delete && !r.approved && !isDeployment(r)" variant="ghost" size="sm" icon="trash" @click="destroy(r)" />
                     </span>
                 </td>
             </tr>

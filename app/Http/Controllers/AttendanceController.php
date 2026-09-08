@@ -794,15 +794,17 @@ class AttendanceController extends Controller
      */
     private function deployedRow(EmployeeDeployment $deployment): array
     {
-        // Host-minimal (2026-09): the host must NOT see the deployed worker's
-        // identity. The grid needs the employee id to key attendance cells, but
-        // the name + designation are withheld — the UI renders an anonymous
-        // "Trabajador desplegado · de {home}" label and never links to the
-        // (tenancy-protected) profile.
+        // The host attendance grid shows the deployed worker's REAL NAME plus a
+        // "Desplegado / Deployed" badge and their home-company subtitle (client
+        // decision 2026-09: the host already picks the worker at deployment
+        // creation, so their identity is not hidden HERE). Anonymisation applies
+        // only to the passive Deployments screen/cards for the host viewer — NOT
+        // to this grid. The worker's WAGE stays hidden ('—' in the summary), and
+        // the profile is still tenancy-protected (a 404 across companies).
         return [
             'id' => $deployment->employee?->id,
-            'full_name' => null,
-            'designation' => null,
+            'full_name' => $deployment->employee?->full_name,
+            'designation' => $deployment->employee?->designation,
             'deployed' => true,
             'home_company' => $deployment->homeCompany?->name,
         ];

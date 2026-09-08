@@ -161,3 +161,51 @@ it('refuses an internal_deployment type submitted through the expense form', fun
         'total' => '100',
     ])->assertSessionHasErrors('type');
 });
+
+/*
+ * Item A (2026-09) — the internal_deployment Gasto is read-only money safety.
+ * The deployed worker's attendance is already counted ONCE as host project
+ * labour (ProfitabilityService::attendanceAggregate), so APPROVING this expense
+ * would double-count it. And a host admin must not edit or delete the engine's
+ * own record. All three paths are refused server-side.
+ */
+it('refuses to APPROVE an internal_deployment expense (double-count guard)', function (): void {
+    $hostAdmin = User::factory()->create(['role' => UserRole::Admin, 'company_id' => $this->host->id]);
+    app(DeploymentChargeService::class)->generateCharge(deploymentWithAttendance(2, 100.0));
+
+    $expense = Expense::query()->withoutGlobalScope(CompanyScope::class)
+        ->where('type', ExpenseType::InternalDeployment->value)->firstOrFail();
+
+    $this->actingAs($hostAdmin)->post("/expenses/{$expense->id}/approve", ['approved' => true])
+        ->assertSessionHasErrors('approved');
+
+    expect($expense->fresh()->approved)->toBeFalse();
+});
+
+it('refuses to EDIT an internal_deployment expense', function (): void {
+    $hostAdmin = User::factory()->create(['role' => UserRole::Admin, 'company_id' => $this->host->id]);
+    app(DeploymentChargeService::class)->generateCharge(deploymentWithAttendance(2, 100.0));
+
+    $expense = Expense::query()->withoutGlobalScope(CompanyScope::class)
+        ->where('type', ExpenseType::InternalDeployment->value)->firstOrFail();
+
+    $this->actingAs($hostAdmin)->post("/expenses/{$expense->id}", [
+        'type' => ExpenseType::Other->value, 'date' => now()->toDateString(),
+        'subtotal' => '1', 'total' => '1',
+    ])->assertStatus(422);
+
+    // Untouched — still the engine's figure.
+    expect((float) $expense->fresh()->total)->toBe(200.0);
+});
+
+it('refuses to DELETE an internal_deployment expense', function (): void {
+    $hostAdmin = User::factory()->create(['role' => UserRole::Admin, 'company_id' => $this->host->id]);
+    app(DeploymentChargeService::class)->generateCharge(deploymentWithAttendance(2, 100.0));
+
+    $expense = Expense::query()->withoutGlobalScope(CompanyScope::class)
+        ->where('type', ExpenseType::InternalDeployment->value)->firstOrFail();
+
+    $this->actingAs($hostAdmin)->delete("/expenses/{$expense->id}")->assertStatus(422);
+
+    expect(Expense::query()->withoutGlobalScope(CompanyScope::class)->find($expense->id))->not->toBeNull();
+});
