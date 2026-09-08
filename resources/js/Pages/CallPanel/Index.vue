@@ -38,6 +38,10 @@ const state = reactive({
     // Date range for the selected worker's call history (left column unaffected).
     from: props.filters.from ?? '',
     to: props.filters.to ?? '',
+    // Independent date range for the top stat cards (calls made / follow-ups
+    // due / not contacted) — recomputes those three metrics over the range.
+    st_from: props.filters.st_from ?? '',
+    st_to: props.filters.st_to ?? '',
 });
 
 const tabs = [
@@ -72,17 +76,42 @@ function onCustomDate() {
     apply();
 }
 
-function apply(extra = {}) {
-    router.get('/calls', {
+// --- Stats/overview date range (independent of the history range) ---
+function computeStPreset() {
+    if (! state.st_from && ! state.st_to) return 'all';
+    if (state.st_from === firstOfMonth(-1) && state.st_to === lastOfMonth(-1)) return 'last_month';
+    if (state.st_from === firstOfMonth(0) && state.st_to === lastOfMonth(0)) return 'this_month';
+    return 'custom';
+}
+const stPreset = ref(computeStPreset());
+function setStPreset(preset) {
+    stPreset.value = preset;
+    if (preset === 'all') { state.st_from = ''; state.st_to = ''; }
+    else if (preset === 'this_month') { state.st_from = firstOfMonth(0); state.st_to = lastOfMonth(0); }
+    else if (preset === 'last_month') { state.st_from = firstOfMonth(-1); state.st_to = lastOfMonth(-1); }
+    if (preset !== 'custom') applyStats();
+}
+function onStCustom() { stPreset.value = 'custom'; applyStats(); }
+function applyStats() {
+    // Only the stat cards + filters need to refresh for a stats-range change.
+    router.get('/calls', buildParams(), { preserveScroll: true, preserveState: true, only: ['stats', 'filters'] });
+}
+
+// The shared query params for /calls (empty dates dropped so they read as null).
+function buildParams(extra = {}) {
+    return {
         ...state,
         from: state.from || undefined,
         to: state.to || undefined,
+        st_from: state.st_from || undefined,
+        st_to: state.st_to || undefined,
         employee: props.selected?.id,
         ...extra,
-    }, {
-        preserveScroll: true,
-        preserveState: true,
-    });
+    };
+}
+
+function apply(extra = {}) {
+    router.get('/calls', buildParams(extra), { preserveScroll: true, preserveState: true });
 }
 
 // Debounce the search box: reload 350ms after the last keystroke, not on every
@@ -93,7 +122,7 @@ function searchApply() {
     searchTimer = setTimeout(() => apply(), 350);
 }
 function select(employee) {
-    router.get('/calls', { ...state, employee: employee.id }, { preserveScroll: true, preserveState: true });
+    router.get('/calls', buildParams({ employee: employee.id }), { preserveScroll: true, preserveState: true });
 }
 
 /* ── Helpers ─────────────────────────────────────────────── */
@@ -348,12 +377,27 @@ const dotStatus = { red: 'danger', amber: 'warn', green: 'ok' };
         <VPageHeader k="calls.title" />
 
         <!-- Top stats bar -->
+        <!-- Overview date range: recomputes the three cards over the period. -->
+        <div class="mb-3 flex flex-wrap items-center gap-2">
+            <span class="text-xs font-medium text-ink-soft">{{ $t('calls.stats_period') }}</span>
+            <div class="flex overflow-hidden rounded-md border border-line-strong text-xs font-medium">
+                <button v-for="p in datePresets" :key="p" type="button" class="px-2.5 py-1.5 transition"
+                    :class="stPreset === p ? 'bg-accent text-on-accent' : 'text-ink-soft hover:bg-surface-hover'"
+                    @click="setStPreset(p)">{{ $t(`calls.range_${p}`) }}</button>
+            </div>
+            <template v-if="stPreset === 'custom'">
+                <VDateInput v-model="state.st_from" class="w-36" @update:model-value="onStCustom()" />
+                <span class="text-xs text-muted">–</span>
+                <VDateInput v-model="state.st_to" class="w-36" @update:model-value="onStCustom()" />
+            </template>
+        </div>
+
         <div class="mb-4 grid gap-3 sm:grid-cols-3">
-            <VKpiCard k="calls.stat_calls_today" :value="stats.calls_today" />
+            <VKpiCard k="calls.stat_calls_made" :value="stats.calls_made" />
             <VKpiCard k="calls.stat_pending_follow_ups" :value="stats.pending_follow_ups"
                 :status="stats.pending_follow_ups > 0 ? 'warn' : 'ok'" />
-            <VKpiCard k="calls.stat_not_contacted" :value="stats.not_contacted_this_week"
-                :status="stats.not_contacted_this_week > 0 ? 'warn' : 'ok'" />
+            <VKpiCard k="calls.stat_not_contacted" :value="stats.not_contacted"
+                :status="stats.not_contacted > 0 ? 'warn' : 'ok'" />
         </div>
 
         <div class="grid gap-4 lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)]">

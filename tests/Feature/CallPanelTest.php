@@ -118,7 +118,7 @@ it('counts a never-contacted worker as not contacted this week', function (): vo
 /**
  * Stats bar.
  */
-it('reports the stats bar figures', function (): void {
+it('reports the stats bar figures (no range = current behaviour)', function (): void {
     $a = Employee::factory()->create(['company_id' => $this->company->id]);
     $b = Employee::factory()->create(['company_id' => $this->company->id]);
     Employee::factory()->create(['company_id' => $this->company->id]); // never called
@@ -128,9 +128,37 @@ it('reports the stats bar figures', function (): void {
 
     $this->get('/calls')
         ->assertInertia(fn ($page) => $page
-            ->where('stats.calls_today', 2)
+            ->where('stats.calls_made', 2)                 // all calls
+            ->where('stats.pending_follow_ups', 1)         // due as of today
+            ->where('stats.not_contacted', 1));            // 1 never-called worker
+});
+
+it('recomputes the stat cards over a selected date range', function (): void {
+    $a = Employee::factory()->create(['company_id' => $this->company->id]);
+    $b = Employee::factory()->create(['company_id' => $this->company->id]);
+    Employee::factory()->create(['company_id' => $this->company->id]); // never called
+
+    // June: 2 calls to A, one with a June follow-up. July: 1 call to B.
+    logCall($a->id, $this->company->id, ['called_at' => '2026-06-05 09:00:00', 'follow_up_date' => '2026-06-20']);
+    logCall($a->id, $this->company->id, ['called_at' => '2026-06-15 09:00:00']);
+    logCall($b->id, $this->company->id, ['called_at' => '2026-07-10 09:00:00']);
+
+    // June window: 2 calls made, 1 follow-up due in June, 2 workers not
+    // contacted in June (B + the never-called one).
+    $this->get('/calls?st_from=2026-06-01&st_to=2026-06-30')
+        ->assertInertia(fn ($page) => $page
+            ->where('stats.calls_made', 2)
             ->where('stats.pending_follow_ups', 1)
-            ->where('stats.not_contacted_this_week', 1));
+            ->where('stats.not_contacted', 2)
+            ->where('filters.st_from', '2026-06-01')
+            ->where('filters.st_to', '2026-06-30'));
+
+    // July window: 1 call made, 0 follow-ups due in July, 2 not contacted (A + never-called).
+    $this->get('/calls?st_from=2026-07-01&st_to=2026-07-31')
+        ->assertInertia(fn ($page) => $page
+            ->where('stats.calls_made', 1)
+            ->where('stats.pending_follow_ups', 0)
+            ->where('stats.not_contacted', 2));
 });
 
 it('loads the selected worker call history', function (): void {

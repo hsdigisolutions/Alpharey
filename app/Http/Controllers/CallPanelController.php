@@ -45,6 +45,10 @@ class CallPanelController extends Controller
         $selectedId = $request->integer('employee');
         $from = $this->validDate($request->query('from'));
         $to = $this->validDate($request->query('to'));
+        // The stats/overview cards carry their OWN date range (st_from/st_to),
+        // independent of the selected worker's history range above.
+        $stFrom = $this->validDate($request->query('st_from'));
+        $stTo = $this->validDate($request->query('st_to'));
 
         return Inertia::render('CallPanel/Index', [
             'employees' => $this->employeeList($request),
@@ -54,12 +58,14 @@ class CallPanelController extends Controller
                 'employee' => $request->query('employee'),
                 'from' => $from,
                 'to' => $to,
+                'st_from' => $stFrom,
+                'st_to' => $stTo,
             ],
             // The date range bounds the SELECTED worker's history only — the
             // left-column triage (last contacted / follow-ups) stays absolute so
             // "who to call now" is never hidden by a historical range.
             'selected' => $selectedId > 0 ? $this->selected($selectedId, $from, $to) : null,
-            'stats' => $this->stats(),
+            'stats' => $this->stats($stFrom, $stTo),
             'can' => [
                 'create' => Gate::allows('call_panel.create'),
                 'edit' => Gate::allows('call_panel.edit'),
@@ -323,24 +329,41 @@ class CallPanelController extends Controller
      *
      * @return array<string, int>
      */
-    private function stats(): array
+    private function stats(?string $from = null, ?string $to = null): array
     {
-        $contactedThisWeek = EmployeeCallLog::query()
-            ->where('called_at', '>=', $this->weekStart())
+        $hasRange = $from !== null || $to !== null;
+
+        // Calls MADE in the range (count of calls, not distinct people — two
+        // calls to one worker count as two). No range → all calls ever.
+        $callsMade = EmployeeCallLog::query()
+            ->when($from !== null, fn ($q) => $q->whereDate('called_at', '>=', $from))
+            ->when($to !== null, fn ($q) => $q->whereDate('called_at', '<=', $to))
+            ->count();
+
+        // Follow-ups DUE: within the range when one is set; otherwise the
+        // current "outstanding as of today" meaning (follow_up_date <= today).
+        $followUps = EmployeeCallLog::query()
+            ->whereNotNull('follow_up_date')
+            ->when($hasRange, function ($q) use ($from, $to): void {
+                $q->when($from !== null, fn ($qq) => $qq->whereDate('follow_up_date', '>=', $from))
+                    ->when($to !== null, fn ($qq) => $qq->whereDate('follow_up_date', '<=', $to));
+            }, fn ($q) => $q->whereDate('follow_up_date', '<=', now()->toDateString()))
+            ->count();
+
+        // NOT contacted: active employees with no call logged in the range (no
+        // range → never contacted at all).
+        $contacted = EmployeeCallLog::query()
+            ->when($from !== null, fn ($q) => $q->whereDate('called_at', '>=', $from))
+            ->when($to !== null, fn ($q) => $q->whereDate('called_at', '<=', $to))
             ->distinct()
             ->pluck('employee_id');
 
         return [
-            'calls_today' => EmployeeCallLog::query()
-                ->whereDate('called_at', now()->toDateString())
-                ->count(),
-            'pending_follow_ups' => EmployeeCallLog::query()
-                ->whereNotNull('follow_up_date')
-                ->whereDate('follow_up_date', '<=', now()->toDateString())
-                ->count(),
-            'not_contacted_this_week' => Employee::query()
+            'calls_made' => $callsMade,
+            'pending_follow_ups' => $followUps,
+            'not_contacted' => Employee::query()
                 ->where('active', true)
-                ->whereNotIn('id', $contactedThisWeek)
+                ->whereNotIn('id', $contacted)
                 ->count(),
         ];
     }
