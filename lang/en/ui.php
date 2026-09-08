@@ -2521,7 +2521,7 @@ return [
         'updated' => 'Desplazamiento actualizado / Deployment updated',
         'completed' => 'Desplazamiento finalizado / Deployment completed',
         'cancelled' => 'Desplazamiento cancelado / Deployment cancelled',
-        'charge_expense_note' => 'Cargo interno por desplazamiento: :employee / Internal deployment charge: :employee',
+        'charge_expense_note' => 'Coste de personal desplegado de :company / Deployed staff cost from :company',
         'overlap' => 'El empleado ya tiene un desplazamiento activo en esas fechas / Employee already has an active deployment in those dates',
         'only_active_editable' => 'Solo se pueden editar desplazamientos activos / Only active deployments can be edited',
         'employee_locked_by_attendance' => 'No se puede cambiar el empleado: ya hay asistencia registrada en este desplazamiento / Cannot change the employee — attendance is already logged for this deployment',

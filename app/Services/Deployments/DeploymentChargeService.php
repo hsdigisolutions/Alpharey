@@ -10,6 +10,7 @@ use App\Models\DeploymentCharge;
 use App\Models\EmployeeDeployment;
 use App\Models\Expense;
 use App\Models\Scopes\CompanyScope;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -26,57 +27,80 @@ use Illuminate\Support\Facades\DB;
 class DeploymentChargeService
 {
     /**
-     * Units (hours or days) the employee logged on the host project within
-     * the deployment window — the billable basis for the cross-charge.
+     * The employee's host-project attendance rows within the deployment window
+     * — the billable basis for the cross-charge. Worked days only; a plain
+     * absence carries no cost and must not inflate the reimbursement.
+     *
+     * @return Collection<int, Attendance>
      */
-    public function accruedUnits(EmployeeDeployment $deployment): float
+    private function windowRecords(EmployeeDeployment $deployment): Collection
     {
         $end = $deployment->deployment_end?->toDateString() ?? now()->toDateString();
 
-        $records = Attendance::query()
+        return Attendance::query()
             ->withoutGlobalScopes()
             ->where('employee_id', $deployment->employee_id)
             ->where('project_id', $deployment->project_id)
             ->whereBetween('date', [$deployment->deployment_start->toDateString(), $end])
-            ->get();
+            ->whereIn('status', ['present', 'late', 'early_leave'])
+            ->get(['id', 'hours_worked', 'total_amount', 'status']);
+    }
+
+    /**
+     * Units (days or hours) the employee logged on the host project — shown in
+     * the cross-charge summary alongside the amount.
+     */
+    public function accruedUnits(EmployeeDeployment $deployment): float
+    {
+        $records = $this->windowRecords($deployment);
 
         return match ($deployment->rate_type) {
             DeploymentRateType::Daily => (float) $records->count(),
-            // hourly / per_meter both bill on logged hours here (meters would
-            // read measurements — deferred until measurement billing, Phase 6)
             default => round((float) $records->sum(fn (Attendance $r) => (float) $r->hours_worked), 2),
         };
     }
 
     /**
-     * Current accrued cost for an active deployment (live, not persisted).
+     * The amount the HOST owes the HOME company — EXACT COST, no margin
+     * (client decision 2026-09): the sum of the worker's FROZEN day totals for
+     * the host-project days in the window, i.e. precisely what the home company
+     * pays the worker for those days. Mixed day types (full / half / hourly)
+     * are already reflected in each row's total_amount, so this is exact.
      */
     public function accruedAmount(EmployeeDeployment $deployment): float
     {
-        $units = $this->accruedUnits($deployment);
-        $rate = (float) ($deployment->rate_during_deployment ?? 0);
-        $split = (float) $deployment->split_pct / 100;
-
-        return round($units * $rate * $split, 2);
+        return round((float) $this->windowRecords($deployment)
+            ->sum(fn (Attendance $r) => (float) $r->total_amount), 2);
     }
 
     /**
-     * Generate (or refresh) the persisted cross-charge for a deployment —
-     * called when it completes. Only Option A produces an automated charge.
+     * Refresh the persisted cross-charge from CURRENT attendance — the live
+     * accrual (client decision 2026-09, Option B): while the deployment is
+     * ACTIVE the charge + host expense grow as days are logged (status
+     * 'pending'); on completion they are refreshed one last time and LOCKED.
+     * Only Option A produces an automated charge.
      */
-    public function generateCharge(EmployeeDeployment $deployment): ?DeploymentCharge
+    public function refreshCharge(EmployeeDeployment $deployment, bool $finalize = false): ?DeploymentCharge
     {
         if ($deployment->billing_method !== BillingMethod::OptionA) {
             return null;
         }
 
-        $units = $this->accruedUnits($deployment);
-        $rate = (float) ($deployment->rate_during_deployment ?? 0);
-        $split = (float) $deployment->split_pct / 100;
-        $amount = round($units * $rate * $split, 2);
-        $periodEnd = $deployment->deployment_end?->toDateString() ?? now()->toDateString();
+        // A locked (completed) charge is final money — never re-open it from a
+        // later attendance edit; only an explicit finalize may touch it again.
+        $current = DeploymentCharge::query()->where('employee_deployment_id', $deployment->id)->first();
+        if ($current !== null && $current->status === 'locked' && ! $finalize) {
+            return $current;
+        }
 
-        return DB::transaction(function () use ($deployment, $units, $rate, $amount, $periodEnd): DeploymentCharge {
+        $units = $this->accruedUnits($deployment);
+        $amount = $this->accruedAmount($deployment);
+        // Display rate = exact cost ÷ units (mixed day types average out).
+        $rate = $units > 0.0 ? round($amount / $units, 2) : 0.0;
+        $periodEnd = $deployment->deployment_end?->toDateString() ?? now()->toDateString();
+        $status = $finalize ? 'locked' : 'pending';
+
+        return DB::transaction(function () use ($deployment, $units, $rate, $amount, $periodEnd, $status): DeploymentCharge {
             $charge = DeploymentCharge::query()->updateOrCreate(
                 ['employee_deployment_id' => $deployment->id],
                 [
@@ -89,7 +113,7 @@ class DeploymentChargeService
                     'rate_type' => $deployment->rate_type->value,
                     'rate' => (string) $rate,
                     'amount' => (string) $amount,
-                    'status' => 'pending',
+                    'status' => $status,
                 ],
             );
 
@@ -97,6 +121,14 @@ class DeploymentChargeService
 
             return $charge;
         });
+    }
+
+    /**
+     * Finalize the charge when a deployment completes (locks the amount).
+     */
+    public function generateCharge(EmployeeDeployment $deployment): ?DeploymentCharge
+    {
+        return $this->refreshCharge($deployment, finalize: true);
     }
 
     /**
@@ -132,10 +164,11 @@ class DeploymentChargeService
             'vat_rate' => null,
             'vat_amount' => '0',
             'total' => (string) $amount,
-            // The employee relation drops all global scopes, so it resolves
-            // even for a soft-deleted worker — never null here.
+            // Host-minimal (2026-09): the note names the HOME company + project,
+            // NEVER the deployed worker — the host must not learn Shizukani's
+            // employee identity from their own expense ledger.
             'notes' => __('ui.deployments.charge_expense_note', [
-                'employee' => $deployment->employee->full_name,
+                'company' => $deployment->homeCompany->name ?? '—',
             ]),
         ]);
 

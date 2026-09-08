@@ -5,8 +5,10 @@ use App\Models\Company;
 use App\Models\DeploymentCharge;
 use App\Models\Employee;
 use App\Models\EmployeeDeployment;
+use App\Models\Expense;
 use App\Models\Project;
 use App\Models\User;
+use App\Services\Attendance\AttendanceService;
 use App\Services\Deployments\DeploymentChargeService;
 use Inertia\Testing\AssertableInertia as Assert;
 
@@ -105,32 +107,74 @@ it('lists available employees of a home company (gated, cross-company)', functio
         ->toContain('Luis Vega');
 });
 
-it('generates an Option A cross-charge from host-project hours on completion', function (): void {
+it('generates an Option A cross-charge = EXACT frozen cost on completion', function (): void {
     $this->actingAs($this->admin)->post('/deployments', deploymentPayload([
         'deployment_start' => '2026-07-01', 'deployment_end' => '2026-07-03', 'rate_during_deployment' => '10',
     ]))->assertRedirect();
 
     $deployment = EmployeeDeployment::query()->firstOrFail();
 
-    // Deployed employee logs hours against the HOST project during the window
+    // Deployed employee's HOST-project days during the window — the exact cost
+    // is the SUM of their FROZEN day totals (no margin, no rate×units guesswork).
     Attendance::factory()->create([
         'company_id' => $this->host->id, 'employee_id' => $this->homeEmployee->id,
-        'project_id' => $this->hostProject->id, 'date' => '2026-07-01', 'hours_worked' => '8',
+        'project_id' => $this->hostProject->id, 'date' => '2026-07-01',
+        'status' => 'present', 'hours_worked' => '8', 'total_amount' => '80',
     ]);
     Attendance::factory()->create([
         'company_id' => $this->host->id, 'employee_id' => $this->homeEmployee->id,
-        'project_id' => $this->hostProject->id, 'date' => '2026-07-02', 'hours_worked' => '6',
+        'project_id' => $this->hostProject->id, 'date' => '2026-07-02',
+        'status' => 'present', 'hours_worked' => '6', 'total_amount' => '60',
     ]);
 
     $this->actingAs($this->admin)->post("/deployments/{$deployment->id}/complete")->assertRedirect();
 
     $charge = DeploymentCharge::query()->where('employee_deployment_id', $deployment->id)->firstOrFail();
 
-    // 14h × 10 × 100% = 140
+    // Exact cost = 80 + 60 = 140 (the frozen totals), locked on completion.
     expect((float) $charge->amount)->toBe(140.0)
+        ->and($charge->status)->toBe('locked')
         ->and($charge->home_company_id)->toBe($this->home->id)
         ->and($charge->host_company_id)->toBe($this->host->id)
         ->and($deployment->fresh()->status->value)->toBe('completed');
+
+    // The host's internal expense carries the amount but NEVER the worker name.
+    $expense = Expense::withoutGlobalScopes()->whereKey($charge->expense_id)->firstOrFail();
+    expect($expense->company_id)->toBe($this->host->id)
+        ->and((float) $expense->total)->toBe(140.0)
+        ->and($expense->notes)->not->toContain($this->homeEmployee->full_name);
+});
+
+it('accrues the cross-charge LIVE as attendance is logged for an active deployment', function (): void {
+    // A daily wage so a full day prices non-zero (the exact cost the host owes).
+    $this->homeEmployee->update(['wage_type' => 'daily', 'daily_wage' => '90']);
+
+    $this->actingAs($this->admin)->post('/deployments', deploymentPayload([
+        'deployment_start' => '2026-07-01', 'deployment_end' => '2026-07-31', 'rate_during_deployment' => '10',
+    ]))->assertRedirect();
+    $deployment = EmployeeDeployment::query()->firstOrFail();
+
+    // Log one host-project day via the service → the pending charge appears.
+    app(AttendanceService::class); // resolve once
+    $this->actingAs($this->admin)->post('/attendance', [
+        'employee_id' => $this->homeEmployee->id, 'project_id' => $this->hostProject->id,
+        'date' => '2026-07-01', 'mode' => 'project_based', 'day_type' => 'full', 'status' => 'present',
+    ])->assertRedirect();
+
+    $charge = DeploymentCharge::query()->where('employee_deployment_id', $deployment->id)->first();
+    expect($charge)->not->toBeNull()
+        ->and($charge->status)->toBe('pending');             // still active → pending
+    $firstAmount = (float) $charge->amount;
+    expect($firstAmount)->toBeGreaterThan(0.0);
+
+    // Log a second day → the SAME charge grows (live accrual).
+    $this->actingAs($this->admin)->post('/attendance', [
+        'employee_id' => $this->homeEmployee->id, 'project_id' => $this->hostProject->id,
+        'date' => '2026-07-02', 'mode' => 'project_based', 'day_type' => 'full', 'status' => 'present',
+    ])->assertRedirect();
+
+    expect((float) $charge->fresh()->amount)->toBeGreaterThan($firstAmount)
+        ->and(DeploymentCharge::query()->where('employee_deployment_id', $deployment->id)->count())->toBe(1);
 });
 
 it('never generates a charge for a non-Option-A deployment', function (): void {

@@ -16,6 +16,7 @@ use App\Models\EmployeeDeployment;
 use App\Models\OvertimePolicy;
 use App\Models\Payroll;
 use App\Models\Scopes\CompanyScope;
+use App\Services\Deployments\DeploymentChargeService;
 use App\Services\Employees\WageRateService;
 use App\Services\Settings\SettingsService;
 use App\Support\CurrentCompany;
@@ -64,7 +65,7 @@ class AttendanceService
      */
     public function create(array $data): Attendance
     {
-        return DB::transaction(function () use ($data): Attendance {
+        $attendance = DB::transaction(function () use ($data): Attendance {
             $employee = $this->resolveEmployee((int) $data['employee_id']);
 
             // Only ONE attendance row may exist per employee per day (a unique
@@ -109,6 +110,10 @@ class AttendanceService
 
             return $attendance;
         });
+
+        $this->refreshDeploymentChargeFor($attendance);
+
+        return $attendance;
     }
 
     /**
@@ -127,7 +132,7 @@ class AttendanceService
      */
     public function createForWorker(Employee $employee, array $data, ?int $companyId = null): Attendance
     {
-        return DB::transaction(function () use ($employee, $data, $companyId): Attendance {
+        $attendance = DB::transaction(function () use ($employee, $data, $companyId): Attendance {
             $companyId ??= $employee->company_id;
 
             $attendance = new Attendance($data);
@@ -144,6 +149,10 @@ class AttendanceService
 
             return $attendance;
         });
+
+        $this->refreshDeploymentChargeFor($attendance);
+
+        return $attendance;
     }
 
     /**
@@ -151,7 +160,7 @@ class AttendanceService
      */
     public function update(Attendance $attendance, array $data): Attendance
     {
-        return DB::transaction(function () use ($attendance, $data): Attendance {
+        $attendance = DB::transaction(function () use ($attendance, $data): Attendance {
             // Guard both the month it is in now and the month it would move to.
             $this->lock->assertOpen($attendance->company_id, $attendance->date);
             $this->assertMonthNotPaid((int) $attendance->employee_id, $attendance->date);
@@ -188,6 +197,10 @@ class AttendanceService
 
             return $attendance;
         });
+
+        $this->refreshDeploymentChargeFor($attendance);
+
+        return $attendance;
     }
 
     /**
@@ -246,6 +259,41 @@ class AttendanceService
         abort_unless($deployedHere, 404);
 
         return $employee;
+    }
+
+    /**
+     * Live-accrual hook (Option B, 2026-09). If this attendance row belongs to
+     * an ACTIVE Option-A deployment — the worker deployed onto this project on
+     * this date — refresh the host cross-charge so "what the host owes the home
+     * company" tracks attendance in real time.
+     *
+     * Called AFTER the attendance transaction commits and wrapped so it can
+     * NEVER roll back or fail an attendance save — the punch is authoritative;
+     * the cross-charge is a derived, best-effort side effect.
+     */
+    private function refreshDeploymentChargeFor(Attendance $attendance): void
+    {
+        try {
+            if ($attendance->project_id === null) {
+                return;
+            }
+
+            $date = $attendance->date->toDateString();
+
+            $deployment = EmployeeDeployment::query()
+                ->where('employee_id', $attendance->employee_id)
+                ->where('project_id', $attendance->project_id)
+                ->where('status', DeploymentStatus::Active->value)
+                ->where('deployment_start', '<=', $date)
+                ->where(fn ($q) => $q->whereNull('deployment_end')->orWhere('deployment_end', '>=', $date))
+                ->first();
+
+            if ($deployment !== null) {
+                app(DeploymentChargeService::class)->refreshCharge($deployment);
+            }
+        } catch (\Throwable $e) {
+            report($e); // logged, never surfaced — the attendance row is saved
+        }
     }
 
     /**

@@ -53,7 +53,9 @@ function deploymentWithAttendance(int $days, float $rate = 100.0): EmployeeDeplo
         'status' => DeploymentStatus::Active,
     ]);
 
-    // Attendance is logged under the HOST company for a deployed worker.
+    // Attendance is logged under the HOST company for a deployed worker. The
+    // cross-charge is now the EXACT frozen cost (sum of total_amount), so each
+    // day's frozen total is the daily rate → days × rate still holds.
     for ($i = 0; $i < $days; $i++) {
         Attendance::factory()->create([
             'company_id' => test()->host->id,
@@ -61,6 +63,7 @@ function deploymentWithAttendance(int $days, float $rate = 100.0): EmployeeDeplo
             'project_id' => test()->project->id,
             'date' => $start->copy()->addDays($i)->toDateString(),
             'status' => AttendanceStatus::Present,
+            'total_amount' => (string) $rate,
         ]);
     }
 
