@@ -43,6 +43,7 @@ class StoreInvoiceRequest extends FormRequest
             'billing_period' => ['nullable', 'string', 'max:40'],
 
             // VAT: the VatRate dropdown only, and blank is valid (No aplica).
+            'is_taxable' => ['nullable', 'boolean'],
             'vat_rate' => ['nullable', Rule::enum(VatRate::class)],
             // A custom rate needs its percentage; other rates ignore it.
             'vat_custom_percent' => ['nullable', 'numeric', 'min:0', 'max:100', 'required_if:vat_rate,custom'],

@@ -88,6 +88,7 @@ class ExpenseReceiptExport
             'base' => (float) $e->subtotal,
             'vat' => (float) $e->vat_amount,
             'total' => (float) $e->total,
+            'is_taxable' => $e->is_taxable,
             'payment_method' => $e->payment_method?->value,
             'filename' => $this->fileName($e, $ext),
             'original_name' => $e->original_name,

@@ -62,6 +62,7 @@ const filters = reactive({
     payment_status: props.filters.payment_status ?? '',
     status: props.filters.status ?? '',
     project_id: props.filters.project_id ?? '',
+    taxable: props.filters.taxable ?? '',
     from: props.filters.from ?? '',
     to: props.filters.to ?? '',
 });
@@ -88,11 +89,17 @@ const editingId = ref(null);
 const blank = {
     type: 'sale', sub_type: 'final', client_id: '', vendor_id: '', project_id: '',
     invoice_date: null, due_date: null, billing_type: '', billing_period: '',
-    vat_rate: null, vat_custom_percent: null, discount_type: '', discount_value: 0, retention_percent: null,
+    is_taxable: true, vat_rate: null, vat_custom_percent: null, discount_type: '', discount_value: 0, retention_percent: null,
     status: 'draft', payment_method: '', payment_date: null, notes: '',
     lines: [{ description: '', quantity: 1, unit_price: 0 }],
 };
 const form = useForm({ ...structuredClone(blank) });
+
+// Non-taxable (no sujeta / exenta) → clear the VAT rate as a soft nudge; fully
+// overridable, and the VAT calculation itself is never touched.
+watch(() => form.is_taxable, (taxable) => {
+    if (!taxable) { form.vat_rate = null; form.vat_custom_percent = null; }
+});
 
 // A sale invoice's project list is filtered to the chosen client's projects;
 // expense invoices (no client) keep the full list. Selection = ACTIVE projects
@@ -245,6 +252,7 @@ function openEdit(row) {
                 due_date: e.due_date ?? null,
                 billing_type: e.billing_type ?? '',
                 billing_period: e.billing_period ?? '',
+                is_taxable: e.is_taxable ?? true,
                 vat_rate: e.vat_rate ?? null,
                 vat_custom_percent: e.vat_custom_percent ?? null,
                 discount_type: e.discount_type ?? '',
@@ -374,6 +382,11 @@ const columns = computed(() => [
                 <VSelect v-model="filters.project_id" @update:model-value="apply()">
                     <option value="">{{ $t('invoices.project') }}</option>
                     <option v-for="p in projects" :key="p.id" :value="p.id">{{ p.name }}</option>
+                </VSelect>
+                <VSelect v-model="filters.taxable" @update:model-value="apply()">
+                    <option value="">{{ $t('invoices.taxable') }}</option>
+                    <option value="taxable">{{ $t('invoices.taxable_yes') }}</option>
+                    <option value="non_taxable">{{ $t('invoices.taxable_no') }}</option>
                 </VSelect>
                 <VDateInput v-model="filters.from" @update:model-value="apply()" />
                 <VDateInput v-model="filters.to" @update:model-value="apply()" />
@@ -531,8 +544,19 @@ const columns = computed(() => [
 
                 <!-- Rates -->
                 <div class="grid gap-4 sm:grid-cols-2">
+                    <FormField k="invoices.taxable" :error="form.errors.is_taxable">
+                        <div class="flex overflow-hidden rounded-md border border-line-strong text-sm font-medium">
+                            <button type="button" class="flex-1 px-3 py-1.5 transition"
+                                :class="form.is_taxable ? 'bg-accent text-on-accent' : 'text-ink-soft hover:bg-surface-hover'"
+                                @click="form.is_taxable = true">{{ $t('invoices.taxable_yes') }}</button>
+                            <button type="button" class="flex-1 px-3 py-1.5 transition"
+                                :class="!form.is_taxable ? 'bg-accent text-on-accent' : 'text-ink-soft hover:bg-surface-hover'"
+                                @click="form.is_taxable = false">{{ $t('invoices.taxable_no') }}</button>
+                        </div>
+                    </FormField>
                     <FormField k="invoices.vat" :error="form.errors.vat_rate || form.errors.vat_custom_percent">
                         <VVatSelect v-model="form.vat_rate" v-model:custom-percent="form.vat_custom_percent" :options="vatOptions" />
+                        <p v-if="!form.is_taxable" class="mt-1 text-xs text-muted">{{ $t('invoices.taxable_no_hint') }}</p>
                     </FormField>
                     <FormField k="invoices.retention" :error="form.errors.retention_percent">
                         <VInput v-model="form.retention_percent" type="number" step="0.01" min="0" max="100" />

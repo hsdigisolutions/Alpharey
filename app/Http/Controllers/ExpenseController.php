@@ -82,6 +82,7 @@ class ExpenseController extends Controller
             // ->string() returns a Stringable — compare on ->value(), or the
             // filter silently never matches.
             ->when($request->filled('approval'), fn ($q) => $q->where('approved', $request->string('approval')->value() === 'approved'))
+            ->when($request->filled('taxable'), fn ($q) => $q->where('is_taxable', $request->string('taxable')->value() === 'taxable'))
             ->when($request->filled('from'), fn ($q) => $q->whereDate('date', '>=', $request->string('from')))
             ->when($request->filled('to'), fn ($q) => $q->whereDate('date', '<=', $request->string('to')))
             ->orderByDesc('date')->orderByDesc('id');
@@ -146,7 +147,7 @@ class ExpenseController extends Controller
         return Inertia::render('Expenses/Index', [
             'expenses' => $expenses,
             'stats' => $this->expenseStats(),
-            'filters' => (object) $request->only(['search', 'project_id', 'vendor_id', 'type', 'expense_category_id', 'payment_status', 'approval', 'from', 'to']),
+            'filters' => (object) $request->only(['search', 'project_id', 'vendor_id', 'type', 'expense_category_id', 'payment_status', 'approval', 'taxable', 'from', 'to']),
             'receipts' => $receipts,
             'receiptFilters' => (object) $rcFilters,
             'canScopeAll' => $isSa,
@@ -540,6 +541,9 @@ class ExpenseController extends Controller
             'date' => ['required', 'date'],
             'due_date' => ['nullable', 'date'],
             'subtotal' => ['required', 'numeric', 'min:0', 'max:9999999'],
+            // Operación sujeta a IVA (taxable) vs no sujeta/exenta — a
+            // classification, NOT the rate. Independent of VAT calculation.
+            'is_taxable' => ['nullable', 'boolean'],
             'vat_rate' => ['nullable', Rule::enum(VatRate::class)],
             // A custom rate needs its percentage; other rates ignore it.
             'vat_custom_percent' => ['nullable', 'numeric', 'min:0', 'max:100', 'required_if:vat_rate,custom'],
@@ -641,6 +645,7 @@ class ExpenseController extends Controller
             'vat_custom_percent' => $e->vat_custom_percent,
             'vat_amount' => (float) $e->vat_amount,
             'total' => (float) $e->total,
+            'is_taxable' => $e->is_taxable,
             'payment_method' => $e->payment_method?->value,
             'payment_status' => $e->payment_status->value,
             'payment_date' => $e->payment_date?->toDateString(),

@@ -48,6 +48,7 @@ use Illuminate\Support\Carbon;
  * @property int|null $vehicle_id
  * @property string|null $vehicle_expense_type
  * @property string|null $review_status
+ * @property bool $is_taxable
  */
 class Expense extends Model
 {
@@ -64,7 +65,7 @@ class Expense extends Model
         'number', 'type', 'expense_category_id', 'vendor_id', 'project_id', 'vehicle_id', 'vehicle_expense_type',
         'employee_id', 'company_card_id', 'date', 'due_date', 'subtotal',
         'vat_rate', 'vat_custom_percent', 'vat_amount', 'total', 'payment_method', 'payment_status',
-        'payment_date', 'is_reimbursable', 'bearable_by', 'deduct_from_salary', 'notes',
+        'payment_date', 'is_reimbursable', 'bearable_by', 'deduct_from_salary', 'notes', 'is_taxable',
     ];
 
     protected function casts(): array
@@ -75,6 +76,7 @@ class Expense extends Model
             'payment_method' => PaymentMethod::class,
             'vat_rate' => VatRate::class,
             'vat_custom_percent' => 'float',
+            'is_taxable' => 'boolean',
             'bearable_by' => BearableBy::class,
             'date' => 'date:Y-m-d',
             'due_date' => 'date:Y-m-d',

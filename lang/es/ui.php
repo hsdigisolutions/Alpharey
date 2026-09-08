@@ -2591,6 +2591,10 @@ return [
         'sub_type_final' => 'Factura final',
         'billing_type' => 'Tipo de facturación',
         'billing_period' => 'Periodo facturado',
+        'taxable' => 'Sujeción IVA',
+        'taxable_yes' => 'Sujeta',
+        'taxable_no' => 'No sujeta / exenta',
+        'taxable_no_hint' => 'Operación no sujeta o exenta: normalmente sin IVA (puedes cambiarlo).',
         'vat' => 'IVA',
         'discount' => 'Descuento',
         'discount_type' => 'Tipo de descuento',
@@ -2694,6 +2698,11 @@ return [
         'pm_cash_via_supervisor' => 'Transferencia vía encargado',
         'pm_company_card' => 'Tarjeta de empresa',
         'no_cards_hint' => 'No hay tarjetas. Añádelas en Ajustes → Tarjetas de empresa.',
+        // Taxable / non-taxable (sujeta a IVA)
+        'taxable' => 'Sujeción IVA',
+        'taxable_yes' => 'Sujeta',
+        'taxable_no' => 'No sujeta / exenta',
+        'taxable_no_hint' => 'Operación no sujeta o exenta: normalmente sin IVA (puedes cambiarlo).',
         // Receipt documents tab (tax filing)
         'tab_list' => 'Gastos',
         'tab_receipts' => 'Recibos',

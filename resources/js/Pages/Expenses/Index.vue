@@ -62,6 +62,7 @@ const filters = reactive({
     expense_category_id: props.filters.expense_category_id ?? '',
     payment_status: props.filters.payment_status ?? '',
     approval: props.filters.approval ?? '',
+    taxable: props.filters.taxable ?? '',
     from: props.filters.from ?? '',
     to: props.filters.to ?? '',
 });
@@ -142,11 +143,18 @@ const editingApproved = ref(false); // approved expenses are view-only (locked s
 const blank = {
     number: '', type: 'factura', expense_category_id: '', vendor_id: '', project_id: '',
     employee_id: '', company_card_id: '', date: null, due_date: null,
-    subtotal: 0, vat_rate: null, vat_custom_percent: null, payment_method: '', payment_status: 'unpaid',
+    subtotal: 0, is_taxable: true, vat_rate: null, vat_custom_percent: null, payment_method: '', payment_status: 'unpaid',
     bearable_by: 'company', deduct_from_salary: false, notes: '', file: null,
 };
 const form = useForm({ ...blank });
 const currentFile = ref(null);
+
+// Non-taxable (no sujeta / exenta) operations normally carry no VAT — clear the
+// rate as a SOFT nudge when the user marks the expense non-taxable. Fully
+// overridable (they can re-pick a rate); VAT math itself is never touched.
+watch(() => form.is_taxable, (taxable) => {
+    if (!taxable) { form.vat_rate = null; form.vat_custom_percent = null; }
+});
 
 // The specific company card only applies to the Company-card method — clear it
 // when the method changes so a stale card id is never saved against Cash etc.
@@ -188,6 +196,7 @@ function openEdit(row) {
         date: row.date,
         due_date: row.due_date ?? null,
         subtotal: row.subtotal,
+        is_taxable: row.is_taxable ?? true,
         vat_rate: row.vat_rate ?? null,
         vat_custom_percent: row.vat_custom_percent ?? null,
         payment_method: row.payment_method ?? '',
@@ -411,6 +420,11 @@ const columns = [
                 <option value="">{{ $t('expenses.approval') }}</option>
                 <option value="approved">{{ $t('expenses.is_approved') }}</option>
                 <option value="pending">{{ $t('expenses.pending') }}</option>
+            </VSelect>
+            <VSelect v-model="filters.taxable" @update:model-value="apply()">
+                <option value="">{{ $t('expenses.taxable') }}</option>
+                <option value="taxable">{{ $t('expenses.taxable_yes') }}</option>
+                <option value="non_taxable">{{ $t('expenses.taxable_no') }}</option>
             </VSelect>
             <VDateInput v-model="filters.from" @update:model-value="apply()" />
             <VDateInput v-model="filters.to" @update:model-value="apply()" />
@@ -652,8 +666,19 @@ const columns = [
                 <FormField k="expenses.subtotal" :error="form.errors.subtotal" required>
                     <VInput v-model="form.subtotal" type="number" step="0.01" min="0" />
                 </FormField>
+                <FormField k="expenses.taxable" :error="form.errors.is_taxable">
+                    <div class="flex overflow-hidden rounded-md border border-line-strong text-sm font-medium">
+                        <button type="button" class="flex-1 px-3 py-1.5 transition"
+                            :class="form.is_taxable ? 'bg-accent text-on-accent' : 'text-ink-soft hover:bg-surface-hover'"
+                            @click="form.is_taxable = true">{{ $t('expenses.taxable_yes') }}</button>
+                        <button type="button" class="flex-1 px-3 py-1.5 transition"
+                            :class="!form.is_taxable ? 'bg-accent text-on-accent' : 'text-ink-soft hover:bg-surface-hover'"
+                            @click="form.is_taxable = false">{{ $t('expenses.taxable_no') }}</button>
+                    </div>
+                </FormField>
                 <FormField k="expenses.vat" :error="form.errors.vat_rate || form.errors.vat_custom_percent">
                     <VVatSelect v-model="form.vat_rate" v-model:custom-percent="form.vat_custom_percent" :options="vatOptions" />
+                    <p v-if="!form.is_taxable" class="mt-1 text-xs text-muted">{{ $t('expenses.taxable_no_hint') }}</p>
                 </FormField>
 
                 <FormField k="expenses.payment_method" :error="form.errors.payment_method">

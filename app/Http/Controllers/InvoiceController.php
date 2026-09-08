@@ -75,6 +75,7 @@ class InvoiceController extends Controller
             // Summary-card filter: invoice status (draft / sent / paid).
             ->when($request->filled('status'), fn ($q) => $q->where('status', $request->string('status')))
             ->when($request->filled('project_id'), fn ($q) => $q->where('project_id', $request->integer('project_id')))
+            ->when($request->filled('taxable'), fn ($q) => $q->where('is_taxable', $request->string('taxable')->value() === 'taxable'))
             ->when($request->filled('from'), fn ($q) => $q->whereDate('invoice_date', '>=', $request->string('from')))
             ->when($request->filled('to'), fn ($q) => $q->whereDate('invoice_date', '<=', $request->string('to')))
             ->orderByDesc('invoice_date')->orderByDesc('id');
@@ -137,7 +138,7 @@ class InvoiceController extends Controller
             'tab' => $tab->value,
             'invoices' => $invoices,
             'stats' => $this->invoiceStats($tab),
-            'filters' => (object) $request->only(['search', 'payment_status', 'status', 'project_id', 'from', 'to']),
+            'filters' => (object) $request->only(['search', 'payment_status', 'status', 'project_id', 'taxable', 'from', 'to']),
             // `clients` = all (so editing an invoice keeps a since-inactive client);
             // the create form selects from active-only `formClients` (Change 4).
             'clients' => Client::query()->orderBy('name')->get(['id', 'name']),
@@ -424,6 +425,7 @@ class InvoiceController extends Controller
             'vat_custom_percent' => $i->vat_custom_percent,
             'vat_percent' => $i->vat_rate?->effectivePercent($i->vat_custom_percent),
             'vat_amount' => (float) $i->vat_amount,
+            'is_taxable' => $i->is_taxable,
             'discount_type' => $i->discount_type?->value,
             'discount_value' => (float) $i->discount_value,
             'discount_amount' => (float) $i->discount_amount,

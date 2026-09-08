@@ -49,6 +49,7 @@ use Illuminate\Support\Carbon;
  * @property numeric-string $retention_amount
  * @property numeric-string $total
  * @property numeric-string $paid_amount
+ * @property bool $is_taxable
  */
 class Invoice extends Model
 {
@@ -72,7 +73,7 @@ class Invoice extends Model
         'subtotal', 'vat_rate', 'vat_custom_percent', 'vat_amount', 'discount_type', 'discount_value',
         'discount_amount', 'retention_percent', 'retention_amount', 'total',
         'paid_amount', 'status', 'payment_status', 'payment_date',
-        'payment_method', 'notes',
+        'payment_method', 'notes', 'is_taxable',
     ];
 
     protected function casts(): array
@@ -83,6 +84,7 @@ class Invoice extends Model
             'status' => InvoiceStatus::class,
             'payment_status' => PaymentStatus::class,
             'discount_type' => DiscountType::class,
+            'is_taxable' => 'boolean',
             'vat_rate' => VatRate::class,
             'vat_custom_percent' => 'float',
             'payment_method' => PaymentMethod::class,

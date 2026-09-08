@@ -33,6 +33,7 @@ class ExpenseReceiptIndexExport implements FromArray, WithHeadings
             $r['base'],
             $r['vat'],
             $r['total'],
+            ($r['is_taxable'] ?? true) ? 'Sujeta / Taxable' : 'No sujeta / Non-taxable',
             $r['payment_method'],
             $r['filename'],
         ], $this->rows);
@@ -53,6 +54,7 @@ class ExpenseReceiptIndexExport implements FromArray, WithHeadings
             'Base / Taxable base',
             'IVA / VAT',
             'Total',
+            'Sujeción IVA / VAT status',
             'Forma de pago / Payment method',
             'Archivo / File',
         ];

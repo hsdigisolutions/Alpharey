@@ -2586,6 +2586,10 @@ return [
         'sub_type_final' => 'Final invoice',
         'billing_type' => 'Billing type',
         'billing_period' => 'Billing period',
+        'taxable' => 'VAT status',
+        'taxable_yes' => 'Taxable',
+        'taxable_no' => 'Non-taxable / exempt',
+        'taxable_no_hint' => 'Non-taxable or exempt operation: normally no VAT (you can override).',
         'vat' => 'VAT',
         'discount' => 'Discount',
         'discount_type' => 'Discount type',
@@ -2689,6 +2693,11 @@ return [
         'pm_cash_via_supervisor' => 'Employee transfer via Supervisor',
         'pm_company_card' => 'Company card',
         'no_cards_hint' => 'No cards yet. Add them in Settings → Company cards.',
+        // Taxable / non-taxable (VAT-subject)
+        'taxable' => 'VAT status',
+        'taxable_yes' => 'Taxable',
+        'taxable_no' => 'Non-taxable / exempt',
+        'taxable_no_hint' => 'Non-taxable or exempt operation: normally no VAT (you can override).',
         // Receipt documents tab (tax filing)
         'tab_list' => 'Expenses',
         'tab_receipts' => 'Receipts',
