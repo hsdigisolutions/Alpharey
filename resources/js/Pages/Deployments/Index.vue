@@ -6,23 +6,20 @@
  * the host is cross-charged automatically. Option B (host runs payroll) is
  * cesión ilegal and is never offered here.
  */
-import { computed, reactive, ref } from 'vue';
+import { reactive, ref } from 'vue';
 import { Head, router, useForm } from '@inertiajs/vue3';
 import { ensureCompanySelected } from '@/composables/useCompanyGate';
 import AppLayout from '@/Layouts/AppLayout.vue';
-import AppIcon from '@/Components/AppIcon.vue';
 import FormField from '@/Components/ui/FormField.vue';
 import VBadge from '@/Components/ui/VBadge.vue';
 import VButton from '@/Components/ui/VButton.vue';
 import VDateInput from '@/Components/ui/VDateInput.vue';
-import VDropdown from '@/Components/ui/VDropdown.vue';
 import VEmptyState from '@/Components/ui/VEmptyState.vue';
 import VInput from '@/Components/ui/VInput.vue';
 import VModal from '@/Components/ui/VModal.vue';
 import VPageHeader from '@/Components/ui/VPageHeader.vue';
 import VPagination from '@/Components/ui/VPagination.vue';
 import VSelect from '@/Components/ui/VSelect.vue';
-import VTable from '@/Components/ui/VTable.vue';
 import VTextarea from '@/Components/ui/VTextarea.vue';
 
 const props = defineProps({
@@ -121,20 +118,6 @@ function submitEdit() {
 function complete(d) { router.post(`/deployments/${d.id}/complete`, {}, { preserveScroll: true }); }
 function cancel(d) { router.post(`/deployments/${d.id}/cancel`, {}, { preserveScroll: true }); }
 
-const showCost = computed(() => props.deployments.data.some((d) => d.accrued_cost !== null));
-
-const columns = [
-    { key: 'employee', labelKey: 'deployments.employee' },
-    { key: 'home', labelKey: 'deployments.home_company' },
-    { key: 'host', labelKey: 'deployments.host_company' },
-    { key: 'project', labelKey: 'deployments.project' },
-    { key: 'period', labelKey: 'deployments.period' },
-    { key: 'rate', labelKey: 'deployments.rate', align: 'end' },
-    { key: 'cost', labelKey: 'deployments.accrued_cost', align: 'end' },
-    { key: 'status', labelKey: 'deployments.status' },
-    { key: 'actions', labelKey: 'common.actions', align: 'end' },
-];
-
 function eur(n) {
     return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(Number(n));
 }
@@ -154,59 +137,69 @@ function eur(n) {
             </VSelect>
         </div>
 
-        <VTable :columns="columns">
-            <tr v-for="d in deployments.data" :key="d.id" class="hover:bg-surface-hover">
-                <td class="px-3 py-2.5 text-sm font-medium text-ink">{{ d.employee ?? '—' }}</td>
-                <td class="px-3 py-2.5 text-sm text-ink-soft">{{ d.home_company ?? '—' }}</td>
-                <td class="px-3 py-2.5 text-sm text-ink-soft">{{ d.host_company ?? '—' }}</td>
-                <td class="px-3 py-2.5 text-sm">{{ d.project ?? '—' }}</td>
-                <td class="tabular-nums px-3 py-2.5 text-sm text-ink-soft">{{ d.start }} → {{ d.end ?? '…' }}</td>
-                <td class="tabular-nums px-3 py-2.5 text-end text-sm">
-                    <span v-if="d.rate">{{ eur(d.rate) }}</span><span v-else>—</span>
-                    <span class="text-muted"> / <Bilingual :k="`deployments.rate_${d.rate_type}`" inline /></span>
-                </td>
-                <td class="tabular-nums px-3 py-2.5 text-end text-sm">
-                    <span v-if="showCost && d.accrued_cost !== null">{{ eur(d.accrued_cost) }}</span>
-                    <span v-else class="text-muted">—</span>
-                </td>
-                <td class="px-3 py-2.5">
-                    <VBadge :status="statusColor[d.status] ?? 'neutral'">
+        <div v-if="deployments.data.length" class="grid gap-4 lg:grid-cols-2">
+            <div v-for="d in deployments.data" :key="d.id"
+                class="flex flex-col rounded-xl border border-line bg-surface-raised p-5 shadow-card">
+                <!-- Header: project + status -->
+                <div class="mb-3 flex items-start justify-between gap-3">
+                    <div class="min-w-0">
+                        <p class="truncate text-base font-semibold text-ink">{{ d.project ?? '—' }}</p>
+                        <p class="mt-0.5 truncate text-xs text-ink-soft">
+                            <!-- HOME sees the worker + host; HOST sees only "de {home}", never the worker. -->
+                            <template v-if="d.viewer === 'home'">{{ d.employee ?? '—' }} · → {{ d.host_company }}</template>
+                            <template v-else>{{ $t('employees.deployed_from', { company: d.home_company }) }}</template>
+                        </p>
+                    </div>
+                    <VBadge :status="statusColor[d.status] ?? 'neutral'" class="shrink-0">
                         <Bilingual :k="`deployments.status_${d.status}`" inline />
                     </VBadge>
-                </td>
-                <td class="px-3 py-2.5 text-end">
-                    <div v-if="can.edit && d.status === 'active'" class="flex justify-end">
-                        <VDropdown align="end" width="w-44" teleport>
-                            <template #trigger="{ toggle }">
-                                <VButton variant="ghost" size="sm" icon="dots" :title="$tPair('common.actions')" @click="toggle" />
-                            </template>
-                            <template #default="{ close }">
-                                <button type="button"
-                                    class="flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-start text-sm text-ink transition-colors hover:bg-surface-sunken"
-                                    @click="openEdit(d); close()">
-                                    <AppIcon name="edit" class="h-4 w-4 shrink-0 text-ink-soft" />
-                                    <Bilingual k="deployments.edit_action" inline />
-                                </button>
-                                <button type="button"
-                                    class="flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-start text-sm text-ink transition-colors hover:bg-surface-sunken"
-                                    @click="complete(d); close()">
-                                    <AppIcon name="check" class="h-4 w-4 shrink-0 text-status-ok" />
-                                    <Bilingual k="deployments.complete" inline />
-                                </button>
-                                <button type="button"
-                                    class="flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-start text-sm text-status-danger transition-colors hover:bg-status-danger-soft"
-                                    @click="cancel(d); close()">
-                                    <AppIcon name="stop" class="h-4 w-4 shrink-0" />
-                                    <Bilingual k="deployments.cancel_action" inline />
-                                </button>
-                            </template>
-                        </VDropdown>
+                </div>
+
+                <!-- Detail -->
+                <dl class="grid grid-cols-2 gap-x-4 gap-y-2.5 text-sm">
+                    <div>
+                        <dt class="text-xs text-muted">{{ $t('deployments.period') }}</dt>
+                        <dd class="tabular-nums text-ink">{{ d.start }} → {{ d.end ?? '…' }}</dd>
                     </div>
-                    <span v-else class="text-muted">—</span>
-                </td>
-            </tr>
-            <template v-if="deployments.data.length === 0" #empty><VEmptyState icon="deployments" /></template>
-        </VTable>
+                    <div>
+                        <dt class="text-xs text-muted">{{ $t('deployments.days_present') }}</dt>
+                        <dd class="tabular-nums text-ink">{{ d.days_present }}</dd>
+                    </div>
+                    <template v-if="d.viewer === 'home'">
+                        <div>
+                            <dt class="text-xs text-muted">{{ $t('deployments.units') }}</dt>
+                            <dd class="tabular-nums text-ink">{{ d.units }} <Bilingual :k="`deployments.rate_${d.rate_type}`" inline /></dd>
+                        </div>
+                        <div>
+                            <dt class="text-xs text-muted">{{ $t('deployments.rate') }} <span class="text-muted">({{ $t('deployments.exact_cost') }})</span></dt>
+                            <dd class="tabular-nums text-ink">{{ d.rate ? eur(d.rate) : '—' }}</dd>
+                        </div>
+                    </template>
+                </dl>
+
+                <!-- HOME: the prominent cross-charge the host owes -->
+                <div v-if="d.viewer === 'home'"
+                    class="mt-4 flex items-center justify-between rounded-lg border border-accent/30 bg-accent-soft px-4 py-3">
+                    <div class="min-w-0">
+                        <p class="truncate text-xs font-medium uppercase tracking-wide text-ink-soft">{{ $t('deployments.owed_by', { company: d.host_company }) }}</p>
+                        <p class="text-[11px] text-muted">{{ d.status === 'active' ? $t('deployments.owed_live') : $t('deployments.owed_final') }}</p>
+                    </div>
+                    <p class="tabular-nums shrink-0 text-2xl font-semibold text-accent">{{ eur(d.accrued_cost ?? 0) }}</p>
+                </div>
+                <!-- HOST: minimal presence only — no worker, no money -->
+                <p v-else class="mt-4 rounded-lg bg-surface-sunken px-4 py-3 text-sm text-ink-soft">
+                    {{ $t('deployments.host_presence', { days: d.days_present }) }}
+                </p>
+
+                <!-- Lifecycle actions (manager) -->
+                <div v-if="can.edit && d.status === 'active'" class="mt-4 flex justify-end gap-2 border-t border-line pt-3">
+                    <VButton variant="secondary" size="sm" icon="edit" @click="openEdit(d)"><Bilingual k="deployments.edit_action" inline /></VButton>
+                    <VButton variant="secondary" size="sm" icon="check" @click="complete(d)"><Bilingual k="deployments.complete" inline /></VButton>
+                    <VButton variant="ghost" size="sm" icon="stop" @click="cancel(d)"><Bilingual k="deployments.cancel_action" inline /></VButton>
+                </div>
+            </div>
+        </div>
+        <VEmptyState v-else icon="deployments" />
 
         <VPagination :page="deployments.current_page" :pages="deployments.last_page"
             :total="deployments.total" @update:page="(p) => apply({ page: p })" />

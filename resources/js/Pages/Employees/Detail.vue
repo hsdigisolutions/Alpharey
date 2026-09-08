@@ -40,6 +40,7 @@ const props = defineProps({
     payroll: { type: Array, default: () => [] },
     wageHistory: { type: Array, default: () => [] },
     attendanceTab: { type: Object, default: null },
+    activeDeployment: { type: Object, default: null },
     attendanceEditing: { type: Object, default: null },
     attendanceProjects: { type: Array, default: () => [] },
     attendanceEmployee: { type: Object, default: null },
@@ -328,6 +329,11 @@ function destroy() {
             <VBadge v-else :status="employee.active ? 'ok' : 'neutral'">
                 <Bilingual :k="employee.active ? 'employees.active' : 'employees.inactive'" inline />
             </VBadge>
+            <!-- Active outbound deployment → "Desplegado a {host}" (title shows project + dates). -->
+            <VBadge v-if="activeDeployment" status="info"
+                :title="`${activeDeployment.project ?? ''} · ${activeDeployment.start}${activeDeployment.end ? ' – ' + activeDeployment.end : ''}`">
+                {{ $t('employees.deployed_to', { company: activeDeployment.host_company }) }}
+            </VBadge>
             <VButton v-if="can.edit" variant="secondary" icon="edit" @click="showEdit = true">
                 <Bilingual k="employees.edit" inline />
             </VButton>
@@ -529,11 +535,16 @@ function destroy() {
                                 <button v-else type="button"
                                     class="relative flex aspect-square min-h-14 flex-col items-center justify-center rounded-md text-xs transition-colors"
                                     :class="attCellClass(c.day)"
-                                    :title="attendanceTab.grid[c.day]?.project ?? ''"
+                                    :title="attendanceTab.grid[c.day]?.deployed_from ? $t('employees.deployed_from_label', { company: attendanceTab.grid[c.day].deployed_from }) : (attendanceTab.grid[c.day]?.project ?? '')"
                                     @click="openAttCell(c.day)">
                                     <span class="absolute start-1 top-0.5 text-[9px] font-medium opacity-70">{{ c.day }}</span>
+                                    <!-- Logged at a HOST company while deployed — marked so it is never confused with own-project attendance. -->
+                                    <span v-if="attendanceTab.grid[c.day]?.deployed_from"
+                                        class="absolute end-1 top-0.5 text-[9px] font-bold text-status-info" title="">↗</span>
                                     <span class="tabular-nums text-sm font-semibold">{{ attCellMarker(c.day) }}</span>
-                                    <span v-if="attendanceTab.grid[c.day]?.project"
+                                    <span v-if="attendanceTab.grid[c.day]?.deployed_from"
+                                        class="absolute bottom-0.5 start-1 max-w-[90%] truncate text-[8px] font-medium text-status-info">{{ $t('employees.deployed_from_short', { company: attendanceTab.grid[c.day].deployed_from }) }}</span>
+                                    <span v-else-if="attendanceTab.grid[c.day]?.project"
                                         class="absolute bottom-0.5 start-1 max-w-[85%] truncate text-[8px] opacity-70">{{ attendanceTab.grid[c.day].project.slice(0, 10) }}</span>
                                     <span v-if="canSeeWages && attendanceTab.grid[c.day]?.total"
                                         class="tabular-nums absolute bottom-0.5 end-1 text-[9px] font-semibold">{{ Math.round(attendanceTab.grid[c.day].total) }}€</span>

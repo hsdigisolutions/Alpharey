@@ -288,6 +288,10 @@ const docDot = { ok: 'ok', warn: 'warn', danger: 'danger', neutral: 'neutral', e
                         <span class="flex items-center gap-2">
                             <VAvatar :name="employee.full_name" size="sm" />
                             <span class="text-sm font-medium">{{ employee.full_name }}</span>
+                            <!-- Active outbound deployment → "Desplegado a {host}". -->
+                            <VBadge v-if="employee.deployed_to" status="info" class="shrink-0">
+                                {{ $t('employees.deployed_to', { company: employee.deployed_to }) }}
+                            </VBadge>
                         </span>
                     </td>
                     <td v-else-if="column.key === 'active'" class="px-3 py-2.5">

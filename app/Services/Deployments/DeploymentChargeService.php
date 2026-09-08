@@ -61,6 +61,28 @@ class DeploymentChargeService
     }
 
     /**
+     * One-query summary for the deployment views: days present, billable units
+     * (days or hours), and the exact-cost amount. Used by both the home
+     * cross-charge card and the host-minimal presence card (the caller decides
+     * which fields each side may see).
+     *
+     * @return array{days: int, units: float, amount: float}
+     */
+    public function summary(EmployeeDeployment $deployment): array
+    {
+        $records = $this->windowRecords($deployment);
+        $days = $records->count();
+
+        return [
+            'days' => $days,
+            'units' => $deployment->rate_type === DeploymentRateType::Daily
+                ? (float) $days
+                : round((float) $records->sum(fn (Attendance $r) => (float) $r->hours_worked), 2),
+            'amount' => round((float) $records->sum(fn (Attendance $r) => (float) $r->total_amount), 2),
+        ];
+    }
+
+    /**
      * The amount the HOST owes the HOME company — EXACT COST, no margin
      * (client decision 2026-09): the sum of the worker's FROZEN day totals for
      * the host-project days in the window, i.e. precisely what the home company

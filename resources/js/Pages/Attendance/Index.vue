@@ -304,7 +304,9 @@ const monthLabel = computed(() => {
                     <tr v-for="emp in employees" :key="emp.id" class="hover:bg-surface-hover/50">
                         <td class="sticky start-0 z-10 bg-surface-raised px-3 py-1.5">
                             <span class="flex items-center gap-1.5 truncate text-sm font-medium">
-                                {{ emp.full_name }}
+                                <!-- A deployed-in worker is anonymised: the host
+                                     never sees the home company's employee name. -->
+                                {{ emp.deployed ? $t('attendance.deployed_worker') : emp.full_name }}
                                 <VBadge v-if="emp.deployed" status="info" class="shrink-0">
                                     <Bilingual k="attendance.deployed" inline />
                                 </VBadge>
@@ -316,7 +318,7 @@ const monthLabel = computed(() => {
                                 </VBadge>
                             </span>
                             <span class="block truncate text-[10px] text-muted">
-                                <template v-if="emp.deployed">{{ emp.home_company }}</template>
+                                <template v-if="emp.deployed">{{ $t('attendance.deployed_from', { company: emp.home_company ?? '—' }) }}</template>
                                 <template v-else>{{ emp.designation ?? '—' }}</template>
                             </span>
                         </td>
@@ -439,12 +441,13 @@ const monthLabel = computed(() => {
                 </thead>
                 <tbody class="divide-y divide-line">
                     <tr v-for="emp in employees" :key="emp.id" class="hover:bg-surface-hover">
-                        <td class="px-3 py-2 font-medium">{{ emp.full_name }}</td>
+                        <td class="px-3 py-2 font-medium">{{ emp.deployed ? $t('attendance.deployed_worker') : emp.full_name }}</td>
                         <td class="tabular-nums px-3 py-2 text-end">{{ summary[emp.id]?.days_present ?? 0 }}</td>
                         <td class="tabular-nums px-3 py-2 text-end">{{ summary[emp.id]?.hours ?? 0 }}</td>
                         <td class="tabular-nums px-3 py-2 text-end">{{ summary[emp.id]?.overtime ?? 0 }}</td>
                         <td class="tabular-nums px-3 py-2 text-end">{{ summary[emp.id]?.absences ?? 0 }}</td>
-                        <td v-if="canSeeWage" class="tabular-nums px-3 py-2 text-end">{{ summary[emp.id]?.total_wage ?? 0 }} €</td>
+                        <!-- A deployed worker's pay belongs to the home company — the host sees presence, not money. -->
+                        <td v-if="canSeeWage" class="tabular-nums px-3 py-2 text-end">{{ emp.deployed ? '—' : (summary[emp.id]?.total_wage ?? 0) + ' €' }}</td>
                     </tr>
                 </tbody>
             </table>

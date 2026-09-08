@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\DeploymentStatus;
 use App\Enums\EquipmentIssueStatus;
 use App\Enums\WageType;
 use App\Http\Requests\Employees\StoreEmployeeRequest;
@@ -12,6 +13,7 @@ use App\Models\Company;
 use App\Models\Department;
 use App\Models\Employee;
 use App\Models\EmployeeCompanyHistory;
+use App\Models\EmployeeDeployment;
 use App\Models\EmployeeEquipmentIssue;
 use App\Models\EmployeeWageRate;
 use App\Models\EquipmentIncident;
@@ -77,9 +79,21 @@ class EmployeeController extends Controller
         // Resolved once, reused for both the list filter and the form dropdown.
         $departmentOptions = $this->departmentOptions();
 
-        $employees = $query->orderBy($sort, $dir)
-            ->paginate($perPage)
-            ->withQueryString()
+        $paginator = $query->orderBy($sort, $dir)->paginate($perPage)->withQueryString();
+
+        // Active OUTBOUND deployments for the employees on this page (one query,
+        // no N+1) → employee_id ⇒ host company name, for the "Desplegado a X"
+        // badge. Deployments are cross-company (no tenant scope), so this reads
+        // them directly; home_company_id pins it to the acting company's own.
+        $deployedMap = EmployeeDeployment::query()
+            ->whereIn('employee_id', collect($paginator->items())->pluck('id'))
+            ->where('status', DeploymentStatus::Active->value)
+            ->when($actingCompanyId !== null, fn ($q) => $q->where('home_company_id', $actingCompanyId))
+            ->with('hostCompany:id,name')
+            ->get()
+            ->keyBy('employee_id');
+
+        $employees = $paginator
             ->through(fn (Employee $employee): array => [
                 'id' => $employee->id,
                 'employee_code' => $employee->employee_code,
@@ -91,6 +105,8 @@ class EmployeeController extends Controller
                 'city' => $employee->city,
                 'mobile' => $employee->mobile,
                 'wage_type' => $employee->wage_type?->value,
+                // Active outbound deployment → "Desplegado a {host company}".
+                'deployed_to' => $deployedMap->get($employee->id)?->hostCompany?->name,
                 // Salary figures only for roles that manage wages (server-side filter).
                 // The Tarifa column shows the rate matching the worker's OWN wage
                 // type — reading the hourly column for every type showed 0/blank
@@ -268,6 +284,8 @@ class EmployeeController extends Controller
             // Employment History (Change 2) — every company stint of this person,
             // linked by person_uuid, newest company last.
             'employmentHistory' => $this->employmentHistoryPayload($request, $employee),
+            // Active OUTBOUND deployment → "Desplegado a {host}" header badge.
+            'activeDeployment' => $this->activeDeploymentPayload($employee),
             'documents' => $panel->forEntity($employee, 'employee'),
             'documentSets' => DocumentTypes::employee(),
             'documentFieldDefs' => DocumentTypes::fieldDefsMap('employee'),
@@ -542,6 +560,33 @@ class EmployeeController extends Controller
     }
 
     /**
+     * The worker's current OUTBOUND deployment (if any) for the detail-header
+     * "Desplegado a {host}" badge — host company, project, and dates.
+     *
+     * @return array{host_company: ?string, project: ?string, start: string, end: ?string}|null
+     */
+    private function activeDeploymentPayload(Employee $employee): ?array
+    {
+        $d = EmployeeDeployment::query()
+            ->where('employee_id', $employee->id)
+            ->where('status', DeploymentStatus::Active->value)
+            ->with(['hostCompany:id,name', 'project:id,name'])
+            ->orderByDesc('deployment_start')
+            ->first();
+
+        if ($d === null) {
+            return null;
+        }
+
+        return [
+            'host_company' => $d->hostCompany?->name,
+            'project' => $d->project?->name,
+            'start' => $d->deployment_start->toDateString(),
+            'end' => $d->deployment_end?->toDateString(),
+        ];
+    }
+
+    /**
      * The Asistencia tab: this employee's month grid + monthly summary. A
      * deployed worker's host-logged days count too, so the query drops the
      * tenant scope and pins to the employee (their pay is home-company's).
@@ -560,7 +605,7 @@ class EmployeeController extends Controller
             ->where('employee_id', $employee->id)
             ->when($scopeCompanyId !== null, fn ($q) => $q->where('company_id', $scopeCompanyId))
             ->whereBetween('date', [$start->toDateString(), $end->toDateString()])
-            ->with('project:id,name')
+            ->with(['project:id,name', 'company:id,name'])
             ->get();
 
         // NET worked hours for this employee's company (full 08:00–17:00 → 8 h).
@@ -577,6 +622,11 @@ class EmployeeController extends Controller
                 'quantity' => $r->quantity !== null ? (float) $r->quantity : null,
                 'project' => $r->project?->name,
                 'total' => $canSeeWages ? (float) $r->total_amount : null,
+                // Logged at another (HOST) company while deployed → the home
+                // admin sees "Desde {host} (desplegado)", never confusing it
+                // with their own project's attendance.
+                'deployed_from' => (int) $r->company_id !== (int) $employee->company_id
+                    ? $r->company?->name : null,
             ];
         }
 

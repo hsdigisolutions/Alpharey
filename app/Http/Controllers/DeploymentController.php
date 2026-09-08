@@ -40,6 +40,7 @@ class DeploymentController extends Controller
         Gate::authorize('deployments.view');
 
         $companyId = app(CurrentCompany::class)->id();
+        $isSuperAdmin = $request->user()?->isSuperAdmin() ?? false;
 
         $deployments = EmployeeDeployment::query()
             ->visibleTo($companyId)
@@ -48,26 +49,48 @@ class DeploymentController extends Controller
             ->orderByDesc('deployment_start')
             ->paginate(25)
             ->withQueryString()
-            ->through(fn (EmployeeDeployment $d): array => [
-                'id' => $d->id,
-                'employee' => $d->employee?->full_name,
-                // For the edit modal (only shown for editable/active rows).
-                'employee_id' => $d->employee_id,
-                'home_company_id' => $d->home_company_id,
-                'home_company' => $d->homeCompany?->name,
-                'host_company' => $d->hostCompany?->name,
-                'project' => $d->project?->name,
-                'start' => $d->deployment_start->toDateString(),
-                'end' => $d->deployment_end?->toDateString(),
-                'rate' => $d->rate_during_deployment,
-                'rate_type' => $d->rate_type->value,
-                'split_pct' => $d->split_pct,
-                'notes' => $d->notes,
-                'billing_method' => $d->billing_method->value,
-                'status' => $d->status->value,
-                'accrued_cost' => Gate::allows('payroll.view') || Gate::allows('deployments.approve')
-                    ? $charges->accruedAmount($d) : null,
-            ]);
+            ->through(function (EmployeeDeployment $d) use ($charges, $companyId, $isSuperAdmin): array {
+                $summary = $charges->summary($d);
+
+                // A PURE-HOST viewer (acting company is the host, not the home,
+                // and not a Super Admin) sees MINIMAL, project-level presence
+                // only: no worker identity, no money. The home side (and a
+                // Super Admin) sees the full cross-charge detail.
+                $hostOnly = ! $isSuperAdmin
+                    && $companyId === $d->host_company_id
+                    && $companyId !== $d->home_company_id;
+
+                $base = [
+                    'id' => $d->id,
+                    'viewer' => $hostOnly ? 'host' : 'home',
+                    'home_company' => $d->homeCompany?->name,
+                    'host_company' => $d->hostCompany?->name,
+                    'project' => $d->project?->name,
+                    'start' => $d->deployment_start->toDateString(),
+                    'end' => $d->deployment_end?->toDateString(),
+                    'days_present' => $summary['days'],
+                    'billing_method' => $d->billing_method->value,
+                    'status' => $d->status->value,
+                ];
+
+                if ($hostOnly) {
+                    // NEVER the worker name, the amount, the rate, or edit data.
+                    return $base;
+                }
+
+                return $base + [
+                    'employee' => $d->employee?->full_name,
+                    'employee_id' => $d->employee_id,
+                    'home_company_id' => $d->home_company_id,
+                    'rate' => $d->rate_during_deployment,
+                    'rate_type' => $d->rate_type->value,
+                    'split_pct' => $d->split_pct,
+                    'notes' => $d->notes,
+                    'units' => $summary['units'],
+                    // Live exact-cost the host owes the home company.
+                    'accrued_cost' => $summary['amount'],
+                ];
+            });
 
         return Inertia::render('Deployments/Index', [
             'deployments' => $deployments,

@@ -207,7 +207,7 @@ it('is visible to the home company but not to an unrelated company', function ()
         ->assertInertia(fn (Assert $page) => $page->has('deployments.data', 0));
 });
 
-it('shows a deployed employee on the host attendance grid with the deployed flag', function (): void {
+it('shows a deployed employee on the host attendance grid — flagged and ANONYMISED', function (): void {
     EmployeeDeployment::factory()->create([
         'home_company_id' => $this->home->id, 'host_company_id' => $this->host->id,
         'employee_id' => $this->homeEmployee->id, 'project_id' => $this->hostProject->id,
@@ -215,10 +215,14 @@ it('shows a deployed employee on the host attendance grid with the deployed flag
         'deployment_end' => now()->endOfMonth()->toDateString(),
     ]);
 
+    // The host sees the deployed flag + home company, but NOT the worker's name
+    // (host-minimal, 2026-09) — full_name is withheld.
     $this->actingAs($this->admin)->get('/attendance')
         ->assertInertia(fn (Assert $page) => $page
             ->where('employees', fn ($employees) => collect($employees)
-                ->contains(fn ($e) => $e['deployed'] === true && $e['full_name'] === 'Ana Torres')));
+                ->contains(fn ($e) => $e['deployed'] === true
+                    && $e['full_name'] === null
+                    && $e['home_company'] === $this->home->name)));
 });
 
 it('refuses to deploy a soft-deleted employee', function (): void {
@@ -385,4 +389,57 @@ it('denies editing without deployments.edit permission', function (): void {
     $this->actingAs($user)->put("/deployments/{$dep->id}", [
         'employee_id' => $this->homeEmployee->id, 'rate_type' => 'hourly', 'rate_during_deployment' => '18', 'split_pct' => 100,
     ])->assertForbidden();
+});
+
+/*
+ * Visibility layer (2026-09): the HOME side sees full cross-charge detail; the
+ * HOST side sees a minimal, anonymised presence only.
+ */
+
+it('shows the home viewer full detail and the host viewer a minimal presence row', function (): void {
+    $this->actingAs($this->admin)->post('/deployments', deploymentPayload([
+        'deployment_start' => '2026-07-01', 'deployment_end' => '2026-07-31', 'rate_type' => 'daily',
+    ]))->assertRedirect();
+    Attendance::factory()->create([
+        'company_id' => $this->host->id, 'employee_id' => $this->homeEmployee->id,
+        'project_id' => $this->hostProject->id, 'date' => '2026-07-01',
+        'status' => 'present', 'total_amount' => '90',
+    ]);
+
+    // HOST admin (acting = host): minimal — no worker name, no amount.
+    $this->actingAs($this->admin)->get('/deployments')
+        ->assertInertia(fn (Assert $p) => $p
+            ->where('deployments.data.0.viewer', 'host')
+            ->where('deployments.data.0.days_present', 1)
+            ->missing('deployments.data.0.employee')
+            ->missing('deployments.data.0.accrued_cost'));
+
+    // HOME admin (acting = home): full detail incl. the €90 owed.
+    $homeAdmin = User::factory()->companyAdmin()->forCompany($this->home)->create();
+    $this->actingAs($homeAdmin)->get('/deployments')
+        ->assertInertia(fn (Assert $p) => $p
+            ->where('deployments.data.0.viewer', 'home')
+            ->where('deployments.data.0.employee', 'Ana Torres')
+            ->where('deployments.data.0.accrued_cost', 90));
+});
+
+it('badges the worker at home and anonymises them on the host attendance grid', function (): void {
+    $this->actingAs($this->admin)->post('/deployments', deploymentPayload([
+        'deployment_start' => now()->startOfMonth()->toDateString(),
+        'deployment_end' => now()->endOfMonth()->toDateString(),
+    ]))->assertRedirect();
+
+    // HOME Employees list → "Desplegado a {host}" badge datum.
+    $homeAdmin = User::factory()->companyAdmin()->forCompany($this->home)->create();
+    $this->actingAs($homeAdmin)->get('/employees')
+        ->assertInertia(fn (Assert $p) => $p->where('employees.data.0.deployed_to', $this->host->name));
+
+    // HOME employee detail → activeDeployment badge payload present.
+    $this->actingAs($homeAdmin)->get("/employees/{$this->homeEmployee->id}")
+        ->assertInertia(fn (Assert $p) => $p->where('activeDeployment.host_company', $this->host->name));
+
+    // HOST attendance grid → the deployed-in worker's NAME is withheld.
+    $this->actingAs($this->admin)->get('/attendance')
+        ->assertInertia(fn (Assert $p) => $p->where('employees', fn ($emps) => collect($emps)
+            ->contains(fn ($e) => ($e['deployed'] ?? false) && $e['full_name'] === null)));
 });
