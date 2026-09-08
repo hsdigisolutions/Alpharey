@@ -243,3 +243,36 @@ it('credits a DEPLOYED worker for task progress (allowDeployed) — regression',
     expect((float) $this->task->refresh()->completed_quantity)->toBe(50.0)
         ->and(TaskProgress::withoutGlobalScopes()->where('production_task_id', $this->task->id)->count())->toBe(1);
 });
+
+it('includes checkout photos in the present-workers feed for an attendance viewer (Phase 1)', function (): void {
+    $a = present($this->companyA->id, $this->project->id, $this->date);
+    // Checkout photo columns are server-set (not fillable) — forceFill for the fixture.
+    $att = Attendance::withoutGlobalScopes()->where('employee_id', $a->id)->where('date', $this->date)->first();
+    $att->forceFill(['check_out_attachment_path' => 'att/x.jpg', 'check_out_attachment_name' => 'proof.jpg'])->save();
+
+    $this->actingAs($this->admin)
+        ->getJson("/projects/{$this->project->id}/present-workers?date={$this->date}")
+        ->assertOk()
+        ->assertJsonPath('workers.0.checkout_photos.0.which', 1)
+        ->assertJsonPath('workers.0.checkout_photos.0.is_image', true)
+        ->assertJsonPath('workers.0.checkout_photos.0.url', "/attendance/{$att->id}/checkout-attachment/1");
+});
+
+it('omits checkout photos from the feed when the viewer cannot see attendance', function (): void {
+    $a = present($this->companyA->id, $this->project->id, $this->date);
+    $att = Attendance::withoutGlobalScopes()->where('employee_id', $a->id)->where('date', $this->date)->first();
+    $att->forceFill(['check_out_attachment_path' => 'att/x.jpg', 'check_out_attachment_name' => 'proof.jpg'])->save();
+
+    // A manager with production_tasks (view+edit) but NO attendance permission:
+    // the feed still lists the worker, but the photos are withheld.
+    $mgr = User::factory()->forCompany($this->companyA)->create();
+    UserModulePermission::query()->create([
+        'user_id' => $mgr->id, 'company_id' => $this->companyA->id, 'module' => 'production_tasks',
+        'can_view' => true, 'can_edit' => true,
+    ]);
+
+    $this->actingAs($mgr)
+        ->getJson("/projects/{$this->project->id}/present-workers?date={$this->date}")
+        ->assertOk()
+        ->assertJsonPath('workers.0.checkout_photos', []);
+});

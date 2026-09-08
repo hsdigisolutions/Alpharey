@@ -34,6 +34,12 @@ class TaskProgressController extends Controller
 
         $date = $request->date('date')?->toDateString() ?? now()->toDateString();
 
+        // Checkout proof-of-work photos (Phase 1 — evidence surfacing) are only
+        // included when the viewer may actually open them; the download route is
+        // itself attendance.view-gated + audited, so this just avoids dead
+        // thumbnails for a task-only manager.
+        $canViewPhotos = Gate::allows('attendance.view');
+
         $workers = Attendance::query()
             ->withoutGlobalScopes()
             ->where('project_id', $project->id)
@@ -46,11 +52,43 @@ class TaskProgressController extends Controller
                 'id' => $a->employee_id,
                 'name' => $a->employee?->full_name,
                 'designation' => $a->employee?->designation,
+                'checkout_photos' => $canViewPhotos ? $this->checkoutPhotos($a) : [],
             ])
             ->values()
             ->all();
 
         return response()->json(['workers' => $workers]);
+    }
+
+    /**
+     * The worker's checkout proof-of-work photos for that attendance row (up to
+     * 3), as gated download URLs + display metadata. Worker-side proof captured
+     * at check-out; here it becomes admin evidence for judging task progress.
+     *
+     * @return list<array{which: int, url: string, name: string|null, is_image: bool}>
+     */
+    private function checkoutPhotos(Attendance $a): array
+    {
+        $slots = [
+            1 => [$a->check_out_attachment_path, $a->check_out_attachment_name],
+            2 => [$a->check_out_attachment_2_path, $a->check_out_attachment_2_name],
+            3 => [$a->check_out_attachment_3_path, $a->check_out_attachment_3_name],
+        ];
+
+        $photos = [];
+        foreach ($slots as $which => [$path, $name]) {
+            if ($path === null) {
+                continue;
+            }
+            $photos[] = [
+                'which' => $which,
+                'url' => "/attendance/{$a->id}/checkout-attachment/{$which}",
+                'name' => $name,
+                'is_image' => $name !== null && preg_match('/\.(jpg|jpeg|png|webp|gif)$/i', $name) === 1,
+            ];
+        }
+
+        return $photos;
     }
 
     public function store(StoreTaskProgressRequest $request, Project $project, ProductionTask $task): RedirectResponse
