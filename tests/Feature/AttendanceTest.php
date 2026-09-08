@@ -355,3 +355,47 @@ it('hides wage totals from users without wage access on the grid summary', funct
         ->assertInertia(fn (Assert $page) => $page
             ->where("summary.{$employee->id}.total_wage", 120));
 });
+
+/*
+ * Recording real attendance on a day that already has an AUTO-GENERATED absence
+ * (the nightly sweep books one for every unrecorded weekday) must TAKE OVER that
+ * placeholder row, not collide with the one-row-per-employee-per-day unique index
+ * and 500. A real, human-owned row still refuses a duplicate with a clear message.
+ */
+it('takes over an auto-generated absence when recording real attendance (no duplicate 500)', function (): void {
+    $employee = Employee::factory()->forCompany($this->companyA)->create(['wage_type' => 'daily', 'daily_wage' => 90]);
+    // The nightly auto-absent sweep booked an absence for this weekday.
+    $absence = Attendance::factory()->create([
+        'company_id' => $this->companyA->id, 'employee_id' => $employee->id,
+        'date' => '2026-08-07', 'status' => 'absent', 'is_auto_generated' => true,
+        'total_amount' => 0, 'hours_worked' => 0,
+    ]);
+
+    $this->actingAs($this->admin)->post('/attendance', [
+        'employee_id' => $employee->id, 'date' => '2026-08-07',
+        'mode' => 'project_based', 'day_type' => 'full', 'status' => 'present',
+    ])->assertRedirect()->assertSessionHasNoErrors();
+
+    // Still exactly ONE row for that day — the placeholder was taken over.
+    $rows = Attendance::withoutGlobalScopes()->where('employee_id', $employee->id)->whereDate('date', '2026-08-07')->get();
+    expect($rows)->toHaveCount(1)
+        ->and($rows->first()->id)->toBe($absence->id)      // same row, updated in place
+        ->and($rows->first()->status->value)->toBe('present')
+        ->and((bool) $rows->first()->is_auto_generated)->toBeFalse()
+        ->and((float) $rows->first()->total_amount)->toBe(90.0);   // full daily wage
+});
+
+it('refuses a duplicate over a real manual row with a clear message, not a 500', function (): void {
+    $employee = Employee::factory()->forCompany($this->companyA)->create();
+    Attendance::factory()->create([
+        'company_id' => $this->companyA->id, 'employee_id' => $employee->id,
+        'date' => '2026-08-07', 'status' => 'present', 'is_auto_generated' => false,
+    ]);
+
+    $this->actingAs($this->admin)->post('/attendance', [
+        'employee_id' => $employee->id, 'date' => '2026-08-07',
+        'mode' => 'project_based', 'day_type' => 'full', 'status' => 'present',
+    ])->assertSessionHasErrors('date');   // friendly 422, not a duplicate-key 500
+
+    expect(Attendance::withoutGlobalScopes()->where('employee_id', $employee->id)->whereDate('date', '2026-08-07')->count())->toBe(1);
+});

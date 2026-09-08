@@ -1124,6 +1124,7 @@ return [
         'max_location_distance' => 'Maximum allowed distance (m)',
         'deleted' => 'Asistencia eliminada / Attendance removed',
         'month_paid' => 'La nómina de este mes ya está pagada — el registro no se puede modificar / This month\'s payroll is already paid — the record cannot be changed',
+        'already_exists' => 'Ya existe un registro de asistencia para este empleado en esa fecha — edítalo en su lugar / An attendance record already exists for this employee on that date — edit it instead',
         'month' => 'Month',
         'employee' => 'Employee',
         'project' => 'Project',

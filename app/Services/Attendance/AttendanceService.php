@@ -67,8 +67,34 @@ class AttendanceService
         return DB::transaction(function () use ($data): Attendance {
             $employee = $this->resolveEmployee((int) $data['employee_id']);
 
-            $attendance = new Attendance($data);
+            // Only ONE attendance row may exist per employee per day (a unique
+            // index on employee_id+date, across ALL companies). Rather than let
+            // a duplicate insert blow up as a 500, reconcile with any row that
+            // already exists for this day:
+            //   • an AUTO-GENERATED absence (the nightly auto-absent sweep books
+            //     one for every unrecorded weekday — possibly under the worker's
+            //     HOME company while they were actually DEPLOYED elsewhere) is a
+            //     placeholder: recording real attendance TAKES IT OVER (moving it
+            //     to the acting/host company, clearing the auto flag), which also
+            //     corrects the false absence for a deployed worker.
+            //   • a real, human-owned row is a genuine clash → a clear message,
+            //     never a 500 (the admin should edit that entry instead).
+            $existing = Attendance::query()
+                ->withoutGlobalScopes()
+                ->where('employee_id', (int) $data['employee_id'])
+                ->whereDate('date', $data['date'])
+                ->first();
+
+            if ($existing !== null && ! $existing->is_auto_generated) {
+                throw ValidationException::withMessages([
+                    'date' => __('ui.attendance.already_exists'),
+                ]);
+            }
+
+            $attendance = $existing ?? new Attendance;
+            $attendance->fill($data);
             $attendance->company_id = app(CurrentCompany::class)->id();
+            $attendance->is_auto_generated = false;
 
             if ($attendance->company_id !== null) {
                 $this->lock->assertOpen($attendance->company_id, $attendance->date);
@@ -79,7 +105,7 @@ class AttendanceService
             $this->recompute($attendance);
             $attendance->save();
 
-            $this->log($attendance, 'created');
+            $this->log($attendance, $existing !== null ? 'updated' : 'created');
 
             return $attendance;
         });
