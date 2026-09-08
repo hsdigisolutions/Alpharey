@@ -73,6 +73,62 @@ split; home badge + `activeDeployment` + host-grid anonymisation),
 `DeploymentChargePostingTest` (host expense basis, updated to exact cost). The
 attendance 500-on-duplicate fix landed alongside (see next entry).
 
+**Deployment host-grid name (2026-09, corrected):** the host ATTENDANCE GRID
+shows the deployed worker's REAL name + a "Desplegado" badge + home-company
+subtitle (client reverted the earlier grid-anonymisation — the host already
+picks the worker at deployment creation, so their identity is not hidden HERE).
+Their WAGE stays hidden and the profile is still tenancy-404. Anonymisation
+applies ONLY to the passive Deployments screen/cards for a pure-host viewer.
+`AttendanceController::deployedRow` returns the real `full_name`/`designation`.
+
+### Deployment settlement — invoice-style, charge-based, P&L-SAFE (2026-09, DONE, deployed to prod)
+
+**The host reimburses the home company for deployed labour, tracked as a
+settlement on the existing `deployment_charges` record** (client-confirmed
+direction: **HOME Shizukani BILLS → HOST Alovar PAYS**). Deliberately NOT built
+as a real Invoices-module row — Invoices are single-company + client/vendor only,
+and faking internal companies as client/vendor would pollute the shared module.
+The charge already spans both companies (`home_company_id` + `host_company_id`,
+visible to both via `EmployeeDeployment::scopeVisibleTo`), so it IS the
+cross-company settlement document.
+
+- Migration `2026_09_09_000001` adds `settlement_status` (unpaid|paid),
+  `invoiced_at`, `paid_at`, `paid_by` to `deployment_charges` — **server-set, NOT
+  fillable** (the settlement flow writes them directly, like the expense-approval
+  columns elsewhere).
+- On **completion** the charge locks and `invoiced_at` is stamped (in
+  `DeploymentChargeService::refreshCharge` when `$finalize`) → it becomes
+  payable/settleable. While ACTIVE it is still **accruing** (invoiced_at null →
+  not settleable; a settlement POST 422s).
+- `DeploymentController::settlement` (`POST /deployments/{deployment}/settlement`,
+  gated `deployments.edit`) marks the charge paid/unpaid. **HOST-ONLY** — asserts
+  the acting company === `host_company_id` (the home side is read-only → 403).
+- **⚠️ P&L SAFETY (Item A intact) — the load-bearing rule:** settlement writes
+  ONLY the charge's own columns and **NEVER sets `Expense.approved`**, and never
+  runs through the cross-charge engine. The `internal_deployment` expense stays
+  unapproved (Item A locked it), so the deployed labour is still counted EXACTLY
+  ONCE in project P&L (via attendance under the host `company_id`). Do NOT wire
+  settlement into the expense-approval flow — that is the double-count landmine
+  Item A closed. Proven on prod (rolled back): marking a real completed
+  deployment paid left `Expense.approved` false and `ProfitabilityService::
+  forProject` byte-identical (cost 5.514,87 → 5.514,87).
+- **UI** (`Deployments/Index.vue`, both card + table views): HOME sees a
+  **Receivable** status (Alovar owes you €X, live/locked, paid history); HOST
+  sees a **Payable** block ("You owe {home} €X · N days · period") with a **Mark
+  as paid** button once completed. Worker identity stays hidden on the host side;
+  the host DOES see the amount they owe (their own liability, already in their
+  expense ledger). No VAT, no PDF (client-confirmed — revisit with the gestoría
+  if formal accounting needs it).
+- Tests: `DeploymentSettlementTest` (5) incl. two CRITICAL proofs (marking paid
+  leaves `Expense.approved` false; project P&L identical before/after).
+
+**Expense Item A (2026-09):** the `internal_deployment` Gasto is READ-ONLY money
+safety — `ExpenseController::approve` refuses it (`internal_deployment_locked`),
+and `update`/`destroy` 422 on it. It is a payable RECORD on the host, never a
+second P&L cost (the labour counts once via attendance). Item B: a host admin can
+click the Gasto → `GET /expenses/{expense}/deployment-detail` (worker anonymised)
+to see project · days · period · live/locked · amount.
+
 ### Attendance: recording a day takes over an auto-absence (2026-09, DONE, deployed)
 
 Recording attendance for a day that already had an AUTO-generated absence (the

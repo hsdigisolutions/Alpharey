@@ -117,6 +117,16 @@ function submitLog() {
             preserveScroll: true, forceFormData: true, onSuccess: () => (logOpen.value = false),
         });
 }
+
+// Checkout-photo evidence (Phase 1): images open in a lightbox, PDFs in a tab.
+const photoLightbox = ref(null);
+function openPhoto(p) {
+    if (p.is_image) {
+        photoLightbox.value = p;
+    } else {
+        window.open(p.url, '_blank', 'noopener');
+    }
+}
 </script>
 
 <template>
@@ -197,11 +207,23 @@ function submitLog() {
                     <div v-if="loadingWorkers" class="py-3 text-sm text-muted">{{ $t('common.loading') }}</div>
                     <div v-else-if="presentWorkers.length === 0" class="rounded-md bg-status-warn-soft px-3 py-2 text-sm text-status-warn">{{ $t('task_progress.none_present') }}</div>
                     <div v-else class="grid gap-1.5 sm:grid-cols-2">
-                        <label v-for="w in presentWorkers" :key="w.id" class="flex items-center gap-2 rounded-md border border-line px-2.5 py-1.5 text-sm hover:bg-surface-hover">
-                            <input type="checkbox" :value="w.id" v-model="logForm.employee_ids" class="accent-accent" />
-                            <span>{{ w.name }}</span>
-                            <span v-if="w.designation" class="text-xs text-muted">· {{ w.designation }}</span>
-                        </label>
+                        <div v-for="w in presentWorkers" :key="w.id" class="rounded-md border border-line px-2.5 py-2">
+                            <label class="flex cursor-pointer items-center gap-2 text-sm">
+                                <input type="checkbox" :value="w.id" v-model="logForm.employee_ids" class="accent-accent" />
+                                <span class="font-medium">{{ w.name }}</span>
+                                <span v-if="w.designation" class="text-xs text-muted">· {{ w.designation }}</span>
+                            </label>
+                            <!-- Checkout proof-of-work photos (evidence). Click = lightbox. -->
+                            <div v-if="w.checkout_photos && w.checkout_photos.length" class="mt-1.5 flex flex-wrap gap-1.5 ps-6">
+                                <button v-for="p in w.checkout_photos" :key="p.which" type="button"
+                                    class="h-12 w-12 overflow-hidden rounded-md border border-line bg-surface-sunken transition hover:ring-2 hover:ring-accent"
+                                    :title="$t('task_progress.evidence_photo')" @click="openPhoto(p)">
+                                    <img v-if="p.is_image" :src="p.url" :alt="p.name ?? ''" class="h-full w-full object-cover" loading="lazy" />
+                                    <span v-else class="flex h-full w-full items-center justify-center"><AppIcon name="file" class="h-4 w-4 text-muted" /></span>
+                                </button>
+                            </div>
+                            <p v-else class="mt-1 ps-6 text-[11px] text-muted">{{ $t('task_progress.no_photos') }}</p>
+                        </div>
                     </div>
                     <p v-if="logForm.errors.employee_ids" class="mt-1 text-xs text-status-danger">{{ logForm.errors.employee_ids }}</p>
                     <p v-if="splitPreview" class="mt-2 text-xs text-ink-soft">
@@ -252,5 +274,14 @@ function submitLog() {
         </VModal>
 
         <VConfirmDialog :open="confirm.open" :message="confirm.message" @confirm="runDelete" @cancel="confirm.open = false" />
+
+        <!-- Checkout-photo lightbox (evidence). Click anywhere to close. -->
+        <div v-if="photoLightbox" class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4" @click="photoLightbox = null">
+            <img :src="photoLightbox.url" :alt="photoLightbox.name ?? ''" class="max-h-full max-w-full rounded-lg object-contain" @click.stop />
+            <button type="button" class="absolute end-4 top-4 rounded-full bg-black/50 p-2 text-white hover:bg-black/70"
+                :title="$t('common.close')" @click="photoLightbox = null">
+                <AppIcon name="x" class="h-5 w-5" />
+            </button>
+        </div>
     </AppLayout>
 </template>
