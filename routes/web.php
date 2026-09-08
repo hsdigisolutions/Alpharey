@@ -38,6 +38,7 @@ use App\Http\Controllers\EmployeeImportExportController;
 use App\Http\Controllers\EmployeeNoteController;
 use App\Http\Controllers\ExpenseCategoryController;
 use App\Http\Controllers\ExpenseController;
+use App\Http\Controllers\ExpenseReceiptController;
 use App\Http\Controllers\InventoryController;
 use App\Http\Controllers\InvoiceController;
 use App\Http\Controllers\LeaveController;
@@ -380,11 +381,15 @@ Route::middleware(['auth', 'active', 'two_factor', 'not_worker'])->group(functio
     // Export routes BEFORE any /expenses/{param} route (decision 30).
     Route::get('/expenses/export', [ExpenseController::class, 'export'])->name('expenses.export');
     Route::get('/expenses/export-pdf', [ExpenseController::class, 'exportPdf'])->name('expenses.export-pdf');
+    // Receipt-document exports (tax filing) — literal paths BEFORE /expenses/{expense}.
+    Route::get('/expenses/receipts/export/zip', [ExpenseReceiptController::class, 'zip'])->name('expenses.receipts.zip');
+    Route::get('/expenses/receipts/export/pdf', [ExpenseReceiptController::class, 'pdf'])->name('expenses.receipts.pdf');
     Route::post('/expenses', [ExpenseController::class, 'store'])->name('expenses.store');
     // Direct vehicle expense entry (Part D) — before /expenses/{expense}.
     Route::post('/expenses/vehicle', [ExpenseController::class, 'storeVehicle'])->name('expenses.vehicle.store');
     Route::get('/vehicles/{vehicle}/drivers-on-date', [ExpenseController::class, 'driversOnDate'])->name('vehicles.drivers-on-date');
     Route::get('/expenses/{expense}/receipt', [ExpenseController::class, 'downloadReceipt'])->name('expenses.receipt');
+    Route::get('/expenses/{expense}/receipt/preview', [ExpenseReceiptController::class, 'preview'])->name('expenses.receipt.preview');
     Route::post('/expenses/{expense}', [ExpenseController::class, 'update'])->name('expenses.update');
     Route::post('/expenses/{expense}/approve', [ExpenseController::class, 'approve'])->name('expenses.approve');
     Route::post('/expenses/{expense}/review', [ExpenseController::class, 'sendToReview'])->name('expenses.review');

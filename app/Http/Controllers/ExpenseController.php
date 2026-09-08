@@ -26,6 +26,7 @@ use App\Models\Vendor;
 use App\Rules\OwnCompanyEmployee;
 use App\Rules\OwnCompanyProject;
 use App\Services\Audit\AuditLogger;
+use App\Services\Expenses\ExpenseReceiptExport;
 use App\Services\Vehicles\VehicleExpenseSyncService;
 use App\Services\Workers\WorkerFuelExpenseService;
 use App\Support\CompanyBranding;
@@ -113,7 +114,7 @@ class ExpenseController extends Controller
         ];
     }
 
-    public function index(Request $request): Response
+    public function index(Request $request, ExpenseReceiptExport $receiptExport): Response
     {
         Gate::authorize('expenses.view');
 
@@ -122,10 +123,33 @@ class ExpenseController extends Controller
             ->withQueryString()
             ->through(fn (Expense $e): array => $this->row($e));
 
+        // Receipt-documents tab: every expense carrying a stored file, under its
+        // own date-range + scope filters (rc_*), so it never clashes with the
+        // expense-list filters above.
+        $isSa = $request->user()?->isSuperAdmin() ?? false;
+        $rcScope = (string) $request->query('rc_scope', 'company');
+        if ($rcScope === 'all' && ! $isSa) {
+            $rcScope = 'company';
+        }
+        $rcFilters = [
+            'from' => $request->filled('rc_from') ? $request->string('rc_from')->value() : null,
+            'to' => $request->filled('rc_to') ? $request->string('rc_to')->value() : null,
+            'scope' => in_array($rcScope, ['company', 'all', 'project'], true) ? $rcScope : 'company',
+            'project_id' => $request->filled('rc_project') ? (int) $request->query('rc_project') : null,
+        ];
+        // CurrentCompany::id() (not contextCompanyId, which redirects a
+        // company-less Super Admin) — null is fine here: the 'all' scope reads
+        // across companies, and any other scope with a null id yields no rows.
+        $receipts = $receiptExport->query(app(CurrentCompany::class)->id(), $rcFilters, $isSa)
+            ->map(fn (Expense $e): array => $receiptExport->row($e))->all();
+
         return Inertia::render('Expenses/Index', [
             'expenses' => $expenses,
             'stats' => $this->expenseStats(),
             'filters' => (object) $request->only(['search', 'project_id', 'vendor_id', 'type', 'expense_category_id', 'payment_status', 'approval', 'from', 'to']),
+            'receipts' => $receipts,
+            'receiptFilters' => (object) $rcFilters,
+            'canScopeAll' => $isSa,
             'vendors' => Vendor::query()->orderBy('name')->get(['id', 'name']),
             // Active company vehicles for the direct vehicle-expense entry (Part D).
             'vehicles' => Vehicle::query()->where('active', true)->orderBy('plate_number')

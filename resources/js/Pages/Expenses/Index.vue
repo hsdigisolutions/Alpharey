@@ -49,6 +49,9 @@ const props = defineProps({
     paymentStatuses: { type: Array, required: true },
     bearableByOptions: { type: Array, required: true },
     can: { type: Object, required: true },
+    receipts: { type: Array, default: () => [] },
+    receiptFilters: { type: Object, default: () => ({ from: null, to: null, scope: 'company', project_id: null }) },
+    canScopeAll: { type: Boolean, default: false },
 });
 
 const filters = reactive({
@@ -73,6 +76,63 @@ function setApproval(val) { filters.approval = val; apply(); }
 const exportQuery = computed(() => new URLSearchParams(
     Object.fromEntries(Object.entries(filters).filter(([, v]) => v !== '' && v != null)),
 ).toString());
+
+/* ---------- Receipts / Documents tab ---------- */
+const tab = ref('expenses'); // 'expenses' | 'receipts'
+
+const rc = reactive({
+    from: props.receiptFilters.from ?? '',
+    to: props.receiptFilters.to ?? '',
+    scope: props.receiptFilters.scope ?? 'company',
+    project_id: props.receiptFilters.project_id ?? '',
+});
+
+// Date-range presets, mirroring the Reports filter bar.
+const isoDate = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const firstOfMonth = (o = 0) => isoDate(new Date(new Date().getFullYear(), new Date().getMonth() + o, 1));
+const lastOfMonth = (o = 0) => isoDate(new Date(new Date().getFullYear(), new Date().getMonth() + o + 1, 0));
+const startOfWeek = () => { const d = new Date(); const dow = (d.getDay() + 6) % 7; d.setDate(d.getDate() - dow); return isoDate(d); };
+const endOfWeek = () => { const d = new Date(); const dow = (d.getDay() + 6) % 7; d.setDate(d.getDate() - dow + 6); return isoDate(d); };
+
+function computeRcPreset() {
+    if (!rc.from && !rc.to) return 'all';
+    if (rc.from === startOfWeek() && rc.to === endOfWeek()) return 'week';
+    if (rc.from === firstOfMonth(0) && rc.to === lastOfMonth(0)) return 'month';
+    return 'custom';
+}
+const rcPreset = ref(computeRcPreset());
+const rcPresets = ['all', 'week', 'month', 'custom'];
+function setRcPreset(p) {
+    rcPreset.value = p;
+    if (p === 'all') { rc.from = ''; rc.to = ''; }
+    else if (p === 'week') { rc.from = startOfWeek(); rc.to = endOfWeek(); }
+    else if (p === 'month') { rc.from = firstOfMonth(0); rc.to = lastOfMonth(0); }
+    if (p !== 'custom') applyReceipts();
+}
+function onRcCustom() { rcPreset.value = 'custom'; applyReceipts(); }
+
+function applyReceipts() {
+    router.get('/expenses', {
+        rc_from: rc.from || undefined,
+        rc_to: rc.to || undefined,
+        rc_scope: rc.scope,
+        rc_project: rc.scope === 'project' ? (rc.project_id || undefined) : undefined,
+    }, {
+        preserveScroll: true, preserveState: true, only: ['receipts', 'receiptFilters'],
+        onSuccess: () => { tab.value = 'receipts'; },
+    });
+}
+
+// Query string for the ZIP / combined-PDF export links (same rc_* filters).
+const receiptExportQuery = computed(() => {
+    const p = { from: rc.from || undefined, to: rc.to || undefined, scope: rc.scope };
+    if (rc.scope === 'project' && rc.project_id) p.project_id = rc.project_id;
+    return new URLSearchParams(Object.fromEntries(Object.entries(p).filter(([, v]) => v != null))).toString();
+});
+
+// Inline preview panel.
+const rcPreviewRow = ref(null); // the receipt row being previewed
+function openPreview(r) { rcPreviewRow.value = r; }
 
 /* ---------- create / edit ---------- */
 const showModal = ref(false);
@@ -303,6 +363,18 @@ const columns = [
             </VButton>
         </VPageHeader>
 
+        <!-- Gastos / Recibos tab switch -->
+        <div class="mb-4 flex gap-1 border-b border-line">
+            <button type="button" class="-mb-px border-b-2 px-4 py-2 text-sm font-medium transition"
+                :class="tab === 'expenses' ? 'border-accent text-ink' : 'border-transparent text-ink-soft hover:text-ink'"
+                @click="tab = 'expenses'">{{ $t('expenses.tab_list') }}</button>
+            <button type="button" class="-mb-px border-b-2 px-4 py-2 text-sm font-medium transition"
+                :class="tab === 'receipts' ? 'border-accent text-ink' : 'border-transparent text-ink-soft hover:text-ink'"
+                @click="tab = 'receipts'">{{ $t('expenses.tab_receipts') }} <span class="text-xs text-muted">({{ receipts.length }})</span></button>
+        </div>
+
+        <!-- ============ GASTOS (expense list) ============ -->
+        <div v-show="tab === 'expenses'">
         <!-- Summary cards — count + € per approval state. Clickable. -->
         <div class="mb-4 grid grid-cols-3 gap-3">
             <VKpiCard k="stats.total" :value="stats.total.count" :sub="eur(stats.total.amount)" clickable :active="filters.approval === ''" @click="setApproval('')" />
@@ -412,6 +484,106 @@ const columns = [
 
         <VPagination :page="expenses.current_page" :pages="expenses.last_page" :total="expenses.total"
             @update:page="(p) => apply({ page: p })" />
+        </div>
+
+        <!-- ============ RECIBOS (receipt documents for tax filing) ============ -->
+        <div v-show="tab === 'receipts'">
+            <!-- Filter bar: date range presets + scope -->
+            <div class="mb-3 flex flex-wrap items-end gap-3 rounded-lg border border-line bg-surface-raised p-3">
+                <div>
+                    <p class="mb-1 text-xs font-medium text-ink-soft">{{ $t('expenses.rc_period') }}</p>
+                    <div class="flex overflow-hidden rounded-md border border-line-strong text-xs font-medium">
+                        <button v-for="p in rcPresets" :key="p" type="button" class="px-2.5 py-1.5 transition"
+                            :class="rcPreset === p ? 'bg-accent text-on-accent' : 'text-ink-soft hover:bg-surface-hover'"
+                            @click="setRcPreset(p)">{{ $t(`expenses.rc_range_${p}`) }}</button>
+                    </div>
+                </div>
+                <template v-if="rcPreset === 'custom'">
+                    <FormField k="expenses.rc_from"><VDateInput v-model="rc.from" @update:model-value="onRcCustom()" /></FormField>
+                    <FormField k="expenses.rc_to"><VDateInput v-model="rc.to" @update:model-value="onRcCustom()" /></FormField>
+                </template>
+                <FormField k="expenses.rc_scope">
+                    <VSelect v-model="rc.scope" @update:model-value="applyReceipts()">
+                        <option value="company">{{ $t('expenses.rc_scope_company') }}</option>
+                        <option value="project">{{ $t('expenses.rc_scope_project') }}</option>
+                        <option v-if="canScopeAll" value="all">{{ $t('expenses.rc_scope_all') }}</option>
+                    </VSelect>
+                </FormField>
+                <FormField v-if="rc.scope === 'project'" k="expenses.project">
+                    <VSelect v-model="rc.project_id" @update:model-value="applyReceipts()">
+                        <option value="">{{ $t('expenses.project') }}</option>
+                        <option v-for="p in projects" :key="p.id" :value="p.id">{{ p.name }}</option>
+                    </VSelect>
+                </FormField>
+                <div class="ms-auto flex items-end gap-2">
+                    <a v-if="can.export && receipts.length" :href="`/expenses/receipts/export/zip?${receiptExportQuery}`"
+                        class="inline-flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-on-accent hover:bg-accent-hover">
+                        <AppIcon name="download" class="h-4 w-4" /> {{ $t('expenses.rc_export_zip') }}
+                    </a>
+                    <a v-if="can.export && receipts.length" :href="`/expenses/receipts/export/pdf?${receiptExportQuery}`"
+                        class="inline-flex items-center gap-1.5 rounded-md border border-line-strong bg-surface-raised px-3 py-1.5 text-sm text-ink hover:bg-surface-hover">
+                        <AppIcon name="download" class="h-4 w-4" /> {{ $t('expenses.rc_export_pdf') }}
+                    </a>
+                </div>
+            </div>
+
+            <VEmptyState v-if="!receipts.length" icon="file" :title="$t('expenses.rc_empty')" />
+            <div v-else class="grid gap-4 lg:grid-cols-[1fr_1.2fr]">
+                <!-- Receipt list -->
+                <div class="overflow-hidden rounded-lg border border-line">
+                    <table class="w-full text-sm">
+                        <thead class="bg-surface-sunken text-xs uppercase text-muted">
+                            <tr>
+                                <th class="px-3 py-2 text-start">{{ $t('expenses.rc_date') }}</th>
+                                <th class="px-3 py-2 text-start">{{ $t('expenses.vendor') }}</th>
+                                <th class="px-3 py-2 text-end">{{ $t('expenses.total') }}</th>
+                                <th class="px-3 py-2 text-end"></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="r in receipts" :key="r.id"
+                                class="cursor-pointer border-t border-line hover:bg-surface-hover"
+                                :class="rcPreviewRow && rcPreviewRow.id === r.id ? 'bg-accent-soft' : ''"
+                                @click="openPreview(r)">
+                                <td class="tabular-nums px-3 py-2.5">{{ r.date }}</td>
+                                <td class="px-3 py-2.5">
+                                    <span class="font-medium text-ink">{{ r.vendor ?? '—' }}</span>
+                                    <span class="block text-xs text-muted">{{ r.category ?? '—' }}<template v-if="r.number"> · {{ r.number }}</template></span>
+                                </td>
+                                <td class="tabular-nums px-3 py-2.5 text-end">{{ eur(r.total) }}</td>
+                                <td class="px-3 py-2.5 text-end">
+                                    <VBadge :status="r.is_image ? 'info' : (r.is_pdf ? 'neutral' : 'neutral')">{{ r.ext || '?' }}</VBadge>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <!-- Inline preview -->
+                <div class="rounded-lg border border-line bg-surface-raised p-3">
+                    <div v-if="!rcPreviewRow" class="flex h-64 items-center justify-center text-sm text-muted">
+                        {{ $t('expenses.rc_pick') }}
+                    </div>
+                    <div v-else>
+                        <div class="mb-2 flex items-start justify-between gap-2">
+                            <div class="min-w-0">
+                                <p class="truncate text-sm font-medium text-ink">{{ rcPreviewRow.vendor ?? '—' }} · {{ eur(rcPreviewRow.total) }}</p>
+                                <p class="truncate text-xs text-muted">{{ rcPreviewRow.original_name ?? rcPreviewRow.filename }}</p>
+                            </div>
+                            <a :href="`/expenses/${rcPreviewRow.id}/receipt`" class="shrink-0 text-xs text-accent hover:underline">{{ $t('common.download') }}</a>
+                        </div>
+                        <img v-if="rcPreviewRow.is_image" :src="`/expenses/${rcPreviewRow.id}/receipt/preview`" alt=""
+                            class="max-h-[70vh] w-full rounded border border-line object-contain" />
+                        <iframe v-else-if="rcPreviewRow.is_pdf" :src="`/expenses/${rcPreviewRow.id}/receipt/preview`"
+                            class="h-[70vh] w-full rounded border border-line" />
+                        <div v-else class="flex h-64 flex-col items-center justify-center gap-2 text-sm text-muted">
+                            <AppIcon name="file" class="h-8 w-8" />
+                            <span>{{ rcPreviewRow.original_name ?? rcPreviewRow.filename }}</span>
+                            <a :href="`/expenses/${rcPreviewRow.id}/receipt`" class="text-accent hover:underline">{{ $t('common.download') }}</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
 
         <VModal :open="showModal" :title-key="editingId ? 'expenses.edit' : 'expenses.new'" @close="showModal = false">
             <form id="expense-form" class="grid gap-4 sm:grid-cols-2" @submit.prevent="submit">
