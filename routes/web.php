@@ -390,6 +390,8 @@ Route::middleware(['auth', 'active', 'two_factor', 'not_worker'])->group(functio
     Route::get('/vehicles/{vehicle}/drivers-on-date', [ExpenseController::class, 'driversOnDate'])->name('vehicles.drivers-on-date');
     Route::get('/expenses/{expense}/receipt', [ExpenseController::class, 'downloadReceipt'])->name('expenses.receipt');
     Route::get('/expenses/{expense}/receipt/preview', [ExpenseReceiptController::class, 'preview'])->name('expenses.receipt.preview');
+    // Host-side deployment cross-charge detail (worker anonymised) — fetched on demand.
+    Route::get('/expenses/{expense}/deployment-detail', [ExpenseController::class, 'deploymentDetail'])->name('expenses.deployment-detail');
     Route::post('/expenses/{expense}', [ExpenseController::class, 'update'])->name('expenses.update');
     Route::post('/expenses/{expense}/approve', [ExpenseController::class, 'approve'])->name('expenses.approve');
     Route::post('/expenses/{expense}/review', [ExpenseController::class, 'sendToReview'])->name('expenses.review');

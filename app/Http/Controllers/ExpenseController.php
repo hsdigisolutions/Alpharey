@@ -12,7 +12,9 @@ use App\Exports\ExpensesExport;
 use App\Http\Controllers\Admin\Concerns\ResolvesCompanyContext;
 use App\Http\Requests\Expenses\StoreVehicleExpenseRequest;
 use App\Models\CompanyCard;
+use App\Models\DeploymentCharge;
 use App\Models\Employee;
+use App\Models\EmployeeDeployment;
 use App\Models\Expense;
 use App\Models\ExpenseCategory;
 use App\Models\ExpenseSplit;
@@ -26,6 +28,7 @@ use App\Models\Vendor;
 use App\Rules\OwnCompanyEmployee;
 use App\Rules\OwnCompanyProject;
 use App\Services\Audit\AuditLogger;
+use App\Services\Deployments\DeploymentChargeService;
 use App\Services\Expenses\ExpenseReceiptExport;
 use App\Services\Vehicles\VehicleExpenseSyncService;
 use App\Services\Workers\WorkerFuelExpenseService;
@@ -538,6 +541,49 @@ class ExpenseController extends Controller
         $expense->delete();
 
         return back()->with('success', __('ui.expenses.deleted'));
+    }
+
+    /**
+     * Host-side detail for an internal_deployment cross-charge (Item B, 2026-09).
+     * The host sees WHY this expense exists — project, date range, days present,
+     * units/rate basis, live-vs-locked status and the amount — but NEVER the
+     * deployed worker's identity (the note already names only the home company).
+     *
+     * Fetched on demand (like the Document Center panel) so the Gastos list
+     * query stays flat. Tenancy holds two ways: the Expense binding is
+     * company-scoped (a host only reaches its own expense; cross-company → 404),
+     * and the deployed worker lives in another company, so nothing in the
+     * payload can reach their profile.
+     */
+    public function deploymentDetail(Expense $expense): JsonResponse
+    {
+        Gate::authorize('expenses.view');
+        abort_unless($expense->type === ExpenseType::InternalDeployment, 404);
+
+        $charge = DeploymentCharge::query()->where('expense_id', $expense->id)->first();
+        abort_if($charge === null, 404);
+
+        $deployment = EmployeeDeployment::query()
+            ->withoutGlobalScopes()
+            ->with(['project:id,name', 'homeCompany:id,name'])
+            ->find($charge->employee_deployment_id);
+        abort_if($deployment === null, 404);
+
+        $summary = app(DeploymentChargeService::class)->summary($deployment);
+
+        return response()->json([
+            'project' => $deployment->project?->name,
+            'home_company' => $deployment->homeCompany?->name,
+            'period_start' => $deployment->deployment_start->toDateString(),
+            'period_end' => $deployment->deployment_end?->toDateString(),
+            'days' => $summary['days'],
+            'units' => (float) $summary['units'],
+            'rate_type' => $charge->rate_type->value,
+            'amount' => (float) $expense->total,
+            // 'locked' once the deployment completed; 'pending' = still accruing.
+            'status' => $charge->status,
+            // Worker identity is DELIBERATELY absent.
+        ]);
     }
 
     /**

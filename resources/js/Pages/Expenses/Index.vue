@@ -184,14 +184,38 @@ function openCreate() {
 
 // The cross-charge engine's internal_deployment Gasto is a system record — it
 // is read-only server-side (never editable/deletable/approvable) and must be
-// read-only here too.
+// read-only here too. Clicking it opens a WHY-is-this-here detail panel (days,
+// period, project, live/locked) with the worker deliberately anonymised.
 function isDeployment(row) {
     return row.type === 'internal_deployment';
 }
 
+const deploymentDetail = ref(null);      // fetched payload
+const deploymentLoading = ref(false);
+const deploymentError = ref(false);
+const showDeploymentDetail = ref(false);
+
+function openDeploymentDetail(row) {
+    deploymentDetail.value = null;
+    deploymentError.value = false;
+    deploymentLoading.value = true;
+    showDeploymentDetail.value = true;
+    fetch(`/expenses/${row.id}/deployment-detail`, { headers: { Accept: 'application/json' } })
+        .then((res) => {
+            if (!res.ok) {
+                throw new Error('detail_failed');
+            }
+            return res.json();
+        })
+        .then((data) => { deploymentDetail.value = data; })
+        .catch(() => { deploymentError.value = true; })
+        .finally(() => { deploymentLoading.value = false; });
+}
+
 function openEdit(row) {
     if (isDeployment(row)) {
-        return; // read-only system record
+        openDeploymentDetail(row); // read-only system record → detail panel
+        return;
     }
     editingId.value = row.id;
     editingApproved.value = row.approved;
@@ -441,14 +465,16 @@ const columns = [
         </div>
 
         <VTable :columns="columns">
-            <tr v-for="r in expenses.data" :key="r.id" class="hover:bg-surface-hover"
-                :class="isDeployment(r) ? 'cursor-default' : 'cursor-pointer'"
+            <tr v-for="r in expenses.data" :key="r.id" class="cursor-pointer hover:bg-surface-hover"
                 @click="openEdit(r)">
                 <td class="tabular-nums px-3 py-2.5 text-sm">{{ r.date }}</td>
                 <td class="px-3 py-2.5 text-sm font-medium text-ink">
                     {{ r.number ?? '—' }}
                     <VBadge v-if="r.source === 'worker_fuel'" status="info" class="ms-1" :title="$t('expenses.auto_fuel_hint')">
                         {{ $t('expenses.auto_fuel_badge') }}
+                    </VBadge>
+                    <VBadge v-if="isDeployment(r)" status="info" class="ms-1" :title="$t('expenses.deployment_badge_hint')">
+                        {{ $t('expenses.deployment_badge') }}
                     </VBadge>
                     <VBadge v-if="r.is_split" status="neutral" class="ms-1">{{ $t('expenses.split_multiple') }}</VBadge>
                 </td>
@@ -834,5 +860,55 @@ const columns = [
         </VModal>
 
         <VConfirmDialog :open="confirm.open" :message="confirm.message" @confirm="runDelete" @cancel="confirm.open = false" />
+
+        <!-- Item B — read-only host detail for a deployment cross-charge. Explains
+             WHY the expense exists; the deployed worker is never named. -->
+        <VModal :open="showDeploymentDetail" size="md" title-key="expenses.deployment_detail_title" @close="showDeploymentDetail = false">
+            <div v-if="deploymentLoading" class="py-8 text-center text-sm text-muted">{{ $t('common.loading') }}</div>
+            <div v-else-if="deploymentError" class="py-8 text-center text-sm text-status-danger">{{ $t('expenses.deployment_detail_error') }}</div>
+            <div v-else-if="deploymentDetail" class="space-y-4">
+                <p class="text-sm text-ink-soft">{{ $t('expenses.deployment_detail_intro') }}</p>
+
+                <!-- amount hero + live/locked status -->
+                <div class="rounded-lg border border-line bg-surface-sunken p-4">
+                    <div class="text-[11px] font-medium uppercase tracking-wide text-muted">{{ $t('expenses.deployment_amount') }}</div>
+                    <div class="mt-1 flex items-center gap-2">
+                        <span class="text-2xl font-semibold tabular-nums text-ink">{{ eur(deploymentDetail.amount) }}</span>
+                        <VBadge :status="deploymentDetail.status === 'locked' ? 'neutral' : 'info'">
+                            {{ deploymentDetail.status === 'locked' ? $t('expenses.deployment_locked') : $t('expenses.deployment_live') }}
+                        </VBadge>
+                    </div>
+                </div>
+
+                <dl class="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
+                    <div class="col-span-2">
+                        <dt class="text-[11px] font-medium uppercase tracking-wide text-muted">{{ $t('expenses.deployment_project') }}</dt>
+                        <dd class="mt-0.5 font-medium text-ink">{{ deploymentDetail.project ?? '—' }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-[11px] font-medium uppercase tracking-wide text-muted">{{ $t('expenses.deployment_days') }}</dt>
+                        <dd class="mt-0.5 font-medium tabular-nums text-ink">{{ deploymentDetail.days }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-[11px] font-medium uppercase tracking-wide text-muted">{{ $t('expenses.deployment_units') }}</dt>
+                        <dd class="mt-0.5 font-medium tabular-nums text-ink">
+                            {{ deploymentDetail.units }} {{ $t(`expenses.deployment_unit_${deploymentDetail.rate_type}`) }}
+                        </dd>
+                    </div>
+                    <div class="col-span-2">
+                        <dt class="text-[11px] font-medium uppercase tracking-wide text-muted">{{ $t('expenses.deployment_period') }}</dt>
+                        <dd class="mt-0.5 font-medium tabular-nums text-ink">
+                            {{ deploymentDetail.period_start }} → {{ deploymentDetail.period_end ?? $t('expenses.deployment_ongoing') }}
+                        </dd>
+                    </div>
+                    <div class="col-span-2">
+                        <dt class="text-[11px] font-medium uppercase tracking-wide text-muted">{{ $t('expenses.deployment_from') }}</dt>
+                        <dd class="mt-0.5 font-medium text-ink">{{ deploymentDetail.home_company ?? '—' }}</dd>
+                    </div>
+                </dl>
+
+                <p class="rounded-md bg-surface-sunken px-3 py-2 text-xs text-muted">{{ $t('expenses.deployment_worker_hidden') }}</p>
+            </div>
+        </VModal>
     </AppLayout>
 </template>

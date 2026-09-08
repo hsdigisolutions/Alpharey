@@ -209,3 +209,53 @@ it('refuses to DELETE an internal_deployment expense', function (): void {
 
     expect(Expense::query()->withoutGlobalScope(CompanyScope::class)->find($expense->id))->not->toBeNull();
 });
+
+/*
+ * Item B (2026-09) — host-side detail for the cross-charge: WHY the expense is
+ * here (project, days, period, live/locked) WITHOUT ever naming the worker.
+ */
+it('serves the host deployment detail with days/period/project and NO worker', function (): void {
+    $hostAdmin = User::factory()->create(['role' => UserRole::Admin, 'company_id' => $this->host->id]);
+    app(DeploymentChargeService::class)->generateCharge(deploymentWithAttendance(3, 100.0));
+
+    $expense = Expense::query()->withoutGlobalScope(CompanyScope::class)
+        ->where('type', ExpenseType::InternalDeployment->value)->firstOrFail();
+
+    $res = $this->actingAs($hostAdmin)->getJson("/expenses/{$expense->id}/deployment-detail");
+
+    $res->assertOk()
+        ->assertJson([
+            'project' => $this->project->name,
+            'home_company' => $this->home->name,
+            'days' => 3,
+            'amount' => 300.0,
+            'status' => 'locked',
+            'rate_type' => 'daily',
+        ])
+        // The deployed worker is NEVER named in the payload.
+        ->assertJsonMissing(['employee' => $this->employee->full_name]);
+
+    expect(array_keys($res->json()))->not->toContain('employee', 'employee_id', 'worker', 'full_name');
+});
+
+it('404s the deployment detail for a non-deployment expense', function (): void {
+    $hostAdmin = User::factory()->create(['role' => UserRole::Admin, 'company_id' => $this->host->id]);
+
+    $ordinary = Expense::factory()->create([
+        'company_id' => $this->host->id, 'type' => ExpenseType::Other->value,
+    ]);
+
+    $this->actingAs($hostAdmin)->getJson("/expenses/{$ordinary->id}/deployment-detail")->assertNotFound();
+});
+
+it('404s the deployment detail across companies (tenancy)', function (): void {
+    app(DeploymentChargeService::class)->generateCharge(deploymentWithAttendance(2, 100.0));
+    $expense = Expense::query()->withoutGlobalScope(CompanyScope::class)
+        ->where('type', ExpenseType::InternalDeployment->value)->firstOrFail();
+
+    // A stranger company's admin must not reach the host's expense.
+    $stranger = Company::factory()->create();
+    $strangerAdmin = User::factory()->create(['role' => UserRole::Admin, 'company_id' => $stranger->id]);
+
+    $this->actingAs($strangerAdmin)->getJson("/expenses/{$expense->id}/deployment-detail")->assertNotFound();
+});
