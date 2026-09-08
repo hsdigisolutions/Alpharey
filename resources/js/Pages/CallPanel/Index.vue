@@ -35,6 +35,9 @@ const props = defineProps({
 const state = reactive({
     search: props.filters.search ?? '',
     tab: props.filters.tab ?? 'all',
+    // Date range for the selected worker's call history (left column unaffected).
+    from: props.filters.from ?? '',
+    to: props.filters.to ?? '',
 });
 
 const tabs = [
@@ -43,8 +46,40 @@ const tabs = [
     { key: 'not_contacted', labelKey: 'calls.tab_not_contacted' },
 ];
 
+// Date-range presets for the call history, mirroring the Reports filter bar.
+const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const firstOfMonth = (offset = 0) => iso(new Date(new Date().getFullYear(), new Date().getMonth() + offset, 1));
+const lastOfMonth = (offset = 0) => iso(new Date(new Date().getFullYear(), new Date().getMonth() + offset + 1, 0));
+
+function computeDatePreset() {
+    if (! state.from && ! state.to) return 'all';
+    if (state.from === firstOfMonth(-1) && state.to === lastOfMonth(-1)) return 'last_month';
+    if (state.from === firstOfMonth(0) && state.to === lastOfMonth(0)) return 'this_month';
+    return 'custom';
+}
+const datePreset = ref(computeDatePreset());
+const datePresets = ['all', 'this_month', 'last_month', 'custom'];
+
+function setDatePreset(preset) {
+    datePreset.value = preset;
+    if (preset === 'all') { state.from = ''; state.to = ''; }
+    else if (preset === 'this_month') { state.from = firstOfMonth(0); state.to = lastOfMonth(0); }
+    else if (preset === 'last_month') { state.from = firstOfMonth(-1); state.to = lastOfMonth(-1); }
+    if (preset !== 'custom') apply();
+}
+function onCustomDate() {
+    datePreset.value = 'custom';
+    apply();
+}
+
 function apply(extra = {}) {
-    router.get('/calls', { ...state, employee: props.selected?.id, ...extra }, {
+    router.get('/calls', {
+        ...state,
+        from: state.from || undefined,
+        to: state.to || undefined,
+        employee: props.selected?.id,
+        ...extra,
+    }, {
         preserveScroll: true,
         preserveState: true,
     });
@@ -530,7 +565,22 @@ const dotStatus = { red: 'danger', amber: 'warn', green: 'ok' };
 
                 <!-- Call history -->
                 <VCard>
-                    <h3 class="mb-3 text-sm font-semibold"><Bilingual k="calls.call_history" inline /></h3>
+                    <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
+                        <h3 class="text-sm font-semibold"><Bilingual k="calls.call_history" inline /></h3>
+                        <div class="flex flex-wrap items-center gap-2">
+                            <div class="flex overflow-hidden rounded-md border border-line-strong text-xs font-medium">
+                                <button v-for="p in datePresets" :key="p" type="button"
+                                    class="px-2.5 py-1.5 transition"
+                                    :class="datePreset === p ? 'bg-accent text-on-accent' : 'text-ink-soft hover:bg-surface-hover'"
+                                    @click="setDatePreset(p)">{{ $t(`calls.range_${p}`) }}</button>
+                            </div>
+                            <template v-if="datePreset === 'custom'">
+                                <VDateInput v-model="state.from" class="w-36" @update:model-value="onCustomDate()" />
+                                <span class="text-xs text-muted">–</span>
+                                <VDateInput v-model="state.to" class="w-36" @update:model-value="onCustomDate()" />
+                            </template>
+                        </div>
+                    </div>
                     <ul v-if="selected.calls.length" class="flex flex-col gap-4">
                         <li v-for="c in selected.calls" :key="c.id"
                             class="rounded-lg border border-line bg-surface-raised p-3 last:mb-0">

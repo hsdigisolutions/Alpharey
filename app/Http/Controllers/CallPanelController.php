@@ -43,11 +43,22 @@ class CallPanelController extends Controller
         Gate::authorize('call_panel.view');
 
         $selectedId = $request->integer('employee');
+        $from = $this->validDate($request->query('from'));
+        $to = $this->validDate($request->query('to'));
 
         return Inertia::render('CallPanel/Index', [
             'employees' => $this->employeeList($request),
-            'filters' => (object) $request->only(['search', 'tab', 'employee']),
-            'selected' => $selectedId > 0 ? $this->selected($selectedId) : null,
+            'filters' => (object) [
+                'search' => $request->query('search'),
+                'tab' => $request->query('tab'),
+                'employee' => $request->query('employee'),
+                'from' => $from,
+                'to' => $to,
+            ],
+            // The date range bounds the SELECTED worker's history only — the
+            // left-column triage (last contacted / follow-ups) stays absolute so
+            // "who to call now" is never hidden by a historical range.
+            'selected' => $selectedId > 0 ? $this->selected($selectedId, $from, $to) : null,
             'stats' => $this->stats(),
             'can' => [
                 'create' => Gate::allows('call_panel.create'),
@@ -55,6 +66,23 @@ class CallPanelController extends Controller
                 'delete' => Gate::allows('call_panel.delete'),
             ],
         ]);
+    }
+
+    /**
+     * A user-supplied Y-m-d date, or null when absent/malformed — the same
+     * validation convention the Reports / Today's Report date filters use.
+     */
+    private function validDate(mixed $value): ?string
+    {
+        if (! is_string($value) || $value === '') {
+            return null;
+        }
+
+        try {
+            return Carbon::createFromFormat('Y-m-d', $value)->toDateString();
+        } catch (\Throwable) {
+            return null;
+        }
     }
 
     public function store(Request $request): RedirectResponse
@@ -251,7 +279,7 @@ class CallPanelController extends Controller
      *
      * @return array<string, mixed>|null
      */
-    private function selected(int $employeeId): ?array
+    private function selected(int $employeeId, ?string $from = null, ?string $to = null): ?array
     {
         $employee = Employee::query()->with('company:id,name')->find($employeeId);
 
@@ -268,6 +296,8 @@ class CallPanelController extends Controller
             'designation' => $employee->designation,
             'calls' => EmployeeCallLog::query()
                 ->where('employee_id', $employee->id)
+                ->when($from !== null, fn ($q) => $q->whereDate('called_at', '>=', $from))
+                ->when($to !== null, fn ($q) => $q->whereDate('called_at', '<=', $to))
                 ->with('caller:id,name')
                 ->orderByDesc('called_at')
                 ->get()

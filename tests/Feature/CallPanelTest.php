@@ -217,3 +217,37 @@ it('accepts a browser webm voice note (sniffed as video/webm)', function () {
     $call = EmployeeCallLog::withoutGlobalScopes()->where('employee_id', $employee->id)->firstOrFail();
     expect($call->voice_note_path)->not->toBeNull();
 });
+
+/*
+ * Date-range filter on the selected worker's call history (2026-09) —
+ * "Last month" quick filter + custom from/to range.
+ */
+
+it('filters the selected worker call history by a custom date range', function (): void {
+    $employee = Employee::factory()->create(['company_id' => $this->company->id]);
+    logCall($employee->id, $this->company->id, ['called_at' => '2026-05-10 09:00:00', 'remarks' => 'May call']);
+    logCall($employee->id, $this->company->id, ['called_at' => '2026-06-15 09:00:00', 'remarks' => 'June call']);
+    logCall($employee->id, $this->company->id, ['called_at' => '2026-07-20 09:00:00', 'remarks' => 'July call']);
+
+    // Unfiltered: all three show.
+    $this->get("/calls?employee={$employee->id}")
+        ->assertInertia(fn ($p) => $p->has('selected.calls', 3));
+
+    // June-only window: just the June call.
+    $this->get("/calls?employee={$employee->id}&from=2026-06-01&to=2026-06-30")
+        ->assertInertia(fn ($p) => $p->has('selected.calls', 1)
+            ->where('selected.calls.0.remarks', 'June call')
+            ->where('filters.from', '2026-06-01')
+            ->where('filters.to', '2026-06-30'));
+});
+
+it('ignores a malformed date filter rather than erroring', function (): void {
+    $employee = Employee::factory()->create(['company_id' => $this->company->id]);
+    logCall($employee->id, $this->company->id, ['called_at' => '2026-06-15 09:00:00']);
+
+    $this->get("/calls?employee={$employee->id}&from=not-a-date&to=")
+        ->assertOk()
+        ->assertInertia(fn ($p) => $p->has('selected.calls', 1)
+            ->where('filters.from', null)
+            ->where('filters.to', null));
+});
