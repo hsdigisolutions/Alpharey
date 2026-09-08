@@ -545,11 +545,11 @@ const columns = computed(() => [
                 <!-- Rates -->
                 <div class="grid gap-4 sm:grid-cols-2">
                     <FormField k="invoices.taxable" :error="form.errors.is_taxable">
-                        <div class="flex overflow-hidden rounded-md border border-line-strong text-sm font-medium">
-                            <button type="button" class="flex-1 px-3 py-1.5 transition"
+                        <div class="flex overflow-hidden rounded-md border border-line-strong bg-surface-sunken text-sm font-medium">
+                            <button type="button" class="flex-1 px-3 py-2 transition"
                                 :class="form.is_taxable ? 'bg-accent text-on-accent' : 'text-ink-soft hover:bg-surface-hover'"
                                 @click="form.is_taxable = true">{{ $t('invoices.taxable_yes') }}</button>
-                            <button type="button" class="flex-1 px-3 py-1.5 transition"
+                            <button type="button" class="flex-1 border-s border-line-strong px-3 py-2 transition"
                                 :class="!form.is_taxable ? 'bg-accent text-on-accent' : 'text-ink-soft hover:bg-surface-hover'"
                                 @click="form.is_taxable = false">{{ $t('invoices.taxable_no') }}</button>
                         </div>

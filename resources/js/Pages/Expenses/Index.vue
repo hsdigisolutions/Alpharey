@@ -599,7 +599,7 @@ const columns = [
             </div>
         </div>
 
-        <VModal :open="showModal" :title-key="editingId ? 'expenses.edit' : 'expenses.new'" @close="showModal = false">
+        <VModal :open="showModal" size="lg" :title-key="editingId ? 'expenses.edit' : 'expenses.new'" @close="showModal = false">
             <form id="expense-form" class="grid gap-4 sm:grid-cols-2" @submit.prevent="submit">
                 <FormField k="expenses.type" :error="form.errors.type" required>
                     <VSelect v-model="form.type">
@@ -667,11 +667,11 @@ const columns = [
                     <VInput v-model="form.subtotal" type="number" step="0.01" min="0" />
                 </FormField>
                 <FormField k="expenses.taxable" :error="form.errors.is_taxable">
-                    <div class="flex overflow-hidden rounded-md border border-line-strong text-sm font-medium">
-                        <button type="button" class="flex-1 px-3 py-1.5 transition"
+                    <div class="flex overflow-hidden rounded-md border border-line-strong bg-surface-sunken text-sm font-medium">
+                        <button type="button" class="flex-1 px-3 py-2 transition"
                             :class="form.is_taxable ? 'bg-accent text-on-accent' : 'text-ink-soft hover:bg-surface-hover'"
                             @click="form.is_taxable = true">{{ $t('expenses.taxable_yes') }}</button>
-                        <button type="button" class="flex-1 px-3 py-1.5 transition"
+                        <button type="button" class="flex-1 border-s border-line-strong px-3 py-2 transition"
                             :class="!form.is_taxable ? 'bg-accent text-on-accent' : 'text-ink-soft hover:bg-surface-hover'"
                             @click="form.is_taxable = false">{{ $t('expenses.taxable_no') }}</button>
                     </div>
