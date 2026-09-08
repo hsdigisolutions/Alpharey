@@ -100,6 +100,11 @@ function exportUrl(kind) {
 // Margin colour for the profitability table: > 15 % green · 5–15 % amber ·
 // < 5 % / negative / a cost with no revenue red.
 function marginClass(row) {
+    // A project with no revenue basis configured is neutral, never a red loss —
+    // its cost is real but there is simply no income figure to compare against.
+    if (row.revenue_basis === 'not_configured') {
+        return 'text-ink-soft';
+    }
     if (row.margin === null || row.margin === undefined) {
         return (Number(row.coste_mo) + Number(row.gastos)) > 0 ? 'text-status-danger' : 'text-ink-soft';
     }
@@ -234,13 +239,16 @@ const tableColumns = computed(() => (table.value ? Object.keys(table.value[0]) :
                                 <tr v-for="(row, i) in (report.rows ?? [])" :key="i"
                                     class="cursor-pointer border-b border-line hover:bg-surface-hover"
                                     @click="openProject(row.project_id)">
-                                    <td class="px-3 py-2 font-medium text-ink">{{ row.project }}</td>
+                                    <td class="px-3 py-2 font-medium text-ink">
+                                        {{ row.project }}
+                                        <span v-if="row.revenue_basis" class="mt-0.5 block text-xs font-normal text-muted">{{ $t(`profitability.basis_${row.revenue_basis}`) }}</span>
+                                    </td>
                                     <td class="px-3 py-2 text-ink-soft">{{ row.client }}</td>
                                     <td class="tabular-nums px-3 py-2 text-end">{{ row.hours }}</td>
-                                    <td class="tabular-nums px-3 py-2 text-end">{{ eur(row.revenue) }}</td>
+                                    <td class="tabular-nums px-3 py-2 text-end">{{ row.revenue_basis === 'not_configured' ? '—' : eur(row.revenue) }}</td>
                                     <td class="tabular-nums px-3 py-2 text-end">{{ eur(row.coste_mo) }}</td>
                                     <td class="tabular-nums px-3 py-2 text-end">{{ eur(row.gastos) }}</td>
-                                    <td class="tabular-nums px-3 py-2 text-end font-medium" :class="marginClass(row)">{{ eur(row.profit) }}</td>
+                                    <td class="tabular-nums px-3 py-2 text-end font-medium" :class="marginClass(row)">{{ row.revenue_basis === 'not_configured' ? '—' : eur(row.profit) }}</td>
                                     <td class="tabular-nums px-3 py-2 text-end font-medium" :class="marginClass(row)">
                                         {{ row.margin !== null ? `${row.margin.toLocaleString('es-ES')} %` : '—' }}
                                     </td>

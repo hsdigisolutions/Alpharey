@@ -123,7 +123,7 @@ class ProfitabilityService
         $expenses = $this->expenseTotal($project->company_id, $from, $to, $project->id);
         $subcontract = $this->subcontractorTotal($project->company_id, $from, $to, $project->id);
 
-        $revenue = $this->revenueFor($project, $hours, $meters, $from, $to);
+        [$revenue, $revenueBasis] = $this->resolveRevenue($project, $hours, $meters, $from, $to);
 
         // COST rules (thaekedar DEAL model, confirmed 2026-08-13) — exactly one
         // labour basis, never our own crew's wages on an externalised project:
@@ -180,6 +180,15 @@ class ProfitabilityService
 
         [$margin, $health] = $this->classify($revenue, $cost, $profit);
 
+        // A project with no revenue basis configured at all (no billing rate, no
+        // paid invoice, no fixed-contract budget) is NOT a loss — it is simply
+        // unmeasured. Show it neutral instead of a fake −100 % red loss, which
+        // was the "quite off" P&L the client reported (2026-09, Option 3).
+        if ($revenueBasis === 'not_configured') {
+            $health = 'neutral';
+            $margin = null;
+        }
+
         $clientHourRate = $project->client_hour_rate !== null ? (float) $project->client_hour_rate : null;
         $avgCostPerHour = $hours > 0 ? round($labourCost / $hours, 2) : null;
 
@@ -188,6 +197,7 @@ class ProfitabilityService
             'project' => $project->name,
             'client' => $project->client?->name,
             'billing_type' => $project->billing_type?->value,
+            'revenue_basis' => $revenueBasis,
             'outsourced' => $outsourced,
             'hours' => round($hours, 2),
             'meters' => round($meters, 2),
@@ -685,17 +695,61 @@ class ProfitabilityService
     }
 
     /**
-     * Revenue by billing method. Hourly / per-meter multiply the client rate by
-     * the accrued units; every other method (fixed, milestone, unset) bills from
-     * the paid sale invoices raised against the project.
+     * Revenue AND the basis it was derived from, so the UI can label exactly
+     * where each project's income figure comes from (transparency — the client
+     * was confused by unexplained P&L numbers, 2026-09).
+     *
+     *   hourly    → client_hour_rate × hours          (basis 'hourly')
+     *   per_meter → client_meter_rate × metres        (basis 'per_meter')
+     *   fixed / milestone / unset → paid SALE invoices (basis 'paid_invoices');
+     *     when nothing is invoiced yet, the project's fixed-contract `budget`
+     *     stands in as expected revenue (basis 'fixed_budget', Option 2). Real
+     *     paid invoices ALWAYS win once they exist, so budget never
+     *     double-counts alongside real invoicing.
+     *   nothing configured at all → 0 revenue, basis 'not_configured' (the P&L
+     *     then reads neutral, never a fake −100 % loss).
+     *
+     * @return array{0: float, 1: string}
      */
-    private function revenueFor(Project $project, float $hours, float $meters, ?string $from, ?string $to): float
+    private function resolveRevenue(Project $project, float $hours, float $meters, ?string $from, ?string $to): array
     {
         return match ($project->billing_type) {
-            BillingType::Hourly => (float) ($project->client_hour_rate ?? 0) * $hours,
-            BillingType::PerMeter => (float) ($project->client_meter_rate ?? 0) * $meters,
-            default => $this->paidInvoiceTotal($project->company_id, $from, $to, $project->id),
+            BillingType::Hourly => $project->client_hour_rate !== null
+                ? [(float) $project->client_hour_rate * $hours, 'hourly']
+                : [0.0, 'not_configured'],
+            BillingType::PerMeter => $project->client_meter_rate !== null
+                ? [(float) $project->client_meter_rate * $meters, 'per_meter']
+                : [0.0, 'not_configured'],
+            default => $this->invoiceOrBudgetRevenue($project, $from, $to),
         };
+    }
+
+    /**
+     * The invoice-billed group (fixed / milestone / unset): paid sale invoices,
+     * falling back to the fixed-contract budget when nothing is invoiced yet.
+     * Paid invoices take priority — the budget is only the estimate.
+     *
+     * @return array{0: float, 1: string}
+     */
+    private function invoiceOrBudgetRevenue(Project $project, ?string $from, ?string $to): array
+    {
+        $paid = $this->paidInvoiceTotal($project->company_id, $from, $to, $project->id);
+
+        if ($paid > 0.0) {
+            return [$paid, 'paid_invoices'];
+        }
+
+        // The budget is a whole-CONTRACT figure — it cannot be sliced into a
+        // date window, so it stands in as revenue only for the full-project
+        // view (no from/to). A period-filtered report of an un-invoiced fixed
+        // project stays 'not_configured' rather than over-crediting the period.
+        $budget = $project->budget !== null ? (float) $project->budget : 0.0;
+
+        if ($budget > 0.0 && $from === null && $to === null) {
+            return [$budget, 'fixed_budget'];
+        }
+
+        return [0.0, 'not_configured'];
     }
 
     private function paidInvoiceTotal(int $companyId, ?string $from, ?string $to, int $projectId): float
@@ -884,10 +938,12 @@ class ProfitabilityService
             'client' => $d['client'] ?? '—',
             'hours' => $d['hours'],
             'revenue' => $d['revenue'],
+            'revenue_basis' => $d['revenue_basis'],
             'coste_mo' => $d['labour_cost'],
             'gastos' => round((float) $d['expenses'] + (float) $d['subcontractor_cost'], 2),
             'profit' => $d['profit'],
             'margin' => $d['margin'],
+            'health' => $d['health'],
         ];
     }
 

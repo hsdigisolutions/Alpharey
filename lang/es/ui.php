@@ -1644,6 +1644,15 @@ return [
         'margin' => 'Margen',
         'outsourced_note' => 'Proyecto subcontratado: coste externo en lugar de mano de obra propia.',
         'no_data' => 'Sin datos de rentabilidad para este proyecto todavía.',
+        // Revenue basis (transparency — where the income figure comes from)
+        'revenue_basis' => 'Base de ingresos',
+        'basis_hourly' => 'Tarifa por hora',
+        'basis_per_meter' => 'Tarifa por metro',
+        'basis_paid_invoices' => 'Facturas cobradas',
+        'basis_fixed_budget' => 'Presupuesto fijo',
+        'basis_not_configured' => 'Sin configurar',
+        'no_revenue_configured' => 'Ingresos sin configurar',
+        'cost_to_date' => 'Coste acumulado',
         // Daily production P&L (Feature 3)
         'kpi_today' => 'Hoy',
         'kpi_month' => 'Este mes',

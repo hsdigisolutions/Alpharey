@@ -392,3 +392,102 @@ it('serves the profitability report to an admin with the project rows', function
             ->where('report.figures.total_revenue', 2000)
             ->has('report.rows', 1));
 });
+
+/*
+ * Revenue basis (2026-09) — Option 2 (budget as fixed-contract revenue) and
+ * Option 3 (no basis configured shows neutral, not a fake −100 % loss).
+ */
+
+it('uses the fixed-contract budget as revenue when nothing is invoiced yet', function (): void {
+    $project = Project::factory()->create([
+        'company_id' => $this->company->id, 'billing_type' => 'fixed',
+        'budget' => '30000', 'client_hour_rate' => null, 'client_meter_rate' => null,
+    ]);
+    punch($this->company, $this->employee, $project, '2026-06-01', 100, 12000);
+
+    $r = $this->service->forProject($project->fresh());
+
+    expect($r['revenue_basis'])->toBe('fixed_budget')
+        ->and($r['revenue'])->toBe(30000.0)
+        ->and($r['cost'])->toBe(12000.0)
+        ->and($r['profit'])->toBe(18000.0)      // 30.000 − 12.000
+        ->and($r['health'])->toBe('ok');
+});
+
+it('lets a paid invoice win over the budget once real invoicing starts', function (): void {
+    $project = Project::factory()->create([
+        'company_id' => $this->company->id, 'billing_type' => 'fixed', 'budget' => '30000',
+    ]);
+    punch($this->company, $this->employee, $project, '2026-06-01', 100, 12000);
+    Invoice::factory()->create([
+        'company_id' => $this->company->id, 'project_id' => $project->id,
+        'type' => 'sale', 'payment_status' => 'paid', 'total' => '25000', 'invoice_date' => '2026-06-10',
+    ]);
+
+    $r = $this->service->forProject($project->fresh());
+
+    // The real €25.000 collected wins over the €30.000 estimate — no double count.
+    expect($r['revenue_basis'])->toBe('paid_invoices')
+        ->and($r['revenue'])->toBe(25000.0)
+        ->and($r['profit'])->toBe(13000.0);     // 25.000 − 12.000
+});
+
+it('shows a project with no revenue basis as neutral, never a fake loss', function (): void {
+    // The production reality: null billing, no budget, no rate, no invoice, but
+    // real attendance cost. Must read neutral (unmeasured), not red danger.
+    $project = Project::factory()->create([
+        'company_id' => $this->company->id, 'billing_type' => null,
+        'budget' => null, 'client_hour_rate' => null, 'client_meter_rate' => null,
+    ]);
+    punch($this->company, $this->employee, $project, '2026-06-01', 100, 12000);
+
+    $r = $this->service->forProject($project->fresh());
+
+    expect($r['revenue_basis'])->toBe('not_configured')
+        ->and($r['revenue'])->toBe(0.0)
+        ->and($r['cost'])->toBe(12000.0)
+        ->and($r['margin'])->toBeNull()
+        ->and($r['health'])->toBe('neutral');   // NOT 'danger'
+});
+
+it('keeps an hourly project with a client rate unaffected (basis hourly)', function (): void {
+    // Regression guard for Gandasegi: hourly + client_hour_rate must not change.
+    $project = Project::factory()->create([
+        'company_id' => $this->company->id, 'billing_type' => 'hourly',
+        'client_hour_rate' => '26', 'budget' => '99999',
+    ]);
+    punch($this->company, $this->employee, $project, '2026-06-01', 100, 1450);
+
+    $r = $this->service->forProject($project->fresh());
+
+    // Budget is IGNORED for an hourly project — the hourly path wins.
+    expect($r['revenue_basis'])->toBe('hourly')
+        ->and($r['revenue'])->toBe(2600.0)      // 26 × 100, not the 99.999 budget
+        ->and($r['health'])->toBe('ok');
+});
+
+it('treats an hourly project with no client rate as not configured', function (): void {
+    $project = Project::factory()->create([
+        'company_id' => $this->company->id, 'billing_type' => 'hourly', 'client_hour_rate' => null,
+    ]);
+    punch($this->company, $this->employee, $project, '2026-06-01', 100, 1450);
+
+    $r = $this->service->forProject($project->fresh());
+
+    expect($r['revenue_basis'])->toBe('not_configured')
+        ->and($r['health'])->toBe('neutral');
+});
+
+it('does not credit the whole budget to a filtered period (budget is whole-contract)', function (): void {
+    $project = Project::factory()->create([
+        'company_id' => $this->company->id, 'billing_type' => 'fixed', 'budget' => '30000',
+    ]);
+    punch($this->company, $this->employee, $project, '2026-06-01', 100, 12000);
+
+    // A date-bounded report must NOT show the full contract budget as that
+    // window's revenue — the budget can't be sliced into a period.
+    $r = $this->service->forProject($project->fresh(), '2026-06-01', '2026-06-30');
+
+    expect($r['revenue_basis'])->toBe('not_configured')
+        ->and($r['revenue'])->toBe(0.0);
+});

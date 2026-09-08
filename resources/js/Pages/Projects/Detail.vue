@@ -543,9 +543,13 @@ const noteStatus = { internal: 'neutral', client_call: 'info', client_email: 'ac
                             </div>
                         </dl>
                         <dl class="divide-y divide-line text-sm">
+                            <div class="flex items-center justify-between py-2">
+                                <dt class="text-ink-soft">{{ $t('profitability.revenue_basis') }}</dt>
+                                <dd><VBadge :status="profitability.revenue_basis === 'not_configured' ? 'neutral' : 'info'">{{ $t(`profitability.basis_${profitability.revenue_basis}`) }}</VBadge></dd>
+                            </div>
                             <div class="flex justify-between py-2">
                                 <dt class="text-ink-soft">{{ $t('profitability.total_revenue') }}</dt>
-                                <dd class="tabular-nums font-medium">{{ eur(profitability.revenue) }}</dd>
+                                <dd class="tabular-nums font-medium">{{ profitability.revenue_basis === 'not_configured' ? '—' : eur(profitability.revenue) }}</dd>
                             </div>
                             <div class="flex justify-between py-2">
                                 <dt class="text-ink-soft">{{ $t('profitability.labour_cost') }}</dt>
@@ -561,7 +565,19 @@ const noteStatus = { internal: 'neutral', client_call: 'info', client_email: 'ac
                             </div>
                         </dl>
                     </div>
-                    <div class="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-line bg-surface-sunken px-4 py-3">
+                    <!-- No revenue basis configured: show cost-to-date, NOT a fake −100 % loss. -->
+                    <div v-if="profitability.revenue_basis === 'not_configured'"
+                        class="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-line bg-surface-sunken px-4 py-3">
+                        <div>
+                            <p class="text-xs uppercase tracking-wide text-muted">{{ $t('profitability.gross_profit') }}</p>
+                            <p class="text-sm font-medium text-ink-soft">{{ $t('profitability.no_revenue_configured') }}</p>
+                        </div>
+                        <div class="text-end">
+                            <p class="text-xs uppercase tracking-wide text-muted">{{ $t('profitability.cost_to_date') }}</p>
+                            <p class="tabular-nums text-xl font-semibold text-ink-soft">{{ eur(profitability.cost) }}</p>
+                        </div>
+                    </div>
+                    <div v-else class="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-line bg-surface-sunken px-4 py-3">
                         <div>
                             <p class="text-xs uppercase tracking-wide text-muted">{{ $t('profitability.gross_profit') }}</p>
                             <p class="tabular-nums text-2xl font-semibold" :class="marginTone[profitability.health]">{{ eur(profitability.profit) }}</p>
