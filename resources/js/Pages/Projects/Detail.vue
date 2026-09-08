@@ -87,7 +87,9 @@ const tabs = computed(() => [
     ...(props.canSeeWages ? [{ key: 'profitability', labelKey: 'projects.tab_profitability' }] : []),
     { key: 'workers', labelKey: 'projects.tab_workers', count: props.workers.length },
     { key: 'attendance', labelKey: 'projects.tab_attendance' },
-    { key: 'measurements', labelKey: 'projects.tab_measurements' },
+    // Measurements tab removed from the project view (2026-09) — measurements are
+    // managed on the standalone /measurements screen (Screen 24), and per-meter
+    // income still reads the measurements table directly in ProfitabilityService.
     ...(props.canManageTasks?.view ? [{ key: 'tasks', labelKey: 'projects.tab_tasks', count: props.projectTasks?.tasks.length }] : []),
     { key: 'invoices', labelKey: 'projects.tab_invoices' },
     { key: 'expenses', labelKey: 'projects.tab_expenses' },
