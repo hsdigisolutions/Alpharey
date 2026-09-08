@@ -4,6 +4,87 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Status: Phase 9 in progress — hardening (2026-08-01)
 
+### Deployment redesign — money model + host/home visibility (2026-09, DONE, deployed to prod)
+
+**The authoritative design for a temporary cross-company deployment** (an
+employee lent FROM their home company TO a host company's project — distinct
+from a permanent transfer). Confirmed with the client 2026-09; verified live on
+the real Shizukani→Alovar deployments (Phurba Sharpa #467, project #125 Plaza
+del Carmen — the live cross-charge was watched accruing €220 → €275 as days were
+logged). Commits: money engine, then the visibility layer. **1262 Pest tests.**
+
+**Money model (unchanged rule + one changed basis):**
+- **HOME company pays the worker directly** — payroll is UNCHANGED
+  (`PayrollService` reads the worker's attendance per-employee scope-dropped and
+  pays under their home company, with a per-deployment note line). Host-pays was
+  explicitly rejected — it is *cesión ilegal* under Spanish law (dev skill Rule
+  13). Do NOT flip this.
+- **HOST reimburses HOME at EXACT COST, no margin.** The cross-charge is the
+  **SUM of the deployed worker's FROZEN day totals** on the host project in the
+  window (`DeploymentChargeService::accruedAmount` → sum of `total_amount`),
+  NOT the old `rate_during_deployment × units × split%` formula. Mixed day types
+  (full/half/hourly) are already in each row's total, so it is exact. A margin
+  option is deliberately NOT built (revisit later if the client wants one).
+- **LIVE ACCRUAL (Option B).** `DeploymentChargeService::refreshCharge()`
+  recomputes the `DeploymentCharge` row + the host `internal_deployment` expense
+  from CURRENT attendance. While the deployment is ACTIVE the charge grows as
+  days are logged (`status='pending'`); on `complete()` it is refreshed once
+  more and **LOCKED** (`status='locked'` — a locked charge is never re-opened by
+  a later attendance edit). The refresh is a **post-commit, best-effort hook** in
+  `AttendanceService` (create/update/createForWorker) — wrapped so a
+  charge-refresh failure can NEVER roll back or fail an attendance save; the
+  punch is authoritative, the cross-charge is a derived side effect.
+- The host `internal_deployment` expense still posts on the **HOST** company_id
+  (never the acting session), no vendor, no VAT, and its note names the **HOME
+  company + project, NEVER the worker** (`deployments.charge_expense_note` takes
+  `:company`, not `:employee`). The amount lives in the host's own expense
+  ledger (their money) — that is the one place the host legitimately sees a
+  figure.
+
+**Visibility rules — HOME sees everything, HOST sees minimal/anonymised:**
+- **HOME badge:** an active OUTBOUND deployment shows "Desplegado a {host}" on
+  the Employees list (`EmployeeController::index` ships `deployed_to` via ONE
+  bounded query — no N+1; the perf guard budget is 18) and the employee-detail
+  header (`activeDeployment` payload).
+- **Attendance labelling (both sides):** the employee Asistencia tab marks
+  host-logged days "Desde {host} (desplegado)" (cell carries `deployed_from` =
+  the host company name when `company_id != employee home company`); the host
+  attendance grid keeps its "Desplegado" badge.
+- **HOME premium cross-charge card** (Deployments screen is a card grid, not a
+  table): the home/SA viewer sees worker · host · project · period · days ·
+  units · rate (exact cost) · a prominent "{host} owes €X" block (live while
+  active, locked when completed).
+- **HOST-minimal:** a PURE-HOST viewer (`DeploymentController::index` sets
+  `viewer='host'` when acting company == host_company_id != home, and not SA)
+  sees ONLY project + days_present + period + status — the row OMITS `employee`
+  and `accrued_cost` entirely. The host attendance grid + monthly summary
+  anonymise the deployed worker (`deployedRow` returns `full_name=null`; UI shows
+  "Trabajador desplegado · de {home}") and hide their wage ("—"). The host can
+  NEVER open the worker's profile/salary/documents (the employee is in another
+  company → tenancy 404).
+- **Accepted residuals (client-confirmed, do NOT "fix"):** the host admin DOES
+  see the worker's name at deployment CREATION (they pick who to deploy) and in
+  the EDIT modal (they manage the posting they created). Only the ONGOING/PASSIVE
+  views (grids, lists, cards) are anonymised — that was the requirement.
+
+**Tests:** `DeploymentTest` (exact-cost on completion + no-worker-name on the
+host expense; live accrual grows the same pending charge; home-vs-host viewer
+split; home badge + `activeDeployment` + host-grid anonymisation),
+`DeploymentChargePostingTest` (host expense basis, updated to exact cost). The
+attendance 500-on-duplicate fix landed alongside (see next entry).
+
+### Attendance: recording a day takes over an auto-absence (2026-09, DONE, deployed)
+
+Recording attendance for a day that already had an AUTO-generated absence (the
+nightly `attendance:auto-absent` sweep) used to throw a raw **500**
+(`UniqueConstraintViolationException` on the one-row-per-employee-per-day index)
+— hit for a DEPLOYED worker whose home auto-absence collided with the real host
+attendance. `AttendanceService::create()` now reconciles instead of colliding:
+an **auto_generated** placeholder is TAKEN OVER (real attendance written onto it,
+moved to the acting/host company, auto flag cleared — which also corrects the
+false absence for a deployed worker); a real, human-owned existing row returns a
+clear `ui.attendance.already_exists` validation message (422), never a 500.
+
 ### Standard working hours 08:00–17:00 + 1 h break — DISPLAY ONLY (2026-09, DONE, deployed to prod)
 
 Default working hours moved **09:00 → 08:00** (end stays 17:00, a 9 h gross
