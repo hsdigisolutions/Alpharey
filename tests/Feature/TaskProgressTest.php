@@ -3,6 +3,7 @@
 use App\Models\Attendance;
 use App\Models\Company;
 use App\Models\Employee;
+use App\Models\EmployeeDeployment;
 use App\Models\ProductionTask;
 use App\Models\Project;
 use App\Models\TaskProgress;
@@ -213,4 +214,32 @@ it('requires the edit permission to log work', function (): void {
     $this->actingAs($user)->post("/projects/{$this->project->id}/tasks/{$this->task->id}/progress", [
         'date' => $this->date, 'quantity' => 10, 'employee_ids' => [$a->id],
     ])->assertForbidden();
+});
+
+it('credits a DEPLOYED worker for task progress (allowDeployed) — regression', function (): void {
+    // The reported production bug: a worker deployed INTO the acting company
+    // appears in the present-workers feed but the log 422'd because the request
+    // rejected them as "not of this company". Their HOME is companyB; they are
+    // deployed onto this (companyA) project, with worked attendance under the
+    // HOST company — exactly the real Shizukani→Alovar case.
+    $deployed = Employee::factory()->create(['company_id' => $this->companyB->id]);
+    EmployeeDeployment::factory()->create([
+        'home_company_id' => $this->companyB->id,
+        'host_company_id' => $this->companyA->id,
+        'employee_id' => $deployed->id,
+        'project_id' => $this->project->id,
+        'deployment_start' => now()->subDays(5)->toDateString(),
+        'deployment_end' => now()->addDays(5)->toDateString(),
+    ]);
+    Attendance::factory()->create([
+        'company_id' => $this->companyA->id, 'employee_id' => $deployed->id,
+        'project_id' => $this->project->id, 'date' => $this->date, 'status' => 'present',
+    ]);
+
+    $this->actingAs($this->admin)->post("/projects/{$this->project->id}/tasks/{$this->task->id}/progress", [
+        'date' => $this->date, 'quantity' => 50, 'employee_ids' => [$deployed->id],
+    ])->assertRedirect()->assertSessionHasNoErrors();
+
+    expect((float) $this->task->refresh()->completed_quantity)->toBe(50.0)
+        ->and(TaskProgress::withoutGlobalScopes()->where('production_task_id', $this->task->id)->count())->toBe(1);
 });

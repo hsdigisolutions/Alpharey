@@ -29,7 +29,12 @@ class StoreTaskProgressRequest extends FormRequest
             // Total quantity produced that day — split equally across workers.
             'quantity' => ['required', 'numeric', 'min:0.01', 'max:9999999'],
             'employee_ids' => ['required', 'array', 'min:1', 'max:100'],
-            'employee_ids.*' => ['integer', new OwnCompanyEmployee],
+            // allowDeployed: a worker deployed INTO the acting company legitimately
+            // has attendance on the host project, so they appear in the present-
+            // workers feed and MUST be creditable for production here — exactly as
+            // StoreAttendanceRequest allows. Without this a deployed worker is
+            // rejected ("does not belong to this company") and the log silently 422s.
+            'employee_ids.*' => ['integer', new OwnCompanyEmployee(allowDeployed: true)],
             'notes' => ['nullable', 'string', 'max:2000'],
             'photo' => ['nullable', 'file', 'mimes:jpg,jpeg,png,webp,pdf', 'max:8192'],
         ];
