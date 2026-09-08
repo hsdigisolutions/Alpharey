@@ -2,8 +2,6 @@
 
 namespace App\Http\Controllers;
 
-use App\Enums\MeasurementStatus;
-use App\Enums\MeasurementType;
 use App\Enums\ProductionTaskCategory;
 use App\Enums\ProductionTaskStatus;
 use App\Enums\ProjectContactRole;
@@ -18,7 +16,6 @@ use App\Models\Client;
 use App\Models\Employee;
 use App\Models\Expense;
 use App\Models\Invoice;
-use App\Models\Measurement;
 use App\Models\ProductionTask;
 use App\Models\Project;
 use App\Models\ProjectContact;
@@ -324,21 +321,10 @@ class ProjectController extends Controller
             'attendanceEntryEmployees' => Gate::allows('attendance.create') ? $this->attendanceEntryEmployees($canSeeWages) : [],
             'canManageAttendance' => Gate::allows('attendance.create'),
             'canSeeAttendance' => Gate::allows('attendance.view'),
-            // Measurements tab — this project's records + summary + entry catalogue.
-            'projectMeasurements' => Gate::allows('measurements.view') ? $this->projectMeasurements($project) : null,
-            'measurementTypes' => array_map(fn (MeasurementType $t) => $t->value, MeasurementType::cases()),
-            'measurementEmployees' => Gate::allows('measurements.view')
-                ? Employee::query()->where('active', true)->orderBy('full_name')
-                    ->get(['id', 'full_name', 'designation'])
-                    ->map(fn (Employee $e) => ['id' => $e->id, 'full_name' => $e->full_name, 'designation' => $e->designation])->all()
-                : [],
-            'canManageMeasurements' => [
-                'view' => Gate::allows('measurements.view'),
-                'create' => Gate::allows('measurements.create'),
-                'edit' => Gate::allows('measurements.edit'),
-                'delete' => Gate::allows('measurements.delete'),
-                'approve' => Gate::allows('measurements.approve'),
-            ],
+            // Measurements tab was removed from the project view (2026-09) — the
+            // standalone /measurements screen owns that workflow, and per-meter
+            // income still reads the measurements table directly in
+            // ProfitabilityService, so no payload is needed here.
             // Tareas tab — production tasks (internal planned-vs-actual tracker).
             'projectTasks' => Gate::allows('production_tasks.view') ? $this->projectTasks($project) : null,
             'taskCategories' => array_map(fn (ProductionTaskCategory $c) => $c->value, ProductionTaskCategory::cases()),
@@ -537,61 +523,6 @@ class ProjectController extends Controller
 
                 return $row;
             })->all();
-    }
-
-    /**
-     * This project's measurements + a summary (approved / pending quantity and
-     * whether they feed billing — a per_meter project).
-     *
-     * @return array<string, mixed>
-     */
-    private function projectMeasurements(Project $project): array
-    {
-        $rows = Measurement::query()
-            ->where('project_id', $project->id)
-            ->with(['employee:id,full_name,designation'])
-            ->orderByDesc('date')
-            ->get();
-
-        $qty = fn (Collection $c): float => round((float) $c->sum(fn (Measurement $m) => (float) $m->quantity), 2);
-
-        // A4 — per-worker breakdown of approved / pending / rejected metres.
-        $perWorker = $rows->groupBy('employee_id')->map(function (Collection $g) use ($qty): array {
-            $first = $g->first();
-
-            return [
-                'employee_id' => $first->employee_id,
-                'employee' => $first->employee_id !== null ? ($first->employee->full_name ?? '—') : '—',
-                'approved' => $qty($g->where('status', MeasurementStatus::Approved)),
-                'pending' => $qty($g->where('status', MeasurementStatus::Pending)),
-                'rejected' => $qty($g->where('status', MeasurementStatus::Rejected)),
-                'total' => $qty($g),
-            ];
-        })->sortByDesc('total')->values()->all();
-
-        return [
-            'records' => $rows->map(fn (Measurement $m): array => [
-                'id' => $m->id,
-                'date' => $m->date->toDateString(),
-                'employee_id' => $m->employee_id,
-                'employee' => $m->employee?->full_name,
-                'designation' => $m->employee?->designation,
-                'quantity' => (float) $m->quantity,
-                'unit' => $m->unit,
-                'type' => $m->measurement_type->value,
-                'status' => $m->status->value,
-                'approved' => $m->approved,
-                'rejection_reason' => $m->rejection_reason,
-                'notes' => $m->notes,
-            ])->values()->all(),
-            'summary' => [
-                'approved_qty' => $qty($rows->where('status', MeasurementStatus::Approved)),
-                'pending_qty' => $qty($rows->where('status', MeasurementStatus::Pending)),
-                'rejected_qty' => $qty($rows->where('status', MeasurementStatus::Rejected)),
-                'billing_linked' => $project->billing_type?->value === 'per_meter',
-            ],
-            'per_worker' => $perWorker,
-        ];
     }
 
     /**

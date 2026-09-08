@@ -49,24 +49,26 @@ it('excludes rejected measurements from per-meter P&L income', function (): void
 
 // ── Connection 3: project summary cards move on approve / reject ─────────────
 it('moves the summary card counts as measurements are approved and rejected', function (): void {
+    // The project-detail Measurements tab was removed (2026-09); the approve/
+    // reject workflow now lives on the standalone /measurements screen. Assert
+    // the status transitions there (same counts the tab used to show).
     $project = Project::factory()->create(['company_id' => $this->company->id, 'billing_type' => 'per_meter']);
     $m1 = Measurement::factory()->create(['company_id' => $this->company->id, 'project_id' => $project->id, 'quantity' => '100']);
     $m2 = Measurement::factory()->create(['company_id' => $this->company->id, 'project_id' => $project->id, 'quantity' => '40']);
 
     // Both pending initially.
-    $this->get("/projects/{$project->id}")->assertInertia(fn (Assert $p) => $p
-        ->where('projectMeasurements.summary.pending_qty', fn ($v) => (float) $v === 140.0)
-        ->where('projectMeasurements.summary.approved_qty', fn ($v) => (float) $v === 0.0)
-        ->where('projectMeasurements.summary.rejected_qty', fn ($v) => (float) $v === 0.0));
+    expect(Measurement::whereIn('id', [$m1->id, $m2->id])->where('status', 'pending')->sum('quantity'))->toEqual(140.0);
 
-    // Approve one, reject the other.
+    // Approve one, reject the other — the standalone screen's endpoints.
     $this->post("/measurements/{$m1->id}/approve")->assertRedirect();
     $this->post("/measurements/{$m2->id}/reject", ['rejection_reason' => 'Wrong area'])->assertRedirect();
 
-    $this->get("/projects/{$project->id}")->assertInertia(fn (Assert $p) => $p
-        ->where('projectMeasurements.summary.pending_qty', fn ($v) => (float) $v === 0.0)
-        ->where('projectMeasurements.summary.approved_qty', fn ($v) => (float) $v === 100.0)
-        ->where('projectMeasurements.summary.rejected_qty', fn ($v) => (float) $v === 40.0));
+    expect((float) Measurement::whereKey($m1->id)->value('quantity'))->toEqual(100.0)
+        ->and(Measurement::whereKey($m1->id)->value('status')?->value)->toBe('approved')
+        ->and((float) Measurement::whereKey($m2->id)->value('quantity'))->toEqual(40.0)
+        ->and(Measurement::whereKey($m2->id)->value('status')?->value)->toBe('rejected')
+        // And the P&L income basis (approved metres) reflects only the approved one.
+        ->and(Measurement::where('project_id', $project->id)->where('status', 'approved')->sum('quantity'))->toEqual(100.0);
 });
 
 // ── Connection 10: measurements + tasks have ZERO effect on salary ──────────

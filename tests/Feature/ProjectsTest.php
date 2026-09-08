@@ -134,29 +134,29 @@ it('shows the project attendance tab with records and a period summary', functio
             ->where('projectAttendance.summary.labour_cost', 80));
 });
 
-it('shows the project measurements tab with an approved/pending summary', function (): void {
+it('no longer ships the measurements-tab payload on the project page, data intact', function (): void {
+    // The Measurements tab was removed from the project detail page (2026-09).
+    // The page must no longer ship its payload, while the measurement DATA and
+    // the standalone /measurements workflow stay fully intact.
     $project = Project::factory()->forCompany($this->companyA)->create(['billing_type' => 'per_meter']);
     $employee = Employee::factory()->forCompany($this->companyA)->create();
 
-    $approved = new Measurement([
+    $m = new Measurement([
         'project_id' => $project->id, 'employee_id' => $employee->id,
         'date' => '2026-05-10', 'quantity' => '850', 'unit' => 'm²', 'measurement_type' => 'area',
     ]);
-    $approved->company_id = $this->companyA->id;
-    $approved->approved = true;
-    $approved->save();
-
-    $pending = new Measurement([
-        'project_id' => $project->id, 'employee_id' => $employee->id,
-        'date' => '2026-05-11', 'quantity' => '50', 'unit' => 'm²', 'measurement_type' => 'area',
-    ]);
-    $pending->company_id = $this->companyA->id;
-    $pending->save();
+    $m->company_id = $this->companyA->id;
+    $m->approved = true;
+    $m->save();
 
     $this->actingAs($this->adminA)->get("/projects/{$project->id}")
+        ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
-            ->has('projectMeasurements.records', 2)
-            ->where('projectMeasurements.summary.approved_qty', 850)
-            ->where('projectMeasurements.summary.pending_qty', 50)
-            ->where('projectMeasurements.summary.billing_linked', true));
+            ->missing('projectMeasurements')
+            ->missing('measurementTypes')
+            ->missing('canManageMeasurements'));
+
+    // Data untouched, and still reachable on the standalone screen.
+    expect(Measurement::where('project_id', $project->id)->count())->toBe(1);
+    $this->actingAs($this->adminA)->get('/measurements')->assertOk();
 });
