@@ -443,3 +443,34 @@ it('badges the worker at home and anonymises them on the host attendance grid', 
         ->assertInertia(fn (Assert $p) => $p->where('employees', fn ($emps) => collect($emps)
             ->contains(fn ($e) => ($e['deployed'] ?? false) && $e['full_name'] === null)));
 });
+
+it('fills a deployed-out worker on the HOME main attendance grid — read-only, no phantom absence', function (): void {
+    $homeAdmin = User::factory()->companyAdmin()->forCompany($this->home)->create();
+    EmployeeDeployment::factory()->create([
+        'home_company_id' => $this->home->id, 'host_company_id' => $this->host->id,
+        'employee_id' => $this->homeEmployee->id, 'project_id' => $this->hostProject->id,
+        'deployment_start' => '2026-07-01', 'deployment_end' => '2026-07-31',
+    ]);
+    // Host-logged day for the home worker (company = HOST), a past weekday.
+    Attendance::factory()->create([
+        'company_id' => $this->host->id, 'employee_id' => $this->homeEmployee->id,
+        'project_id' => $this->hostProject->id, 'date' => '2026-07-07',
+        'status' => 'present', 'day_type' => 'full', 'total_amount' => '90',
+    ]);
+
+    // Shizukani's MAIN grid now shows 7 July FILLED for the worker — marked
+    // deployed-out (read-only), from the host, present (NOT a phantom absence),
+    // and appearing exactly once.
+    $eid = $this->homeEmployee->id;
+    $this->actingAs($homeAdmin)->get('/attendance?month=2026-07')
+        ->assertInertia(fn (Assert $p) => $p
+            // 7 July is the DEPLOYED-OUT cell — present, from the host, read-only —
+            // NOT the phantom absence it used to be.
+            ->where("grid.{$eid}.7.deployed_out", true)
+            ->where("grid.{$eid}.7.deployed_from", $this->host->name)
+            ->where("grid.{$eid}.7.status", 'present')
+            // Folded into the summary as a present day (complete picture). The
+            // OTHER unrecorded weekdays are still genuine absences — the point is
+            // the deployed day is not one of them.
+            ->where("summary.{$eid}.days_present", 1));
+});

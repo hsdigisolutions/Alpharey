@@ -155,11 +155,56 @@ class AttendanceController extends Controller
             ];
         }
 
+        // Deployed-OUT days: this company's OWN workers who logged attendance at
+        // a HOST company while deployed there. Those rows live under the HOST
+        // company_id, so the company-scoped query above misses them — the grid
+        // would otherwise show a blank cell AND a false auto-absence. Merge them
+        // in READ-ONLY, marked "Desde {host} (desplegado)", so the home grid is
+        // a COMPLETE picture. No duplication: one row per employee/day (unique
+        // index), own-company rows always win (??=), and these fill the cell
+        // BEFORE the virtual-absence sweep so no phantom absence is added.
+        $deployedOut = collect();
+        if (in_array($empStatus, ['active', 'all'], true) && $actingCompanyId !== null) {
+            $deployedOut = Attendance::query()
+                ->withoutGlobalScopes()
+                ->whereIn('employee_id', $ownEmployees->pluck('id'))
+                ->where('company_id', '!=', $actingCompanyId)
+                ->whereBetween('date', [$start->toDateString(), $end->toDateString()])
+                ->with(['project:id,name', 'company:id,name'])
+                ->get();
+
+            foreach ($deployedOut as $record) {
+                $day = (int) $record->date->format('j');
+                $grid[$record->employee_id][$day] ??= [
+                    'id' => $record->id,
+                    'status' => $record->status->value,
+                    'day_type' => $record->day_type?->value,
+                    'is_weekend' => (bool) $record->is_weekend,
+                    'is_auto' => false,
+                    'is_auto_detected' => false,
+                    'is_overridden' => false,
+                    'hours' => $record->displayHoursNet($breakMinutes),
+                    'quantity' => $record->quantity !== null ? (float) $record->quantity : null,
+                    'project' => $record->project?->name,
+                    'has_voice_note' => false,
+                    'voice_note_has_audio' => false,
+                    'location_mismatch' => false,
+                    'distance' => null,
+                    'distance_band' => null,
+                    // Logged at another (HOST) company → READ-ONLY here (the row
+                    // belongs to the host); the cell is labelled + non-editable.
+                    'deployed_out' => true,
+                    'deployed_from' => $record->company?->name,
+                ];
+            }
+        }
+
         // Live absences: an own employee's unrecorded past weekday (on/after
         // joining) is shown as an auto-absence immediately — the same rule the
         // worker PWA uses (AttendanceAbsence), so both views agree without
         // waiting for the nightly attendance:auto-absent sweep. Deployed-in
-        // workers are excluded (their HOME company owns their absences).
+        // workers are excluded (their HOME company owns their absences); a
+        // deployed-OUT day already filled the cell above, so it is skipped here.
         $today = now()->startOfDay();
         $workingDays = app(AttendanceService::class)
             ->workingDays(app(CurrentCompany::class)->id() ?? 0);
@@ -242,7 +287,10 @@ class AttendanceController extends Controller
         // Monthly summary per employee. The wage total is gated exactly like
         // the cell payload below — hours are attendance data, money is pay data.
 
-        $summary = $records->groupBy('employee_id')->map(function ($rows) use ($canSeeWage, $breakMinutes) {
+        // Deployed-OUT rows are folded in so the home summary counts those days
+        // as present (with their hours + the home worker's pay), matching the
+        // grid — a complete picture, no phantom absences.
+        $summary = $records->concat($deployedOut)->groupBy('employee_id')->map(function ($rows) use ($canSeeWage, $breakMinutes) {
             // status is an AttendanceStatus enum cast — compare on ->value
             $countStatus = fn (array $statuses): int => $rows
                 ->filter(fn ($r) => in_array($r->status->value, $statuses, true))->count();

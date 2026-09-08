@@ -202,6 +202,9 @@ function openCell(emp, day) {
     // A transferred-away worker's history is read-only at this company — the
     // cells still show their attendance, but never open for edit / new entry.
     if (emp.transferred_away) return;
+    // A deployed-OUT day was logged at the HOST company — read-only here (the
+    // record belongs to the host); it is visible but never editable.
+    if (props.grid[emp.id]?.[day]?.deployed_out) return;
     if (!props.can.edit && !props.can.create) return;
     const employeeId = emp.id;
     const cell = props.grid[employeeId]?.[day];
@@ -328,11 +331,18 @@ const monthLabel = computed(() => {
                                 :class="[grid[emp.id]?.[day]
                                     ? cellClass(grid[emp.id][day])
                                     : (isWeekend(day) ? 'bg-surface-sunken/40' : (emp.transferred_away ? '' : 'hover:bg-surface-sunken')),
-                                    emp.transferred_away ? 'cursor-default' : '']"
-                                :title="grid[emp.id]?.[day]?.project ?? ''"
+                                    (emp.transferred_away || grid[emp.id]?.[day]?.deployed_out) ? 'cursor-default' : '',
+                                    grid[emp.id]?.[day]?.deployed_out ? 'ring-1 ring-inset ring-status-info' : '']"
+                                :title="grid[emp.id]?.[day]?.deployed_out
+                                    ? $t('employees.deployed_from_label', { company: grid[emp.id][day].deployed_from })
+                                    : (grid[emp.id]?.[day]?.project ?? '')"
                                 @click="openCell(emp, day)">
                                 {{ cellContent(grid[emp.id]?.[day]) }}
                             </button>
+                            <!-- Logged at a HOST company while deployed — a ↗ marks it as deployed-out. -->
+                            <span v-if="grid[emp.id]?.[day]?.deployed_out"
+                                class="pointer-events-none absolute end-0.5 top-0.5 text-[9px] font-bold leading-none text-status-info"
+                                :title="$t('employees.deployed_from_label', { company: grid[emp.id][day].deployed_from })">↗</span>
                             <!-- Worker left a note: a mic for a voice note, a plain
                                  note glyph for a text-only note. -->
                             <AppIcon v-if="grid[emp.id]?.[day]?.has_voice_note"

@@ -78,9 +78,10 @@ it('renders the attendance grid with a bounded query count', function (): void {
     $month = now()->format('Y-m');
     $count = countQueries(fn () => $this->actingAs($this->admin)->get("/attendance?month={$month}")->assertOk());
 
-    // The grid fetches employees + records + deployed-in as a fixed set of
-    // queries and assembles the cells in memory — flat regardless of headcount.
-    expect($count)->toBeLessThan(20);
+    // The grid fetches employees + records + deployed-in + the deployed-OUT
+    // host rows as a fixed set of queries and assembles the cells in memory —
+    // flat regardless of headcount (each is one page-level query, never per-row).
+    expect($count)->toBeLessThan(21);
 });
 
 it('builds the dashboard with a bounded query count', function (): void {
