@@ -122,7 +122,7 @@ class DeploymentChargeService
         $periodEnd = $deployment->deployment_end?->toDateString() ?? now()->toDateString();
         $status = $finalize ? 'locked' : 'pending';
 
-        return DB::transaction(function () use ($deployment, $units, $rate, $amount, $periodEnd, $status): DeploymentCharge {
+        return DB::transaction(function () use ($deployment, $units, $rate, $amount, $periodEnd, $status, $finalize): DeploymentCharge {
             $charge = DeploymentCharge::query()->updateOrCreate(
                 ['employee_deployment_id' => $deployment->id],
                 [
@@ -138,6 +138,17 @@ class DeploymentChargeService
                     'status' => $status,
                 ],
             );
+
+            // Settlement (2026-09): on completion the charge LOCKS and becomes
+            // payable — stamp invoiced_at once so the host's "payable" and the
+            // home's "receivable" both date from completion. Never re-stamped,
+            // and the settlement_status/paid_* columns are left untouched here
+            // (they belong to the separate host "mark paid" action, which must
+            // never run through this P&L-bearing engine).
+            if ($finalize && $charge->invoiced_at === null) {
+                $charge->invoiced_at = now();
+                $charge->save();
+            }
 
             $this->postHostExpense($charge, $deployment, $amount, $periodEnd);
 

@@ -9,6 +9,7 @@ use App\Http\Requests\Deployments\StoreDeploymentRequest;
 use App\Http\Requests\Deployments\UpdateDeploymentRequest;
 use App\Models\Attendance;
 use App\Models\Company;
+use App\Models\DeploymentCharge;
 use App\Models\Employee;
 use App\Models\EmployeeDeployment;
 use App\Models\Project;
@@ -42,20 +43,44 @@ class DeploymentController extends Controller
         $companyId = app(CurrentCompany::class)->id();
         $isSuperAdmin = $request->user()?->isSuperAdmin() ?? false;
 
-        $deployments = EmployeeDeployment::query()
+        $paginator = EmployeeDeployment::query()
             ->visibleTo($companyId)
             ->with(['employee:id,full_name', 'homeCompany:id,name', 'hostCompany:id,name', 'project:id,name'])
             ->when($request->filled('status'), fn ($q) => $q->where('status', $request->string('status')))
             ->orderByDesc('deployment_start')
             ->paginate(25)
-            ->withQueryString()
-            ->through(function (EmployeeDeployment $d) use ($charges, $companyId, $isSuperAdmin): array {
+            ->withQueryString();
+
+        // Settlement rows for the whole page in ONE query (no N+1) — keyed by
+        // deployment id. The charge is the cross-company record; its settlement
+        // columns drive the payable/receivable + paid history on both sides.
+        $chargeMap = DeploymentCharge::query()
+            ->whereIn('employee_deployment_id', $paginator->getCollection()->pluck('id')->all())
+            ->get()
+            ->keyBy('employee_deployment_id');
+
+        $deployments = $paginator
+            ->through(function (EmployeeDeployment $d) use ($charges, $companyId, $isSuperAdmin, $chargeMap): array {
                 $summary = $charges->summary($d);
+                $charge = $chargeMap->get($d->id);
+
+                // A charge becomes payable/settleable only once the deployment
+                // COMPLETES (the charge locks and invoiced_at is stamped); while
+                // active it is still accruing.
+                $isPayable = $charge !== null && $charge->invoiced_at !== null;
+                $settlement = $charge === null
+                    ? ['status' => 'unpaid', 'is_payable' => false, 'invoiced_at' => null, 'paid_at' => null]
+                    : [
+                        'status' => $charge->settlement_status,
+                        'is_payable' => $isPayable,
+                        'invoiced_at' => $charge->invoiced_at?->toDateString(),
+                        'paid_at' => $charge->paid_at?->toDateString(),
+                    ];
 
                 // A PURE-HOST viewer (acting company is the host, not the home,
-                // and not a Super Admin) sees MINIMAL, project-level presence
-                // only: no worker identity, no money. The home side (and a
-                // Super Admin) sees the full cross-charge detail.
+                // and not a Super Admin) sees MINIMAL, project-level presence —
+                // no worker identity. The home side (and a Super Admin) sees the
+                // full cross-charge detail.
                 $hostOnly = ! $isSuperAdmin
                     && $companyId === $d->host_company_id
                     && $companyId !== $d->home_company_id;
@@ -71,10 +96,18 @@ class DeploymentController extends Controller
                     'days_present' => $summary['days'],
                     'billing_method' => $d->billing_method->value,
                     'status' => $d->status->value,
+                    'settlement' => $settlement,
                 ];
 
                 if ($hostOnly) {
-                    // NEVER the worker name, the amount, the rate, or edit data.
+                    // Still no worker name. The host DOES see the amount they owe
+                    // ONCE the deployment is completed (their own liability — the
+                    // same figure already in their expense ledger) so they can
+                    // settle it; while accruing, no amount is shown.
+                    if ($isPayable) {
+                        $base['settlement']['amount'] = (float) ($charge->amount ?? $summary['amount']);
+                    }
+
                     return $base;
                 }
 
@@ -107,6 +140,9 @@ class DeploymentController extends Controller
                 'create' => Gate::allows('deployments.create'),
                 'edit' => Gate::allows('deployments.edit'),
                 'approve' => Gate::allows('deployments.approve'),
+                // The UI additionally gates the Mark-as-paid control on
+                // viewer === 'host' && settlement.is_payable && unpaid.
+                'settle' => Gate::allows('deployments.edit'),
             ],
         ]);
     }
@@ -276,6 +312,44 @@ class DeploymentController extends Controller
         $this->notifyDeploymentEvent($notify, $deployment, 'cancelled');
 
         return back()->with('success', __('ui.deployments.cancelled'));
+    }
+
+    /**
+     * Invoice-based settlement (2026-09). The HOST company (the debtor — it owes
+     * the HOME company for the deployed labour) marks the cross-charge paid once
+     * it has reimbursed the home company; it can also un-mark it (correction).
+     *
+     * ⚠️ P&L SAFETY (Item A): this writes ONLY the charge's settlement columns.
+     * It NEVER sets Expense.approved and never runs through the cross-charge
+     * engine, so the internal_deployment expense stays unapproved and the
+     * project P&L (labour counted once via attendance) is completely untouched.
+     * This is deliberately NOT the expense-approval flow.
+     */
+    public function settlement(Request $request, EmployeeDeployment $deployment): RedirectResponse
+    {
+        Gate::authorize('deployments.edit');
+        $this->assertVisible($deployment);
+
+        // Only the HOST (the payer) may settle — the home side is read-only.
+        $companyId = app(CurrentCompany::class)->id();
+        abort_unless($companyId !== null && $companyId === $deployment->host_company_id, 403);
+
+        $validated = $request->validate(['paid' => ['required', 'boolean']]);
+
+        $charge = DeploymentCharge::query()->where('employee_deployment_id', $deployment->id)->first();
+        // Only a COMPLETED charge is payable: invoiced_at is stamped when the
+        // deployment completes (the charge locks). An accruing one is not yet
+        // settleable.
+        abort_if($charge === null || $charge->invoiced_at === null, 422, __('ui.deployments.not_payable'));
+
+        // Server-set directly (not mass-assignable) — the settlement columns
+        // only. Expense.approved is intentionally never referenced here.
+        $charge->settlement_status = $validated['paid'] ? 'paid' : 'unpaid';
+        $charge->paid_at = $validated['paid'] ? now() : null;
+        $charge->paid_by = $validated['paid'] ? $request->user()?->id : null;
+        $charge->save();
+
+        return back()->with('success', __('ui.deployments.'.($validated['paid'] ? 'marked_paid' : 'marked_unpaid')));
     }
 
     /**

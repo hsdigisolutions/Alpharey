@@ -133,6 +133,9 @@ function submitEdit() {
 
 function complete(d) { router.post(`/deployments/${d.id}/complete`, {}, { preserveScroll: true }); }
 function cancel(d) { router.post(`/deployments/${d.id}/cancel`, {}, { preserveScroll: true }); }
+// Host-side settlement: mark the cross-charge paid/unpaid. A pure status write
+// — it never touches the internal_deployment expense or project P&L.
+function markPaid(d, paid) { router.post(`/deployments/${d.id}/settlement`, { paid }, { preserveScroll: true }); }
 
 function eur(n) {
     return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(Number(n));
@@ -217,22 +220,53 @@ function eur(n) {
                     </dl>
 
                     <div class="mt-auto pt-4">
-                        <!-- HOME: the prominent cross-charge the host owes -->
-                        <div v-if="d.viewer === 'home'"
-                            class="flex items-center justify-between rounded-lg border border-accent/30 bg-accent-soft px-4 py-3">
-                            <div class="min-w-0">
-                                <p class="truncate text-[11px] font-semibold uppercase tracking-wide text-ink-soft">{{ $t('deployments.owed_by', { company: d.host_company }) }}</p>
-                                <p class="mt-0.5 flex items-center gap-1.5 text-[11px] text-muted">
-                                    <span v-if="d.status === 'active'" class="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-accent" />
-                                    {{ d.status === 'active' ? $t('deployments.owed_live') : $t('deployments.owed_final') }}
-                                </p>
+                        <!-- HOME: the prominent cross-charge the host owes (receivable) -->
+                        <template v-if="d.viewer === 'home'">
+                            <div class="flex items-center justify-between rounded-lg border border-accent/30 bg-accent-soft px-4 py-3">
+                                <div class="min-w-0">
+                                    <p class="truncate text-[11px] font-semibold uppercase tracking-wide text-ink-soft">{{ $t('deployments.owed_by', { company: d.host_company }) }}</p>
+                                    <p class="mt-0.5 flex items-center gap-1.5 text-[11px] text-muted">
+                                        <span v-if="d.status === 'active'" class="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-accent" />
+                                        {{ d.status === 'active' ? $t('deployments.owed_live') : $t('deployments.owed_final') }}
+                                    </p>
+                                </div>
+                                <p class="shrink-0 text-[26px] font-semibold tabular-nums leading-none text-accent">{{ eur(d.accrued_cost ?? 0) }}</p>
                             </div>
-                            <p class="shrink-0 text-[26px] font-semibold tabular-nums leading-none text-accent">{{ eur(d.accrued_cost ?? 0) }}</p>
-                        </div>
-                        <!-- HOST: minimal presence only — no worker, no money -->
-                        <p v-else class="rounded-lg bg-surface-sunken px-4 py-3 text-sm text-ink-soft">
-                            {{ $t('deployments.host_presence', { days: d.days_present }) }}
-                        </p>
+                            <!-- Receivable settlement status (read-only on the home side) -->
+                            <div v-if="d.settlement && d.settlement.is_payable" class="mt-2 flex items-center justify-between px-1 text-[11px]">
+                                <span class="text-muted">{{ $t('deployments.receivable') }}<template v-if="d.settlement.invoiced_at"> · {{ d.settlement.invoiced_at }}</template></span>
+                                <VBadge :status="d.settlement.status === 'paid' ? 'ok' : 'warn'">
+                                    {{ d.settlement.status === 'paid' ? $t('deployments.settled_on', { date: d.settlement.paid_at }) : $t('deployments.pending_payment') }}
+                                </VBadge>
+                            </div>
+                        </template>
+                        <!-- HOST: a completed deployment is a payable they can settle;
+                             an active one is still accruing (no amount). -->
+                        <template v-else>
+                            <div v-if="d.settlement && d.settlement.is_payable" class="rounded-lg border border-line bg-surface-sunken px-4 py-3">
+                                <div class="flex items-center justify-between">
+                                    <div class="min-w-0">
+                                        <p class="truncate text-[11px] font-semibold uppercase tracking-wide text-ink-soft">{{ $t('deployments.you_owe', { company: d.home_company }) }}</p>
+                                        <p class="mt-0.5 text-[11px] text-muted">{{ d.start }} → {{ d.end ?? $t('expenses.deployment_ongoing') }} · {{ d.days_present }} {{ $t('deployments.days_present').toLowerCase() }}</p>
+                                    </div>
+                                    <p class="shrink-0 text-2xl font-semibold tabular-nums leading-none text-ink">{{ eur(d.settlement.amount ?? 0) }}</p>
+                                </div>
+                                <div class="mt-3 flex items-center justify-between gap-2">
+                                    <VBadge :status="d.settlement.status === 'paid' ? 'ok' : 'warn'">
+                                        {{ d.settlement.status === 'paid' ? $t('deployments.settled_on', { date: d.settlement.paid_at }) : $t('deployments.pending_payment') }}
+                                    </VBadge>
+                                    <VButton v-if="can.settle && d.settlement.status !== 'paid'" size="sm" icon="check" @click="markPaid(d, true)">
+                                        <Bilingual k="deployments.mark_paid" inline />
+                                    </VButton>
+                                    <VButton v-else-if="can.settle && d.settlement.status === 'paid'" variant="ghost" size="sm" @click="markPaid(d, false)">
+                                        <Bilingual k="deployments.mark_unpaid" inline />
+                                    </VButton>
+                                </div>
+                            </div>
+                            <p v-else class="rounded-lg bg-surface-sunken px-4 py-3 text-sm text-ink-soft">
+                                {{ $t('deployments.host_presence', { days: d.days_present }) }}
+                            </p>
+                        </template>
                     </div>
 
                     <!-- Lifecycle actions (manager) -->
@@ -256,6 +290,7 @@ function eur(n) {
                             <th class="px-3 py-2.5 text-end font-medium">{{ $t('deployments.days_present') }}</th>
                             <th class="px-3 py-2.5 text-end font-medium">{{ $t('deployments.accrued_cost') }}</th>
                             <th class="px-3 py-2.5 text-start font-medium">{{ $t('deployments.status') }}</th>
+                            <th class="px-3 py-2.5 text-start font-medium">{{ $t('deployments.settlement') }}</th>
                             <th v-if="can.edit" class="px-3 py-2.5 text-end font-medium"><span class="sr-only">{{ $t('deployments.edit_action') }}</span></th>
                         </tr>
                     </thead>
@@ -276,17 +311,30 @@ function eur(n) {
                             <td class="px-3 py-2.5 text-ink">{{ d.project ?? '—' }}</td>
                             <td class="px-3 py-2.5 tabular-nums text-ink-soft">{{ d.start }} → {{ d.end ?? $t('expenses.deployment_ongoing') }}</td>
                             <td class="px-3 py-2.5 text-end tabular-nums text-ink">{{ d.days_present }}</td>
-                            <!-- HOME: exact cost owed (live/locked); HOST: hidden. -->
+                            <!-- HOME: exact cost owed (live/locked). HOST: the payable
+                                 amount once completed; hidden while accruing. -->
                             <td class="px-3 py-2.5 text-end tabular-nums">
-                                <template v-if="d.viewer === 'home'">
-                                    <span class="font-semibold text-accent">{{ eur(d.accrued_cost ?? 0) }}</span>
-                                </template>
+                                <span v-if="d.viewer === 'home'" class="font-semibold text-accent">{{ eur(d.accrued_cost ?? 0) }}</span>
+                                <span v-else-if="d.settlement && d.settlement.is_payable" class="font-semibold text-ink">{{ eur(d.settlement.amount ?? 0) }}</span>
                                 <span v-else class="text-muted">—</span>
                             </td>
                             <td class="px-3 py-2.5">
                                 <VBadge :status="statusColor[d.status] ?? 'neutral'">
                                     <Bilingual :k="`deployments.status_${d.status}`" inline />
                                 </VBadge>
+                            </td>
+                            <td class="px-3 py-2.5">
+                                <div v-if="d.settlement && d.settlement.is_payable" class="flex items-center gap-2">
+                                    <VBadge :status="d.settlement.status === 'paid' ? 'ok' : 'warn'"
+                                        :title="d.settlement.status === 'paid' ? (d.settlement.paid_at ?? '') : ''">
+                                        {{ d.settlement.status === 'paid' ? $t('deployments.paid_label') : $t('deployments.pending_payment') }}
+                                    </VBadge>
+                                    <button v-if="d.viewer === 'host' && can.settle && d.settlement.status !== 'paid'" type="button"
+                                        class="rounded-sm px-2 py-0.5 text-xs text-accent hover:underline" @click="markPaid(d, true)">
+                                        {{ $t('deployments.mark_paid') }}
+                                    </button>
+                                </div>
+                                <span v-else class="text-muted">—</span>
                             </td>
                             <td v-if="can.edit" class="px-3 py-2.5 text-end">
                                 <span v-if="d.status === 'active'" class="flex items-center justify-end gap-1">
