@@ -335,7 +335,10 @@ it('previews an image inline, a PDF inline, and 404s a non-previewable type', fu
     $doc->update(['mime' => 'application/pdf']);
     $pdfRes = $this->get("/documents/{$doc->id}/preview")->assertOk();
     expect($pdfRes->headers->get('content-type'))->toContain('application/pdf')
-        ->and($pdfRes->headers->get('content-disposition'))->toContain('inline');
+        ->and($pdfRes->headers->get('content-disposition'))->toContain('inline')
+        // Framable by our own document panel's <iframe> (only this route is).
+        ->and($pdfRes->headers->get('x-frame-options'))->toBe('SAMEORIGIN')
+        ->and($pdfRes->headers->get('content-security-policy'))->toContain("frame-ancestors 'self'");
 
     // Image → inline.
     $doc->update(['mime' => 'image/jpeg']);
@@ -366,4 +369,20 @@ it('refuses a preview across companies (tenancy)', function (): void {
     $other = Company::factory()->create();
     $admin = User::factory()->companyAdmin()->forCompany($other)->create();
     $this->actingAs($admin)->get("/documents/{$doc->id}/preview")->assertNotFound();
+});
+
+it('keeps every OTHER response frame-locked (only the preview route is framable)', function (): void {
+    $this->actingAs($this->sa);
+
+    // A normal page keeps DENY + frame-ancestors 'none'.
+    $res = $this->get('/companies');
+    expect($res->headers->get('x-frame-options'))->toBe('DENY')
+        ->and($res->headers->get('content-security-policy'))->toContain("frame-ancestors 'none'");
+
+    // And so does the DOWNLOAD route (it is never framed).
+    $company = Company::factory()->create();
+    uploadCompanyDoc($company, 'poliza_rc')->assertSessionHasNoErrors();
+    $doc = Document::query()->where('type_key', 'poliza_rc')->firstOrFail();
+    $dl = $this->get("/documents/{$doc->id}/download")->assertOk();
+    expect($dl->headers->get('x-frame-options'))->toBe('DENY');
 });

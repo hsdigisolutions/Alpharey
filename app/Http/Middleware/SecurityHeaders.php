@@ -18,7 +18,14 @@ class SecurityHeaders
         /** @var Response $response */
         $response = $next($request);
 
-        $response->headers->set('X-Frame-Options', 'DENY');
+        // The document inline-preview endpoint is embedded in an <iframe> on the
+        // same-origin document panel (PDF viewer). It is the ONE response the app
+        // frames, so it — and only it — allows SAME-ORIGIN framing; everything
+        // else stays DENY / frame-ancestors 'none'. It serves a private file the
+        // viewer may already download, so same-origin framing adds no exposure.
+        $framablePreview = $request->routeIs('documents.preview');
+
+        $response->headers->set('X-Frame-Options', $framablePreview ? 'SAMEORIGIN' : 'DENY');
         $response->headers->set('X-Content-Type-Options', 'nosniff');
         $response->headers->set('Referrer-Policy', 'strict-origin-when-cross-origin');
         // camera=(self) — check-in selfie. geolocation=(self) — GPS punch.
@@ -32,11 +39,16 @@ class SecurityHeaders
         }
 
         if (! app()->environment('local')) {
+            // frame-ancestors overrides X-Frame-Options in modern browsers, so it
+            // must also allow 'self' on the preview response for the iframe to
+            // render; every other response keeps 'none'.
+            $frameAncestors = $framablePreview ? "frame-ancestors 'self'" : "frame-ancestors 'none'";
+
             $response->headers->set(
                 'Content-Security-Policy',
                 "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
                 ."img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; "
-                ."frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
+                ."{$frameAncestors}; base-uri 'self'; form-action 'self'",
             );
         }
 
