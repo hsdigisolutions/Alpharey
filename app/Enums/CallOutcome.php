@@ -15,7 +15,9 @@ enum CallOutcome: string
     {
         return match ($this) {
             self::Connected => 'Contactado',
-            self::NoAnswer => 'No contactó',
+            // "Sin respuesta" (no answer), NOT "no contactado" — the latter
+            // collides with the "sin contactar esta semana" triage tab.
+            self::NoAnswer => 'Sin respuesta',
         };
     }
 
@@ -23,7 +25,9 @@ enum CallOutcome: string
     {
         return match ($this) {
             self::Connected => 'Connected',
-            self::NoAnswer => 'Not connected',
+            // "No answer", NOT "not connected" — the latter reads the same as the
+            // "not contacted this week" triage and confused which is which.
+            self::NoAnswer => 'No answer',
         };
     }
 

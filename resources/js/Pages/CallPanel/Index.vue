@@ -512,7 +512,8 @@ const dotStatus = { red: 'danger', amber: 'warn', green: 'ok' };
                         <span class="min-w-0 flex-1">
                             <span class="block truncate text-sm font-medium">{{ e.name }}</span>
                             <span class="block truncate text-xs text-muted">
-                                {{ e.last_contacted ?? $t('calls.never_contacted') }}
+                                <template v-if="e.last_contacted">{{ $t('calls.last_contacted') }}: {{ e.last_contacted }}</template>
+                                <template v-else>{{ $t('calls.never_contacted') }}</template>
                             </span>
                         </span>
                         <VStatusDot :status="dotStatus[e.indicator]" :pulse="e.indicator === 'red'" />
