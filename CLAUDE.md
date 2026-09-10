@@ -4,6 +4,50 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Status: Phase 9 in progress — hardening (2026-08-01)
 
+### Call Panel — outcome tracking + 4-category month overview (2026-09, DONE, deployed to prod)
+
+Screen 13 reworked so a month's call activity reads as four SEPARATED groups
+instead of one mixed pile, and so "who was reached" is actually knowable.
+
+- **Call OUTCOME (the enabling gap).** `employee_call_logs` had NO outcome/status
+  field, so "connected vs not connected" was impossible. Migration
+  `2026_09_10_000001` adds `call_outcome` (`App\Enums\CallOutcome`:
+  `connected` | `no_answer`), **nullable**, and **backfills every existing row to
+  `connected`** (client-confirmed: legacy rows are real logged conversations with
+  remarks). The log form has a Connected/Not-connected selector (default
+  Connected); `store()` defaults to `connected` when omitted. `call_outcome` is
+  fillable + enum-cast.
+- **Four-category month OVERVIEW** (`CallPanelController::overview`, company-scoped
+  over the selected range): **Calls made** (total calls) · **Connected** (distinct
+  people reached — a worker with ≥1 `connected` call) · **Not connected** (distinct
+  people called but NEVER reached — PER-PERSON, so a worker with a miss THEN a
+  connect counts as Connected) · **Follow-ups** (distinct people with a
+  `follow_up_date` in the range — an orthogonal "needs a callback" list). Each
+  ships a count + the underlying people/calls; the UI is four cards that expand to
+  their list (a person row opens that worker).
+- **ONE consolidated filter bar** replaced TWO confusing, visually-identical date
+  ranges (the reported "custom date not working" was NOT a query bug — it was a
+  stats-range AND a separate per-worker-history range that looked the same, so
+  filtering one seemed to do nothing). Now: a **month navigator** (default,
+  `?month=YYYY-MM`), a **custom range** (`?from&to`), or **all-time**
+  (`?range=all`), resolved by `CallPanelController::resolveOverviewRange` — and
+  `filters.range`/`month`/`from`/`to` are echoed so the UI reflects the effective
+  selection. The per-worker history range was REMOVED; the selected worker shows
+  their FULL history (the one date filter is the overview one). The left "who to
+  call" triage stays ABSOLUTE (it is "who to call now", not a historical slice).
+- Tests: `CallPanelTest` (four-category default-month + custom-range separation,
+  per-person connected/not-connected split, month selection, outcome save
+  default+explicit, full-history-not-trimmed, tenancy, malformed-date → month
+  fallback). Verified on prod (August 2026: 34 calls / 34 connected / 0 / 0).
+
+**Security note (2026-09-09):** `maatwebsite/excel` bumped 3.1.69 → 3.1.70
+(in-constraint patch) to clear CVE-2026-84374 (export written outside the disk on
+a caller-controlled path). We only ever pass FIXED export filenames so real
+exposure was low, but it failed `composer audit`. Fixed in the repo AND on the
+production server (the server runs its own `vendor/` — invoke composer there with
+`/usr/bin/php82 /usr/local/bin/composer`, since the default `composer`/`php` on
+the box is PHP 8.0 and cannot resolve the app's `php ^8.2`).
+
 ### Deployment redesign — money model + host/home visibility (2026-09, DONE, deployed to prod)
 
 **The authoritative design for a temporary cross-company deployment** (an
