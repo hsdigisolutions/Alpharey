@@ -34,6 +34,11 @@ class UpdateDocumentMetadataRequest extends FormRequest
         $document = $this->document();
 
         return [
+            // The alert dates ARE now correctable in place (client 2026-09) — a
+            // mistyped issue/expiry date no longer forces a re-upload. Same
+            // nullable-date rule the upload uses; the columns are set directly.
+            'issue_date' => ['nullable', 'date'],
+            'expiry_date' => ['nullable', 'date'],
             ...$this->metadataRules($this->entityType($document), $document->type_key),
             ...$this->contactRules(),
         ];

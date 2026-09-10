@@ -690,6 +690,7 @@ return [
         'uploaded' => 'Uploaded',
         'by' => 'By',
         'edit_fields' => 'Edit fields',
+        'preview' => 'Preview',
         'new_version' => 'New version',
         'replace_file' => 'Replace file',
         'replace_hint' => 'Fix the file without creating a new version.',

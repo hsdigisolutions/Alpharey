@@ -219,7 +219,7 @@ it('replaces the file in place keeping the same version and deleting the old fil
     Storage::disk('local')->assertExists($newPath);
 });
 
-it('edits metadata without changing the version, file, or dates', function (): void {
+it('edits metadata without changing the version or file, and leaves dates untouched when omitted', function (): void {
     $company = Company::factory()->create();
 
     $this->actingAs($this->sa);
@@ -294,4 +294,76 @@ it('stops a company admin from editing another company document (404)', function
     $this->actingAs($adminB)
         ->post("/documents/{$docA->id}/replace", ['file' => UploadedFile::fake()->create('x.pdf', 10, 'application/pdf')])
         ->assertNotFound();
+});
+
+it('corrects the issue and expiry dates in place via the metadata endpoint (client 2026-09)', function (): void {
+    $company = Company::factory()->create();
+
+    $this->actingAs($this->sa);
+    uploadCompanyDoc($company, 'poliza_rc', [
+        'issue_date' => '2026-01-01',
+        'expiry_date' => '2026-12-31',
+    ])->assertSessionHasNoErrors();
+
+    $doc = Document::query()->where('type_key', 'poliza_rc')->firstOrFail();
+
+    // A mistyped date is corrected without a re-upload — same version, same file.
+    $filePath = $doc->getAttribute('file_path');
+    $this->patch("/documents/{$doc->id}/metadata", [
+        'issue_date' => '2026-02-15',
+        'expiry_date' => '2027-02-14',
+        'metadata' => [],
+    ])->assertRedirect()->assertSessionHasNoErrors();
+
+    $doc->refresh();
+    expect($doc->version)->toBe(1)
+        ->and($doc->getAttribute('file_path'))->toBe($filePath)
+        ->and($doc->issue_date?->toDateString())->toBe('2026-02-15')
+        ->and($doc->expiry_date?->toDateString())->toBe('2027-02-14');
+});
+
+it('previews an image inline, a PDF inline, and 404s a non-previewable type', function (): void {
+    $company = Company::factory()->create();
+    $this->actingAs($this->sa);
+
+    // One real uploaded file; the mime column drives the preview decision, so we
+    // set it deterministically per case (fake-upload mime detection is flaky).
+    uploadCompanyDoc($company, 'poliza_rc')->assertSessionHasNoErrors();
+    $doc = Document::query()->where('type_key', 'poliza_rc')->firstOrFail();
+
+    // PDF → inline.
+    $doc->update(['mime' => 'application/pdf']);
+    $pdfRes = $this->get("/documents/{$doc->id}/preview")->assertOk();
+    expect($pdfRes->headers->get('content-type'))->toContain('application/pdf')
+        ->and($pdfRes->headers->get('content-disposition'))->toContain('inline');
+
+    // Image → inline.
+    $doc->update(['mime' => 'image/jpeg']);
+    $imgRes = $this->get("/documents/{$doc->id}/preview")->assertOk();
+    expect($imgRes->headers->get('content-type'))->toContain('image/')
+        ->and($imgRes->headers->get('content-disposition'))->toContain('inline');
+
+    // A non-previewable type (a Word doc) is download-only → 404 on preview.
+    $doc->update(['mime' => 'application/msword']);
+    $this->get("/documents/{$doc->id}/preview")->assertNotFound();
+
+    // The inline view is audited like a download.
+    $doc->update(['mime' => 'application/pdf']);
+    $this->get("/documents/{$doc->id}/preview")->assertOk();
+    $this->assertDatabaseHas('audit_logs', [
+        'action' => 'viewed', 'model_type' => $doc->getMorphClass(), 'model_id' => (string) $doc->id,
+    ]);
+});
+
+it('refuses a preview across companies (tenancy)', function (): void {
+    $mine = Company::factory()->create();
+    $this->actingAs($this->sa);
+    uploadCompanyDoc($mine, 'poliza_rc')->assertSessionHasNoErrors();
+    $doc = Document::query()->where('type_key', 'poliza_rc')->firstOrFail();
+    $doc->update(['mime' => 'application/pdf']);
+
+    // A company admin of ANOTHER company cannot preview it.
+    $other = Company::factory()->create();
+    $admin = User::factory()->companyAdmin()->forCompany($other)->create();
+    $this->actingAs($admin)->get("/documents/{$doc->id}/preview")->assertNotFound();
 });

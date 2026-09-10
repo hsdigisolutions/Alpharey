@@ -692,6 +692,7 @@ return [
         'uploaded' => 'Subido',
         'by' => 'Por',
         'edit_fields' => 'Editar datos',
+        'preview' => 'Vista previa',
         'new_version' => 'Nueva versión',
         'replace_file' => 'Reemplazar archivo',
         'replace_hint' => 'Corrige el archivo sin crear una nueva versión.',

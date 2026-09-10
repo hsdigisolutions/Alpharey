@@ -22,6 +22,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
@@ -152,8 +153,8 @@ class DocumentController extends Controller
     }
 
     /**
-     * Edit the descriptive fields (metadata JSON + contact block) without
-     * touching the file, version, or the alert dates.
+     * Edit the descriptive fields (metadata JSON + contact block) + correct the
+     * alert dates in place, without touching the file or the version.
      */
     public function updateMetadata(UpdateDocumentMetadataRequest $request, Document $document, AuditLogger $audit): RedirectResponse
     {
@@ -161,10 +162,23 @@ class DocumentController extends Controller
 
         $validated = $request->validated();
 
-        $document->update([
+        $data = [
             'metadata' => $this->cleanMetadata($validated['metadata'] ?? null),
             'contacts' => $this->cleanContacts($validated['contacts'] ?? null),
-        ]);
+        ];
+
+        // In-place date correction (client 2026-09) — the 90/60/30 alert engine
+        // reads these columns, so a corrected date re-grades at once. Only touch
+        // them when the form actually submitted them (the panel always does; a
+        // metadata-only caller leaves the dates untouched, never wiping them).
+        if ($request->exists('issue_date')) {
+            $data['issue_date'] = $validated['issue_date'] ?? null;
+        }
+        if ($request->exists('expiry_date')) {
+            $data['expiry_date'] = $validated['expiry_date'] ?? null;
+        }
+
+        $document->update($data);
 
         $audit->log('updated', $document, null, null, $document->type_key, 'documents');
 
@@ -274,6 +288,43 @@ class DocumentController extends Controller
         $audit->log('downloaded', $document, null, null, $document->type_key, 'documents');
 
         return Storage::disk('local')->download($path, $document->original_name ?? 'documento');
+    }
+
+    /**
+     * Serve the file INLINE (not as an attachment) for the in-panel preview —
+     * an image renders in a lightbox, a PDF in an embedded viewer. Same gate +
+     * access check + audit as a download (seeing the content is a download), but
+     * only for the previewable types (image / PDF); anything else 404s so the UI
+     * falls back to the download button.
+     */
+    public function preview(Request $request, Document $document, AuditLogger $audit): BinaryFileResponse
+    {
+        Gate::authorize('documents.download');
+        $this->assertCompanyDocumentAccess($document);
+
+        $path = $document->getAttribute('file_path');
+
+        abort_if($path === null || ! Storage::disk('local')->exists($path), 404);
+        abort_unless($this->isPreviewable($document->mime), 404);
+
+        $audit->log('viewed', $document, null, null, $document->type_key, 'documents');
+
+        $response = response()->file(Storage::disk('local')->path($path), [
+            'Content-Type' => $document->mime ?? 'application/octet-stream',
+        ]);
+        // Explicit INLINE disposition — the whole point of preview vs download.
+        $response->setContentDisposition('inline', $document->original_name ?? 'documento');
+
+        return $response;
+    }
+
+    /**
+     * Only images and PDFs render inline; every other type is download-only.
+     */
+    private function isPreviewable(?string $mime): bool
+    {
+        return $mime !== null
+            && (str_starts_with($mime, 'image/') || $mime === 'application/pdf');
     }
 
     public function destroy(Request $request, Document $document): RedirectResponse

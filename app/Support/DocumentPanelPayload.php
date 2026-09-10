@@ -110,6 +110,8 @@ class DocumentPanelPayload
             'name' => $document->name,
             'original_name' => $document->original_name,
             'has_file' => $document->getAttribute('file_path') !== null,
+            // Drives the inline-preview choice (image lightbox vs PDF viewer).
+            'mime' => $document->mime,
             'has_flag' => $document->has_flag,
             'issue_date' => $document->issue_date?->toDateString(),
             'expiry_date' => $document->expiry_date?->toDateString(),

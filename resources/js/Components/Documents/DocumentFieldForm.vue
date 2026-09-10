@@ -4,10 +4,11 @@
  * (field_defs shipped by the backend). Used by the edit-metadata form and the
  * new-version / first-upload forms.
  *
- * Column-bound dates (start/end/valid_until → issue_date/expiry_date) and the
- * read-only CCC behave differently by context: on a NEW VERSION the dates are
- * editable; when EDITING an existing version's fields they are read-only, since
- * the metadata endpoint never rewrites a version's dates (that is a renewal).
+ * Column-bound dates (start/end/valid_until → issue_date/expiry_date) follow the
+ * `datesEditable` flag. The CCC is always read-only (mirrored from the company).
+ * Dates are editable both on a NEW VERSION and when EDITING fields — the metadata
+ * endpoint now corrects issue/expiry in place (client 2026-09), so a mistyped
+ * alert date no longer forces a re-upload.
  */
 import AppIcon from '@/Components/AppIcon.vue';
 import FormField from '@/Components/ui/FormField.vue';

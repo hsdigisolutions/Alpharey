@@ -5,6 +5,7 @@ use App\Models\Document;
 use App\Models\Employee;
 use App\Models\Project;
 use App\Models\User;
+use Illuminate\Http\UploadedFile;
 use Inertia\Testing\AssertableInertia;
 
 beforeEach(function (): void {
@@ -99,4 +100,34 @@ it('saves contacts on a project document and ships the smart payload', function 
         ->where('documents.0.contacts.0.role', 'Licencias')
         ->has('documents.0.field_defs')
         ->has('documentFieldDefs.permit'));
+});
+
+it('corrects the dates in place on an EMPLOYEE document + previews it inline (client 2026-09)', function (): void {
+    $employee = Employee::factory()->for($this->company)->create();
+
+    $this->actingAs($this->sa)->post('/documents', [
+        'entity_type' => 'employee', 'entity_id' => $employee->id,
+        'category' => 'personal', 'type_key' => 'dni',
+        'file' => UploadedFile::fake()->create('dni.pdf', 50, 'application/pdf'),
+        'issue_date' => '2026-01-01', 'expiry_date' => '2030-01-01',
+    ])->assertRedirect()->assertSessionHasNoErrors();
+
+    $doc = Document::query()->where('type_key', 'dni')->firstOrFail();
+    $filePath = $doc->getAttribute('file_path');
+
+    // Date correction without a re-upload — same version + file.
+    $this->patch("/documents/{$doc->id}/metadata", [
+        'issue_date' => '2026-03-10', 'expiry_date' => '2031-03-09', 'metadata' => [],
+    ])->assertRedirect()->assertSessionHasNoErrors();
+
+    $doc->refresh();
+    expect($doc->version)->toBe(1)
+        ->and($doc->getAttribute('file_path'))->toBe($filePath)
+        ->and($doc->issue_date?->toDateString())->toBe('2026-03-10')
+        ->and($doc->expiry_date?->toDateString())->toBe('2031-03-09');
+
+    // Inline preview works for the employee doc too.
+    $doc->update(['mime' => 'application/pdf']);
+    $res = $this->get("/documents/{$doc->id}/preview")->assertOk();
+    expect($res->headers->get('content-disposition'))->toContain('inline');
 });

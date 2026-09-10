@@ -52,6 +52,7 @@ watch(() => props.doc?.id, () => {
     showReplace.value = false;
     showHistory.value = false;
     replaceFile.value = null;
+    previewOpen.value = false;
 });
 
 const money = new Intl.NumberFormat('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -133,6 +134,13 @@ function download() {
 function downloadVersion(id) {
     window.location.href = `/documents/${id}/download`;
 }
+
+// Inline preview: images render in a lightbox, PDFs in an embedded viewer.
+const previewOpen = ref(false);
+const previewIsImage = computed(() => (props.doc?.mime ?? '').startsWith('image/'));
+const previewIsPdf = computed(() => props.doc?.mime === 'application/pdf');
+const canPreview = computed(() => props.doc?.has_file && (previewIsImage.value || previewIsPdf.value));
+const previewUrl = computed(() => (props.doc ? `/documents/${props.doc.id}/preview` : ''));
 </script>
 
 <template>
@@ -215,6 +223,9 @@ function downloadVersion(id) {
 
                 <!-- Actions -->
                 <div class="mt-5 flex flex-wrap gap-2">
+                    <VButton v-if="can.download && canPreview" variant="secondary" size="sm" icon="eye" @click="previewOpen = true">
+                        <Bilingual k="documents.preview" inline />
+                    </VButton>
                     <VButton v-if="can.download && doc.has_file" variant="secondary" size="sm" icon="download" @click="download">
                         <Bilingual k="documents.download" inline />
                     </VButton>
@@ -264,7 +275,7 @@ function downloadVersion(id) {
             <!-- EDIT MODE -->
             <form v-else class="mt-4" @submit.prevent="submitEdit">
                 <DocumentFieldForm :fields="doc.field_defs" :form="editForm"
-                    :ccc="doc.ccc" :dates-editable="false" />
+                    :ccc="doc.ccc" :dates-editable="true" />
                 <div class="mt-5 flex justify-end gap-2">
                     <VButton variant="ghost" size="sm" @click="editing = false">
                         <Bilingual k="common.cancel" inline />
@@ -291,5 +302,29 @@ function downloadVersion(id) {
                 </VButton>
             </template>
         </VModal>
+
+        <!-- Inline preview: image lightbox / embedded PDF viewer (download stays available) -->
+        <div v-if="previewOpen && doc" class="fixed inset-0 z-[60] flex flex-col bg-black/85"
+            @click.self="previewOpen = false">
+            <div class="flex items-center justify-between gap-3 px-4 py-3">
+                <span class="truncate text-sm font-medium text-white/90">{{ doc.original_name ?? '—' }}</span>
+                <div class="flex items-center gap-1">
+                    <button type="button" class="rounded-md p-2 text-white/80 hover:bg-white/10 hover:text-white"
+                        :title="$t('documents.download')" @click="download">
+                        <AppIcon name="download" class="h-5 w-5" />
+                    </button>
+                    <button type="button" class="rounded-md p-2 text-white/80 hover:bg-white/10 hover:text-white"
+                        :title="$t('common.close')" @click="previewOpen = false">
+                        <AppIcon name="x" class="h-5 w-5" />
+                    </button>
+                </div>
+            </div>
+            <div class="flex flex-1 items-center justify-center overflow-auto p-4 pt-0">
+                <img v-if="previewIsImage" :src="previewUrl" :alt="doc.original_name ?? ''"
+                    class="max-h-full max-w-full rounded-lg object-contain" @click.stop />
+                <iframe v-else-if="previewIsPdf" :src="previewUrl" title="PDF"
+                    class="h-full w-full rounded-lg bg-white" @click.stop></iframe>
+            </div>
+        </div>
     </VSlideOver>
 </template>
