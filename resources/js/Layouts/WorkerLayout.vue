@@ -58,8 +58,10 @@ const dateLine = computed(() =>
 // (sessionStorage) — it returns next time they open the tab, and never at all
 // once the app is installed (standalone).
 const DISMISS_KEY = 'pwa_install_dismissed';
-const showInstall = ref(false);
-const iosMode = ref(null);
+const showInstall = ref(false);    // a LIVE one-tap prompt is available (Android)
+const iosMode = ref(null);         // 'safari' | 'other' | null
+const androidManual = ref(false);  // non-iOS browser, not installed, no live prompt
+const standalone = ref(false);
 const bannerDismissed = ref(sessionStorageGet(DISMISS_KEY) === '1');
 
 function sessionStorageGet(k) {
@@ -70,18 +72,31 @@ function dismissBanner() {
     try { window.sessionStorage.setItem(DISMISS_KEY, '1'); } catch { /* private mode: session-only in memory */ }
 }
 
+// The banner shows EVERY session for anyone NOT running the installed app; the
+// only thing that hides it for good is a real install (isStandalone()). It must
+// NOT depend on Chrome's `beforeinstallprompt` (canPromptInstall) alone — Chrome
+// fires that once and then throttles it for ~90 days, so a worker who ignored
+// the banner once was left on the browser with the button gone and no way back
+// to install. When there is no live prompt we fall back to manual instructions.
 const showInstallBanner = computed(() =>
-    ! bannerDismissed.value && (showInstall.value || iosMode.value !== null));
+    ! bannerDismissed.value && ! standalone.value
+    && (showInstall.value || iosMode.value !== null || androidManual.value));
 
 function refreshInstallState() {
-    if (isStandalone()) { // installed → never nag
+    standalone.value = isStandalone();
+    if (standalone.value) { // running the installed app → never nag
         showInstall.value = false;
         iosMode.value = null;
+        androidManual.value = false;
 
         return;
     }
     showInstall.value = canPromptInstall();
     iosMode.value = isIos() ? (isIosSafari() ? 'safari' : 'other') : null;
+    // A non-iOS browser with no live prompt (Chrome throttled beforeinstallprompt,
+    // or a browser that installs only from its own menu) STILL shows the banner —
+    // with manual "Add to Home screen" steps — so it never vanishes pre-install.
+    androidManual.value = ! isIos() && ! showInstall.value;
 }
 
 onMounted(() => {
@@ -208,6 +223,11 @@ function logout() {
                         <!-- iOS but NOT Safari (in-app webview / other browser): can't install here -->
                         <template v-else-if="iosMode === 'other'">
                             <p class="mt-0.5 text-xs text-ink-soft">{{ $t('worker.install_open_safari') }}</p>
+                        </template>
+
+                        <!-- Android/other browser, no live prompt (Chrome throttled it): manual steps -->
+                        <template v-else-if="androidManual">
+                            <p class="mt-0.5 text-xs text-ink-soft">{{ $t('worker.install_android_manual') }}</p>
                         </template>
                     </div>
 

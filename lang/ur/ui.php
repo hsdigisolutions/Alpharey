@@ -113,6 +113,7 @@ return [
         'install_ios_1' => 'اس ایپ کو انسٹال کرنے کے لیے: شیئر بٹن پر ٹیپ کریں',
         'install_ios_2' => 'پھر «Add to Home Screen»۔',
         'install_open_safari' => 'اسے اپنے فون پر انسٹال کرنے کے لیے Safari میں کھولیں۔',
+        'install_android_manual' => 'انسٹال کرنے کے لیے: براؤزر مینو (⋮) کھولیں اور «Add to Home screen» یا «Install app» پر ٹیپ کریں۔',
         'note_saved' => 'نوٹ محفوظ ہو گیا',
         'voice_note' => 'آواز کا نوٹ',
         'voice_note_hint' => 'اختیاری۔ ریکارڈ کرنے کے لیے دبائے رکھیں۔ یا نیچے متن لکھیں۔',

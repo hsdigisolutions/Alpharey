@@ -2072,6 +2072,7 @@ return [
         'install_ios_1' => 'Para instalar esta app: toca el botón compartir',
         'install_ios_2' => 'y luego «Añadir a pantalla de inicio».',
         'install_open_safari' => 'Ábrela en Safari para instalarla en tu teléfono.',
+        'install_android_manual' => 'Para instalar: abre el menú del navegador (⋮) y toca «Añadir a pantalla de inicio» o «Instalar app».',
         // Privacy notice — shown once (per version) before the first punch.
         // Information duty, NOT consent (LOPDGDD art. 90 / RD-ley 8/2019);
         // see docs/GDPR_WORKER_NOTICE.md. Retention/contact wording is

@@ -2067,6 +2067,7 @@ return [
         'install_ios_1' => 'To install this app: tap the share button',
         'install_ios_2' => 'then "Add to Home Screen".',
         'install_open_safari' => 'Open it in Safari to install it on your phone.',
+        'install_android_manual' => 'To install: open the browser menu (⋮) and tap “Add to Home screen” or “Install app”.',
         // Privacy notice — shown once (per version) before the first punch.
         // Information duty, NOT consent (LOPDGDD art. 90 / RD-ley 8/2019);
         // see docs/GDPR_WORKER_NOTICE.md. Retention/contact wording is
