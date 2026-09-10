@@ -5,8 +5,8 @@
  * Right column: log form (auto-fills today, voice recording, file attachment)
  * + full call history with download and inline rename.
  */
-import { onUnmounted, reactive, ref, watch } from 'vue';
-import { Head, router, useForm } from '@inertiajs/vue3';
+import { computed, onUnmounted, reactive, ref, watch } from 'vue';
+import { Head, router, useForm, usePage } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import AppIcon from '@/Components/AppIcon.vue';
 import FormField from '@/Components/ui/FormField.vue';
@@ -16,7 +16,7 @@ import VCard from '@/Components/ui/VCard.vue';
 import VDateInput from '@/Components/ui/VDateInput.vue';
 import VEmptyState from '@/Components/ui/VEmptyState.vue';
 import VInput from '@/Components/ui/VInput.vue';
-import VKpiCard from '@/Components/ui/VKpiCard.vue';
+import VBadge from '@/Components/ui/VBadge.vue';
 import VPageHeader from '@/Components/ui/VPageHeader.vue';
 import VSearchInput from '@/Components/ui/VSearchInput.vue';
 import VStatusDot from '@/Components/ui/VStatusDot.vue';
@@ -24,24 +24,26 @@ import VDropdown from '@/Components/ui/VDropdown.vue';
 import VTabs from '@/Components/ui/VTabs.vue';
 import VTextarea from '@/Components/ui/VTextarea.vue';
 
+const page = usePage();
+
 const props = defineProps({
     employees: { type: Array, required: true },
     filters: { type: Object, required: true },
     selected: { type: Object, default: null },
-    stats: { type: Object, required: true },
+    overview: { type: Object, required: true },
+    callOutcomes: { type: Array, default: () => [] },
     can: { type: Object, required: true },
 });
 
+// ONE date filter drives the whole overview: a month (default), an arbitrary
+// custom range, or all-time. The left "who to call" list stays absolute.
 const state = reactive({
     search: props.filters.search ?? '',
     tab: props.filters.tab ?? 'all',
-    // Date range for the selected worker's call history (left column unaffected).
+    mode: props.filters.range ?? 'month', // month | custom | all
+    month: props.filters.month ?? currentMonth(),
     from: props.filters.from ?? '',
     to: props.filters.to ?? '',
-    // Independent date range for the top stat cards (calls made / follow-ups
-    // due / not contacted) — recomputes those three metrics over the range.
-    st_from: props.filters.st_from ?? '',
-    st_to: props.filters.st_to ?? '',
 });
 
 const tabs = [
@@ -50,64 +52,72 @@ const tabs = [
     { key: 'not_contacted', labelKey: 'calls.tab_not_contacted' },
 ];
 
-// Date-range presets for the call history, mirroring the Reports filter bar.
-const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-const firstOfMonth = (offset = 0) => iso(new Date(new Date().getFullYear(), new Date().getMonth() + offset, 1));
-const lastOfMonth = (offset = 0) => iso(new Date(new Date().getFullYear(), new Date().getMonth() + offset + 1, 0));
+// Which of the four category lists is expanded below the cards.
+const activeCategory = ref('calls_made');
 
-function computeDatePreset() {
-    if (! state.from && ! state.to) return 'all';
-    if (state.from === firstOfMonth(-1) && state.to === lastOfMonth(-1)) return 'last_month';
-    if (state.from === firstOfMonth(0) && state.to === lastOfMonth(0)) return 'this_month';
-    return 'custom';
-}
-const datePreset = ref(computeDatePreset());
-const datePresets = ['all', 'this_month', 'last_month', 'custom'];
+// The four month-overview categories (icon + semantic tone + live count).
+const categories = computed(() => [
+    { key: 'calls_made', icon: 'calls', tone: 'accent', count: props.overview.calls_made.count },
+    { key: 'connected', icon: 'check', tone: 'ok', count: props.overview.connected.count },
+    { key: 'not_connected', icon: 'x', tone: 'danger', count: props.overview.not_connected.count },
+    { key: 'follow_ups', icon: 'bell', tone: 'warn', count: props.overview.follow_ups.count },
+]);
+const toneRing = { accent: 'ring-accent', ok: 'ring-status-ok', danger: 'ring-status-danger', warn: 'ring-status-warn' };
+const toneText = { accent: 'text-accent', ok: 'text-status-ok', danger: 'text-status-danger', warn: 'text-status-warn' };
+const toneSoftBg = { accent: 'bg-accent-soft', ok: 'bg-status-ok-soft', danger: 'bg-status-danger-soft', warn: 'bg-status-warn-soft' };
 
-function setDatePreset(preset) {
-    datePreset.value = preset;
-    if (preset === 'all') { state.from = ''; state.to = ''; }
-    else if (preset === 'this_month') { state.from = firstOfMonth(0); state.to = lastOfMonth(0); }
-    else if (preset === 'last_month') { state.from = firstOfMonth(-1); state.to = lastOfMonth(-1); }
-    if (preset !== 'custom') apply();
+function currentMonth() {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
+// A human month label ("September 2026") for the navigator.
+function monthLabel(ym) {
+    if (! ym) return '';
+    const [y, m] = ym.split('-').map(Number);
+    return new Date(y, m - 1, 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+}
+function shiftMonth(ym, delta) {
+    const [y, m] = ym.split('-').map(Number);
+    const d = new Date(y, m - 1 + delta, 1);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function setMode(mode) {
+    state.mode = mode;
+    if (mode === 'month' && ! state.month) state.month = currentMonth();
+    applyOverview();
+}
+function goMonth(delta) {
+    state.mode = 'month';
+    state.month = shiftMonth(state.month || currentMonth(), delta);
+    applyOverview();
+}
+function onMonthPick() { state.mode = 'month'; applyOverview(); }
 function onCustomDate() {
-    datePreset.value = 'custom';
-    apply();
+    // Only apply once both ends are set (a half range would filter oddly).
+    if (state.from && state.to) applyOverview();
 }
 
-// --- Stats/overview date range (independent of the history range) ---
-function computeStPreset() {
-    if (! state.st_from && ! state.st_to) return 'all';
-    if (state.st_from === firstOfMonth(-1) && state.st_to === lastOfMonth(-1)) return 'last_month';
-    if (state.st_from === firstOfMonth(0) && state.st_to === lastOfMonth(0)) return 'this_month';
-    return 'custom';
-}
-const stPreset = ref(computeStPreset());
-function setStPreset(preset) {
-    stPreset.value = preset;
-    if (preset === 'all') { state.st_from = ''; state.st_to = ''; }
-    else if (preset === 'this_month') { state.st_from = firstOfMonth(0); state.st_to = lastOfMonth(0); }
-    else if (preset === 'last_month') { state.st_from = firstOfMonth(-1); state.st_to = lastOfMonth(-1); }
-    if (preset !== 'custom') applyStats();
-}
-function onStCustom() { stPreset.value = 'custom'; applyStats(); }
-function applyStats() {
-    // Only the stat cards + filters need to refresh for a stats-range change.
-    router.get('/calls', buildParams(), { preserveScroll: true, preserveState: true, only: ['stats', 'filters'] });
+// The overview date params for the current mode.
+function rangeParams() {
+    if (state.mode === 'all') return { range: 'all' };
+    if (state.mode === 'custom') return { from: state.from || undefined, to: state.to || undefined };
+    return { month: state.month || currentMonth() };
 }
 
-// The shared query params for /calls (empty dates dropped so they read as null).
 function buildParams(extra = {}) {
     return {
-        ...state,
-        from: state.from || undefined,
-        to: state.to || undefined,
-        st_from: state.st_from || undefined,
-        st_to: state.st_to || undefined,
+        search: state.search || undefined,
+        tab: state.tab || undefined,
         employee: props.selected?.id,
+        ...rangeParams(),
         ...extra,
     };
+}
+
+// A range change only touches the overview + filters (the left list is absolute).
+function applyOverview() {
+    router.get('/calls', buildParams(), { preserveScroll: true, preserveState: true, only: ['overview', 'filters'] });
 }
 
 function apply(extra = {}) {
@@ -138,6 +148,7 @@ function localNow() {
 const form = useForm({
     employee_id: null,
     called_at: localNow(),
+    call_outcome: 'connected',
     remarks: '',
     follow_up_date: null,
     voice_note: null,
@@ -146,12 +157,21 @@ const form = useForm({
     attachment_label: '',
 });
 
+// value → localized label + a semantic status for the outcome badge.
+const outcomeLabel = (v) => {
+    const o = props.callOutcomes.find((c) => c.value === v);
+    if (! o) return null;
+    return (page.props.locale?.primary ?? 'es') === 'en' ? o.label_en : o.label_es;
+};
+const outcomeStatus = (v) => (v === 'connected' ? 'ok' : v === 'no_answer' ? 'danger' : 'neutral');
+
 watch(() => props.selected?.id, (id) => {
     form.employee_id = id ?? null;
 }, { immediate: true });
 
 function resetForm() {
     form.remarks = '';
+    form.call_outcome = 'connected';
     form.follow_up_date = null;
     form.voice_note = null;
     form.voice_note_label = '';
@@ -376,28 +396,105 @@ const dotStatus = { red: 'danger', amber: 'warn', green: 'ok' };
     <AppLayout>
         <VPageHeader k="calls.title" />
 
-        <!-- Top stats bar -->
-        <!-- Overview date range: recomputes the three cards over the period. -->
-        <div class="mb-3 flex flex-wrap items-center gap-2">
-            <span class="text-xs font-medium text-ink-soft">{{ $t('calls.stats_period') }}</span>
-            <div class="flex overflow-hidden rounded-md border border-line-strong text-xs font-medium">
-                <button v-for="p in datePresets" :key="p" type="button" class="px-2.5 py-1.5 transition"
-                    :class="stPreset === p ? 'bg-accent text-on-accent' : 'text-ink-soft hover:bg-surface-hover'"
-                    @click="setStPreset(p)">{{ $t(`calls.range_${p}`) }}</button>
+        <!-- ONE overview filter: month navigator / custom range / all-time. -->
+        <div class="mb-4 flex flex-wrap items-center gap-3 rounded-lg border border-line bg-surface-raised px-4 py-3 shadow-card">
+            <span class="text-[11px] font-semibold uppercase tracking-wide text-muted">{{ $t('calls.overview') }}</span>
+
+            <div class="inline-flex rounded-lg border border-line bg-surface-sunken p-0.5 text-xs font-medium">
+                <button v-for="m in ['month', 'custom', 'all']" :key="m" type="button"
+                    class="rounded-md px-3 py-1 transition"
+                    :class="state.mode === m ? 'bg-surface-raised text-ink shadow-card' : 'text-ink-soft hover:text-ink'"
+                    @click="setMode(m)">{{ $t(`calls.mode_${m}`) }}</button>
             </div>
-            <template v-if="stPreset === 'custom'">
-                <VDateInput v-model="state.st_from" class="w-36" @update:model-value="onStCustom()" />
+
+            <!-- Month navigator -->
+            <div v-if="state.mode === 'month'" class="inline-flex items-center gap-1">
+                <button type="button" class="rounded-md border border-line p-1.5 text-ink-soft hover:bg-surface-hover"
+                    :title="$t('calls.prev_month')" @click="goMonth(-1)">
+                    <AppIcon name="chevron-right" class="h-4 w-4 rotate-180" />
+                </button>
+                <input v-model="state.month" type="month"
+                    class="tabular-nums rounded-md border border-line bg-surface-raised px-3 py-1.5 text-sm text-ink"
+                    @change="onMonthPick" />
+                <button type="button" class="rounded-md border border-line p-1.5 text-ink-soft hover:bg-surface-hover"
+                    :title="$t('calls.next_month')" @click="goMonth(1)">
+                    <AppIcon name="chevron-right" class="h-4 w-4" />
+                </button>
+            </div>
+
+            <!-- Custom range -->
+            <div v-else-if="state.mode === 'custom'" class="inline-flex items-center gap-2">
+                <VDateInput v-model="state.from" class="w-40" @update:model-value="onCustomDate()" />
                 <span class="text-xs text-muted">–</span>
-                <VDateInput v-model="state.st_to" class="w-36" @update:model-value="onStCustom()" />
-            </template>
+                <VDateInput v-model="state.to" class="w-40" @update:model-value="onCustomDate()" />
+            </div>
+
+            <span class="ms-auto text-sm font-semibold text-ink">{{ overview.period_label }}</span>
         </div>
 
-        <div class="mb-4 grid gap-3 sm:grid-cols-3">
-            <VKpiCard k="calls.stat_calls_made" :value="stats.calls_made" />
-            <VKpiCard k="calls.stat_pending_follow_ups" :value="stats.pending_follow_ups"
-                :status="stats.pending_follow_ups > 0 ? 'warn' : 'ok'" />
-            <VKpiCard k="calls.stat_not_contacted" :value="stats.not_contacted"
-                :status="stats.not_contacted > 0 ? 'warn' : 'ok'" />
+        <!-- Four clearly-separated category cards -->
+        <div class="mb-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <button v-for="cat in categories" :key="cat.key" type="button"
+                class="rounded-xl bg-surface-raised p-4 text-start shadow-card transition"
+                :class="activeCategory === cat.key ? `ring-2 ${toneRing[cat.tone]}` : 'border border-line hover:shadow-raised'"
+                @click="activeCategory = cat.key">
+                <div class="flex items-center justify-between">
+                    <span class="flex h-8 w-8 items-center justify-center rounded-lg" :class="toneSoftBg[cat.tone]">
+                        <AppIcon :name="cat.icon" class="h-4 w-4" :class="toneText[cat.tone]" />
+                    </span>
+                    <span class="tabular-nums text-2xl font-semibold text-ink">{{ cat.count }}</span>
+                </div>
+                <p class="mt-2 text-sm font-medium text-ink">{{ $t(`calls.cat_${cat.key}`) }}</p>
+                <p class="text-xs text-muted">{{ $t(`calls.cat_${cat.key}_hint`) }}</p>
+            </button>
+        </div>
+
+        <!-- The selected category's people/calls, clearly separated (not mixed) -->
+        <div class="mb-4 rounded-lg border border-line bg-surface-raised p-4 shadow-card">
+            <div class="mb-2 flex items-center justify-between">
+                <h3 class="text-sm font-semibold text-ink">{{ $t(`calls.cat_${activeCategory}`) }}</h3>
+                <span class="tabular-nums text-xs text-muted">{{ overview[activeCategory].count }} · {{ overview.period_label }}</span>
+            </div>
+
+            <!-- Calls made: the calls themselves -->
+            <ul v-if="activeCategory === 'calls_made'" class="max-h-96 divide-y divide-line overflow-y-auto">
+                <li v-for="c in overview.calls_made.calls" :key="c.id" class="flex flex-wrap items-center gap-2 py-2">
+                    <button type="button" class="min-w-0 flex-1 text-start" @click="c.employee_id && select({ id: c.employee_id })">
+                        <span class="block truncate text-sm font-medium text-ink">{{ c.name ?? '—' }}</span>
+                        <span class="block truncate text-xs text-muted">{{ c.remarks || '—' }}</span>
+                    </button>
+                    <VBadge :status="outcomeStatus(c.outcome)">{{ outcomeLabel(c.outcome) ?? '—' }}</VBadge>
+                    <span class="tabular-nums w-40 shrink-0 text-end text-xs text-muted">{{ c.called_at }}</span>
+                </li>
+                <li v-if="overview.calls_made.calls.length === 0" class="py-6 text-center text-sm text-muted">{{ $t('calls.cat_empty') }}</li>
+            </ul>
+
+            <!-- Connected / Not connected: distinct people -->
+            <ul v-else-if="activeCategory === 'connected' || activeCategory === 'not_connected'"
+                class="max-h-96 divide-y divide-line overflow-y-auto">
+                <li v-for="p in overview[activeCategory].people" :key="p.id" class="flex items-center gap-3 py-2">
+                    <VAvatar :name="p.name" size="sm" />
+                    <button type="button" class="min-w-0 flex-1 text-start" @click="select({ id: p.id })">
+                        <span class="block truncate text-sm font-medium text-ink">{{ p.name }}</span>
+                        <span class="block truncate text-xs text-muted">{{ p.designation || '—' }}</span>
+                    </button>
+                    <span class="tabular-nums shrink-0 text-xs text-muted">{{ $t('calls.calls_n', { n: p.calls }) }}</span>
+                </li>
+                <li v-if="overview[activeCategory].people.length === 0" class="py-6 text-center text-sm text-muted">{{ $t('calls.cat_empty') }}</li>
+            </ul>
+
+            <!-- Follow-ups: people needing a callback in the period -->
+            <ul v-else class="max-h-96 divide-y divide-line overflow-y-auto">
+                <li v-for="p in overview.follow_ups.people" :key="p.id" class="flex items-center gap-3 py-2">
+                    <VStatusDot :status="dotStatus[p.indicator]" :pulse="p.indicator === 'red'" />
+                    <button type="button" class="min-w-0 flex-1 text-start" @click="select({ id: p.id })">
+                        <span class="block truncate text-sm font-medium text-ink">{{ p.name }}</span>
+                        <span class="block truncate text-xs text-muted">{{ p.designation || '—' }}</span>
+                    </button>
+                    <span class="tabular-nums shrink-0 text-xs text-status-warn">{{ p.follow_up_date }}</span>
+                </li>
+                <li v-if="overview.follow_ups.people.length === 0" class="py-6 text-center text-sm text-muted">{{ $t('calls.cat_empty') }}</li>
+            </ul>
         </div>
 
         <div class="grid gap-4 lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)]">
@@ -490,6 +587,21 @@ const dotStatus = { red: 'danger', amber: 'warn', green: 'ok' };
                                 <VDateInput v-model="form.follow_up_date" />
                             </FormField>
                         </div>
+
+                        <!-- Outcome: did the worker pick up? Drives the Connected /
+                             Not connected split on the month overview. -->
+                        <FormField k="calls.outcome" :error="form.errors.call_outcome">
+                            <div class="inline-flex rounded-lg border border-line bg-surface-sunken p-0.5 text-sm font-medium">
+                                <button v-for="o in callOutcomes" :key="o.value" type="button"
+                                    class="rounded-md px-4 py-1.5 transition"
+                                    :class="form.call_outcome === o.value
+                                        ? (o.value === 'connected' ? 'bg-status-ok-soft text-status-ok' : 'bg-status-danger-soft text-status-danger')
+                                        : 'text-ink-soft hover:text-ink'"
+                                    @click="form.call_outcome = o.value">
+                                    {{ (page.props.locale?.primary ?? 'es') === 'en' ? o.label_en : o.label_es }}
+                                </button>
+                            </div>
+                        </FormField>
 
                         <FormField k="calls.remarks" :error="form.errors.remarks" required>
                             <VTextarea v-model="form.remarks" :rows="3" :placeholder="$t('calls.remarks_placeholder')" />
@@ -607,29 +719,17 @@ const dotStatus = { red: 'danger', amber: 'warn', green: 'ok' };
                     </form>
                 </VCard>
 
-                <!-- Call history -->
+                <!-- Call history (full history — the one date filter is the overview one) -->
                 <VCard>
-                    <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
-                        <h3 class="text-sm font-semibold"><Bilingual k="calls.call_history" inline /></h3>
-                        <div class="flex flex-wrap items-center gap-2">
-                            <div class="flex overflow-hidden rounded-md border border-line-strong text-xs font-medium">
-                                <button v-for="p in datePresets" :key="p" type="button"
-                                    class="px-2.5 py-1.5 transition"
-                                    :class="datePreset === p ? 'bg-accent text-on-accent' : 'text-ink-soft hover:bg-surface-hover'"
-                                    @click="setDatePreset(p)">{{ $t(`calls.range_${p}`) }}</button>
-                            </div>
-                            <template v-if="datePreset === 'custom'">
-                                <VDateInput v-model="state.from" class="w-36" @update:model-value="onCustomDate()" />
-                                <span class="text-xs text-muted">–</span>
-                                <VDateInput v-model="state.to" class="w-36" @update:model-value="onCustomDate()" />
-                            </template>
-                        </div>
-                    </div>
+                    <h3 class="mb-3 text-sm font-semibold"><Bilingual k="calls.call_history" inline /></h3>
                     <ul v-if="selected.calls.length" class="flex flex-col gap-4">
                         <li v-for="c in selected.calls" :key="c.id"
                             class="rounded-lg border border-line bg-surface-raised p-3 last:mb-0">
-                            <div class="flex flex-wrap items-baseline justify-between gap-2">
-                                <span class="tabular-nums text-sm font-semibold">{{ c.called_at }}</span>
+                            <div class="flex flex-wrap items-center justify-between gap-2">
+                                <span class="flex items-center gap-2">
+                                    <span class="tabular-nums text-sm font-semibold">{{ c.called_at }}</span>
+                                    <VBadge v-if="c.outcome" :status="outcomeStatus(c.outcome)">{{ outcomeLabel(c.outcome) }}</VBadge>
+                                </span>
                                 <span class="text-xs text-muted">{{ c.called_by ?? '—' }}</span>
                             </div>
                             <p class="mt-1.5 text-sm text-ink-soft">{{ c.remarks }}</p>

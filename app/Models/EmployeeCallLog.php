@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\CallOutcome;
 use App\Models\Concerns\Auditable;
 use App\Models\Concerns\BelongsToCompany;
 use Illuminate\Database\Eloquent\Model;
@@ -11,6 +12,7 @@ use Illuminate\Support\Carbon;
 /**
  * @property Carbon $called_at
  * @property Carbon|null $follow_up_date
+ * @property CallOutcome|null $call_outcome
  * @property string|null $remarks
  * @property string|null $voice_note_path
  * @property string|null $voice_note_label
@@ -26,7 +28,7 @@ class EmployeeCallLog extends Model
     public string $auditModule = 'call_panel';
 
     /** @var list<string> */
-    protected $fillable = ['called_at', 'remarks', 'follow_up_date', 'voice_note_label', 'attachment_label'];
+    protected $fillable = ['called_at', 'remarks', 'call_outcome', 'follow_up_date', 'voice_note_label', 'attachment_label'];
 
     /** Paths must never reach the client or the audit log. */
     /** @var list<string> */
@@ -40,6 +42,7 @@ class EmployeeCallLog extends Model
         return [
             'called_at' => 'datetime',
             'follow_up_date' => 'date:Y-m-d',
+            'call_outcome' => CallOutcome::class,
         ];
     }
 

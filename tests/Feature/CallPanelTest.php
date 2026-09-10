@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\CallOutcome;
 use App\Enums\UserRole;
 use App\Models\Company;
 use App\Models\Employee;
@@ -22,6 +23,9 @@ function logCall(int $employeeId, int $companyId, array $overrides = []): Employ
     $call = new EmployeeCallLog(array_merge([
         'called_at' => now(),
         'remarks' => 'Llamada de seguimiento',
+        // Mirror production: every logged call carries an outcome (default
+        // connected — the common case + the migration backfill).
+        'call_outcome' => 'connected',
     ], $overrides));
     $call->employee_id = $employeeId;
     $call->company_id = $companyId;
@@ -116,49 +120,75 @@ it('counts a never-contacted worker as not contacted this week', function (): vo
 });
 
 /**
- * Stats bar.
+ * Month overview — four SEPARATED categories (calls made · connected ·
+ * not connected · follow-ups).
  */
-it('reports the stats bar figures (no range = current behaviour)', function (): void {
+it('reports the four overview categories for the default (current) month', function (): void {
     $a = Employee::factory()->create(['company_id' => $this->company->id]);
     $b = Employee::factory()->create(['company_id' => $this->company->id]);
     Employee::factory()->create(['company_id' => $this->company->id]); // never called
 
-    logCall($a->id, $this->company->id, ['called_at' => now(), 'follow_up_date' => now()->toDateString()]);
-    logCall($b->id, $this->company->id, ['called_at' => now()]);
+    // A reached (connected) + a follow-up today; B tried but not reached.
+    logCall($a->id, $this->company->id, ['called_at' => now(), 'call_outcome' => 'connected', 'follow_up_date' => now()->toDateString()]);
+    logCall($b->id, $this->company->id, ['called_at' => now(), 'call_outcome' => 'no_answer']);
 
     $this->get('/calls')
         ->assertInertia(fn ($page) => $page
-            ->where('stats.calls_made', 2)                 // all calls
-            ->where('stats.pending_follow_ups', 1)         // due as of today
-            ->where('stats.not_contacted', 1));            // 1 never-called worker
+            ->where('filters.range', 'month')
+            ->where('overview.calls_made.count', 2)      // total calls
+            ->where('overview.connected.count', 1)       // A reached
+            ->where('overview.not_connected.count', 1)   // B not reached
+            ->where('overview.follow_ups.count', 1));    // A's follow-up today
 });
 
-it('recomputes the stat cards over a selected date range', function (): void {
+it('recomputes the four categories over a custom date range', function (): void {
     $a = Employee::factory()->create(['company_id' => $this->company->id]);
     $b = Employee::factory()->create(['company_id' => $this->company->id]);
-    Employee::factory()->create(['company_id' => $this->company->id]); // never called
 
-    // June: 2 calls to A, one with a June follow-up. July: 1 call to B.
-    logCall($a->id, $this->company->id, ['called_at' => '2026-06-05 09:00:00', 'follow_up_date' => '2026-06-20']);
-    logCall($a->id, $this->company->id, ['called_at' => '2026-06-15 09:00:00']);
-    logCall($b->id, $this->company->id, ['called_at' => '2026-07-10 09:00:00']);
+    // June: A reached twice (one with a June follow-up). July: B not reached.
+    logCall($a->id, $this->company->id, ['called_at' => '2026-06-05 09:00:00', 'call_outcome' => 'connected', 'follow_up_date' => '2026-06-20']);
+    logCall($a->id, $this->company->id, ['called_at' => '2026-06-15 09:00:00', 'call_outcome' => 'connected']);
+    logCall($b->id, $this->company->id, ['called_at' => '2026-07-10 09:00:00', 'call_outcome' => 'no_answer']);
 
-    // June window: 2 calls made, 1 follow-up due in June, 2 workers not
-    // contacted in June (B + the never-called one).
-    $this->get('/calls?st_from=2026-06-01&st_to=2026-06-30')
+    // June window: 2 calls, A connected (1 person), 0 not-connected, 1 follow-up.
+    $this->get('/calls?from=2026-06-01&to=2026-06-30')
         ->assertInertia(fn ($page) => $page
-            ->where('stats.calls_made', 2)
-            ->where('stats.pending_follow_ups', 1)
-            ->where('stats.not_contacted', 2)
-            ->where('filters.st_from', '2026-06-01')
-            ->where('filters.st_to', '2026-06-30'));
+            ->where('filters.range', 'custom')
+            ->where('filters.from', '2026-06-01')
+            ->where('filters.to', '2026-06-30')
+            ->where('overview.calls_made.count', 2)
+            ->where('overview.connected.count', 1)
+            ->where('overview.not_connected.count', 0)
+            ->where('overview.follow_ups.count', 1));
 
-    // July window: 1 call made, 0 follow-ups due in July, 2 not contacted (A + never-called).
-    $this->get('/calls?st_from=2026-07-01&st_to=2026-07-31')
+    // July window: 1 call, 0 connected, B not-connected (1 person), 0 follow-ups.
+    $this->get('/calls?from=2026-07-01&to=2026-07-31')
         ->assertInertia(fn ($page) => $page
-            ->where('stats.calls_made', 1)
-            ->where('stats.pending_follow_ups', 0)
-            ->where('stats.not_contacted', 2));
+            ->where('overview.calls_made.count', 1)
+            ->where('overview.connected.count', 0)
+            ->where('overview.not_connected.count', 1)
+            ->where('overview.follow_ups.count', 0));
+});
+
+it('selects the overview by month and splits connected vs not-connected per person', function (): void {
+    $reached = Employee::factory()->create(['company_id' => $this->company->id]);
+    $missed = Employee::factory()->create(['company_id' => $this->company->id]);
+    $mixed = Employee::factory()->create(['company_id' => $this->company->id]);
+
+    // In June: reached (connected), missed (no_answer only), mixed (a miss THEN a
+    // connect — reached at least once ⇒ Connected).
+    logCall($reached->id, $this->company->id, ['called_at' => '2026-06-10 09:00:00', 'call_outcome' => 'connected']);
+    logCall($missed->id, $this->company->id, ['called_at' => '2026-06-11 09:00:00', 'call_outcome' => 'no_answer']);
+    logCall($mixed->id, $this->company->id, ['called_at' => '2026-06-12 09:00:00', 'call_outcome' => 'no_answer']);
+    logCall($mixed->id, $this->company->id, ['called_at' => '2026-06-13 09:00:00', 'call_outcome' => 'connected']);
+
+    $this->get('/calls?month=2026-06')
+        ->assertInertia(fn ($page) => $page
+            ->where('filters.range', 'month')
+            ->where('filters.month', '2026-06')
+            ->where('overview.calls_made.count', 4)
+            ->where('overview.connected.count', 2)       // reached + mixed
+            ->where('overview.not_connected.count', 1)); // missed only
 });
 
 it('loads the selected worker call history', function (): void {
@@ -247,35 +277,64 @@ it('accepts a browser webm voice note (sniffed as video/webm)', function () {
 });
 
 /*
- * Date-range filter on the selected worker's call history (2026-09) —
- * "Last month" quick filter + custom from/to range.
+ * The overview date range (2026-09): the ONE date filter now drives the month
+ * overview; the selected worker's history is always FULL (the confusing second
+ * per-worker range was removed).
  */
 
-it('filters the selected worker call history by a custom date range', function (): void {
+it('keeps the selected worker history FULL while the range drives the overview', function (): void {
     $employee = Employee::factory()->create(['company_id' => $this->company->id]);
     logCall($employee->id, $this->company->id, ['called_at' => '2026-05-10 09:00:00', 'remarks' => 'May call']);
     logCall($employee->id, $this->company->id, ['called_at' => '2026-06-15 09:00:00', 'remarks' => 'June call']);
     logCall($employee->id, $this->company->id, ['called_at' => '2026-07-20 09:00:00', 'remarks' => 'July call']);
 
-    // Unfiltered: all three show.
-    $this->get("/calls?employee={$employee->id}")
-        ->assertInertia(fn ($p) => $p->has('selected.calls', 3));
-
-    // June-only window: just the June call.
+    // A June overview range does NOT trim the worker's history — all three show,
+    // while the overview counts only the June call.
     $this->get("/calls?employee={$employee->id}&from=2026-06-01&to=2026-06-30")
-        ->assertInertia(fn ($p) => $p->has('selected.calls', 1)
-            ->where('selected.calls.0.remarks', 'June call')
+        ->assertInertia(fn ($p) => $p->has('selected.calls', 3)
+            ->where('overview.calls_made.count', 1)
             ->where('filters.from', '2026-06-01')
             ->where('filters.to', '2026-06-30'));
 });
 
-it('ignores a malformed date filter rather than erroring', function (): void {
+it('ignores a malformed date filter rather than erroring (falls back to the month)', function (): void {
     $employee = Employee::factory()->create(['company_id' => $this->company->id]);
     logCall($employee->id, $this->company->id, ['called_at' => '2026-06-15 09:00:00']);
 
+    // A malformed custom date is ignored → the overview falls back to the
+    // month (effective bounds set, page renders, no error).
     $this->get("/calls?employee={$employee->id}&from=not-a-date&to=")
         ->assertOk()
         ->assertInertia(fn ($p) => $p->has('selected.calls', 1)
-            ->where('filters.from', null)
-            ->where('filters.to', null));
+            ->where('filters.range', 'month')
+            ->where('filters.month', now()->format('Y-m')));
+});
+
+it('saves the call outcome (default connected; explicit no_answer honoured)', function (): void {
+    $employee = Employee::factory()->create(['company_id' => $this->company->id]);
+
+    // Omitted → defaults to connected.
+    $this->post('/calls', ['employee_id' => $employee->id, 'remarks' => 'Reached'])->assertRedirect();
+    // Explicit no_answer.
+    $this->post('/calls', ['employee_id' => $employee->id, 'remarks' => 'No pickup', 'call_outcome' => 'no_answer'])->assertRedirect();
+
+    $calls = EmployeeCallLog::query()->orderBy('id')->get();
+    expect($calls[0]->call_outcome)->toBe(CallOutcome::Connected)
+        ->and($calls[1]->call_outcome)->toBe(CallOutcome::NoAnswer);
+});
+
+it('ships the outcome options + never leaks another company overview (tenancy)', function (): void {
+    $mine = Employee::factory()->create(['company_id' => $this->company->id]);
+    logCall($mine->id, $this->company->id, ['called_at' => now(), 'call_outcome' => 'connected']);
+
+    // Another company's call must not appear in MY overview.
+    $other = Company::factory()->create();
+    $otherEmp = Employee::factory()->create(['company_id' => $other->id]);
+    logCall($otherEmp->id, $other->id, ['called_at' => now(), 'call_outcome' => 'connected']);
+
+    $this->get('/calls')
+        ->assertInertia(fn ($p) => $p
+            ->has('callOutcomes', 2)
+            ->where('overview.calls_made.count', 1)      // only mine
+            ->where('overview.connected.count', 1));
 });

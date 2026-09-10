@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\CallOutcome;
 use App\Models\Employee;
 use App\Models\EmployeeCallLog;
 use App\Services\Audit\AuditLogger;
@@ -9,6 +10,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -18,20 +20,22 @@ use Inertia\Response;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
- * Screen 13 — Call Panel. Two columns: who to call on the left, the log for
- * the selected worker on the right.
+ * Screen 13 — Call Panel. Left column: who to call. Right column: the log for
+ * the selected worker. Top: a single date filter (month navigator or custom
+ * range) that drives the month OVERVIEW — four clearly-separated categories:
+ * calls made · connected · not connected · follow-ups.
  *
- * Builds on employee_call_logs (Phase 2, Screen 06 Tab 6) — the same rows, a
- * different surface. The panel adds follow-up triage, voice note recording,
- * and file attachment per call entry.
+ * Builds on employee_call_logs (Phase 2, Screen 06 Tab 6). Each call now records
+ * an OUTCOME (connected / no answer), which is what makes the connected-vs-not
+ * separation possible.
  */
 class CallPanelController extends Controller
 {
     /**
-     * "Not contacted this week" is measured against the start of the current
-     * week, not a rolling 7 days: the client thinks in working weeks, and a
-     * Monday-morning list that still counts last Tuesday's call as "this week"
-     * would be wrong on the one day the list matters most.
+     * "Not contacted this week" (the left-list tab) is measured against the
+     * start of the current week, not a rolling 7 days: the client thinks in
+     * working weeks, and a Monday-morning list that still counts last Tuesday's
+     * call as "this week" would be wrong on the one day the list matters most.
      */
     private function weekStart(): Carbon
     {
@@ -43,12 +47,7 @@ class CallPanelController extends Controller
         Gate::authorize('call_panel.view');
 
         $selectedId = $request->integer('employee');
-        $from = $this->validDate($request->query('from'));
-        $to = $this->validDate($request->query('to'));
-        // The stats/overview cards carry their OWN date range (st_from/st_to),
-        // independent of the selected worker's history range above.
-        $stFrom = $this->validDate($request->query('st_from'));
-        $stTo = $this->validDate($request->query('st_to'));
+        [$from, $to, $mode, $month] = $this->resolveOverviewRange($request);
 
         return Inertia::render('CallPanel/Index', [
             'employees' => $this->employeeList($request),
@@ -56,22 +55,62 @@ class CallPanelController extends Controller
                 'search' => $request->query('search'),
                 'tab' => $request->query('tab'),
                 'employee' => $request->query('employee'),
+                // The single overview range, echoed so the UI reflects the
+                // effective selection (default = the current month).
+                'range' => $mode,
+                'month' => $month,
                 'from' => $from,
                 'to' => $to,
-                'st_from' => $stFrom,
-                'st_to' => $stTo,
             ],
-            // The date range bounds the SELECTED worker's history only — the
-            // left-column triage (last contacted / follow-ups) stays absolute so
-            // "who to call now" is never hidden by a historical range.
-            'selected' => $selectedId > 0 ? $this->selected($selectedId, $from, $to) : null,
-            'stats' => $this->stats($stFrom, $stTo),
+            // The selected worker's FULL history (its own date range was removed
+            // — one date filter on the screen now, the overview one).
+            'selected' => $selectedId > 0 ? $this->selected($selectedId) : null,
+            'overview' => $this->overview($from, $to, $mode),
+            'callOutcomes' => CallOutcome::options(),
             'can' => [
                 'create' => Gate::allows('call_panel.create'),
                 'edit' => Gate::allows('call_panel.edit'),
                 'delete' => Gate::allows('call_panel.delete'),
             ],
         ]);
+    }
+
+    /**
+     * Resolve the ONE overview date range from the request. A custom from/to
+     * wins; then an explicit all-time; otherwise a month (default: this month).
+     *
+     * @return array{0: ?string, 1: ?string, 2: string, 3: ?string} [from, to, mode, month]
+     */
+    private function resolveOverviewRange(Request $request): array
+    {
+        $from = $this->validDate($request->query('from'));
+        $to = $this->validDate($request->query('to'));
+        if ($from !== null || $to !== null) {
+            return [$from, $to, 'custom', null];
+        }
+
+        if ($request->query('range') === 'all') {
+            return [null, null, 'all', null];
+        }
+
+        // Month mode (YYYY-MM), defaulting to the current month.
+        $raw = $request->query('month');
+        $base = null;
+        if (is_string($raw) && preg_match('/^\d{4}-\d{2}$/', $raw) === 1) {
+            try {
+                $base = Carbon::createFromFormat('Y-m-d', $raw.'-01')->startOfMonth();
+            } catch (\Throwable) {
+                $base = null;
+            }
+        }
+        $base ??= now()->startOfMonth();
+
+        return [
+            $base->copy()->startOfMonth()->toDateString(),
+            $base->copy()->endOfMonth()->toDateString(),
+            'month',
+            $base->format('Y-m'),
+        ];
     }
 
     /**
@@ -98,6 +137,9 @@ class CallPanelController extends Controller
         $validated = $request->validate([
             'employee_id' => ['required', 'integer'],
             'called_at' => ['nullable', 'date'],
+            // Did the worker actually pick up? Defaults to connected (the common
+            // case) when the form omits it.
+            'call_outcome' => ['nullable', Rule::enum(CallOutcome::class)],
             'remarks' => ['required', 'string', 'max:2000'],
             'follow_up_date' => ['nullable', 'date'],
             // video/webm is included because a browser MediaRecorder webm blob is
@@ -118,6 +160,7 @@ class CallPanelController extends Controller
         $call = new EmployeeCallLog([
             'called_at' => $validated['called_at'] ?? now(),
             'remarks' => $validated['remarks'],
+            'call_outcome' => $validated['call_outcome'] ?? CallOutcome::Connected->value,
             'follow_up_date' => $validated['follow_up_date'] ?? null,
         ]);
         $call->employee_id = $employee->id;
@@ -201,7 +244,9 @@ class CallPanelController extends Controller
 
     /**
      * The left column. Each row carries its own last-contact and follow-up
-     * facts so the indicator is computed once, server-side.
+     * facts so the indicator is computed once, server-side. This "who to call"
+     * triage is intentionally ABSOLUTE (not bound by the overview range) — it is
+     * "who to call now", not a historical slice.
      *
      * @return array<int, array<string, mixed>>
      */
@@ -281,11 +326,12 @@ class CallPanelController extends Controller
     }
 
     /**
-     * The right column: the worker's card plus their full call history.
+     * The right column: the worker's card plus their FULL call history (no date
+     * range — the one date filter on the screen is the overview one).
      *
      * @return array<string, mixed>|null
      */
-    private function selected(int $employeeId, ?string $from = null, ?string $to = null): ?array
+    private function selected(int $employeeId): ?array
     {
         $employee = Employee::query()->with('company:id,name')->find($employeeId);
 
@@ -302,8 +348,6 @@ class CallPanelController extends Controller
             'designation' => $employee->designation,
             'calls' => EmployeeCallLog::query()
                 ->where('employee_id', $employee->id)
-                ->when($from !== null, fn ($q) => $q->whereDate('called_at', '>=', $from))
-                ->when($to !== null, fn ($q) => $q->whereDate('called_at', '<=', $to))
                 ->with('caller:id,name')
                 ->orderByDesc('called_at')
                 ->get()
@@ -311,6 +355,7 @@ class CallPanelController extends Controller
                     'id' => $c->id,
                     'called_at' => $c->called_at->toDateTimeString(),
                     'called_by' => $c->caller?->name,
+                    'outcome' => $c->call_outcome?->value,
                     'remarks' => $c->remarks,
                     'follow_up_date' => $c->follow_up_date?->toDateString(),
                     'has_voice_note' => $c->voice_note_path !== null,
@@ -325,46 +370,92 @@ class CallPanelController extends Controller
     }
 
     /**
-     * The top stats bar.
+     * The month OVERVIEW — four clearly-separated categories over the selected
+     * range (company-scoped). Connected / Not connected are PER-PERSON: a worker
+     * reached at least once in the range is Connected; one called but never
+     * reached is Not connected. Follow-ups are the people with a follow-up dated
+     * in the range (an orthogonal "needs a callback" list).
      *
-     * @return array<string, int>
+     * @return array<string, mixed>
      */
-    private function stats(?string $from = null, ?string $to = null): array
+    private function overview(?string $from, ?string $to, string $mode): array
     {
-        $hasRange = $from !== null || $to !== null;
-
-        // Calls MADE in the range (count of calls, not distinct people — two
-        // calls to one worker count as two). No range → all calls ever.
-        $callsMade = EmployeeCallLog::query()
+        // Calls made in the range, with the worker + caller for the lists.
+        $calls = EmployeeCallLog::query()
             ->when($from !== null, fn ($q) => $q->whereDate('called_at', '>=', $from))
             ->when($to !== null, fn ($q) => $q->whereDate('called_at', '<=', $to))
-            ->count();
+            ->with(['employee:id,full_name,designation', 'caller:id,name'])
+            ->orderByDesc('called_at')
+            ->get();
 
-        // Follow-ups DUE: within the range when one is set; otherwise the
-        // current "outstanding as of today" meaning (follow_up_date <= today).
-        $followUps = EmployeeCallLog::query()
+        $callsMade = $calls->map(fn (EmployeeCallLog $c): array => [
+            'id' => $c->id,
+            'employee_id' => $c->employee_id,
+            'name' => $c->employee?->full_name,
+            'designation' => $c->employee?->designation,
+            'called_at' => $c->called_at->toDateTimeString(),
+            'called_by' => $c->caller?->name,
+            'outcome' => $c->call_outcome?->value,
+            'remarks' => Str::limit((string) $c->remarks, 80),
+            'follow_up_date' => $c->follow_up_date?->toDateString(),
+        ])->all();
+
+        // Per-person connected / not-connected split.
+        $connected = [];
+        $notConnected = [];
+        foreach ($calls->groupBy('employee_id') as $group) {
+            /** @var Collection<int, EmployeeCallLog> $group */
+            $emp = $group->first()?->employee;
+            $reached = $group->contains(fn (EmployeeCallLog $c): bool => $c->call_outcome === CallOutcome::Connected);
+            $row = [
+                'id' => $group->first()?->employee_id,
+                'name' => $emp?->full_name,
+                'designation' => $emp?->designation,
+                'calls' => $group->count(),
+                'last_called' => $group->max('called_at')?->toDateTimeString(),
+            ];
+            if ($reached) {
+                $connected[] = $row;
+            } else {
+                $notConnected[] = $row;
+            }
+        }
+
+        // Follow-ups dated within the range, one row per worker (soonest first).
+        $followUpCalls = EmployeeCallLog::query()
             ->whereNotNull('follow_up_date')
-            ->when($hasRange, function ($q) use ($from, $to): void {
-                $q->when($from !== null, fn ($qq) => $qq->whereDate('follow_up_date', '>=', $from))
-                    ->when($to !== null, fn ($qq) => $qq->whereDate('follow_up_date', '<=', $to));
-            }, fn ($q) => $q->whereDate('follow_up_date', '<=', now()->toDateString()))
-            ->count();
+            ->when($from !== null, fn ($q) => $q->whereDate('follow_up_date', '>=', $from))
+            ->when($to !== null, fn ($q) => $q->whereDate('follow_up_date', '<=', $to))
+            ->with('employee:id,full_name,designation')
+            ->get();
 
-        // NOT contacted: active employees with no call logged in the range (no
-        // range → never contacted at all).
-        $contacted = EmployeeCallLog::query()
-            ->when($from !== null, fn ($q) => $q->whereDate('called_at', '>=', $from))
-            ->when($to !== null, fn ($q) => $q->whereDate('called_at', '<=', $to))
-            ->distinct()
-            ->pluck('employee_id');
+        $followUps = $followUpCalls->groupBy('employee_id')->map(function (Collection $group): array {
+            /** @var Collection<int, EmployeeCallLog> $group */
+            $soonest = $group->min('follow_up_date');
+            $date = $soonest !== null ? Carbon::parse($soonest) : null;
+
+            return [
+                'id' => $group->first()?->employee_id,
+                'name' => $group->first()?->employee?->full_name,
+                'designation' => $group->first()?->employee?->designation,
+                'follow_up_date' => $date?->toDateString(),
+                'indicator' => $this->indicator($date),
+            ];
+        })->sortBy('follow_up_date')->values()->all();
+
+        // A friendly label for the period header.
+        $label = match ($mode) {
+            'all' => __('ui.calls.range_all'),
+            'custom' => trim(($from ?? '…').' – '.($to ?? '…')),
+            default => $from !== null ? Carbon::parse($from)->translatedFormat('F Y') : '',
+        };
 
         return [
-            'calls_made' => $callsMade,
-            'pending_follow_ups' => $followUps,
-            'not_contacted' => Employee::query()
-                ->where('active', true)
-                ->whereNotIn('id', $contacted)
-                ->count(),
+            'period_label' => $label,
+            'calls_made' => ['count' => $calls->count(), 'calls' => $callsMade],
+            'connected' => ['count' => count($connected), 'people' => $connected],
+            'not_connected' => ['count' => count($notConnected), 'people' => $notConnected],
+            'follow_ups' => ['count' => count($followUps), 'people' => $followUps],
         ];
     }
 }
