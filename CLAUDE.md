@@ -4,6 +4,62 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Status: Phase 9 in progress — hardening (2026-08-01)
 
+### Document panel + PWA install fixes (2026-09-11, DONE, deployed to prod)
+
+Four production fixes to the shared smart-document panel plus the worker PWA
+install prompt. All are the SAME root-cause family for the document ones —
+`Document` is `BelongsToCompany` (CompanyScope), and the Companies screen is
+Super-Admin-only yet lists EVERY company, so anywhere the scope narrows to the
+SA's header-selected session company it wrongly hides another company's docs.
+
+- **1. Inline-preview framing (`documents.preview`).** The inline-preview route
+  (commit 8e2fdba) serves a PDF into a same-origin `<iframe>` on the panel, but
+  every response carried `X-Frame-Options: DENY` + CSP `frame-ancestors 'none'`,
+  so the browser refused the frame (Chrome shows "refused to connect").
+  `SecurityHeaders` now exempts ONLY the `documents.preview` route
+  (`X-Frame-Options: SAMEORIGIN` + `frame-ancestors 'self'`); every other
+  response stays DENY/'none'. `frame-ancestors` overrides X-Frame-Options in
+  modern browsers, so BOTH must flip. It serves a private file the viewer may
+  already download → same-origin framing adds no exposure. (commit 39a39a1)
+- **2. Company-doc panel showed uploads as "Missing" (display scope).**
+  `CompanyController::index` eager-loaded `documents` THROUGH CompanyScope, so a
+  SA with a company selected saw every OTHER company's panel all-"Missing" (the
+  upload saved fine — right `company_id`, `is_current=1` — just scoped OUT of the
+  display query). Fixed: the eager-load drops CompanyScope (a company owns its
+  docs by `documentable_id` + its own `company_id`; the card list was already
+  unscoped, `store()`/`DocumentPanelPayload::single()` already drop it). SA-only
+  screen ⇒ no leak. (commit 53b79c9)
+- **3. Document ACTION routes 404'd cross-company for a SA (binding scope).**
+  Same cause on the action side: `preview`/`download`/`replace`/`updateMetadata`/
+  `destroy`/`panel` bind `Document`, whose CompanyScope route-model binding
+  narrows to the SA's selected company — so opening a doc owned by a DIFFERENT
+  company hit the 404 page. `Document::resolveRouteBinding` now drops CompanyScope
+  ONLY for a Super Admin (cross-company by right); every non-SA stays scoped to
+  their own company, so document-action TENANCY IS INTACT (a company admin still
+  404s on another company's doc — pinned by the existing cross-company test).
+  `assertCompanyDocumentAccess` still gates company docs to admin roles. (789cc0b)
+- **4. In-place date correction (8e2fdba).** The panel edit-fields form corrects
+  `issue_date`/`expiry_date` without a re-upload (`updateMetadata` writes them
+  only when the request submits them, so a metadata-only caller never wipes
+  them); the 90/60/30 alert engine re-grades at once. Detail slide-over widened
+  `md:max-w-xl → 2xl` (b7eedae).
+
+**PWA install button vanished for workers (state vs event).** The worker install
+banner was gated on `canPromptInstall()` (Chrome's one-shot `beforeinstallprompt`,
+which Chrome fires once then throttles ~90 days after an ignore), so an Android
+worker who ignored it lost the banner forever despite never installing.
+`WorkerLayout.refreshInstallState()` now drives the banner from install STATE: it
+shows whenever the app is NOT running standalone (`isStandalone()` false). When
+the native prompt is available it is used; when throttled/gone a manual
+"open menu → Add to Home screen" instruction shows instead (`androidManual`, key
+`worker.install_android_manual`, en/es/ur). Only a real install (standalone)
+hides it forever; Dismiss stays session-only (`sessionStorage`), returning next
+session — so stuck workers get the button back on their next app open with no
+data cleanup. (commit e6ea83b)
+
+Tests: `CompanyDocumentDetailTest` (+cross-company display, +cross-company
+action-route access with tenancy preserved, +preview framing). Five gates green.
+
 ### Call Panel — outcome tracking + 4-category month overview (2026-09, DONE, deployed to prod)
 
 Screen 13 reworked so a month's call activity reads as four SEPARATED groups
