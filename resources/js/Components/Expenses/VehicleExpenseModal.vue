@@ -167,6 +167,9 @@ function submit() {
                     <option value="employee">{{ $t('expenses.bearable_employee') }}</option>
                 </VSelect>
             </FormField>
+            <p class="sm:col-span-2 rounded-md bg-status-info-soft px-3 py-2 text-xs text-status-info">
+                {{ $t('expenses.bearable_reimburse_hint') }}
+            </p>
 
             <FormField k="expenses.notes" class="sm:col-span-2" :error="form.errors.notes">
                 <VTextarea v-model="form.notes" :rows="2" />

@@ -166,6 +166,13 @@ watch(() => form.is_taxable, (taxable) => {
     if (!taxable) { form.vat_rate = null; form.vat_custom_percent = null; }
 });
 
+// On THIS tab, an Employee-borne expense means "deduct from salary" (worker
+// reimbursements go through the Worker Expense tab). Default the toggle on when
+// Employee is picked, and clear it otherwise — the admin can still override.
+watch(() => form.bearable_by, (bearer) => {
+    form.deduct_from_salary = bearer === 'employee';
+});
+
 // The specific company card only applies to the Company-card method — clear it
 // when the method changes so a stale card id is never saved against Cash etc.
 watch(() => form.payment_method, (method) => {
@@ -746,10 +753,15 @@ const columns = [
                 </FormField>
                 <label v-if="form.bearable_by === 'employee'" class="flex items-center gap-2 pt-6">
                     <VCheckbox v-model="form.deduct_from_salary">
-                        <Bilingual k="expenses.deduct_from_salary" inline class="text-sm" />
+                        <span class="text-sm">{{ $t('expenses.deduct_from_salary_label') }}</span>
                     </VCheckbox>
                 </label>
-                <p class="sm:col-span-2 -mt-2 text-xs text-muted">{{ $t('expenses.bearable_hint') }}</p>
+                <!-- Steer worker reimbursements to the Worker Expense tab (this
+                     tab's Employee option is for DEDUCTIONS, not reimbursements). -->
+                <p class="sm:col-span-2 -mt-2 rounded-md bg-status-info-soft px-3 py-2 text-xs text-status-info">
+                    {{ $t('expenses.bearable_reimburse_hint') }}
+                </p>
+                <p class="sm:col-span-2 text-xs text-muted">{{ $t('expenses.bearable_hint') }}</p>
 
                 <dl class="tabular-nums sm:col-span-2 space-y-1 rounded-lg border border-line bg-surface-sunken p-3 text-sm">
                     <div v-if="form.vat_rate" class="flex justify-between">
