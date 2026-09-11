@@ -144,7 +144,7 @@ const previewUrl = computed(() => (props.doc ? `/documents/${props.doc.id}/previ
 </script>
 
 <template>
-    <VSlideOver :open="doc !== null" title-key="documents.detail" width="md:max-w-xl" @close="emit('close')">
+    <VSlideOver :open="doc !== null" title-key="documents.detail" width="md:max-w-2xl" @close="emit('close')">
         <template v-if="doc">
             <!-- Status-accented header card -->
             <div class="relative overflow-hidden rounded-xl border border-line bg-surface-raised shadow-card">
