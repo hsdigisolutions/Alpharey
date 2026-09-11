@@ -4,6 +4,7 @@ namespace App\Services\Workers;
 
 use App\Enums\BearableBy;
 use App\Enums\ExpenseType;
+use App\Enums\NotificationType;
 use App\Enums\PaymentStatus;
 use App\Enums\WorkerExpenseStatus;
 use App\Models\Expense;
@@ -11,6 +12,7 @@ use App\Models\ExpenseCategory;
 use App\Models\Scopes\CompanyScope;
 use App\Models\Vehicle;
 use App\Models\WorkerExpense;
+use App\Services\Notifications\NotificationDispatcher;
 
 /**
  * When a manager APPROVES a worker's expense (fuel or any category), mirror it
@@ -56,14 +58,15 @@ class WorkerFuelExpenseService
     /**
      * Create the mirror Expense in the "in review" state — the manager sent the
      * worker expense to the Super-Admin review queue instead of approving it.
-     * The mirror is unapproved with review_status = in_review.
+     * The mirror is unapproved with review_status = in_review, and carries WHO
+     * escalated it + any note (BUG 4 — the review queue shows both).
      */
-    public function mirrorForReview(WorkerExpense $workerExpense): ?Expense
+    public function mirrorForReview(WorkerExpense $workerExpense, ?int $escalatedBy = null, ?string $note = null): ?Expense
     {
-        return $this->createMirror($workerExpense, 'in_review');
+        return $this->createMirror($workerExpense, 'in_review', $escalatedBy, $note);
     }
 
-    private function createMirror(WorkerExpense $workerExpense, ?string $reviewStatus): ?Expense
+    private function createMirror(WorkerExpense $workerExpense, ?string $reviewStatus, ?int $escalatedBy = null, ?string $note = null): ?Expense
     {
         if ($workerExpense->auto_expense_id !== null) {
             return null; // idempotent — already mirrored
@@ -98,6 +101,8 @@ class WorkerFuelExpenseService
         $expense->source = $isFuel ? self::SOURCE : self::SOURCE_GENERAL;
         $expense->source_id = $workerExpense->id;
         $expense->review_status = $reviewStatus;
+        $expense->escalated_by = $reviewStatus === 'in_review' ? $escalatedBy : null;
+        $expense->review_note = $reviewStatus === 'in_review' ? $note : null;
         // Reference the SAME receipt file (not copied).
         if ($workerExpense->receipt_path !== null) {
             $expense->file_path = $workerExpense->receipt_path;
@@ -143,5 +148,78 @@ class WorkerFuelExpenseService
             ['company_id' => $companyId, 'name' => $isFuel ? 'Combustible' : 'Gasto de trabajador'],
             ['active' => true],
         );
+    }
+
+    /**
+     * The WorkerExpense a mirror Expense was created from (source_id link), or
+     * null when the expense is not a worker mirror. Scope dropped — the decider
+     * may be a Super Admin acting across companies.
+     */
+    public function linkedWorkerExpense(Expense $expense): ?WorkerExpense
+    {
+        if (! in_array($expense->source, [self::SOURCE, self::SOURCE_GENERAL], true) || $expense->source_id === null) {
+            return null;
+        }
+
+        return WorkerExpense::query()->withoutGlobalScope(CompanyScope::class)->find($expense->source_id);
+    }
+
+    /**
+     * The mirror was escalated to review → the WorkerExpense reflects it as
+     * in_review, with NO approver stamped (it was NOT approved — BUG 3). Keeps
+     * the Worker Expenses tab truthful about the real (pending-SA) state.
+     */
+    public function markWorkerInReview(Expense $expense): void
+    {
+        $workerExpense = $this->linkedWorkerExpense($expense);
+        if ($workerExpense === null) {
+            return;
+        }
+
+        $workerExpense->status = WorkerExpenseStatus::InReview;
+        $workerExpense->approved_by = null;
+        $workerExpense->approved_at = null;
+        $workerExpense->rejection_reason = null;
+        $workerExpense->save();
+    }
+
+    /**
+     * The Super Admin's FINAL decision on the mirror cascades to the linked
+     * WorkerExpense so the Worker Expenses tab, and the worker's own view, show
+     * the true outcome — and the worker is notified. Money is NOT touched here:
+     * payroll counts the mirror Expense via its own `approved` flag (a mirrored
+     * WorkerExpense is excluded from PayrollService::pwaExpensesFor), so this is
+     * a status/tracking sync only.
+     */
+    public function applyFinalDecisionToWorker(Expense $expense, bool $approved, ?int $deciderId): void
+    {
+        $workerExpense = $this->linkedWorkerExpense($expense);
+        if ($workerExpense === null) {
+            return;
+        }
+
+        $newStatus = $approved ? WorkerExpenseStatus::Approved : WorkerExpenseStatus::Rejected;
+        $changed = $workerExpense->status !== $newStatus;
+
+        $workerExpense->status = $newStatus;
+        $workerExpense->approved_by = $deciderId;
+        $workerExpense->approved_at = now();
+        $workerExpense->save();
+
+        // Notify only on a real transition — a worker escalated then approved is
+        // told once; the normal manager→admin path (already Approved) won't
+        // double-notify.
+        if ($changed) {
+            app(NotificationDispatcher::class)->dispatchToUser(
+                NotificationType::ExpenseDecided,
+                $workerExpense->employee?->user,
+                [
+                    'title_es' => $approved ? 'Tu gasto fue aprobado' : 'Tu gasto fue rechazado',
+                    'title_en' => $approved ? 'Your expense was approved' : 'Your expense was rejected',
+                    'entity' => $workerExpense->description,
+                    'url' => '/worker',
+                ],
+            );
+        }
     }
 }

@@ -75,16 +75,25 @@ class ExpenseController extends Controller
     private function filteredQuery(Request $request): Builder
     {
         return Expense::query()
-            ->with(['vendor:id,name', 'project:id,name', 'employee:id,full_name', 'category:id,name', 'splits.category:id,name'])
+            ->with(['vendor:id,name', 'project:id,name,client_id', 'project.client:id,name', 'employee:id,full_name,employee_code', 'category:id,name', 'splits.category:id,name', 'escalatedBy:id,name'])
             ->when($request->filled('search'), fn ($q) => $q->where('number', 'like', '%'.$request->string('search').'%'))
             ->when($request->filled('project_id'), fn ($q) => $q->where('project_id', $request->integer('project_id')))
             ->when($request->filled('vendor_id'), fn ($q) => $q->where('vendor_id', $request->integer('vendor_id')))
             ->when($request->filled('type'), fn ($q) => $q->where('type', $request->string('type')))
             ->when($request->filled('expense_category_id'), fn ($q) => $q->where('expense_category_id', $request->integer('expense_category_id')))
             ->when($request->filled('payment_status'), fn ($q) => $q->where('payment_status', $request->string('payment_status')))
+            // Approval filter: 'approved' / 'pending' (awaiting a first decision,
+            // NOT escalated) / 'in_review' (escalated to the Super-Admin queue).
             // ->string() returns a Stringable — compare on ->value(), or the
             // filter silently never matches.
-            ->when($request->filled('approval'), fn ($q) => $q->where('approved', $request->string('approval')->value() === 'approved'))
+            ->when($request->filled('approval'), function ($q) use ($request) {
+                $approval = $request->string('approval')->value();
+                match ($approval) {
+                    'approved' => $q->where('approved', true),
+                    'in_review' => $q->where('review_status', 'in_review'),
+                    default => $q->where('approved', false)->whereNull('review_status'), // pending
+                };
+            })
             ->when($request->filled('taxable'), fn ($q) => $q->where('is_taxable', $request->string('taxable')->value() === 'taxable'))
             ->when($request->filled('from'), fn ($q) => $q->whereDate('date', '>=', $request->string('from')))
             ->when($request->filled('to'), fn ($q) => $q->whereDate('date', '<=', $request->string('to')))
@@ -107,14 +116,18 @@ class ExpenseController extends Controller
             ->selectRaw('COALESCE(SUM(total), 0) as total_sum')
             ->selectRaw('COALESCE(SUM(CASE WHEN approved = 1 THEN 1 ELSE 0 END), 0) as approved_count')
             ->selectRaw('COALESCE(SUM(CASE WHEN approved = 1 THEN total ELSE 0 END), 0) as approved_sum')
-            ->selectRaw('COALESCE(SUM(CASE WHEN approved = 0 THEN 1 ELSE 0 END), 0) as pending_count')
-            ->selectRaw('COALESCE(SUM(CASE WHEN approved = 0 THEN total ELSE 0 END), 0) as pending_sum')
+            // Pending = awaiting a first decision, NOT escalated (review_status null).
+            ->selectRaw('COALESCE(SUM(CASE WHEN approved = 0 AND review_status IS NULL THEN 1 ELSE 0 END), 0) as pending_count')
+            ->selectRaw('COALESCE(SUM(CASE WHEN approved = 0 AND review_status IS NULL THEN total ELSE 0 END), 0) as pending_sum')
+            ->selectRaw("COALESCE(SUM(CASE WHEN review_status = 'in_review' THEN 1 ELSE 0 END), 0) as review_count")
+            ->selectRaw("COALESCE(SUM(CASE WHEN review_status = 'in_review' THEN total ELSE 0 END), 0) as review_sum")
             ->first();
 
         return [
             'total' => ['count' => (int) ($r->total_count ?? 0), 'amount' => (float) ($r->total_sum ?? 0)],
             'approved' => ['count' => (int) ($r->approved_count ?? 0), 'amount' => (float) ($r->approved_sum ?? 0)],
             'pending' => ['count' => (int) ($r->pending_count ?? 0), 'amount' => (float) ($r->pending_sum ?? 0)],
+            'in_review' => ['count' => (int) ($r->review_count ?? 0), 'amount' => (float) ($r->review_sum ?? 0)],
         ];
     }
 
@@ -446,6 +459,8 @@ class ExpenseController extends Controller
         $expense->approved = $validated['approved'];
         $expense->approved_by = $validated['approved'] ? Auth::id() : null;
         $expense->approved_at = $validated['approved'] ? now() : null;
+        // The final decision closes the review — drop it out of the review queue.
+        $expense->review_status = null;
         $expense->save();
 
         // Part E — on final approval, mirror a vehicle-linked expense into the
@@ -455,6 +470,12 @@ class ExpenseController extends Controller
             app(VehicleExpenseSyncService::class)->syncOnFinalApproval($expense);
         }
 
+        // BUG 3/4 — cascade the SA's final decision to the linked WorkerExpense so
+        // the Worker Expenses tab + the worker's view show the true outcome, and
+        // the worker is notified. Money is untouched: payroll counts the mirror
+        // Expense via its own `approved` flag (this only syncs status + notifies).
+        app(WorkerFuelExpenseService::class)->applyFinalDecisionToWorker($expense, $expense->approved, $expense->approved_by);
+
         return back()->with('success', __('ui.expenses.'.($validated['approved'] ? 'approved' : 'rejected')));
     }
 
@@ -463,15 +484,26 @@ class ExpenseController extends Controller
      * final approve/reject — for when the admin is unsure. The Super Admin's
      * decision in that queue is the final call.
      */
-    public function sendToReview(Expense $expense): RedirectResponse
+    public function sendToReview(Request $request, Expense $expense): RedirectResponse
     {
         Gate::authorize('expenses.approve_final');
+
+        $validated = $request->validate([
+            'review_note' => ['nullable', 'string', 'max:500'],
+        ]);
 
         $expense->review_status = 'in_review';
         $expense->approved = false;
         $expense->approved_by = null;
         $expense->approved_at = null;
+        // Who escalated + their note (BUG 4 — shown in the review queue).
+        $expense->escalated_by = Auth::id();
+        $expense->review_note = $validated['review_note'] ?? null;
         $expense->save();
+
+        // Keep the Worker Expenses tab / the worker's own view truthful: a worker
+        // mirror sent to review reads as in_review, never "approved" (BUG 3).
+        app(WorkerFuelExpenseService::class)->markWorkerInReview($expense);
 
         return back()->with('success', __('ui.expenses.sent_to_review'));
     }
@@ -716,12 +748,20 @@ class ExpenseController extends Controller
             'payment_date' => $e->payment_date?->toDateString(),
             'approved' => $e->approved,
             'review_status' => $e->review_status,
+            // Review queue (BUG 4): who escalated it + their note, and the client
+            // + worker context for the detail panel.
+            'escalated_by' => $e->escalatedBy?->name,
+            'review_note' => $e->review_note,
+            'client' => $e->project?->client?->name,
+            'employee_code' => $e->employee?->employee_code,
+            'is_worker_submitted' => in_array($e->source, ['worker_fuel', 'worker_expense'], true),
             'is_reimbursable' => $e->is_reimbursable,
             'bearable_by' => $e->bearable_by->value,
             'deduct_from_salary' => $e->deduct_from_salary,
             'notes' => $e->notes,
             'has_file' => $e->file_path !== null,
             'original_name' => $e->original_name,
+            'ext' => strtolower(pathinfo((string) ($e->original_name ?: $e->file_path), PATHINFO_EXTENSION)),
             // Non-null when the row was auto-created (e.g. 'worker_fuel').
             'source' => $e->source,
         ];

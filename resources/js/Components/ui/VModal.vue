@@ -9,7 +9,7 @@ import AppIcon from '@/Components/AppIcon.vue';
 const props = defineProps({
     open: { type: Boolean, default: false },
     titleKey: { type: String, required: true },
-    size: { type: String, default: 'md' }, // sm | md | lg
+    size: { type: String, default: 'md' }, // sm | md | lg | xl
 });
 
 const emit = defineEmits(['close']);
@@ -18,6 +18,7 @@ const sizes = {
     sm: 'md:max-w-md',
     md: 'md:max-w-xl',
     lg: 'md:max-w-3xl',
+    xl: 'md:max-w-5xl',
 };
 
 function onKeydown(event) {

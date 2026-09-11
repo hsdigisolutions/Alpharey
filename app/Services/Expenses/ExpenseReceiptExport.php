@@ -45,7 +45,10 @@ class ExpenseReceiptExport
 
         $q = Expense::query()
             ->whereNotNull('file_path')
-            ->with(['vendor:id,name', 'project:id,name,company_id', 'category:id,name'])
+            ->with([
+                'vendor:id,name', 'project:id,name,company_id,client_id', 'project.client:id,name',
+                'category:id,name', 'employee:id,full_name,employee_code', 'escalatedBy:id,name',
+            ])
             ->when($from !== null, fn ($qq) => $qq->whereDate('date', '>=', $from))
             ->when($to !== null, fn ($qq) => $qq->whereDate('date', '<=', $to))
             ->orderBy('date')
@@ -83,6 +86,7 @@ class ExpenseReceiptExport
             'number' => $e->number,
             'vendor' => $e->vendor?->name,
             'project' => $e->project?->name,
+            'client' => $e->project?->client?->name,
             'category' => $e->category?->name,
             'concept' => $e->notes,
             'base' => (float) $e->subtotal,
@@ -90,6 +94,16 @@ class ExpenseReceiptExport
             'total' => (float) $e->total,
             'is_taxable' => $e->is_taxable,
             'payment_method' => $e->payment_method?->value,
+            // Context for the premium receipt detail panel (BUG 2 / BUG 4):
+            // who submitted it, the money state, and the review trail.
+            'employee' => $e->employee?->full_name,
+            'employee_code' => $e->employee?->employee_code,
+            'is_worker_submitted' => in_array($e->source, ['worker_fuel', 'worker_expense'], true),
+            'payment_status' => $e->payment_status->value,
+            'approved' => $e->approved,
+            'review_status' => $e->review_status,
+            'escalated_by' => $e->escalatedBy?->name,
+            'review_note' => $e->review_note,
             'filename' => $this->fileName($e, $ext),
             'original_name' => $e->original_name,
             'ext' => $ext,

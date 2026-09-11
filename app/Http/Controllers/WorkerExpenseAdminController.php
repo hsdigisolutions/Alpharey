@@ -139,17 +139,24 @@ class WorkerExpenseAdminController extends Controller
      * approving/rejecting. Creates the mirror Expense in the in_review state; the
      * Super Admin makes the final call there.
      */
-    public function sendToReview(WorkerExpense $workerExpense): RedirectResponse
+    public function sendToReview(Request $request, WorkerExpense $workerExpense): RedirectResponse
     {
         Gate::authorize('expenses.approve');
 
+        $validated = $request->validate([
+            'review_note' => ['nullable', 'string', 'max:500'],
+        ]);
+
+        // Escalation is NOT an approval — do not stamp approved_by/approved_at
+        // (BUG 3: that made the Worker Expenses tab read "Approved by {manager}").
+        // The manager is recorded as the ESCALATOR on the mirror instead.
         $workerExpense->status = WorkerExpenseStatus::InReview;
-        $workerExpense->approved_by = Auth::id();
-        $workerExpense->approved_at = now();
+        $workerExpense->approved_by = null;
+        $workerExpense->approved_at = null;
         $workerExpense->rejection_reason = null;
         $workerExpense->save();
 
-        app(WorkerFuelExpenseService::class)->mirrorForReview($workerExpense);
+        app(WorkerFuelExpenseService::class)->mirrorForReview($workerExpense, Auth::id(), $validated['review_note'] ?? null);
 
         return back()->with('success', __('ui.worker_expenses.sent_to_review'));
     }

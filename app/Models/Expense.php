@@ -48,6 +48,8 @@ use Illuminate\Support\Carbon;
  * @property int|null $vehicle_id
  * @property string|null $vehicle_expense_type
  * @property string|null $review_status
+ * @property int|null $escalated_by
+ * @property string|null $review_note
  * @property bool $is_taxable
  */
 class Expense extends Model
@@ -139,6 +141,16 @@ class Expense extends Model
         }
 
         return null;
+    }
+
+    /**
+     * The user who sent this expense to the Super-Admin review queue (BUG 4).
+     *
+     * @return BelongsTo<User, $this>
+     */
+    public function escalatedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'escalated_by');
     }
 
     /**

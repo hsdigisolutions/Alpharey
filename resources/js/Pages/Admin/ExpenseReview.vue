@@ -2,15 +2,22 @@
 /**
  * Part C — Expenses awaiting review (Super Admin only). Every expense a manager
  * or admin escalated with "Send to review" lands here; the Super Admin's
- * approve/reject is the final decision.
+ * approve/reject is the final decision, cascaded to the worker + payroll.
+ *
+ * BUG 4 — each row opens the premium receipt-detail panel (reused from the
+ * Expenses tab) so the SA sees the full receipt + who submitted it + which
+ * manager escalated it + their note before deciding.
  */
+import { computed, ref } from 'vue';
 import { router } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import Bilingual from '@/Components/Bilingual.vue';
+import ExpenseReceiptDetail from '@/Components/Expenses/ExpenseReceiptDetail.vue';
 import VButton from '@/Components/ui/VButton.vue';
 import VCard from '@/Components/ui/VCard.vue';
 import VBadge from '@/Components/ui/VBadge.vue';
 import VEmptyState from '@/Components/ui/VEmptyState.vue';
+import VModal from '@/Components/ui/VModal.vue';
 import VPageHeader from '@/Components/ui/VPageHeader.vue';
 
 defineProps({
@@ -19,8 +26,16 @@ defineProps({
 
 const eur = (n) => new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(Number(n) || 0);
 
+const detailRow = ref(null);
+function openDetail(e) { detailRow.value = e; }
+
 function decide(id, action) {
     router.post(`/expense-review/${id}/${action}`, {}, { preserveScroll: true });
+}
+function decideFromDetail(action) {
+    if (!detailRow.value) return;
+    decide(detailRow.value.id, action);
+    detailRow.value = null;
 }
 </script>
 
@@ -38,8 +53,8 @@ function decide(id, action) {
             <VCard v-for="e in expenses" :key="e.id" class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div class="min-w-0 flex-1">
                     <div class="flex flex-wrap items-center gap-2">
-                        <span class="tabular-nums text-base font-semibold text-ink">{{ eur(e.amount) }}</span>
-                        <VBadge status="warn"><Bilingual k="expenses.in_review" inline /></VBadge>
+                        <span class="tabular-nums text-base font-semibold text-ink">{{ eur(e.total) }}</span>
+                        <VBadge status="info"><Bilingual k="expenses.in_review" inline /></VBadge>
                         <span class="text-xs text-muted">{{ e.company }}</span>
                     </div>
                     <div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[13px] text-ink-soft">
@@ -48,9 +63,15 @@ function decide(id, action) {
                         <span v-if="e.employee">· {{ e.employee }}</span>
                         <span v-if="e.vehicle">· {{ e.vehicle }}</span>
                     </div>
-                    <p v-if="e.notes" class="mt-1 truncate text-[13px] text-muted">{{ e.notes }}</p>
+                    <p v-if="e.escalated_by" class="mt-1 text-[13px] text-ink-soft">
+                        <Bilingual k="expenses.escalated_by" inline />: <span class="font-medium">{{ e.escalated_by }}</span>
+                        <span v-if="e.review_note" class="italic text-muted"> — “{{ e.review_note }}”</span>
+                    </p>
                 </div>
                 <div class="flex shrink-0 items-center gap-2">
+                    <VButton variant="ghost" size="sm" icon="eye" @click="openDetail(e)">
+                        <Bilingual k="expenses.review" inline />
+                    </VButton>
                     <VButton variant="secondary" size="sm" @click="decide(e.id, 'reject')">
                         <Bilingual k="expenses.review_reject" inline />
                     </VButton>
@@ -60,5 +81,18 @@ function decide(id, action) {
                 </div>
             </VCard>
         </div>
+
+        <!-- Full receipt + context, with the final decision in the footer. -->
+        <VModal :open="!!detailRow" size="xl" title-key="expenses.receipt_detail_title" @close="detailRow = null">
+            <ExpenseReceiptDetail v-if="detailRow" :row="detailRow" />
+            <template #footer>
+                <VButton variant="ghost" class="text-status-danger" @click="decideFromDetail('reject')">
+                    <Bilingual k="expenses.review_reject" inline />
+                </VButton>
+                <VButton @click="decideFromDetail('approve')">
+                    <Bilingual k="expenses.review_approve" inline />
+                </VButton>
+            </template>
+        </VModal>
     </AppLayout>
 </template>

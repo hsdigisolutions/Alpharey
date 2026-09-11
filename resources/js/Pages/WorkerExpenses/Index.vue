@@ -69,11 +69,21 @@ function submitReject() {
     });
 }
 
-// ── Approve ──────────────────────────────────────────────────────────────────
-function sendToReview(expense) {
-    router.post(route('worker-expenses.review', expense.id), {}, { preserveScroll: true });
+// ── Send to review (escalate to Super Admin, with an optional note) ───────────
+const reviewTarget = ref(null);
+const reviewForm = useForm({ review_note: '' });
+function openSendToReview(expense) {
+    reviewTarget.value = expense;
+    reviewForm.reset();
+}
+function submitSendToReview() {
+    reviewForm.post(route('worker-expenses.review', reviewTarget.value.id), {
+        preserveScroll: true,
+        onSuccess: () => { reviewTarget.value = null; reviewForm.reset(); },
+    });
 }
 
+// ── Approve ──────────────────────────────────────────────────────────────────
 function approve(expense) {
     router.post(route('worker-expenses.approve', expense.id));
 }
@@ -158,7 +168,7 @@ function approve(expense) {
                                     <VButton size="sm" variant="ghost" class="text-status-danger" @click="openReject(e)">
                                         <Bilingual k="worker_expenses.reject" inline />
                                     </VButton>
-                                    <VButton size="sm" variant="ghost" @click="sendToReview(e)">
+                                    <VButton size="sm" variant="ghost" @click="openSendToReview(e)">
                                         <Bilingual k="worker_expenses.send_to_review" inline />
                                     </VButton>
                                 </div>
@@ -195,6 +205,21 @@ function approve(expense) {
                     </VButton>
                 </div>
             </form>
+        </VModal>
+
+        <!-- Send to review — optional note for the Super Admin -->
+        <VModal :open="!!reviewTarget" title-key="worker_expenses.send_to_review" size="sm"
+            @close="reviewTarget = null">
+            <form id="we-review-form" @submit.prevent="submitSendToReview">
+                <p class="mb-2 text-xs text-ink-soft"><Bilingual k="expenses.review_note_hint" /></p>
+                <VTextarea v-model="reviewForm.review_note" :rows="3" :placeholder="$t('expenses.review_note_placeholder')" />
+            </form>
+            <template #footer>
+                <VButton variant="ghost" @click="reviewTarget = null"><Bilingual k="common.cancel" inline /></VButton>
+                <VButton type="submit" form="we-review-form" :loading="reviewForm.processing">
+                    <Bilingual k="worker_expenses.send_to_review" inline />
+                </VButton>
+            </template>
         </VModal>
 
         <!-- New worker expense (admin, on behalf of a worker) -->

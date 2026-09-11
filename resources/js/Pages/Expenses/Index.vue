@@ -14,6 +14,7 @@ import { Head, router, useForm } from '@inertiajs/vue3';
 import { ensureCompanySelected } from '@/composables/useCompanyGate';
 import AppIcon from '@/Components/AppIcon.vue';
 import AppLayout from '@/Layouts/AppLayout.vue';
+import ExpenseReceiptDetail from '@/Components/Expenses/ExpenseReceiptDetail.vue';
 import FormField from '@/Components/ui/FormField.vue';
 import VBadge from '@/Components/ui/VBadge.vue';
 import VButton from '@/Components/ui/VButton.vue';
@@ -131,9 +132,18 @@ const receiptExportQuery = computed(() => {
     return new URLSearchParams(Object.fromEntries(Object.entries(p).filter(([, v]) => v != null))).toString();
 });
 
-// Inline preview panel.
-const rcPreviewRow = ref(null); // the receipt row being previewed
-function openPreview(r) { rcPreviewRow.value = r; }
+// Premium receipt detail (BUG 2) — opens in a wide modal, reused by the Recibos
+// tab and the review queue (BUG 4). `detailRow` is the enriched receipt/expense
+// row; `detailReviewable` when the SA can decide on an in-review row here.
+const detailRow = ref(null);
+function openDetail(r) { detailRow.value = r; }
+function closeDetail() { detailRow.value = null; }
+const detailReviewable = computed(() => !!(detailRow.value && props.can.approve_final && detailRow.value.review_status === 'in_review'));
+function decideFromDetail(value) {
+    if (!detailRow.value) return;
+    approve(detailRow.value, value);
+    closeDetail();
+}
 
 /* ---------- create / edit ---------- */
 const showModal = ref(false);
@@ -283,8 +293,18 @@ function approve(row, value) {
     router.post(`/expenses/${row.id}/approve`, { approved: value }, { preserveScroll: true });
 }
 
-function sendToReview(row) {
-    router.post(`/expenses/${row.id}/review`, {}, { preserveScroll: true });
+// Send to the Super-Admin review queue with an optional note (BUG 4).
+const reviewNoteTarget = ref(null);
+const reviewNoteForm = useForm({ review_note: '' });
+function openSendToReview(row) {
+    reviewNoteTarget.value = row;
+    reviewNoteForm.reset();
+}
+function submitSendToReview() {
+    reviewNoteForm.post(`/expenses/${reviewNoteTarget.value.id}/review`, {
+        preserveScroll: true,
+        onSuccess: () => { reviewNoteTarget.value = null; reviewNoteForm.reset(); },
+    });
 }
 
 const confirm = ref({ open: false, message: '', fn: null });
@@ -419,10 +439,11 @@ const columns = [
         <!-- ============ GASTOS (expense list) ============ -->
         <div v-show="tab === 'expenses'">
         <!-- Summary cards — count + € per approval state. Clickable. -->
-        <div class="mb-4 grid grid-cols-3 gap-3">
+        <div class="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
             <VKpiCard k="stats.total" :value="stats.total.count" :sub="eur(stats.total.amount)" clickable :active="filters.approval === ''" @click="setApproval('')" />
             <VKpiCard k="stats.approved" :value="stats.approved.count" :sub="eur(stats.approved.amount)" status="ok" clickable :active="filters.approval === 'approved'" @click="setApproval('approved')" />
             <VKpiCard k="stats.pending" :value="stats.pending.count" :sub="eur(stats.pending.amount)" status="warn" clickable :active="filters.approval === 'pending'" @click="setApproval('pending')" />
+            <VKpiCard v-if="stats.in_review" k="stats.in_review" :value="stats.in_review.count" :sub="eur(stats.in_review.amount)" status="info" clickable :active="filters.approval === 'in_review'" @click="setApproval('in_review')" />
         </div>
 
         <div class="grid grid-cols-2 gap-2 pb-3 lg:grid-cols-4">
@@ -520,10 +541,15 @@ const columns = [
                             <VButton v-else variant="ghost" size="sm" @click="approve(r, false)">
                                 <Bilingual k="expenses.reject" inline />
                             </VButton>
-                            <VButton v-if="!r.approved" variant="ghost" size="sm" @click="sendToReview(r)">
+                            <VButton v-if="!r.approved" variant="ghost" size="sm" @click="openSendToReview(r)">
                                 <Bilingual k="expenses.send_to_review" inline />
                             </VButton>
                         </template>
+                        <!-- In-review row (BUG 4): the final approver opens the full-detail
+                             review panel and decides there; others just view it. -->
+                        <VButton v-if="r.review_status === 'in_review'" variant="ghost" size="sm" icon="eye" @click="openDetail(r)">
+                            <Bilingual :k="can.approve_final ? 'expenses.review' : 'expenses.view'" inline />
+                        </VButton>
                         <VButton v-if="can.delete && !r.approved && !isDeployment(r)" variant="ghost" size="sm" icon="trash" @click="destroy(r)" />
                     </span>
                 </td>
@@ -579,60 +605,34 @@ const columns = [
             </div>
 
             <VEmptyState v-if="!receipts.length" icon="file" :title="$t('expenses.rc_empty')" />
-            <div v-else class="grid gap-4 lg:grid-cols-[1fr_1.2fr]">
-                <!-- Receipt list -->
-                <div class="overflow-hidden rounded-lg border border-line">
-                    <table class="w-full text-sm">
-                        <thead class="bg-surface-sunken text-xs uppercase text-muted">
-                            <tr>
-                                <th class="px-3 py-2 text-start">{{ $t('expenses.rc_date') }}</th>
-                                <th class="px-3 py-2 text-start">{{ $t('expenses.vendor') }}</th>
-                                <th class="px-3 py-2 text-end">{{ $t('expenses.total') }}</th>
-                                <th class="px-3 py-2 text-end"></th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr v-for="r in receipts" :key="r.id"
-                                class="cursor-pointer border-t border-line hover:bg-surface-hover"
-                                :class="rcPreviewRow && rcPreviewRow.id === r.id ? 'bg-accent-soft' : ''"
-                                @click="openPreview(r)">
-                                <td class="tabular-nums px-3 py-2.5">{{ r.date }}</td>
-                                <td class="px-3 py-2.5">
-                                    <span class="font-medium text-ink">{{ r.vendor ?? '—' }}</span>
-                                    <span class="block text-xs text-muted">{{ r.category ?? '—' }}<template v-if="r.number"> · {{ r.number }}</template></span>
-                                </td>
-                                <td class="tabular-nums px-3 py-2.5 text-end">{{ eur(r.total) }}</td>
-                                <td class="px-3 py-2.5 text-end">
-                                    <VBadge :status="r.is_image ? 'info' : (r.is_pdf ? 'neutral' : 'neutral')">{{ r.ext || '?' }}</VBadge>
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-                <!-- Inline preview -->
-                <div class="rounded-lg border border-line bg-surface-raised p-3">
-                    <div v-if="!rcPreviewRow" class="flex h-64 items-center justify-center text-sm text-muted">
-                        {{ $t('expenses.rc_pick') }}
-                    </div>
-                    <div v-else>
-                        <div class="mb-2 flex items-start justify-between gap-2">
-                            <div class="min-w-0">
-                                <p class="truncate text-sm font-medium text-ink">{{ rcPreviewRow.vendor ?? '—' }} · {{ eur(rcPreviewRow.total) }}</p>
-                                <p class="truncate text-xs text-muted">{{ rcPreviewRow.original_name ?? rcPreviewRow.filename }}</p>
-                            </div>
-                            <a :href="`/expenses/${rcPreviewRow.id}/receipt`" class="shrink-0 text-xs text-accent hover:underline">{{ $t('common.download') }}</a>
-                        </div>
-                        <img v-if="rcPreviewRow.is_image" :src="`/expenses/${rcPreviewRow.id}/receipt/preview`" alt=""
-                            class="max-h-[70vh] w-full rounded border border-line object-contain" />
-                        <iframe v-else-if="rcPreviewRow.is_pdf" :src="`/expenses/${rcPreviewRow.id}/receipt/preview`"
-                            class="h-[70vh] w-full rounded border border-line" />
-                        <div v-else class="flex h-64 flex-col items-center justify-center gap-2 text-sm text-muted">
-                            <AppIcon name="file" class="h-8 w-8" />
-                            <span>{{ rcPreviewRow.original_name ?? rcPreviewRow.filename }}</span>
-                            <a :href="`/expenses/${rcPreviewRow.id}/receipt`" class="text-accent hover:underline">{{ $t('common.download') }}</a>
-                        </div>
-                    </div>
-                </div>
+            <div v-else class="overflow-hidden rounded-lg border border-line">
+                <table class="w-full text-sm">
+                    <thead class="bg-surface-sunken text-xs uppercase text-muted">
+                        <tr>
+                            <th class="px-3 py-2 text-start">{{ $t('expenses.rc_date') }}</th>
+                            <th class="px-3 py-2 text-start">{{ $t('expenses.vendor') }}</th>
+                            <th class="px-3 py-2 text-start">{{ $t('worker_expenses.employee') }}</th>
+                            <th class="px-3 py-2 text-end">{{ $t('expenses.total') }}</th>
+                            <th class="px-3 py-2 text-end"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr v-for="r in receipts" :key="r.id"
+                            class="cursor-pointer border-t border-line hover:bg-surface-hover"
+                            @click="openDetail(r)">
+                            <td class="tabular-nums px-3 py-2.5">{{ r.date }}</td>
+                            <td class="px-3 py-2.5">
+                                <span class="font-medium text-ink">{{ r.vendor ?? r.category ?? '—' }}</span>
+                                <span class="block text-xs text-muted">{{ r.category ?? '—' }}<template v-if="r.number"> · {{ r.number }}</template></span>
+                            </td>
+                            <td class="px-3 py-2.5 text-ink-soft">{{ r.employee ?? '—' }}</td>
+                            <td class="tabular-nums px-3 py-2.5 text-end">{{ eur(r.total) }}</td>
+                            <td class="px-3 py-2.5 text-end">
+                                <VBadge status="neutral">{{ r.ext || '?' }}</VBadge>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
             </div>
         </div>
 
@@ -909,6 +909,33 @@ const columns = [
 
                 <p class="rounded-md bg-surface-sunken px-3 py-2 text-xs text-muted">{{ $t('expenses.deployment_worker_hidden') }}</p>
             </div>
+        </VModal>
+
+        <!-- Premium receipt detail (BUG 2) + Super-Admin review decision (BUG 4). -->
+        <VModal :open="!!detailRow" size="xl" title-key="expenses.receipt_detail_title" @close="closeDetail">
+            <ExpenseReceiptDetail v-if="detailRow" :row="detailRow" />
+            <template v-if="detailReviewable" #footer>
+                <VButton variant="ghost" class="text-status-danger" @click="decideFromDetail(false)">
+                    <Bilingual k="expenses.reject" inline />
+                </VButton>
+                <VButton @click="decideFromDetail(true)">
+                    <Bilingual k="expenses.approve" inline />
+                </VButton>
+            </template>
+        </VModal>
+
+        <!-- Send to review — optional note for the Super Admin (BUG 4). -->
+        <VModal :open="!!reviewNoteTarget" size="sm" title-key="expenses.send_to_review" @close="reviewNoteTarget = null">
+            <form id="review-note-form" @submit.prevent="submitSendToReview">
+                <p class="mb-2 text-xs text-ink-soft"><Bilingual k="expenses.review_note_hint" /></p>
+                <VTextarea v-model="reviewNoteForm.review_note" :rows="3" :placeholder="$t('expenses.review_note_placeholder')" />
+            </form>
+            <template #footer>
+                <VButton variant="ghost" @click="reviewNoteTarget = null"><Bilingual k="common.cancel" inline /></VButton>
+                <VButton type="submit" form="review-note-form" :loading="reviewNoteForm.processing">
+                    <Bilingual k="expenses.send_to_review" inline />
+                </VButton>
+            </template>
         </VModal>
     </AppLayout>
 </template>
