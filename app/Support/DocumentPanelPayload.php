@@ -135,6 +135,9 @@ class DocumentPanelPayload
                     'issue_date' => $version->issue_date?->toDateString(),
                     'expiry_date' => $version->expiry_date?->toDateString(),
                     'has_file' => $version->getAttribute('file_path') !== null,
+                    // So a previous version can open in the inline preview too.
+                    'mime' => $version->mime,
+                    'original_name' => $version->original_name,
                 ])
                 ->values()
                 ->all(),

@@ -141,7 +141,11 @@ it('keeps previous versions in the history array, newest first', function (): vo
         ->where('companies.0.documents.0.version', 2)
         ->where('companies.0.documents.0.metadata.policy_number', 'V2')
         ->has('companies.0.documents.0.history', 1)
-        ->where('companies.0.documents.0.history.0.version', 1));
+        ->where('companies.0.documents.0.history.0.version', 1)
+        // A previous version carries mime + original_name so it can open in the
+        // inline preview too (not download-only).
+        ->has('companies.0.documents.0.history.0.mime')
+        ->has('companies.0.documents.0.history.0.original_name'));
 
     expect(Document::query()->where('type_key', 'poliza_rc')->count())->toBe(2);
 });

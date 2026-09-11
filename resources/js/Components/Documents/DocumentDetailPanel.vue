@@ -52,7 +52,7 @@ watch(() => props.doc?.id, () => {
     showReplace.value = false;
     showHistory.value = false;
     replaceFile.value = null;
-    previewOpen.value = false;
+    previewTarget.value = null;
 });
 
 const money = new Intl.NumberFormat('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -136,11 +136,25 @@ function downloadVersion(id) {
 }
 
 // Inline preview: images render in a lightbox, PDFs in an embedded viewer.
-const previewOpen = ref(false);
-const previewIsImage = computed(() => (props.doc?.mime ?? '').startsWith('image/'));
-const previewIsPdf = computed(() => props.doc?.mime === 'application/pdf');
-const canPreview = computed(() => props.doc?.has_file && (previewIsImage.value || previewIsPdf.value));
-const previewUrl = computed(() => (props.doc ? `/documents/${props.doc.id}/preview` : ''));
+// The target is EITHER the current version OR a previous version — any row with
+// a previewable file (image/PDF) opens here.
+const previewTarget = ref(null);
+const previewOpen = computed({
+    get: () => previewTarget.value !== null,
+    set: (open) => { if (!open) previewTarget.value = null; },
+});
+const previewIsImage = computed(() => (previewTarget.value?.mime ?? '').startsWith('image/'));
+const previewIsPdf = computed(() => previewTarget.value?.mime === 'application/pdf');
+const previewUrl = computed(() => (previewTarget.value ? `/documents/${previewTarget.value.id}/preview` : ''));
+
+function isPreviewable(version) {
+    const mime = version?.mime ?? '';
+    return !!version?.has_file && (mime.startsWith('image/') || mime === 'application/pdf');
+}
+const canPreview = computed(() => isPreviewable(props.doc));
+function openPreview(version) {
+    previewTarget.value = { id: version.id, mime: version.mime, original_name: version.original_name ?? null };
+}
 </script>
 
 <template>
@@ -223,7 +237,7 @@ const previewUrl = computed(() => (props.doc ? `/documents/${props.doc.id}/previ
 
                 <!-- Actions -->
                 <div class="mt-5 flex flex-wrap gap-2">
-                    <VButton v-if="can.download && canPreview" variant="secondary" size="sm" icon="eye" @click="previewOpen = true">
+                    <VButton v-if="can.download && canPreview" variant="secondary" size="sm" icon="eye" @click="openPreview(doc)">
                         <Bilingual k="documents.preview" inline />
                     </VButton>
                     <VButton v-if="can.download && doc.has_file" variant="secondary" size="sm" icon="download" @click="download">
@@ -261,12 +275,19 @@ const previewUrl = computed(() => (props.doc ? `/documents/${props.doc.id}/previ
                                 <span class="font-medium text-ink">v{{ v.version }}</span> · {{ v.uploaded_at ?? '—' }}
                                 <span v-if="v.uploaded_by" class="text-muted">· {{ v.uploaded_by }}</span>
                             </span>
-                            <button v-if="can.download && v.has_file" type="button"
-                                class="rounded-md p-1 text-ink-soft hover:bg-surface-hover hover:text-ink"
-                                :aria-label="`download v${v.version}`" @click="downloadVersion(v.id)">
-                                <AppIcon name="download" class="h-3.5 w-3.5" />
-                            </button>
-                            <span v-else class="text-muted"><Bilingual k="documents.no_file" inline /></span>
+                            <span class="flex items-center gap-1">
+                                <button v-if="can.download && isPreviewable(v)" type="button"
+                                    class="rounded-md p-1 text-ink-soft hover:bg-surface-hover hover:text-ink"
+                                    :aria-label="`preview v${v.version}`" @click="openPreview(v)">
+                                    <AppIcon name="eye" class="h-3.5 w-3.5" />
+                                </button>
+                                <button v-if="can.download && v.has_file" type="button"
+                                    class="rounded-md p-1 text-ink-soft hover:bg-surface-hover hover:text-ink"
+                                    :aria-label="`download v${v.version}`" @click="downloadVersion(v.id)">
+                                    <AppIcon name="download" class="h-3.5 w-3.5" />
+                                </button>
+                                <span v-if="!v.has_file" class="text-muted"><Bilingual k="documents.no_file" inline /></span>
+                            </span>
                         </li>
                     </ol>
                 </div>
@@ -303,14 +324,14 @@ const previewUrl = computed(() => (props.doc ? `/documents/${props.doc.id}/previ
             </template>
         </VModal>
 
-        <!-- Inline preview: image lightbox / embedded PDF viewer (download stays available) -->
-        <div v-if="previewOpen && doc" class="fixed inset-0 z-[60] flex flex-col bg-black/85"
+        <!-- Inline preview: image lightbox / embedded PDF viewer (current OR a previous version) -->
+        <div v-if="previewTarget" class="fixed inset-0 z-[60] flex flex-col bg-black/85"
             @click.self="previewOpen = false">
             <div class="flex items-center justify-between gap-3 px-4 py-3">
-                <span class="truncate text-sm font-medium text-white/90">{{ doc.original_name ?? '—' }}</span>
+                <span class="truncate text-sm font-medium text-white/90">{{ previewTarget.original_name ?? '—' }}</span>
                 <div class="flex items-center gap-1">
                     <button type="button" class="rounded-md p-2 text-white/80 hover:bg-white/10 hover:text-white"
-                        :title="$t('documents.download')" @click="download">
+                        :title="$t('documents.download')" @click="downloadVersion(previewTarget.id)">
                         <AppIcon name="download" class="h-5 w-5" />
                     </button>
                     <button type="button" class="rounded-md p-2 text-white/80 hover:bg-white/10 hover:text-white"
@@ -320,7 +341,7 @@ const previewUrl = computed(() => (props.doc ? `/documents/${props.doc.id}/previ
                 </div>
             </div>
             <div class="flex flex-1 items-center justify-center overflow-auto p-4 pt-0">
-                <img v-if="previewIsImage" :src="previewUrl" :alt="doc.original_name ?? ''"
+                <img v-if="previewIsImage" :src="previewUrl" :alt="previewTarget.original_name ?? ''"
                     class="max-h-full max-w-full rounded-lg object-contain" @click.stop />
                 <iframe v-else-if="previewIsPdf" :src="previewUrl" title="PDF"
                     class="h-full w-full rounded-lg bg-white" @click.stop></iframe>
