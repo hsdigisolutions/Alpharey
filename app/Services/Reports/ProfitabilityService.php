@@ -10,11 +10,14 @@ use App\Models\Attendance;
 use App\Models\Expense;
 use App\Models\Invoice;
 use App\Models\Measurement;
+use App\Models\ProductionTask;
 use App\Models\Project;
 use App\Models\ProjectDesignationRate;
 use App\Models\Scopes\CompanyScope;
 use App\Models\Subcontractor;
 use App\Models\SubcontractorPayment;
+use App\Models\TaskProgress;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
@@ -273,12 +276,16 @@ class ProfitabilityService
         // per worker/day = their approved measured quantity × the client meter
         // rate, while their COST stays the daily/hourly rate they are paid.
         $isPerMeter = $project->billing_type === BillingType::PerMeter;
+        // Task-based: per-worker daily income = Σ (their task-progress quantity ×
+        // the task's client_rate). Same treatment as per_meter, but the value is
+        // already income (the rate lives on the task, not the project).
+        $isTaskBased = $project->billing_type === BillingType::TaskBased;
 
         // Invoice-billed (fixed / milestone / unset) projects earn from PAID
         // invoices, which cannot be attributed to a single day — the daily view
         // must not fabricate hours × rate income the project-level P&L doesn't
         // recognise. Income shows 0 and health stays neutral.
-        $isInvoiceBilled = ! $isPerMeter && $project->billing_type !== BillingType::Hourly;
+        $isInvoiceBilled = ! $isPerMeter && ! $isTaskBased && $project->billing_type !== BillingType::Hourly;
 
         // COST parity with forProject() (spec C9): when the project's labour is
         // EXTERNAL — a subcontractor record, or the outsourced flag — our own
@@ -326,6 +333,20 @@ class ProfitabilityService
                 ($measuredByDate[$mDate][$m->getAttribute('employee_id') ?? 0] ?? 0.0) + (float) $m->getAttribute('qty');
         }
 
+        // Task-based: date => [employee_id => income] (already quantity × client_rate).
+        $taskIncomeRows = $isTaskBased
+            ? $this->taskProgressQuery($project->id, $from, $to)
+                ->selectRaw('task_progress.date as d, task_progress.employee_id as emp, COALESCE(SUM(task_progress.quantity * production_tasks.client_rate),0) as inc')
+                ->groupBy('task_progress.date', 'task_progress.employee_id')
+                ->get()
+            : collect();
+        $taskIncomeByDate = [];
+        foreach ($taskIncomeRows as $ti) {
+            $tDate = substr((string) $ti->getAttribute('d'), 0, 10);
+            $emp = $ti->getAttribute('emp') ?? 0;
+            $taskIncomeByDate[$tDate][$emp] = ($taskIncomeByDate[$tDate][$emp] ?? 0.0) + (float) $ti->getAttribute('inc');
+        }
+
         // Group rows by date, building the per-worker lines as we go.
         $byDate = [];
         foreach ($rows as $r) {
@@ -333,6 +354,7 @@ class ProfitabilityService
             $hours = (float) $r->hours_worked;
             $income = match (true) {
                 $isPerMeter => round((float) ($measuredByDate[$date][$r->employee_id] ?? 0) * $clientMeter, 2),
+                $isTaskBased => round((float) ($taskIncomeByDate[$date][$r->employee_id] ?? 0), 2),
                 $isInvoiceBilled => 0.0,
                 default => $this->rowIncome($r, $rates, $clientHour, $clientMeter),
             };
@@ -342,6 +364,9 @@ class ProfitabilityService
             // Consumed — leftovers (measured but no attendance row) are added below.
             if ($isPerMeter) {
                 unset($measuredByDate[$date][$r->employee_id]);
+            }
+            if ($isTaskBased) {
+                unset($taskIncomeByDate[$date][$r->employee_id]);
             }
 
             $byDate[$date] ??= ['hours' => 0.0, 'income' => 0.0, 'labour' => 0.0, 'workers' => []];
@@ -368,6 +393,18 @@ class ProfitabilityService
                 if ($left > 0) {
                     $byDate[$date] ??= ['hours' => 0.0, 'income' => 0.0, 'labour' => 0.0, 'workers' => []];
                     $byDate[$date]['income'] += round($left * $clientMeter, 2);
+                }
+            }
+            ksort($byDate);
+        }
+        // Same for task-based: progress logged with no matching attendance row
+        // (the value is already income = quantity × client_rate).
+        if ($isTaskBased) {
+            foreach ($taskIncomeByDate as $date => $byWorker) {
+                $left = array_sum($byWorker);
+                if ($left > 0) {
+                    $byDate[$date] ??= ['hours' => 0.0, 'income' => 0.0, 'labour' => 0.0, 'workers' => []];
+                    $byDate[$date]['income'] += round($left, 2);
                 }
             }
             ksort($byDate);
@@ -670,6 +707,64 @@ class ProfitabilityService
             ->map(fn ($qty): float => (float) $qty);
     }
 
+    /**
+     * Task-based revenue (BillingType::TaskBased): Σ (Production-Task "Log Work"
+     * quantity × that task's client_rate) in the window — the admin's daily task
+     * progress IS the billing source (no separate Measurements step). A task with
+     * no client_rate bills nothing; a project with NO rated task at all is
+     * 'not_configured' (neutral, never a fake loss) — mirroring per_meter with no
+     * measurements. `unit_price` stays the INTERNAL cost estimate, untouched.
+     *
+     * @return array{0: float, 1: string}
+     */
+    private function taskBasedRevenue(int $projectId, ?string $from, ?string $to): array
+    {
+        $hasRate = ProductionTask::query()->withoutGlobalScope(CompanyScope::class)
+            ->where('project_id', $projectId)->whereNotNull('client_rate')->exists();
+
+        if (! $hasRate) {
+            return [0.0, 'not_configured'];
+        }
+
+        $revenue = (float) $this->taskProgressQuery($projectId, $from, $to)
+            ->sum(DB::raw('task_progress.quantity * production_tasks.client_rate'));
+
+        return [round($revenue, 2), 'task_based'];
+    }
+
+    /**
+     * Task revenue grouped by a raw date/month expression on task_progress.date
+     * (for the day/month breakdowns).
+     *
+     * @return Collection<string, float>
+     */
+    private function taskProgressRevenueBy(string $groupExpr, int $projectId, ?string $from, ?string $to): Collection
+    {
+        return $this->taskProgressQuery($projectId, $from, $to)
+            ->selectRaw("{$groupExpr} as slice")
+            ->selectRaw('COALESCE(SUM(task_progress.quantity * production_tasks.client_rate),0) as rev')
+            ->groupByRaw($groupExpr)
+            ->pluck('rev', 'slice')
+            ->map(fn ($v): float => (float) $v);
+    }
+
+    /**
+     * The shared task-progress → rated-task join for task-based revenue. Scope
+     * dropped (cross-company reads happen for a Super Admin); only tasks WITH a
+     * client_rate count (production_tasks has no `date`, so `date` is unambiguous).
+     *
+     * @return Builder<TaskProgress>
+     */
+    private function taskProgressQuery(int $projectId, ?string $from, ?string $to): Builder
+    {
+        return TaskProgress::query()->withoutGlobalScope(CompanyScope::class)
+            ->join('production_tasks', 'task_progress.production_task_id', '=', 'production_tasks.id')
+            ->where('production_tasks.project_id', $projectId)
+            ->whereNotNull('production_tasks.client_rate')
+            ->when($from !== null, fn ($q) => $q->whereDate('task_progress.date', '>=', $from))
+            ->when($to !== null, fn ($q) => $q->whereDate('task_progress.date', '<=', $to));
+    }
+
     private function expenseTotal(int $companyId, ?string $from, ?string $to, int $projectId): float
     {
         return (float) Expense::query()
@@ -720,6 +815,9 @@ class ProfitabilityService
             BillingType::PerMeter => $project->client_meter_rate !== null
                 ? [(float) $project->client_meter_rate * $meters, 'per_meter']
                 : [0.0, 'not_configured'],
+            // NEW arm only — hourly / per_meter / invoice / not_configured are all
+            // untouched. Task-based earns from Production-Task progress.
+            BillingType::TaskBased => $this->taskBasedRevenue($project->id, $from, $to),
             default => $this->invoiceOrBudgetRevenue($project, $from, $to),
         };
     }
@@ -792,15 +890,18 @@ class ProfitabilityService
         // Per-meter billing: the day's metres come from APPROVED measurements.
         $isPerMeter = $project->billing_type === BillingType::PerMeter;
         $measured = $isPerMeter ? $this->approvedMetersBy('date', $project->id, $from, $to) : collect();
+        // Task-based billing: the day's revenue comes from Production-Task progress.
+        $isTaskBased = $project->billing_type === BillingType::TaskBased;
+        $taskRev = $isTaskBased ? $this->taskProgressRevenueBy('date', $project->id, $from, $to) : collect();
 
         // Both maps key on plain Y-m-d (the raw SQL key has no time part; the
         // hydrated attendance date is a Carbon — normalise to compare).
-        $days = $rows->map(function (Attendance $r) use ($project, $isPerMeter, $measured): array {
+        $days = $rows->map(function (Attendance $r) use ($project, $isPerMeter, $isTaskBased, $measured, $taskRev): array {
             $date = substr((string) $r->getAttribute('date'), 0, 10);
             $hours = (float) $r->getAttribute('hours');
             $meters = $isPerMeter ? (float) ($measured[$date] ?? 0) : (float) $r->getAttribute('meters');
             $cost = round((float) $r->getAttribute('labour'), 2);
-            $revenue = $this->unitRevenue($project, $hours, $meters);
+            $revenue = $isTaskBased ? round((float) ($taskRev[$date] ?? 0), 2) : $this->unitRevenue($project, $hours, $meters);
 
             return [
                 'date' => $date,
@@ -818,6 +919,13 @@ class ProfitabilityService
             if (! in_array($date, $attDates, true)) {
                 $revenue = round((float) ($project->client_meter_rate ?? 0) * (float) $qty, 2);
                 $days[] = ['date' => $date, 'hours' => 0.0, 'revenue' => $revenue, 'cost' => 0.0, 'profit' => $revenue];
+            }
+        }
+        // Same for a task-based day with progress logged but no attendance row.
+        foreach ($taskRev as $date => $rev) {
+            $date = substr((string) $date, 0, 10);
+            if (! in_array($date, $attDates, true) && (float) $rev > 0) {
+                $days[] = ['date' => $date, 'hours' => 0.0, 'revenue' => round((float) $rev, 2), 'cost' => 0.0, 'profit' => round((float) $rev, 2)];
             }
         }
         usort($days, fn (array $a, array $b): int => strcmp($a['date'], $b['date']));
@@ -854,13 +962,18 @@ class ProfitabilityService
         $measured = $isPerMeter
             ? $this->approvedMetersBy($this->monthExpression(), $project->id, $from, $to)
             : collect();
+        // Task-based billing: the month's revenue comes from Production-Task progress.
+        $isTaskBased = $project->billing_type === BillingType::TaskBased;
+        $taskRev = $isTaskBased
+            ? $this->taskProgressRevenueBy($this->monthExpression(), $project->id, $from, $to)
+            : collect();
 
-        $monthsOut = $rows->map(function (Attendance $r) use ($project, $isPerMeter, $measured): array {
+        $monthsOut = $rows->map(function (Attendance $r) use ($project, $isPerMeter, $isTaskBased, $measured, $taskRev): array {
             $ym = (string) $r->getAttribute('ym');
             $hours = (float) $r->getAttribute('hours');
             $meters = $isPerMeter ? (float) ($measured[$ym] ?? 0) : (float) $r->getAttribute('meters');
             $cost = round((float) $r->getAttribute('labour'), 2);
-            $revenue = $this->unitRevenue($project, $hours, $meters);
+            $revenue = $isTaskBased ? round((float) ($taskRev[$ym] ?? 0), 2) : $this->unitRevenue($project, $hours, $meters);
             $profit = $revenue !== null ? round($revenue - $cost, 2) : null;
 
             return [
@@ -879,6 +992,13 @@ class ProfitabilityService
             if (! in_array((string) $ym, $attMonths, true)) {
                 $revenue = round((float) ($project->client_meter_rate ?? 0) * (float) $qty, 2);
                 $monthsOut[] = ['month' => (string) $ym, 'hours' => 0.0, 'revenue' => $revenue, 'cost' => 0.0, 'profit' => $revenue, 'margin' => $revenue > 0.0 ? 100.0 : null];
+            }
+        }
+        // Same for a task-based month with progress but no attendance.
+        foreach ($taskRev as $ym => $rev) {
+            if (! in_array((string) $ym, $attMonths, true) && (float) $rev > 0) {
+                $r = round((float) $rev, 2);
+                $monthsOut[] = ['month' => (string) $ym, 'hours' => 0.0, 'revenue' => $r, 'cost' => 0.0, 'profit' => $r, 'margin' => 100.0];
             }
         }
         usort($monthsOut, fn (array $a, array $b): int => strcmp($a['month'], $b['month']));
@@ -1001,8 +1121,14 @@ class ProfitabilityService
         // Deal edits (agreed_budget / responsibility) change the cost basis.
         $deal = Subcontractor::query()->withoutGlobalScope(CompanyScope::class)
             ->where('company_id', $companyId)->max('updated_at');
+        // Task-based income basis: a new "Log Work" entry or an edited task
+        // client_rate must refresh the P&L, not wait out the TTL.
+        $tp = TaskProgress::query()->withoutGlobalScope(CompanyScope::class)
+            ->where('company_id', $companyId)->max('updated_at');
+        $tsk = ProductionTask::query()->withoutGlobalScope(CompanyScope::class)
+            ->where('company_id', $companyId)->max('updated_at');
 
-        return implode('|', [(string) $att, (string) $exp, (string) $prj, (string) $sub, (string) $mea, (string) $inv, (string) $deal]);
+        return implode('|', [(string) $att, (string) $exp, (string) $prj, (string) $sub, (string) $mea, (string) $inv, (string) $deal, (string) $tp, (string) $tsk]);
     }
 
     /** Portable "year-month" grouping — SQLite in tests, MySQL in production. */

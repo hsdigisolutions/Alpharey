@@ -186,6 +186,8 @@ class ProductionTaskController extends Controller
             'category' => $t->category->value,
             'house_number' => $t->house_number,
             'unit' => $t->unit,
+            'unit_price' => (float) $t->unit_price,
+            'client_rate' => $t->client_rate !== null ? (float) $t->client_rate : null,
             'planned_quantity' => (float) $t->planned_quantity,
             'completed_quantity' => (float) $t->completed_quantity,
             'weightage' => (float) $t->weightage,

@@ -35,6 +35,8 @@ class StoreProductionTaskRequest extends FormRequest
             'tasks.*.unit' => ['nullable', 'string', 'max:20'],
             // Internal cost rate — never client billing.
             'tasks.*.unit_price' => ['nullable', 'numeric', 'min:0', 'max:9999999'],
+            // Client billing rate (task-based P&L revenue = progress × client_rate).
+            'tasks.*.client_rate' => ['nullable', 'numeric', 'min:0', 'max:9999999'],
             'tasks.*.planned_quantity' => ['required', 'numeric', 'min:0', 'max:9999999'],
             // Weightage is advisory — the project sum need not equal 100.
             'tasks.*.weightage' => ['nullable', 'numeric', 'min:0', 'max:100'],

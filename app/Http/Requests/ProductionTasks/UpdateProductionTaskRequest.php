@@ -30,6 +30,7 @@ class UpdateProductionTaskRequest extends FormRequest
             'house_number' => ['nullable', 'string', 'max:100'],
             'unit' => ['nullable', 'string', 'max:20'],
             'unit_price' => ['nullable', 'numeric', 'min:0', 'max:9999999'],
+            'client_rate' => ['nullable', 'numeric', 'min:0', 'max:9999999'],
             'planned_quantity' => ['required', 'numeric', 'min:0', 'max:9999999'],
             'weightage' => ['nullable', 'numeric', 'min:0', 'max:100'],
             'status' => ['required', Rule::enum(ProductionTaskStatus::class)],
