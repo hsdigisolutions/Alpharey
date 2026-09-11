@@ -4,6 +4,54 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Status: Phase 9 in progress — hardening (2026-08-01)
 
+### Expense/dashboard bug batch — 4 fixes (2026-09-11, DONE, deployed to prod)
+
+- **BUG 1 — dashboard "documents expiring" stale + broken icon.** The whole
+  dashboard payload is `Cache::remember("dashboard:{company}", 120s)` and NOTHING
+  invalidated it on a document write, so a corrected expiry date kept showing the
+  old count (the Documents Center busts on a MAX(updated_at) signature; the
+  dashboard did not). The query is correct — it was purely the un-busted cache.
+  `DocumentController` now calls `DashboardService::forget($document->company_id)`
+  on store/updateMetadata/replace/destroy/exempt. Also the card used
+  `icon="documents"` (not a defined `AppIcon` glyph → rendered nothing) → `icon="file"`.
+- **BUG 3 — worker expense read "Approved by {manager}" after escalation.** Root
+  cause: TWO state machines that never synced — `WorkerExpense.status` (set at the
+  manager step) vs the **mirror `Expense`** the SA actually decides on. Fixes:
+  `WorkerExpenseAdminController::sendToReview` no longer stamps the manager as
+  `approved_by` (keeps `status=in_review`, records the manager as the ESCALATOR on
+  the mirror). `WorkerFuelExpenseService::applyFinalDecisionToWorker` is the single
+  place that cascades a FINAL decision to `WorkerExpense.status` + records the real
+  decider + notifies the worker (on a true transition only) — called from BOTH the
+  SA review queue AND `ExpenseController::approve` (main Expenses tab).
+  `ExpenseController::sendToReview` marks the linked worker record in_review too.
+- **⚠️ PAYROLL SAFETY (load-bearing).** The status sync is **display/tracking only**
+  — payroll counts the mirror `Expense` via ITS `approved` flag, and a mirrored
+  WorkerExpense is excluded from `PayrollService::pwaExpensesFor` (`whereNull
+  auto_expense_id`). So `WorkerExpense.status` NEVER feeds payroll. Proven on prod:
+  legacy record #3 (status corrected `approved`→`in_review`) contributes 0 to
+  payroll either way (it has a mirror, and the mirror is unapproved). Do NOT route
+  payroll through `WorkerExpense.status`.
+- **BUG 2 — receipt preview had no context.** New reusable
+  `Components/Expenses/ExpenseReceiptDetail.vue` — a premium TWO-PANE panel
+  (context summary beside the image/PDF): vendor, amount, date, category,
+  project/client, submitting worker, payment method, approval/review trail.
+  `ExpenseReceiptExport::row` + `ExpenseController::row` ship that context;
+  `VModal` gained an `xl` size.
+- **BUG 4 — SA review queue.** The dedicated `/expense-review` screen
+  (`Admin/ExpenseReviewController` + `Admin/ExpenseReview.vue`) ALREADY existed and
+  cascaded; it now shows the full receipt detail (reuses BUG 2's panel), WHO
+  escalated + their note, and its approve/reject go through the shared cascade
+  (so the worker is notified). Migration `2026_09_11_000001` adds `escalated_by` +
+  `review_note` to `expenses` (server-set). The main Expenses screen also gained an
+  **"En revisión / In review"** KPI + filter with the same detail panel + decide
+  action. **Cross-company trap:** the review queue is an SA cross-company tool, so
+  its employee/project/vehicle eager-loads DROP `CompanyScope` (else the names
+  blank out when the SA has another company selected — same trap as the doc panel).
+- Tests: `ExpenseReviewTest` (+7 — escalation records escalator/note + never marks
+  approved; SA approve/reject notifies the worker + records the SA as decider;
+  payroll safety; in-review filter/KPI; review-queue full-detail payload),
+  `DashboardTest` (+1 cache-bust). 1294 pass / 7612 assertions.
+
 ### Document panel + PWA install fixes (2026-09-11, DONE, deployed to prod)
 
 Four production fixes to the shared smart-document panel plus the worker PWA
