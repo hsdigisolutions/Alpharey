@@ -28,6 +28,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property string|null $house_number
  * @property string|null $unit
  * @property numeric-string $unit_price
+ * @property numeric-string|null $client_rate
  * @property numeric-string $planned_quantity
  * @property numeric-string $completed_quantity
  * @property numeric-string $weightage
@@ -47,7 +48,7 @@ class ProductionTask extends Model
     /** @var list<string> */
     protected $fillable = [
         'project_id', 'name', 'category', 'house_number', 'unit',
-        'unit_price', 'planned_quantity', 'weightage', 'status', 'notes',
+        'unit_price', 'client_rate', 'planned_quantity', 'weightage', 'status', 'notes',
     ];
 
     protected function casts(): array
@@ -56,6 +57,7 @@ class ProductionTask extends Model
             'category' => ProductionTaskCategory::class,
             'status' => ProductionTaskStatus::class,
             'unit_price' => 'decimal:2',
+            'client_rate' => 'decimal:2',
             'planned_quantity' => 'decimal:2',
             'completed_quantity' => 'decimal:2',
             'weightage' => 'decimal:2',

@@ -31,6 +31,7 @@ use Illuminate\Support\Carbon;
  * @property VatRate|null $vat_rate
  * @property Carbon|null $start_date
  * @property Carbon|null $end_date
+ * @property Carbon|null $task_reminder_at
  * @property bool $outsourced
  * @property numeric-string|null $client_hour_rate
  * @property numeric-string|null $client_meter_rate
@@ -86,6 +87,7 @@ class Project extends Model
             'longitude' => 'decimal:7',
             'geofence_radius' => 'integer',
             'outsourced' => 'boolean',
+            'task_reminder_at' => 'datetime',
         ];
     }
 
