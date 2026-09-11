@@ -5,6 +5,8 @@
  */
 import { watch } from 'vue';
 import { useForm } from '@inertiajs/vue3';
+import { useFormDraft } from '@/composables/useFormDraft';
+import DraftBanner from '@/Components/ui/DraftBanner.vue';
 import FormField from '@/Components/ui/FormField.vue';
 import VButton from '@/Components/ui/VButton.vue';
 import VCheckbox from '@/Components/ui/VCheckbox.vue';
@@ -27,14 +29,21 @@ const blank = {
 };
 const form = useForm({ ...blank });
 
+// Exclude fiscal / bank identifiers from plaintext localStorage.
+const draft = useFormDraft(form, {
+    key: () => `client:${props.client?.id ?? 'new'}`,
+    exclude: ['nif', 'vat_number', 'bank_account'],
+});
+
 watch(() => props.open, (open) => {
-    if (!open) return;
+    if (!open) { draft.disarm(); return; }
     form.clearErrors();
     Object.keys(blank).forEach((k) => { form[k] = props.client?.[k] ?? blank[k]; });
+    draft.arm();
 });
 
 function submit() {
-    const opts = { preserveScroll: true, onSuccess: () => emit('close') };
+    const opts = { preserveScroll: true, onSuccess: () => { draft.clear(); emit('close'); } };
     props.client ? form.put(`/clients/${props.client.id}`, opts) : form.post('/clients', opts);
 }
 
@@ -44,6 +53,7 @@ const types = ['company', 'private', 'municipality', 'other'];
 <template>
     <VModal :open="open" :title-key="client ? 'clients.edit' : 'clients.new'" size="lg" @close="emit('close')">
         <form id="client-form" class="grid gap-4 sm:grid-cols-2" @submit.prevent="submit">
+            <DraftBanner class="sm:col-span-2" :show="draft.hasDraft.value" @discard="draft.discard()" />
             <FormField k="clients.code" :error="form.errors.code">
                 <VInput v-model="form.code" :invalid="Boolean(form.errors.code)" :placeholder="$t('clients.code_hint')" />
             </FormField>

@@ -11,8 +11,10 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { Head, router, useForm } from '@inertiajs/vue3';
 import { ensureCompanySelected } from '@/composables/useCompanyGate';
+import { useFormDraft } from '@/composables/useFormDraft';
 import AppIcon from '@/Components/AppIcon.vue';
 import AppLayout from '@/Layouts/AppLayout.vue';
+import DraftBanner from '@/Components/ui/DraftBanner.vue';
 import FormField from '@/Components/ui/FormField.vue';
 import VBadge from '@/Components/ui/VBadge.vue';
 import VButton from '@/Components/ui/VButton.vue';
@@ -94,6 +96,7 @@ const blank = {
     lines: [{ description: '', quantity: 1, unit_price: 0 }],
 };
 const form = useForm({ ...structuredClone(blank) });
+const draft = useFormDraft(form, { key: () => `invoice:${editingId.value ?? 'new'}` });
 
 // Non-taxable (no sujeta / exenta) → clear the VAT rate as a soft nudge; fully
 // overridable, and the VAT calculation itself is never touched.
@@ -148,6 +151,7 @@ function openCreate() {
     form.type = props.tab; // the tab you are on decides sale vs expense
     form.clearErrors();
     panelOpen.value = true;
+    draft.arm();
 }
 
 // When opened from a project (preset), lock the project (and its client) so the
@@ -170,7 +174,7 @@ function openCreateForProject(preset) {
 
 // Reset the locks whenever the panel closes.
 watch(panelOpen, (open) => {
-    if (!open) { lockedProject.value = false; lockedClient.value = false; }
+    if (!open) { lockedProject.value = false; lockedClient.value = false; draft.disarm(); }
 });
 
 onMounted(() => {
@@ -212,7 +216,7 @@ function removeLine(i) {
 }
 
 function submit() {
-    const opts = { preserveScroll: true, onSuccess: () => (panelOpen.value = false) };
+    const opts = { preserveScroll: true, onSuccess: () => { draft.clear(); panelOpen.value = false; } };
     const payload = form.transform((d) => ({
         ...d,
         client_id: d.client_id || null,
@@ -268,6 +272,7 @@ function openEdit(row) {
             });
             form.clearErrors();
             panelOpen.value = true;
+            draft.arm();
         },
     });
 }
@@ -445,6 +450,7 @@ const columns = computed(() => [
         <VSlideOver :open="panelOpen" :title-key="editingId ? 'invoices.edit' : 'invoices.new'"
             width="md:max-w-3xl" @close="panelOpen = false">
             <form id="invoice-form" class="space-y-5" @submit.prevent="submit">
+                <DraftBanner :show="draft.hasDraft.value" @discard="draft.discard()" />
                 <div class="grid gap-4 sm:grid-cols-2">
                     <FormField k="invoices.sub_type" :error="form.errors.sub_type" required>
                         <VSelect v-model="form.sub_type">

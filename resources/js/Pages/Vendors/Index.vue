@@ -4,7 +4,9 @@
  */
 import { reactive, ref, watch } from 'vue';
 import { Head, router, useForm } from '@inertiajs/vue3';
+import { useFormDraft } from '@/composables/useFormDraft';
 import AppLayout from '@/Layouts/AppLayout.vue';
+import DraftBanner from '@/Components/ui/DraftBanner.vue';
 import FormField from '@/Components/ui/FormField.vue';
 import VAvatar from '@/Components/ui/VAvatar.vue';
 import VBadge from '@/Components/ui/VBadge.vue';
@@ -39,8 +41,12 @@ function setStatus(val) { filters.status = val; apply(); }
 const showForm = ref(false);
 const blank = { name: '', company_name: '', nif: '', phone: '', email: '', city: '', address: '', payment_terms: '', active: true, notes: '' };
 const form = useForm({ ...blank });
+const draft = useFormDraft(form, { key: () => 'vendor:new', exclude: ['nif'] });
+watch(showForm, (open) => {
+    if (open) { form.clearErrors(); draft.arm(); } else { draft.disarm(); }
+});
 function submit() {
-    form.post('/vendors', { preserveScroll: true, onSuccess: () => { showForm.value = false; form.reset(); } });
+    form.post('/vendors', { preserveScroll: true, onSuccess: () => { draft.clear(); showForm.value = false; form.reset(); } });
 }
 
 const columns = [
@@ -90,6 +96,7 @@ const columns = [
 
         <VModal :open="showForm" title-key="vendors.new" @close="showForm = false">
             <form id="vendor-form" class="grid gap-4 sm:grid-cols-2" @submit.prevent="submit">
+                <DraftBanner class="sm:col-span-2" :show="draft.hasDraft.value" @discard="draft.discard()" />
                 <FormField k="vendors.name" :error="form.errors.name" required><VInput v-model="form.name" :invalid="Boolean(form.errors.name)" /></FormField>
                 <FormField k="vendors.company_name"><VInput v-model="form.company_name" /></FormField>
                 <FormField k="vendors.nif"><VInput v-model="form.nif" /></FormField>

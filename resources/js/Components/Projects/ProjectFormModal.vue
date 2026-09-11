@@ -5,6 +5,8 @@
  */
 import { watch } from 'vue';
 import { useForm } from '@inertiajs/vue3';
+import { useFormDraft } from '@/composables/useFormDraft';
+import DraftBanner from '@/Components/ui/DraftBanner.vue';
 import FormField from '@/Components/ui/FormField.vue';
 import VButton from '@/Components/ui/VButton.vue';
 import VCurrencyInput from '@/Components/ui/VCurrencyInput.vue';
@@ -37,10 +39,13 @@ const blank = {
 };
 const form = useForm({ ...blank });
 
+const draft = useFormDraft(form, { key: () => `project:${props.project?.id ?? 'new'}` });
+
 watch(() => props.open, (open) => {
-    if (!open) return;
+    if (!open) { draft.disarm(); return; }
     form.clearErrors();
     Object.keys(blank).forEach((k) => { form[k] = props.project?.[k] ?? blank[k]; });
+    draft.arm();
 });
 
 function submit() {
@@ -56,7 +61,7 @@ function submit() {
         longitude: d.longitude === '' ? null : d.longitude,
         geofence_radius: d.geofence_radius === '' || d.geofence_radius === null ? 500 : d.geofence_radius,
     }));
-    const opts = { preserveScroll: true, onSuccess: () => emit('close') };
+    const opts = { preserveScroll: true, onSuccess: () => { draft.clear(); emit('close'); } };
     props.project ? payload.put(`/projects/${props.project.id}`, opts) : payload.post('/projects', opts);
 }
 
@@ -75,6 +80,7 @@ function employeeLabel(e) {
 <template>
     <VModal :open="open" :title-key="project ? 'projects.edit' : 'projects.new'" size="lg" @close="emit('close')">
         <form id="project-form" class="space-y-4" @submit.prevent="submit">
+            <DraftBanner :show="draft.hasDraft.value" @discard="draft.discard()" />
             <div class="grid gap-4 sm:grid-cols-2">
                 <FormField k="projects.code" :error="form.errors.code">
                     <VInput v-model="form.code" :invalid="Boolean(form.errors.code)" :placeholder="$t('projects.code_hint')" />

@@ -12,8 +12,10 @@
 import { computed, reactive, ref, watch } from 'vue';
 import { Head, router, useForm } from '@inertiajs/vue3';
 import { ensureCompanySelected } from '@/composables/useCompanyGate';
+import { useFormDraft } from '@/composables/useFormDraft';
 import AppIcon from '@/Components/AppIcon.vue';
 import AppLayout from '@/Layouts/AppLayout.vue';
+import DraftBanner from '@/Components/ui/DraftBanner.vue';
 import ExpenseReceiptDetail from '@/Components/Expenses/ExpenseReceiptDetail.vue';
 import FormField from '@/Components/ui/FormField.vue';
 import VBadge from '@/Components/ui/VBadge.vue';
@@ -158,6 +160,8 @@ const blank = {
 };
 const form = useForm({ ...blank });
 const currentFile = ref(null);
+const draft = useFormDraft(form, { key: () => `expense:${editingId.value ?? 'new'}` });
+watch(showModal, (v) => { if (!v) draft.disarm(); });
 
 // Non-taxable (no sujeta / exenta) operations normally carry no VAT — clear the
 // rate as a SOFT nudge when the user marks the expense non-taxable. Fully
@@ -197,6 +201,7 @@ function openCreate() {
     currentFile.value = null;
     form.clearErrors();
     showModal.value = true;
+    draft.arm();
 }
 
 // The cross-charge engine's internal_deployment Gasto is a system record — it
@@ -269,6 +274,7 @@ function openEdit(row) {
     currentFile.value = row.original_name ?? null;
     form.clearErrors();
     showModal.value = true;
+    draft.arm();
 }
 
 function submit() {
@@ -292,7 +298,7 @@ function submit() {
             }))
             : undefined,
     }));
-    const opts = { preserveScroll: true, onSuccess: () => (showModal.value = false) };
+    const opts = { preserveScroll: true, onSuccess: () => { draft.clear(); showModal.value = false; } };
     editingId.value ? payload.post(`/expenses/${editingId.value}`, opts) : payload.post('/expenses', opts);
 }
 
@@ -645,6 +651,7 @@ const columns = [
 
         <VModal :open="showModal" size="lg" :title-key="editingId ? 'expenses.edit' : 'expenses.new'" @close="showModal = false">
             <form id="expense-form" class="grid gap-4 sm:grid-cols-2" @submit.prevent="submit">
+                <DraftBanner class="sm:col-span-2" :show="draft.hasDraft.value" @discard="draft.discard()" />
                 <FormField k="expenses.type" :error="form.errors.type" required>
                     <VSelect v-model="form.type">
                         <option v-for="t in types" :key="t" :value="t">

@@ -6,8 +6,10 @@
  */
 import { computed, ref, watch } from 'vue';
 import { Head, useForm } from '@inertiajs/vue3';
+import { useFormDraft } from '@/composables/useFormDraft';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import DocumentsPanel from '@/Components/Documents/DocumentsPanel.vue';
+import DraftBanner from '@/Components/ui/DraftBanner.vue';
 import FormField from '@/Components/ui/FormField.vue';
 import VAlert from '@/Components/ui/VAlert.vue';
 import VAvatar from '@/Components/ui/VAvatar.vue';
@@ -44,6 +46,14 @@ const createForm = useForm({ ...blankFields });
 const editForm = useForm({ ...blankFields });
 const deleteForm = useForm({ confirm_name: '' });
 
+// Fiscal identifiers never go to plaintext localStorage.
+const createDraft = useFormDraft(createForm, { key: () => 'company:new', exclude: ['cif', 'ccc'] });
+const editDraft = useFormDraft(editForm, { key: () => `company:${selectedId.value}`, exclude: ['cif', 'ccc'] });
+
+watch(showCreate, (open) => {
+    if (open) { createForm.clearErrors(); createDraft.arm(); } else { createDraft.disarm(); }
+});
+
 // Keyed on the ID, not the computed object: a partial reload (after saving a
 // document) mints a new `selected` object with the same id — watching the object
 // would bounce the open tab back to Información on every save.
@@ -55,6 +65,9 @@ watch(selectedId, () => {
         });
         editForm.clearErrors();
         tab.value = 'info';
+        editDraft.arm();
+    } else {
+        editDraft.disarm();
     }
 });
 
@@ -62,6 +75,7 @@ function submitCreate() {
     createForm.post('/companies', {
         preserveScroll: true,
         onSuccess: () => {
+            createDraft.clear();
             showCreate.value = false;
             createForm.reset();
         },
@@ -69,7 +83,7 @@ function submitCreate() {
 }
 
 function submitEdit() {
-    editForm.put(`/companies/${selectedId.value}`, { preserveScroll: true });
+    editForm.put(`/companies/${selectedId.value}`, { preserveScroll: true, onSuccess: () => editDraft.clear() });
 }
 
 function submitDelete() {
@@ -137,6 +151,7 @@ const fieldRows = [
                 ]" />
 
                 <form v-if="tab === 'info'" class="mt-4 space-y-4" @submit.prevent="submitEdit">
+                    <DraftBanner :show="editDraft.hasDraft.value" @discard="editDraft.discard()" />
                     <div v-for="(row, i) in fieldRows" :key="i" class="grid gap-4 sm:grid-cols-2">
                         <template v-for="field in row" :key="field">
                             <FormField v-if="field === 'status'" k="companies.status" :error="editForm.errors.status">
@@ -193,6 +208,7 @@ const fieldRows = [
         <!-- Create modal -->
         <VModal :open="showCreate" title-key="companies.new" @close="showCreate = false">
             <form id="create-company" class="space-y-4" @submit.prevent="submitCreate">
+                <DraftBanner :show="createDraft.hasDraft.value" @discard="createDraft.discard()" />
                 <FormField k="companies.name" :error="createForm.errors.name" required>
                     <VInput v-model="createForm.name" :invalid="Boolean(createForm.errors.name)" />
                 </FormField>

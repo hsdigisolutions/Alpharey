@@ -385,6 +385,8 @@ return [
         'search_everything' => 'Search the whole system',
         'search_no_results' => 'No results',
         'search_hint' => 'Type at least 2 characters',
+        'draft_restored' => 'Unsaved draft restored',
+        'draft_discard' => 'Discard draft',
         'language' => 'Language',
         'theme' => 'Theme',
         'dark_mode' => 'Dark mode',

@@ -5,7 +5,9 @@
  */
 import { computed, reactive, ref, watch } from 'vue';
 import { Head, router, useForm } from '@inertiajs/vue3';
+import { useFormDraft } from '@/composables/useFormDraft';
 import AppLayout from '@/Layouts/AppLayout.vue';
+import DraftBanner from '@/Components/ui/DraftBanner.vue';
 import AppIcon from '@/Components/AppIcon.vue';
 import FormField from '@/Components/ui/FormField.vue';
 import VBadge from '@/Components/ui/VBadge.vue';
@@ -45,6 +47,7 @@ const showPanel = ref(false);
 const editing = ref(null);
 const blank = { client_id: '', project_id: '', proposal_date: null, expiry_date: null, description: '', line_items: [], vat_rate: null, vat_custom_percent: null, status: 'draft', notes: '' };
 const form = useForm({ ...blank });
+const draft = useFormDraft(form, { key: () => `proposal:${editing.value?.id ?? 'new'}` });
 
 function open(proposal = null) {
     editing.value = proposal;
@@ -52,7 +55,9 @@ function open(proposal = null) {
     if (!form.line_items) form.line_items = [];
     form.clearErrors();
     showPanel.value = true;
+    draft.arm();
 }
+watch(showPanel, (v) => { if (!v) draft.disarm(); });
 function addLine() { form.line_items.push({ description: '', qty: 1, unit_price: 0 }); }
 function removeLine(i) { form.line_items.splice(i, 1); }
 
@@ -66,7 +71,7 @@ const total = computed(() => subtotal.value + (vatAmount.value ?? 0));
 
 function submit() {
     const payload = form.transform((d) => ({ ...d, client_id: d.client_id || null, project_id: d.project_id || null }));
-    const opts = { preserveScroll: true, onSuccess: () => (showPanel.value = false) };
+    const opts = { preserveScroll: true, onSuccess: () => { draft.clear(); showPanel.value = false; } };
     editing.value ? payload.put(`/proposals/${editing.value.id}`, opts) : payload.post('/proposals', opts);
 }
 
@@ -126,6 +131,7 @@ const columns = [
         <!-- Detail slide-over -->
         <VSlideOver :open="showPanel" :title-key="editing ? 'proposals.edit' : 'proposals.new'" @close="showPanel = false">
             <form id="proposal-form" class="space-y-4" @submit.prevent="submit">
+                <DraftBanner :show="draft.hasDraft.value" @discard="draft.discard()" />
                 <div class="grid gap-4 sm:grid-cols-2">
                     <FormField k="proposals.client" :error="form.errors.client_id">
                         <VSelect v-model="form.client_id">

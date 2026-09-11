@@ -4,10 +4,12 @@
  * vehicle's insurance/ITV expiries, graded server-side by VehicleCompliance
  * on the same traffic light as documents.
  */
-import { onBeforeUnmount, onMounted, reactive, ref } from 'vue';
+import { onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
 import { ensureCompanySelected } from '@/composables/useCompanyGate';
+import { useFormDraft } from '@/composables/useFormDraft';
 import AppLayout from '@/Layouts/AppLayout.vue';
+import DraftBanner from '@/Components/ui/DraftBanner.vue';
 import AppIcon from '@/Components/AppIcon.vue';
 import VehicleSessionPanel from '@/Components/Vehicles/VehicleSessionPanel.vue';
 import FormField from '@/Components/ui/FormField.vue';
@@ -112,6 +114,7 @@ const blank = {
     ita_expiry_date: null, road_tax_expiry_date: null, purchase_date: null, current_mileage: null,
 };
 const form = useForm({ ...blank });
+const draft = useFormDraft(form, { key: () => 'vehicle:new' });
 
 function open() {
     if (!ensureCompanySelected()) return;
@@ -119,7 +122,9 @@ function open() {
     Object.keys(blank).forEach((k) => { form[k] = blank[k]; });
     form.clearErrors();
     showModal.value = true;
+    draft.arm();
 }
+watch(showModal, (v) => { if (!v) draft.disarm(); });
 function submit() {
     form.transform((d) => ({
         ...d,
@@ -128,7 +133,7 @@ function submit() {
         vehicle_type: d.vehicle_type || null,
     })).post('/vehicles', {
         preserveScroll: true,
-        onSuccess: () => (showModal.value = false),
+        onSuccess: () => { draft.clear(); showModal.value = false; },
     });
 }
 
@@ -271,6 +276,7 @@ const columns = [
 
         <VModal :open="showModal" title-key="vehicles.new" size="lg" @close="showModal = false">
             <form id="vehicle-form" class="grid gap-4 sm:grid-cols-2" @submit.prevent="submit">
+                <DraftBanner class="sm:col-span-2" :show="draft.hasDraft.value" @discard="draft.discard()" />
                 <FormField k="vehicles.plate_number" :error="form.errors.plate_number" required>
                     <VInput v-model="form.plate_number" />
                 </FormField>

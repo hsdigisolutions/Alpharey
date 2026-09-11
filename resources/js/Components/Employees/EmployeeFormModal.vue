@@ -6,6 +6,8 @@
  */
 import { computed, watch } from 'vue';
 import { useForm, usePage } from '@inertiajs/vue3';
+import { useFormDraft } from '@/composables/useFormDraft';
+import DraftBanner from '@/Components/ui/DraftBanner.vue';
 import FormField from '@/Components/ui/FormField.vue';
 import VButton from '@/Components/ui/VButton.vue';
 import VCheckbox from '@/Components/ui/VCheckbox.vue';
@@ -47,12 +49,19 @@ const blank = {
 
 const form = useForm({ ...blank });
 
+// Never write PII / pay figures to plaintext localStorage.
+const draft = useFormDraft(form, {
+    key: () => `employee:${props.employee?.id ?? 'new'}`,
+    exclude: ['nif', 'iban', 'bank_name', 'wage_rate', 'base_salary', 'daily_wage', 'per_meter_rate', 'commission_percent'],
+});
+
 watch(() => props.open, (open) => {
-    if (!open) return;
+    if (!open) { draft.disarm(); return; }
     form.clearErrors();
     Object.keys(blank).forEach((key) => {
         form[key] = props.employee?.[key] ?? blank[key];
     });
+    draft.arm();
 });
 
 function submit() {
@@ -62,7 +71,7 @@ function submit() {
         payment_method: data.payment_method || null,
     }));
 
-    const options = { preserveScroll: true, onSuccess: () => emit('close') };
+    const options = { preserveScroll: true, onSuccess: () => { draft.clear(); emit('close'); } };
 
     if (props.employee) {
         payload.put(`/employees/${props.employee.id}`, options);
@@ -85,6 +94,7 @@ const showBank = computed(() => !form.payment_method || form.payment_method === 
 <template>
     <VModal :open="open" :title-key="employee ? 'employees.edit' : 'employees.new'" size="lg" @close="emit('close')">
         <form id="employee-form" class="space-y-6" @submit.prevent="submit">
+            <DraftBanner :show="draft.hasDraft.value" @discard="draft.discard()" />
             <!-- Personal -->
             <section>
                 <Bilingual k="employees.section_personal" class="mb-3 text-[15px] font-semibold" />
