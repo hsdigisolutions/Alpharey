@@ -18,7 +18,7 @@ import VEmptyState from '@/Components/ui/VEmptyState.vue';
 import VInput from '@/Components/ui/VInput.vue';
 import VPageHeader from '@/Components/ui/VPageHeader.vue';
 import VPagination from '@/Components/ui/VPagination.vue';
-import VSearchInput from '@/Components/ui/VSearchInput.vue';
+import VSuggestSearch from '@/Components/ui/VSuggestSearch.vue';
 import VSelect from '@/Components/ui/VSelect.vue';
 import VSlideOver from '@/Components/ui/VSlideOver.vue';
 import VTable from '@/Components/ui/VTable.vue';
@@ -96,7 +96,7 @@ const columns = [
         </VPageHeader>
 
         <div class="flex flex-wrap items-end gap-2 pb-3">
-            <div class="w-full sm:w-56"><VSearchInput v-model="filters.search" /></div>
+            <div class="w-full sm:w-56"><VSuggestSearch v-model="filters.search" module="proposals" @select="apply()" /></div>
             <VSelect v-model="filters.status" class="w-full sm:w-52" @update:model-value="apply()">
                 <option value="">{{ $t('proposals.status') }}</option>
                 <option v-for="s in statuses" :key="s" :value="s">{{ $t(`proposals.status_${s}`) }}</option>

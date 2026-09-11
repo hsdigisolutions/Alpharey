@@ -20,7 +20,7 @@ import VInput from '@/Components/ui/VInput.vue';
 import VModal from '@/Components/ui/VModal.vue';
 import VPageHeader from '@/Components/ui/VPageHeader.vue';
 import VPagination from '@/Components/ui/VPagination.vue';
-import VSearchInput from '@/Components/ui/VSearchInput.vue';
+import VSuggestSearch from '@/Components/ui/VSuggestSearch.vue';
 import VSelect from '@/Components/ui/VSelect.vue';
 import VStatusDot from '@/Components/ui/VStatusDot.vue';
 import VTable from '@/Components/ui/VTable.vue';
@@ -196,7 +196,7 @@ const columns = [
 
         <!-- ══════════ Fleet list ══════════ -->
         <div class="flex flex-wrap items-end gap-2 pb-3">
-            <VSearchInput v-model="filters.search" class="w-full sm:w-72" :placeholder="$t('vehicles.search')"
+            <VSuggestSearch v-model="filters.search" module="vehicles" jump class="w-full sm:w-72" :placeholder="$t('vehicles.search')"
                 @update:model-value="searchApply()" />
             <VSelect v-model="filters.ownership" class="w-full sm:w-48" @update:model-value="apply()">
                 <option value="">{{ $t('vehicles.ownership') }}</option>

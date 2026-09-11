@@ -21,10 +21,14 @@ class SearchController extends Controller
     public function __invoke(Request $request): JsonResponse
     {
         $term = (string) $request->query('q', '');
+        // Optional single-module scope for the per-list suggestion box
+        // (VSuggestSearch, Change 2); null keeps the grouped global-bar search.
+        $module = $request->query('module');
+        $module = is_string($module) && $module !== '' ? $module : null;
 
         return response()->json([
             'query' => $term,
-            'groups' => $this->search->search($term),
+            'groups' => $this->search->search($term, $module),
         ]);
     }
 }

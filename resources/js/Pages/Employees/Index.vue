@@ -22,7 +22,7 @@ import VFileDrop from '@/Components/ui/VFileDrop.vue';
 import VModal from '@/Components/ui/VModal.vue';
 import VPageHeader from '@/Components/ui/VPageHeader.vue';
 import VPagination from '@/Components/ui/VPagination.vue';
-import VSearchInput from '@/Components/ui/VSearchInput.vue';
+import VSuggestSearch from '@/Components/ui/VSuggestSearch.vue';
 import VSelect from '@/Components/ui/VSelect.vue';
 import VStatusDot from '@/Components/ui/VStatusDot.vue';
 import VTable from '@/Components/ui/VTable.vue';
@@ -212,7 +212,7 @@ const docDot = { ok: 'ok', warn: 'warn', danger: 'danger', neutral: 'neutral', e
         <div class="space-y-2 pb-3">
             <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
                 <div class="sm:w-64">
-                    <VSearchInput v-model="filters.search" />
+                    <VSuggestSearch v-model="filters.search" module="employees" jump />
                 </div>
 
                 <div class="flex flex-wrap items-center gap-2 sm:ms-auto">

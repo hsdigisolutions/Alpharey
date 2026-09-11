@@ -16,6 +16,7 @@ import { useFormDraft } from '@/composables/useFormDraft';
 import AppIcon from '@/Components/AppIcon.vue';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import DraftBanner from '@/Components/ui/DraftBanner.vue';
+import VSuggestSearch from '@/Components/ui/VSuggestSearch.vue';
 import ExpenseReceiptDetail from '@/Components/Expenses/ExpenseReceiptDetail.vue';
 import FormField from '@/Components/ui/FormField.vue';
 import VBadge from '@/Components/ui/VBadge.vue';
@@ -73,6 +74,10 @@ const filters = reactive({
 function apply(extra = {}) {
     router.get('/expenses', { ...filters, ...extra }, { preserveScroll: true, preserveState: true });
 }
+// Debounced table filter for the suggestion box (keystrokes shouldn't each
+// reload; the dropdown is live, the table follows 350ms later).
+let searchTimer = null;
+function searchApply() { clearTimeout(searchTimer); searchTimer = setTimeout(() => apply(), 350); }
 function setApproval(val) { filters.approval = val; apply(); }
 
 // Export the current filtered view (built as a computed so the query string is
@@ -460,8 +465,8 @@ const columns = [
         </div>
 
         <div class="grid grid-cols-2 gap-2 pb-3 lg:grid-cols-4">
-            <VInput v-model="filters.search" :placeholder="$t('expenses.search')"
-                @keyup.enter="apply()" @blur="apply()" />
+            <VSuggestSearch v-model="filters.search" module="expenses" :placeholder="$t('expenses.search')"
+                @update:model-value="searchApply()" @select="apply()" />
             <VSelect v-model="filters.type" @update:model-value="apply()">
                 <option value="">{{ $t('expenses.all_types') }}</option>
                 <option v-for="t in types" :key="t" :value="t">{{ $t(`expenses.type_${t}`) }}</option>

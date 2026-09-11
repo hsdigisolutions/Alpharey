@@ -74,3 +74,51 @@ it('only reaches the active company for tenant-scoped entities', function (): vo
 it('denies the endpoint to a guest', function (): void {
     $this->getJson('/search?q=test')->assertUnauthorized();
 });
+
+it('scopes to a single module when module= is given (VSuggestSearch)', function (): void {
+    $admin = User::factory()->create(['role' => UserRole::Admin, 'company_id' => $this->company->id]);
+    Employee::factory()->create(['company_id' => $this->company->id, 'full_name' => 'Antonio Búscame']);
+    Project::factory()->create(['company_id' => $this->company->id, 'name' => 'Obra Búscame']);
+
+    $response = $this->actingAs($admin)->getJson('/search?q=Búscame&module=projects')->assertOk();
+    $modules = collect($response->json('groups'))->pluck('module');
+
+    // ONLY the requested module runs — the employee match is never queried.
+    expect($modules)->toContain('projects')
+        ->and($modules)->not->toContain('employees');
+});
+
+it('honours the view gate even when a module is requested directly', function (): void {
+    // A manager without projects.view asking for module=projects gets nothing —
+    // the provider is gated, not merely hidden.
+    $user = User::factory()->create(['role' => UserRole::Manager, 'company_id' => $this->company->id]);
+    Project::factory()->create(['company_id' => $this->company->id, 'name' => 'Secreto Obra']);
+
+    $this->actingAs($user)
+        ->getJson('/search?q=Secreto&module=projects')
+        ->assertOk()
+        ->assertJsonPath('groups', []);
+});
+
+it('returns an empty result for an unknown module', function (): void {
+    $admin = User::factory()->create(['role' => UserRole::Admin, 'company_id' => $this->company->id]);
+    Employee::factory()->create(['company_id' => $this->company->id, 'full_name' => 'Antonio Búscame']);
+
+    $this->actingAs($admin)
+        ->getJson('/search?q=Búscame&module=not_a_module')
+        ->assertOk()
+        ->assertJsonPath('groups', []);
+});
+
+it('returns up to eight rows for a single module (vs five on the global bar)', function (): void {
+    $admin = User::factory()->create(['role' => UserRole::Admin, 'company_id' => $this->company->id]);
+    Employee::factory()->count(9)->create([
+        'company_id' => $this->company->id,
+        'full_name' => fn () => 'Zzsuggest '.fake()->unique()->numerify('####'),
+    ]);
+
+    $response = $this->actingAs($admin)->getJson('/search?q=Zzsuggest&module=employees')->assertOk();
+    $rows = collect($response->json('groups'))->firstWhere('module', 'employees')['results'] ?? [];
+
+    expect($rows)->toHaveCount(8);
+});

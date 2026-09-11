@@ -21,7 +21,7 @@ import VInput from '@/Components/ui/VInput.vue';
 import VModal from '@/Components/ui/VModal.vue';
 import VPageHeader from '@/Components/ui/VPageHeader.vue';
 import VPagination from '@/Components/ui/VPagination.vue';
-import VSearchInput from '@/Components/ui/VSearchInput.vue';
+import VSuggestSearch from '@/Components/ui/VSuggestSearch.vue';
 import VSelect from '@/Components/ui/VSelect.vue';
 import VTable from '@/Components/ui/VTable.vue';
 import VTabs from '@/Components/ui/VTabs.vue';
@@ -316,8 +316,8 @@ const categoryColumns = [
         <!-- Items -->
         <template v-if="view === 'items'">
             <div class="flex flex-wrap items-end gap-2 pb-3">
-                <VSearchInput v-model="filters.search" class="w-full sm:w-72" :placeholder="$t('inventory.search')"
-                    @update:model-value="searchApply()" />
+                <VSuggestSearch v-model="filters.search" module="inventory" class="w-full sm:w-72" :placeholder="$t('inventory.search')"
+                    @update:model-value="searchApply()" @select="apply()" />
                 <VSelect v-model="filters.equipment_category_id" class="w-full sm:w-52" @update:model-value="apply()">
                     <option value="">{{ $t('inventory.category') }}</option>
                     <option v-for="c in categories" :key="c.id" :value="c.id">{{ c.name }}</option>

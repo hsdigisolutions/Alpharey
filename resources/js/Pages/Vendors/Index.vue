@@ -18,7 +18,7 @@ import VKpiCard from '@/Components/ui/VKpiCard.vue';
 import VModal from '@/Components/ui/VModal.vue';
 import VPageHeader from '@/Components/ui/VPageHeader.vue';
 import VPagination from '@/Components/ui/VPagination.vue';
-import VSearchInput from '@/Components/ui/VSearchInput.vue';
+import VSuggestSearch from '@/Components/ui/VSuggestSearch.vue';
 import VTable from '@/Components/ui/VTable.vue';
 
 const props = defineProps({
@@ -74,7 +74,7 @@ const columns = [
             <VKpiCard k="stats.inactive" :value="stats.inactive" status="warn" clickable :active="filters.status === 'inactive'" @click="setStatus('inactive')" />
         </div>
 
-        <div class="w-full pb-3 sm:w-60"><VSearchInput v-model="filters.search" /></div>
+        <div class="w-full pb-3 sm:w-60"><VSuggestSearch v-model="filters.search" module="vendors" jump /></div>
 
         <VTable :columns="columns">
             <tr v-for="v in vendors.data" :key="v.id" class="cursor-pointer hover:bg-surface-hover" @click="router.get(`/vendors/${v.id}`)">

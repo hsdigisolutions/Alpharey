@@ -16,6 +16,7 @@ import AppIcon from '@/Components/AppIcon.vue';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import DraftBanner from '@/Components/ui/DraftBanner.vue';
 import FormField from '@/Components/ui/FormField.vue';
+import VSuggestSearch from '@/Components/ui/VSuggestSearch.vue';
 import VBadge from '@/Components/ui/VBadge.vue';
 import VButton from '@/Components/ui/VButton.vue';
 import VConfirmDialog from '@/Components/ui/VConfirmDialog.vue';
@@ -78,6 +79,10 @@ const exportUrl = computed(
 function apply(extra = {}) {
     router.get('/invoices', { tab: props.tab, ...filters, ...extra }, { preserveScroll: true, preserveState: true });
 }
+// Debounced table filter for the suggestion box (keystrokes must not each fire
+// a full reload; the dropdown itself is live, the table catches up 350ms later).
+let searchTimer = null;
+function searchApply() { clearTimeout(searchTimer); searchTimer = setTimeout(() => apply(), 350); }
 function setStatus(val) { filters.status = val; apply(); }
 
 function switchTab(tab) {
@@ -378,6 +383,7 @@ const columns = computed(() => [
 
         <div class="space-y-2 py-3">
             <div class="grid grid-cols-2 gap-2 lg:grid-cols-4">
+                <VSuggestSearch v-model="filters.search" module="invoices" :placeholder="$t('common.search')" @update:model-value="searchApply()" @select="apply()" />
                 <VSelect v-model="filters.payment_status" @update:model-value="apply()">
                     <option value="">{{ $t('invoices.payment_status') }}</option>
                     <option v-for="s in paymentStatuses" :key="s" :value="s">

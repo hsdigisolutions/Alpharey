@@ -14,7 +14,7 @@ import VEmptyState from '@/Components/ui/VEmptyState.vue';
 import VKpiCard from '@/Components/ui/VKpiCard.vue';
 import VPageHeader from '@/Components/ui/VPageHeader.vue';
 import VPagination from '@/Components/ui/VPagination.vue';
-import VSearchInput from '@/Components/ui/VSearchInput.vue';
+import VSuggestSearch from '@/Components/ui/VSuggestSearch.vue';
 import VSelect from '@/Components/ui/VSelect.vue';
 import VTable from '@/Components/ui/VTable.vue';
 
@@ -97,7 +97,7 @@ const columns = [
         </div>
 
         <div class="flex flex-wrap items-end gap-2 pb-3">
-            <div class="w-full sm:w-56"><VSearchInput v-model="filters.search" /></div>
+            <div class="w-full sm:w-56"><VSuggestSearch v-model="filters.search" module="projects" jump /></div>
             <VSelect v-model="filters.client_id" class="w-full sm:w-56" @update:model-value="apply()">
                 <option value="">{{ $t('projects.client') }}</option>
                 <option v-for="c in filterOptions.clients" :key="c.id" :value="c.id">{{ c.name }}</option>
