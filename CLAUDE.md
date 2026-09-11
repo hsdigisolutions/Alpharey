@@ -4,6 +4,53 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Status: Phase 9 in progress — hardening (2026-08-01)
 
+### Form draft autosave + live search suggestions (2026-09-11, DONE, deployed to prod)
+
+Two client-confirmed UX changes. **1313 Pest tests.**
+
+**Change 1 — form draft autosave (`useFormDraft`).** A reusable composable
+(`resources/js/composables/useFormDraft.js`) debounce-saves (500ms) an Inertia
+`useForm` to localStorage, keyed per instance (`draft:project:new` /
+`draft:invoice:42`). Nothing is written until a field differs from the pristine
+state captured at `arm()` time (an untouched form leaves no stray draft); a
+successful submit `clear()`s it; closing without submitting keeps it for next
+open. On open, `arm()` auto-restores a saved draft and flips `hasDraft`, which
+the shared `DraftBanner.vue` surfaces as a dismissible "Discard draft" bar
+(revert to pristine + delete the draft). **Sensitive fields NEVER hit plaintext
+localStorage** — Employee excludes nif/iban/bank_name + all wage fields, Client
+excludes nif/vat_number/bank_account, Vendor excludes nif, Company excludes
+cif/ccc; file inputs are dropped automatically. Wired into Company (create +
+edit), Project, Invoice, Proposal, Employee, Client, Expense, Vendor, Vehicle;
+tiny quick modals (advance/payment/note/category/2FA/login) are deliberately
+excluded. Lifecycle the caller drives: `arm()` after populating the form for the
+opened record, `clear()` on submit success, `disarm()` on close-without-submit,
+`discard()` from the banner. Lang: `common.draft_restored` / `draft_discard`.
+Verified on prod: typed a project name → reload → banner + restored value;
+Discard reverts to blank + clears storage; an employee draft saved `full_name`
+but NOT the typed `nif`/`iban`.
+
+**Change 2 — live search suggestions (`VSuggestSearch`).** A per-list search box
+with a live suggestions dropdown scoped to ONE module via the extended
+`/search?q=…&module=…` endpoint (minChars 2, 250ms debounce, AbortController,
+server LIMIT 8). It IS the list's search field (v-model = the filter term); on
+picking a suggestion it either **JUMPs** to the record's detail page (Employees,
+Clients, Projects, Vendors, Vehicles — `jump` prop) or **FILLs** the term and
+emits `select` so the page filters its own table (Proposals, Inventory,
+Invoices, Expenses — entities with no standalone detail page). `GlobalSearch::
+search` gained an optional `$module` arm (runs exactly one gated provider at
+LIMIT 8; unknown module or ungranted view → empty) plus two new providers
+(subcontractors, inventory); `SearchController` passes `&module=` through. The
+grouped global bar is unchanged. Invoices gained a search box it never had (with
+a 350ms-debounced table filter); Expenses' plain input became a suggestion box.
+Tests: `GlobalSearchTest` (+4 — single-module scoping, gate honoured under a
+direct module request, unknown-module empty, 8-row single-module limit).
+Verified on prod: `/employees` suggestions (8 rows, name + code) → click jumped
+to `/employees/349`; fill-mode box on `/expenses` renders its dropdown and never
+navigates. **Follow-up (component + backend already support the modules;
+adoption is incremental): Subcontractors / Documents / Call Panel / Attendance
+have no existing list-search box to enhance — wiring those needs controller-side
+filter work.**
+
 ### P&L task-based revenue — Production-Task "Log Work" as billing source (2026-09-11, DONE, deployed to prod)
 
 Project P&L can now bill from **production-task progress** instead of the
