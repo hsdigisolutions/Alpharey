@@ -235,7 +235,7 @@ const trendChart = computed(() => {
     };
 });
 
-const blankTaskRow = () => ({ name: '', category: 'other', house_number: '', unit: 'm²', unit_price: 0, planned_quantity: null, weightage: 0, status: 'open', notes: '' });
+const blankTaskRow = () => ({ name: '', category: 'other', house_number: '', unit: 'm²', unit_price: 0, client_rate: null, planned_quantity: null, weightage: 0, status: 'open', notes: '' });
 
 // Bulk add — a grid of rows.
 const bulkOpen = ref(false);
@@ -313,7 +313,7 @@ const taskForm = useForm(blankTaskRow());
 const editingTaskId = ref(null);
 function openTaskEdit(t) {
     editingTaskId.value = t.id;
-    Object.assign(taskForm, { name: t.name, category: t.category, house_number: t.house_number ?? '', unit: t.unit ?? 'm²', unit_price: t.unit_price, planned_quantity: t.planned_quantity, weightage: t.weightage, status: t.status, notes: t.notes ?? '' });
+    Object.assign(taskForm, { name: t.name, category: t.category, house_number: t.house_number ?? '', unit: t.unit ?? 'm²', unit_price: t.unit_price, client_rate: t.client_rate ?? null, planned_quantity: t.planned_quantity, weightage: t.weightage, status: t.status, notes: t.notes ?? '' });
     taskForm.clearErrors();
     taskEditOpen.value = true;
 }
@@ -1443,6 +1443,14 @@ const noteStatus = { internal: 'neutral', client_call: 'info', client_email: 'ac
                         <span class="pointer-events-none absolute end-3 top-1/2 -translate-y-1/2 text-sm text-muted">€</span>
                     </div>
                     <p class="mt-1 text-xs text-muted">{{ $t('production_tasks.unit_price_hint') }}</p>
+                </FormField>
+                <!-- 4b. Client billing rate — drives task-based project revenue. -->
+                <FormField k="production_tasks.client_rate" :error="taskForm.errors.client_rate">
+                    <div class="relative">
+                        <VInput v-model="taskForm.client_rate" type="number" step="0.01" min="0" class="pe-7" :placeholder="$t('production_tasks.ph_client_rate')" />
+                        <span class="pointer-events-none absolute end-3 top-1/2 -translate-y-1/2 text-sm text-muted">€</span>
+                    </div>
+                    <p class="mt-1 text-xs text-muted">{{ $t('production_tasks.client_rate_hint') }}</p>
                 </FormField>
                 <!-- 5. Total measurement / planned quantity -->
                 <FormField k="production_tasks.planned" :error="taskForm.errors.planned_quantity" required><VInput v-model="taskForm.planned_quantity" type="number" step="0.01" min="0" :placeholder="$t('production_tasks.ph_planned')" /></FormField>

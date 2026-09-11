@@ -93,10 +93,11 @@ it('builds the dashboard with a bounded query count', function (): void {
     $count = countQueries(fn () => $this->actingAs($this->admin)->get('/dashboard')->assertOk());
 
     // ~8 KPIs + 3 charts + 2 panels: a fixed set of aggregate queries, none
-    // per-employee. (+2 constant queries: the P&L cache signature now also
-    // tracks measurements + invoices so approving production or marking an
-    // invoice paid refreshes the widget instead of waiting out the TTL.)
-    expect($count)->toBeLessThan(42);
+    // per-employee. The P&L cache signature adds a small CONSTANT set of
+    // MAX(updated_at) reads (measurements, invoices, and now task_progress +
+    // production_tasks for task-based billing) so approving production, marking
+    // an invoice paid, or logging task work refreshes the widget at once.
+    expect($count)->toBeLessThan(44);
 });
 
 it('serves the dashboard from cache on the second hit', function (): void {

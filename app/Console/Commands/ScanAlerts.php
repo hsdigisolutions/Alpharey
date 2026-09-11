@@ -2,6 +2,8 @@
 
 namespace App\Console\Commands;
 
+use App\Enums\AttendanceStatus;
+use App\Enums\BillingType;
 use App\Enums\EquipmentIssueStatus;
 use App\Enums\InvoiceType;
 use App\Enums\NotificationType;
@@ -16,6 +18,7 @@ use App\Models\Invoice;
 use App\Models\InvoiceReminder;
 use App\Models\Project;
 use App\Models\Scopes\CompanyScope;
+use App\Models\TaskProgress;
 use App\Models\VehicleSession;
 use App\Services\Inventory\PpeComplianceService;
 use App\Services\Notifications\NotificationDispatcher;
@@ -44,6 +47,7 @@ class ScanAlerts extends Command
         $sent = 0;
         $sent += $this->scanOverdueInvoices($dispatcher);
         $sent += $this->scanInvoiceReminders($dispatcher);
+        $sent += $this->scanTaskProgressMissing($dispatcher);
         $sent += $this->scanUnreturnedVehicles($dispatcher);
         $sent += $this->scanCallFollowUps($dispatcher);
         $sent += $this->scanLowStock($dispatcher);
@@ -148,6 +152,66 @@ class ScanAlerts extends Command
             $reminder->period_end = $end;
             $reminder->last_sent_at = now();
             $reminder->save();
+
+            $sent++;
+        }
+
+        return $sent;
+    }
+
+    /**
+     * Task-based projects (BillingType::TaskBased) with worked attendance in the
+     * last 7 days but NO Production-Task progress logged in that window — the
+     * admin's manual "Log Work" step (which drives revenue) has lagged, so the
+     * P&L may be understating income. Cadence guard: projects.task_reminder_at
+     * (server-set), nudged again only after 7 days — never re-spammed daily.
+     */
+    private function scanTaskProgressMissing(NotificationDispatcher $dispatcher): int
+    {
+        $window = now()->subDays(7)->toDateString();
+        $today = now()->toDateString();
+        $worked = [AttendanceStatus::Present->value, AttendanceStatus::Late->value, AttendanceStatus::EarlyLeave->value];
+
+        $projects = Project::query()->withoutGlobalScope(CompanyScope::class)
+            ->where('billing_type', BillingType::TaskBased->value)
+            ->get(['id', 'name', 'company_id', 'task_reminder_at']);
+
+        $sent = 0;
+
+        foreach ($projects as $project) {
+            $hasAttendance = Attendance::query()->withoutGlobalScope(CompanyScope::class)
+                ->where('project_id', $project->id)
+                ->whereIn('status', $worked)
+                ->whereBetween('date', [$window, $today])
+                ->exists();
+            if (! $hasAttendance) {
+                continue;
+            }
+
+            $hasProgress = TaskProgress::query()->withoutGlobalScope(CompanyScope::class)
+                ->join('production_tasks', 'task_progress.production_task_id', '=', 'production_tasks.id')
+                ->where('production_tasks.project_id', $project->id)
+                ->whereBetween('task_progress.date', [$window, $today])
+                ->exists();
+            if ($hasProgress) {
+                continue; // progress is being logged — no nudge needed
+            }
+
+            // Cadence: only nudge again after 7 days.
+            if ($project->task_reminder_at !== null && $project->task_reminder_at->gt(now()->subDays(7))) {
+                continue;
+            }
+
+            $dispatcher->dispatch(NotificationType::TaskProgressMissing, (int) $project->company_id, [
+                'title_es' => "Obra por tarea sin progreso registrado: {$project->name}",
+                'title_en' => "Task-based project with no progress logged: {$project->name}",
+                'body_es' => 'Hay jornadas registradas pero ningún avance de tarea en los últimos 7 días — los ingresos pueden estar incompletos.',
+                'body_en' => 'Attendance is logged but no task progress in the last 7 days — revenue may be understated.',
+                'entity' => $project->name, 'url' => '/projects',
+            ]);
+
+            $project->task_reminder_at = now();
+            $project->save();
 
             $sent++;
         }

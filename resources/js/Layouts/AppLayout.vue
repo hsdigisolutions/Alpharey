@@ -62,7 +62,9 @@ const secondaryNav = computed(() => [
     { key: 'expenses', labelKey: 'nav.expenses', icon: 'expenses', href: '/expenses' },
     { key: 'leave', labelKey: 'nav.leave', icon: 'leave', href: '/leave' },
     { key: 'inventory', labelKey: 'nav.inventory', icon: 'inventory', href: '/inventory' },
-    { key: 'measurements', labelKey: 'nav.measurements', icon: 'edit', href: '/measurements' },
+    // Measurements retired from the nav (2026-09): per-meter billing was replaced
+    // by task-based billing, which sources revenue from Production Tasks (Tareas).
+    // The /measurements routes + table stay intact (dormant) — just not surfaced.
     { key: 'tasks', labelKey: 'nav.tasks', icon: 'columns', href: '/tasks' },
     { key: 'deployments', labelKey: 'nav.deployments', icon: 'deployments', href: '/deployments' },
     { key: 'subcontractors', labelKey: 'nav.subcontractors', icon: 'employees', href: '/subcontractors' },

@@ -62,7 +62,9 @@ function submit() {
 
 const statuses = ['active', 'in_progress', 'completed', 'cancelled', 'on_hold'];
 const priorities = ['low', 'medium', 'high', 'urgent'];
-const billingTypes = ['fixed', 'hourly', 'per_meter', 'milestone'];
+// per_meter retired in favour of task_based (revenue from Production-Task
+// progress). Any legacy per_meter project keeps its value; it's just not offered.
+const billingTypes = ['fixed', 'hourly', 'task_based', 'milestone'];
 
 // "Name · Designation" for the manager/foreman/safety/coordinator dropdowns.
 function employeeLabel(e) {

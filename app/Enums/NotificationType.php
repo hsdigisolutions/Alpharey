@@ -44,6 +44,9 @@ enum NotificationType: string
     // Legacy Phase-8
     case ProjectAlert = 'project_alert';
     case DeploymentEvent = 'deployment_event';
+    // Task-based project has worked days but no task progress logged in a while —
+    // its revenue may be understated (the admin's manual "Log Work" step lagged).
+    case TaskProgressMissing = 'task_progress_missing';
     // Worker-direct (not in the role matrix)
     case AdvanceDecided = 'advance_decided';
     case ExpenseDecided = 'expense_decided';
@@ -119,7 +122,7 @@ enum NotificationType: string
             self::PpeExpiring, self::PpeMissing => 'inventory',
             self::CallFollowUp => 'calls',
             self::WeekendOffer => 'calendar',
-            self::ProjectAlert => 'projects',
+            self::ProjectAlert, self::TaskProgressMissing => 'projects',
             self::DeploymentEvent => 'deployments',
         };
     }

@@ -54,12 +54,12 @@ const columns = [
 // ── Edit task ───────────────────────────────────────────────────────────────
 const editOpen = ref(false);
 const editing = ref(null);
-const editForm = useForm({ name: '', category: 'other', house_number: '', unit: 'm²', unit_price: 0, planned_quantity: null, weightage: 0, status: 'open', notes: '' });
+const editForm = useForm({ name: '', category: 'other', house_number: '', unit: 'm²', unit_price: 0, client_rate: null, planned_quantity: null, weightage: 0, status: 'open', notes: '' });
 function openEdit(t) {
     editing.value = t;
     Object.assign(editForm, {
         name: t.name, category: t.category, house_number: t.house_number ?? '', unit: t.unit ?? 'm²',
-        unit_price: t.unit_price ?? 0, planned_quantity: t.planned_quantity, weightage: t.weightage, status: t.status, notes: t.notes ?? '',
+        unit_price: t.unit_price ?? 0, client_rate: t.client_rate ?? null, planned_quantity: t.planned_quantity, weightage: t.weightage, status: t.status, notes: t.notes ?? '',
     });
     editForm.clearErrors();
     editOpen.value = true;
@@ -255,6 +255,13 @@ function openPhoto(p) {
                         <span class="pointer-events-none absolute end-3 top-1/2 -translate-y-1/2 text-sm text-muted">€</span>
                     </div>
                     <p class="mt-1 text-xs text-muted">{{ $t('production_tasks.unit_price_hint') }}</p>
+                </FormField>
+                <FormField k="production_tasks.client_rate" :error="editForm.errors.client_rate">
+                    <div class="relative">
+                        <VInput v-model="editForm.client_rate" type="number" step="0.01" min="0" class="pe-7" :placeholder="$t('production_tasks.ph_client_rate')" />
+                        <span class="pointer-events-none absolute end-3 top-1/2 -translate-y-1/2 text-sm text-muted">€</span>
+                    </div>
+                    <p class="mt-1 text-xs text-muted">{{ $t('production_tasks.client_rate_hint') }}</p>
                 </FormField>
                 <FormField k="production_tasks.planned" :error="editForm.errors.planned_quantity" required><VInput v-model="editForm.planned_quantity" type="number" step="0.01" min="0" :placeholder="$t('production_tasks.ph_planned')" /></FormField>
                 <FormField k="production_tasks.weightage" :error="editForm.errors.weightage">
