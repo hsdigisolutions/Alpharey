@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Enums\AttendanceStatus;
+use App\Exports\TodayBreakdownExport;
 use App\Exports\TodayExport;
 use App\Exports\TodayProjectsExport;
 use App\Http\Controllers\Admin\Concerns\ResolvesCompanyContext;
@@ -110,6 +111,35 @@ class TodayController extends Controller
         }
 
         return Excel::download(new TodayExport($rows), 'informe-hoy.xlsx');
+    }
+
+    /**
+     * Export ONLY the "Project Breakdown" section (Excel or PDF) — a clean,
+     * readable document for sharing (Change 2), with the employees column +
+     * totals row.
+     */
+    public function exportBreakdown(Request $request, AuditLogger $audit): BinaryFileResponse|HttpResponse
+    {
+        $companyId = $this->contextCompanyId();
+        $data = $this->today->for($companyId, $this->resolveFilters($request));
+        /** @var list<array<string, mixed>> $rows */
+        $rows = $data['project_breakdown'];
+        /** @var array<string, int|float> $totals */
+        $totals = $data['project_breakdown_totals'];
+        $format = $request->query('format') === 'pdf' ? 'pdf' : 'excel';
+
+        $audit->log('exported', null, null, null, 'Today project breakdown '.strtoupper($format), 'other');
+
+        if ($format === 'pdf') {
+            return Pdf::loadView('exports.today-breakdown-pdf', [
+                'rows' => $rows,
+                'totals' => $totals,
+                'generated_at' => (string) $data['generated_at'],
+                'logo' => CompanyBranding::currentLogo(),
+            ])->download('desglose-obras.pdf');
+        }
+
+        return Excel::download(new TodayBreakdownExport($rows, $totals), 'desglose-obras.xlsx');
     }
 
     /**

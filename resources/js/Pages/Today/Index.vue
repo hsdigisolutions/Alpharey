@@ -128,6 +128,20 @@ function exportToday(format) {
     window.location.href = `/today/export?${params.toString()}`;
 }
 
+// Format a project's worked-employee list as "Name (days), Name (days)".
+function employeeList(employees) {
+    return (employees ?? []).map((e) => `${e.name} (${e.days})`).join(', ');
+}
+
+// Export ONLY the "Project Breakdown" section (Excel or PDF) — respects the date filter.
+function exportBreakdown(format) {
+    const params = new URLSearchParams();
+    if (filters.from) params.append('from', filters.from);
+    if (filters.to) params.append('to', filters.to);
+    params.append('format', format);
+    window.location.href = `/today/breakdown-export?${params.toString()}`;
+}
+
 // Export ONLY the "Projects with no activity today" section (Excel or PDF).
 function exportProjectsNoActivity(format) {
     const params = new URLSearchParams();
@@ -197,35 +211,66 @@ onBeforeUnmount(() => {
 
         <!-- Project breakdown -->
         <VCard v-if="data.project_breakdown && data.project_breakdown.length" class="mt-6">
-            <h2 class="mb-3 text-sm font-semibold text-ink"><Bilingual k="today.project_breakdown" inline /></h2>
-            <div class="overflow-x-auto">
-                <table class="w-full text-sm">
-                    <thead>
-                        <tr class="border-b border-line text-xs uppercase text-muted">
-                            <th class="px-2 py-2 text-start font-medium">{{ $t('today.project') }}</th>
-                            <th class="px-2 py-2 text-end font-medium">{{ $t('today.pb_assigned') }}</th>
-                            <th class="px-2 py-2 text-end font-medium">{{ $t('today.pb_present') }}</th>
-                            <th class="px-2 py-2 text-end font-medium">{{ $t('today.pb_absent') }}</th>
-                            <th class="px-2 py-2 text-end font-medium">{{ $t('today.pb_hours') }}</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr v-for="(pb, i) in data.project_breakdown" :key="i" class="border-b border-line">
-                            <td class="px-2 py-2">{{ pb.project ?? $t('today.no_project') }}</td>
-                            <td class="tabular-nums px-2 py-2 text-end">{{ pb.assigned }}</td>
-                            <td class="tabular-nums px-2 py-2 text-end text-status-ok">{{ pb.present }}</td>
-                            <td class="tabular-nums px-2 py-2 text-end" :class="pb.absent > 0 ? 'text-status-danger' : ''">{{ pb.absent }}</td>
-                            <td class="tabular-nums px-2 py-2 text-end">{{ pb.hours }}h</td>
-                        </tr>
-                    </tbody>
-                </table>
+            <div class="mb-2 flex flex-wrap items-start justify-between gap-2">
+                <h2 class="text-sm font-semibold text-ink"><Bilingual k="today.project_breakdown" inline /></h2>
+                <div class="flex items-center gap-2">
+                    <VButton variant="secondary" size="sm" icon="download" @click="exportBreakdown('excel')">Excel</VButton>
+                    <VButton variant="secondary" size="sm" icon="download" @click="exportBreakdown('pdf')">PDF</VButton>
+                </div>
             </div>
+            <!-- Compact layout (Change 2): numbers pinned narrow, Employees takes the
+                 slack and wraps — so a quick screenshot stays readable. -->
+            <table class="w-full table-fixed text-[13px]">
+                <thead>
+                    <tr class="border-b border-line text-[11px] uppercase text-muted">
+                        <th class="w-40 px-2 py-1.5 text-start font-medium">{{ $t('today.project') }}</th>
+                        <th class="px-2 py-1.5 text-start font-medium">{{ $t('today.pb_employees') }}</th>
+                        <th class="w-16 px-1.5 py-1.5 text-end font-medium">{{ $t('today.pb_assigned') }}</th>
+                        <th class="w-16 px-1.5 py-1.5 text-end font-medium">{{ $t('today.pb_present') }}</th>
+                        <th class="w-16 px-1.5 py-1.5 text-end font-medium">{{ $t('today.pb_absent') }}</th>
+                        <th class="w-16 px-1.5 py-1.5 text-end font-medium">{{ $t('today.pb_hours') }}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr v-for="(pb, i) in data.project_breakdown" :key="i" class="border-b border-line align-top">
+                        <td class="px-2 py-1.5 font-medium text-ink">{{ pb.project ?? $t('today.no_project') }}</td>
+                        <td class="px-2 py-1.5 text-ink-soft">
+                            <span v-if="pb.employees && pb.employees.length" class="break-words">
+                                <template v-for="(e, j) in pb.employees" :key="j"><span class="whitespace-nowrap">{{ e.name }} <span class="text-muted">({{ e.days }})</span></span>{{ j < pb.employees.length - 1 ? ', ' : '' }}</template>
+                            </span>
+                            <span v-else class="text-muted">—</span>
+                        </td>
+                        <td class="tabular-nums px-1.5 py-1.5 text-end">{{ pb.assigned }}</td>
+                        <td class="tabular-nums px-1.5 py-1.5 text-end text-status-ok">{{ pb.present }}</td>
+                        <td class="tabular-nums px-1.5 py-1.5 text-end" :class="pb.absent > 0 ? 'text-status-danger' : ''">{{ pb.absent }}</td>
+                        <td class="tabular-nums px-1.5 py-1.5 text-end">{{ pb.hours }}h</td>
+                    </tr>
+                    <!-- Totals (Change 3): employees shown BOTH ways, clearly labelled. -->
+                    <tr v-if="data.project_breakdown_totals" class="border-t-2 border-line-strong bg-surface-sunken/50 font-semibold">
+                        <td class="px-2 py-2 text-ink">
+                            {{ $t('today.pb_total') }}
+                            <span class="block text-[11px] font-normal text-muted">{{ data.project_breakdown_totals.projects }} {{ $t('today.pb_projects') }}</span>
+                        </td>
+                        <td class="px-2 py-2 text-[12px] font-normal text-ink-soft">
+                            <span class="font-semibold text-ink">{{ data.project_breakdown_totals.unique_employees }}</span> {{ $t('today.pb_unique') }}
+                            · <span class="font-semibold text-ink">{{ data.project_breakdown_totals.employee_instances }}</span> {{ $t('today.pb_instances') }}
+                        </td>
+                        <td class="tabular-nums px-1.5 py-2 text-end text-ink">{{ data.project_breakdown_totals.assigned }}</td>
+                        <td class="tabular-nums px-1.5 py-2 text-end text-status-ok">{{ data.project_breakdown_totals.present }}</td>
+                        <td class="tabular-nums px-1.5 py-2 text-end">{{ data.project_breakdown_totals.absent }}</td>
+                        <td class="tabular-nums px-1.5 py-2 text-end text-ink">{{ data.project_breakdown_totals.hours }}h</td>
+                    </tr>
+                </tbody>
+            </table>
         </VCard>
 
         <!-- Projects with no activity today -->
         <VCard v-if="data.projects_no_activity && data.projects_no_activity.length" class="mt-6">
             <div class="mb-1 flex flex-wrap items-start justify-between gap-2">
-                <h2 class="text-sm font-semibold text-ink"><Bilingual k="today.no_activity_title" inline /></h2>
+                <h2 class="text-sm font-semibold text-ink">
+                    <Bilingual k="today.no_activity_title" inline />
+                    <span class="ms-1 text-xs font-normal text-muted">({{ data.projects_no_activity_total ?? data.projects_no_activity.length }})</span>
+                </h2>
                 <div class="flex items-center gap-2">
                     <VButton variant="secondary" size="sm" icon="download" @click="exportProjectsNoActivity('excel')">Excel</VButton>
                     <VButton variant="secondary" size="sm" icon="download" @click="exportProjectsNoActivity('pdf')">PDF</VButton>
@@ -296,35 +341,38 @@ onBeforeUnmount(() => {
                     <VBadge :status="statusBadge[group.status] ?? 'neutral'">{{ statusLabel(group.status) }}</VBadge>
                     <span class="text-xs text-muted">{{ group.rows.length }}</span>
                 </div>
-                <table class="w-full text-sm">
+                <!-- Light-tightened (Change 4): smaller text + row padding, and the
+                     Home-company / Distance columns pinned narrow, for a readable
+                     screenshot (a full PDF/Excel export is on the section above). -->
+                <table class="w-full text-[13px]">
                     <thead>
-                        <tr class="border-b border-line text-start text-xs uppercase text-muted">
-                            <th v-if="!data.single_day" class="px-2 py-2 text-start font-medium">{{ $t('timesheet.day') }}</th>
-                            <th class="px-2 py-2 text-start font-medium">{{ $t('today.employee') }}</th>
-                            <th class="px-2 py-2 text-start font-medium">{{ $t('today.home_company') }}</th>
-                            <th class="px-2 py-2 text-start font-medium">{{ $t('today.project') }}</th>
-                            <th class="px-2 py-2 text-start font-medium">{{ $t('today.check_in') }}</th>
-                            <th class="px-2 py-2 text-start font-medium">{{ $t('today.check_out') }}</th>
-                            <th class="tabular-nums px-2 py-2 text-end font-medium">{{ $t('today.hours') }}</th>
-                            <th class="px-2 py-2 text-end font-medium">{{ $t('today.distance') }}</th>
+                        <tr class="border-b border-line text-start text-[11px] uppercase text-muted">
+                            <th v-if="!data.single_day" class="px-2 py-1.5 text-start font-medium">{{ $t('timesheet.day') }}</th>
+                            <th class="px-2 py-1.5 text-start font-medium">{{ $t('today.employee') }}</th>
+                            <th class="w-24 px-2 py-1.5 text-start font-medium">{{ $t('today.home_company') }}</th>
+                            <th class="px-2 py-1.5 text-start font-medium">{{ $t('today.project') }}</th>
+                            <th class="w-16 px-2 py-1.5 text-start font-medium">{{ $t('today.check_in') }}</th>
+                            <th class="w-16 px-2 py-1.5 text-start font-medium">{{ $t('today.check_out') }}</th>
+                            <th class="tabular-nums w-16 px-2 py-1.5 text-end font-medium">{{ $t('today.hours') }}</th>
+                            <th class="w-16 px-2 py-1.5 text-end font-medium">{{ $t('today.distance') }}</th>
                         </tr>
                     </thead>
                     <tbody>
                         <tr v-for="row in group.rows" :key="row.id" class="border-b border-line">
-                            <td v-if="!data.single_day" class="tabular-nums px-2 py-2 text-ink-soft">{{ row.date }}</td>
-                            <td class="px-2 py-2 text-ink">{{ row.employee }}</td>
-                            <td class="px-2 py-2">
+                            <td v-if="!data.single_day" class="tabular-nums px-2 py-1.5 text-ink-soft">{{ row.date }}</td>
+                            <td class="px-2 py-1.5 text-ink">{{ row.employee }}</td>
+                            <td class="px-2 py-1.5">
                                 <VBadge v-if="row.home_company" status="info">{{ row.home_company }}</VBadge>
                                 <span v-else class="text-muted">—</span>
                             </td>
-                            <td class="px-2 py-2 text-ink-soft">{{ row.project ?? '—' }}</td>
-                            <td class="tabular-nums px-2 py-2 text-ink-soft">{{ row.worked ? (row.check_in ?? '—') : '—' }}</td>
-                            <td class="tabular-nums px-2 py-2 text-ink-soft">{{ row.worked ? (row.check_out ?? '—') : '—' }}</td>
-                            <td class="tabular-nums px-2 py-2 text-end text-ink">
-                                <template v-if="row.worked">{{ row.hours }}h<span v-if="row.still_working" class="ms-1 text-xs text-status-info">· {{ $t('today.still_working') }}</span></template>
+                            <td class="px-2 py-1.5 text-ink-soft">{{ row.project ?? '—' }}</td>
+                            <td class="tabular-nums px-2 py-1.5 text-ink-soft">{{ row.worked ? (row.check_in ?? '—') : '—' }}</td>
+                            <td class="tabular-nums px-2 py-1.5 text-ink-soft">{{ row.worked ? (row.check_out ?? '—') : '—' }}</td>
+                            <td class="tabular-nums px-2 py-1.5 text-end text-ink">
+                                <template v-if="row.worked">{{ row.hours }}h<span v-if="row.still_working" class="ms-1 text-[11px] text-status-info">· {{ $t('today.still_working') }}</span></template>
                                 <span v-else class="text-muted">—</span>
                             </td>
-                            <td class="tabular-nums px-2 py-2 text-end text-ink-soft">{{ row.distance != null ? `${Math.round(row.distance)}m` : '—' }}</td>
+                            <td class="tabular-nums px-2 py-1.5 text-end text-ink-soft">{{ row.distance != null ? `${Math.round(row.distance)}m` : '—' }}</td>
                         </tr>
                     </tbody>
                 </table>

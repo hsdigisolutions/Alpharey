@@ -45,6 +45,53 @@ it('ships the checked-in-now KPI, project breakdown and row distance', function 
             ->has('data.attendance.0.distance'));
 });
 
+it('ships the employees + worked-day count per project, honouring the range (Change 1)', function (): void {
+    $project = Project::factory()->forCompany($this->company)->create(['name' => 'Reforma']);
+    $emp = Employee::factory()->forCompany($this->company)->create(['full_name' => 'Haris']);
+    // Two worked days on this project within the range.
+    Attendance::factory()->create(['company_id' => $this->company->id, 'employee_id' => $emp->id, 'project_id' => $project->id, 'date' => '2026-05-10', 'status' => 'present', 'hours_worked' => '8']);
+    Attendance::factory()->create(['company_id' => $this->company->id, 'employee_id' => $emp->id, 'project_id' => $project->id, 'date' => '2026-05-11', 'status' => 'present', 'hours_worked' => '8']);
+
+    $this->actingAs($this->admin)->get('/today?from=2026-05-10&to=2026-05-11')
+        ->assertInertia(fn ($page) => $page
+            ->has('data.project_breakdown.0.employees', 1)
+            ->where('data.project_breakdown.0.employees.0.name', 'Haris')
+            ->where('data.project_breakdown.0.employees.0.days', 2));
+});
+
+it('ships breakdown totals with unique headcount AND employee-instances (Change 3)', function (): void {
+    $p1 = Project::factory()->forCompany($this->company)->create(['name' => 'A']);
+    $p2 = Project::factory()->forCompany($this->company)->create(['name' => 'B']);
+    $a = Employee::factory()->forCompany($this->company)->create();
+    $b = Employee::factory()->forCompany($this->company)->create();
+    // `a` works on BOTH projects (two instances, one unique); `b` on p1 only.
+    Attendance::factory()->create(['company_id' => $this->company->id, 'employee_id' => $a->id, 'project_id' => $p1->id, 'date' => '2026-05-10', 'status' => 'present', 'hours_worked' => '8']);
+    Attendance::factory()->create(['company_id' => $this->company->id, 'employee_id' => $a->id, 'project_id' => $p2->id, 'date' => '2026-05-11', 'status' => 'present', 'hours_worked' => '8']);
+    Attendance::factory()->create(['company_id' => $this->company->id, 'employee_id' => $b->id, 'project_id' => $p1->id, 'date' => '2026-05-10', 'status' => 'present', 'hours_worked' => '8']);
+
+    $this->actingAs($this->admin)->get('/today?from=2026-05-10&to=2026-05-11')
+        ->assertInertia(fn ($page) => $page
+            ->where('data.project_breakdown_totals.projects', 2)
+            ->where('data.project_breakdown_totals.unique_employees', 2)
+            ->where('data.project_breakdown_totals.employee_instances', 3)
+            ->where('data.project_breakdown_totals.present', 3));
+});
+
+it('exports the project breakdown as Excel and PDF (Change 2)', function (): void {
+    $project = Project::factory()->forCompany($this->company)->create(['name' => 'Reforma']);
+    $emp = Employee::factory()->forCompany($this->company)->create(['full_name' => 'Hamza']);
+    Attendance::factory()->create(['company_id' => $this->company->id, 'employee_id' => $emp->id, 'project_id' => $project->id, 'date' => now()->toDateString(), 'status' => 'present', 'hours_worked' => '8']);
+
+    $this->actingAs($this->admin)->get('/today/breakdown-export?format=excel')->assertOk();
+    $this->actingAs($this->admin)->get('/today/breakdown-export?format=pdf')->assertOk();
+    $this->assertDatabaseHas('audit_logs', ['action' => 'exported']);
+});
+
+it('ships a projects_no_activity_total count (Change 4)', function (): void {
+    $this->actingAs($this->admin)->get('/today')
+        ->assertInertia(fn ($page) => $page->has('data.projects_no_activity_total'));
+});
+
 it('exports the filtered worker view as Excel and PDF', function (): void {
     $e = Employee::factory()->forCompany($this->company)->create();
     Attendance::factory()->create([

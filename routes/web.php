@@ -207,6 +207,7 @@ Route::middleware(['auth', 'active', 'two_factor', 'not_worker'])->group(functio
 
     // Screen 15 — Today's Report (Phase 8). Live view, client auto-refresh.
     Route::get('/today/export', [TodayController::class, 'export'])->name('today.export');
+    Route::get('/today/breakdown-export', [TodayController::class, 'exportBreakdown'])->name('today.breakdown-export');
     Route::get('/today/projects-export', [TodayController::class, 'exportProjects'])->name('today.projects-export');
     Route::get('/today', [TodayController::class, 'index'])->name('today.index');
 

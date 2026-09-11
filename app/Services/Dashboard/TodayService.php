@@ -62,11 +62,14 @@ class TodayService
         $rows = $this->applyAttendanceFilters($allRows, $filters);
 
         $projectsNoActivity = $this->projectsWithNoActivity($from, $to);
+        $breakdown = $this->projectBreakdown($allRows);
 
         return [
             'kpis' => $this->kpis($companyId, $from, $to, $today, $allRows, count($projectsNoActivity)),
-            'project_breakdown' => $this->projectBreakdown($allRows),
+            'project_breakdown' => $breakdown,
+            'project_breakdown_totals' => $this->breakdownTotals($allRows, $breakdown),
             'projects_no_activity' => $projectsNoActivity,
+            'projects_no_activity_total' => count($projectsNoActivity),
             'attendance' => $rows->values()->all(),
             'attendance_total' => $allRows->count(),
             'single_day' => $from === $to,
@@ -202,6 +205,7 @@ class TodayService
             ->get()
             ->map(fn (Attendance $a): array => [
                 'id' => $a->id,
+                'employee_id' => $a->employee_id,
                 'employee' => $a->employee?->full_name,
                 'home_company' => $homeByEmployee[$a->employee_id] ?? null,
                 'project' => $a->project?->name,
@@ -245,9 +249,23 @@ class TodayService
 
         return $byProject->map(function (Collection $rows, string $pidKey) use ($assigned): array {
             $pid = $pidKey === '0' ? null : (int) $pidKey;
-            $present = $rows->filter(fn (array $r): bool => in_array($r['status'], self::WORKED, true))->count();
+            $worked = $rows->filter(fn (array $r): bool => in_array($r['status'], self::WORKED, true));
+            $present = $worked->count();
             $rosterCount = $pid !== null ? (int) ($assigned[$pid] ?? 0) : 0;
             $assignedCount = max($rosterCount, $rows->count());
+
+            // Who worked here in the period + their worked-day count (one attendance
+            // row = one employee-day, so counting rows per employee = day-count).
+            // Most-days first, honouring the SELECTED date range like every figure.
+            $employees = $worked
+                ->groupBy('employee_id')
+                ->map(fn (Collection $grp): array => [
+                    'name' => $grp->first()['employee'],
+                    'days' => $grp->count(),
+                ])
+                ->sortByDesc('days')
+                ->values()
+                ->all();
 
             return [
                 'project_id' => $pid,
@@ -256,8 +274,37 @@ class TodayService
                 'present' => $present,
                 'absent' => max(0, $assignedCount - $present),
                 'hours' => round($rows->sum(fn (array $r): float => (float) $r['hours']), 2),
+                'employees' => $employees,
             ];
         })->values()->sortByDesc('present')->values()->all();
+    }
+
+    /**
+     * Totals row for the project breakdown (Change 3). The employee figure is
+     * shown TWO ways because they answer different questions: the distinct
+     * headcount (a worker on two projects counts once) and the sum of the
+     * per-project counts (employee-instances — the honest column total, which
+     * can exceed the headcount when a worker splits days across projects).
+     *
+     * @param  Collection<int, array<string, mixed>>  $allToday
+     * @param  list<array<string, mixed>>  $breakdown
+     * @return array<string, int|float>
+     */
+    private function breakdownTotals(Collection $allToday, array $breakdown): array
+    {
+        $rows = collect($breakdown);
+
+        return [
+            'projects' => count($breakdown),
+            'unique_employees' => $allToday
+                ->filter(fn (array $r): bool => in_array($r['status'], self::WORKED, true))
+                ->pluck('employee_id')->filter()->unique()->count(),
+            'employee_instances' => (int) $rows->sum(fn (array $r): int => count($r['employees'])),
+            'assigned' => (int) $rows->sum('assigned'),
+            'present' => (int) $rows->sum('present'),
+            'absent' => (int) $rows->sum('absent'),
+            'hours' => round((float) $rows->sum('hours'), 2),
+        ];
     }
 
     /** A project counts as "worked recently" within this many days. */
