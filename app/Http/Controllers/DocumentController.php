@@ -13,6 +13,7 @@ use App\Models\Project;
 use App\Models\Scopes\CompanyScope;
 use App\Models\Vendor;
 use App\Services\Audit\AuditLogger;
+use App\Services\Dashboard\DashboardService;
 use App\Support\CurrentCompany;
 use App\Support\DocumentTypes;
 use Illuminate\Database\Eloquent\Model;
@@ -113,6 +114,7 @@ class DocumentController extends Controller
         });
 
         $audit->log('uploaded', $document, null, null, $document->type_key, 'documents');
+        $this->bustDashboard($companyId);
 
         return back()->with('success', __('ui.documents.saved'));
     }
@@ -148,6 +150,7 @@ class DocumentController extends Controller
         }
 
         $audit->log('updated', $document, null, null, $document->type_key, 'documents');
+        $this->bustDashboard($document->company_id);
 
         return back()->with('success', __('ui.documents.saved'));
     }
@@ -181,6 +184,7 @@ class DocumentController extends Controller
         $document->update($data);
 
         $audit->log('updated', $document, null, null, $document->type_key, 'documents');
+        $this->bustDashboard($document->company_id);
 
         return back()->with('success', __('ui.documents.saved'));
     }
@@ -333,6 +337,7 @@ class DocumentController extends Controller
         $this->assertCompanyDocumentAccess($document);
 
         $document->delete(); // soft delete — metadata + audit survive
+        $this->bustDashboard($document->company_id);
 
         return back()->with('success', __('ui.documents.deleted'));
     }
@@ -346,8 +351,23 @@ class DocumentController extends Controller
         $this->assertCompanyDocumentAccess($document);
 
         $document->update(['is_exempt' => ! $document->is_exempt]);
+        $this->bustDashboard($document->company_id);
 
         return back()->with('success', __('ui.documents.saved'));
+    }
+
+    /**
+     * A document write (new version, in-place date edit, replace, delete,
+     * exempt) can change the dashboard's "documents expiring" figure, which is
+     * cached per company. Drop that company's cached payload so the card
+     * reflects the change at once instead of after the short TTL — mirroring the
+     * Documents Center, which busts its own cache on any document change.
+     */
+    private function bustDashboard(?int $companyId): void
+    {
+        if ($companyId !== null) {
+            app(DashboardService::class)->forget($companyId);
+        }
     }
 
     private function resolveEntity(string $type, int $id): Model

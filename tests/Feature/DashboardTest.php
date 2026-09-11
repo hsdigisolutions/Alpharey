@@ -5,6 +5,7 @@ use App\Enums\PaymentStatus;
 use App\Enums\ProjectStatus;
 use App\Enums\UserRole;
 use App\Models\Company;
+use App\Models\Document;
 use App\Models\Employee;
 use App\Models\Invoice;
 use App\Models\Project;
@@ -26,6 +27,31 @@ it('renders the dashboard for a company admin', function (): void {
         ->get('/dashboard')
         ->assertOk()
         ->assertInertia(fn ($page) => $page->component('Dashboard')->has('data.kpis'));
+});
+
+it('refreshes the documents-expiring count as soon as a document date is corrected (cache bust, BUG 1)', function (): void {
+    // A company document expiring inside the warn window → dashboard shows 1.
+    $doc = new Document([
+        'category' => 'company', 'type_key' => 'poliza_rc',
+        'expiry_date' => now()->addDays(10)->toDateString(),
+    ]);
+    $doc->documentable()->associate($this->company);
+    $doc->company_id = $this->company->id;
+    $doc->version = 1;
+    $doc->save();
+
+    $this->actingAs($this->admin);
+    // Warm the 120s dashboard cache.
+    expect(app(DashboardService::class)->for($this->company->id)['kpis']['documents_expiring'])->toBe(1);
+
+    // Admin corrects the expiry to far in the future via the real endpoint.
+    $this->patch("/documents/{$doc->id}/metadata", [
+        'entity_type' => 'company', 'type_key' => 'poliza_rc',
+        'expiry_date' => now()->addYear()->toDateString(),
+    ])->assertRedirect();
+
+    // The card reflects it AT ONCE — the write busted the cache (was stale before).
+    expect(app(DashboardService::class)->for($this->company->id)['kpis']['documents_expiring'])->toBe(0);
 });
 
 it('sends a Super Admin with no company selected to Welcome', function (): void {

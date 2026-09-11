@@ -74,7 +74,7 @@ function go(routeName) {
             <VKpiCard k="dashboard.active_employees" icon="employees" :value="kpis.active_employees" />
             <VKpiCard k="dashboard.active_projects" icon="projects" :value="kpis.active_projects" />
             <VKpiCard k="dashboard.pending_invoices" icon="invoices" :value="eur(kpis.pending_invoices_eur)" />
-            <VKpiCard k="dashboard.documents_expiring" icon="documents" :value="kpis.documents_expiring"
+            <VKpiCard k="dashboard.documents_expiring" icon="file" :value="kpis.documents_expiring"
                 :status="kpis.documents_expiring > 0 ? 'warn' : null" />
         </div>
 
