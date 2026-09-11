@@ -4,6 +4,50 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Status: Phase 9 in progress — hardening (2026-08-01)
 
+### P&L task-based revenue — Production-Task "Log Work" as billing source (2026-09-11, DONE, deployed to prod)
+
+Project P&L can now bill from **production-task progress** instead of the
+separate Measurements module. Confirmed with the client; deployed to prod and
+verified on real data. **1309 Pest tests.**
+
+- **Schema.** `production_tasks.client_rate` (nullable decimal 14,2) is the
+  CLIENT billing rate; the existing `unit_price` stays the INTERNAL cost,
+  untouched. `projects.task_reminder_at` (nullable timestamp, server-set) is the
+  nudge-cadence guard. New `BillingType::TaskBased` enum case — it REPLACES
+  per_meter as the offered task/unit billing basis (existing per_meter projects
+  keep working; the value just isn't offered on new projects).
+- **Revenue.** `ProfitabilityService::resolveRevenue` gains exactly ONE new arm:
+  `BillingType::TaskBased` → `taskBasedRevenue()` = Σ(task-progress quantity in
+  range × the task's `client_rate`); `not_configured` (neutral health, never a
+  fake −100% loss) when no task on the project carries a `client_rate`. **The
+  hourly / fixed-budget / paid-invoice / per_meter / not-configured arms are
+  byte-for-byte untouched** — proven on prod: #96 hourly, #152 not_configured,
+  #136 fixed all identical to the cent before/after deploy. `dailyPnl` +
+  day/month breakdowns get the task-based income arm (per-worker income folds in
+  by date) plus a leftover loop for task days with no attendance. Task queries
+  drop the CompanyScope (`taskProgressQuery`), same pattern as the meter/hour
+  readers. **No approval step** — admin logging the work IS the authorization.
+- **Cache.** `signature()` now also tracks `task_progress` + `production_tasks`
+  MAX(updated_at), so logging work busts the P&L cache (dashboard query budget
+  42 → 44, two constant reads).
+- **Nudge.** New `NotificationType::TaskProgressMissing` (icon in the `projects`
+  group; `ntype_task_progress_missing` label es/en). `notifications:scan` gains a
+  sweep: a `task_based` project with worked attendance in the last 7 days but NO
+  task progress in the window (and not nudged in the last 7 days) → notify admins
+  ("attendance logged but no task progress — revenue may be understated") and
+  stamp `task_reminder_at`. Url is the static `/projects` (a real GET route; a
+  dynamic `/projects/{id}` cannot be a source literal for the url-route guard).
+- **UI.** New-project billing dropdown offers **Fixed / Hourly / Task-based
+  (from Production Tasks) / Milestone** — per_meter dropped. Production Task
+  forms (project Tareas tab + standalone screen) gain the `client_rate` field
+  (unit_price kept as the internal-cost field). **Measurements is hidden from the
+  nav** — the `/measurements` route, controller, table and data are kept intact
+  and reachable directly (dormant), only the sidebar item is removed.
+- Tests: `ProfitabilityTaskBasedTest` (6 — client_rate not unit_price,
+  not_configured neutral, hourly regression guard, nudge fires on gap, silent
+  when logged, cadence guard). Verified on prod (rolled-back tx): task_based
+  revenue 10 × 20 = 200; no-rate project = 0/not_configured/neutral.
+
 ### Expense/dashboard bug batch — 4 fixes (2026-09-11, DONE, deployed to prod)
 
 - **BUG 1 — dashboard "documents expiring" stale + broken icon.** The whole
