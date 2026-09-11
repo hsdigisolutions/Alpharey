@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Expense;
+use App\Models\Scopes\CompanyScope;
 use App\Services\Expenses\ExpenseReceiptExport;
 use App\Services\Vehicles\VehicleExpenseSyncService;
 use App\Services\Workers\WorkerFuelExpenseService;
@@ -29,11 +30,15 @@ class ExpenseReviewController extends Controller
     {
         $expenses = Expense::query()->withoutGlobalScopes()
             ->where('review_status', 'in_review')
+            // Cross-company SA tool: employee / project / vehicle are company-scoped,
+            // so drop CompanyScope on the eager-loads or their names blank out when
+            // the SA has a different company selected (same trap as the doc panel).
             ->with([
                 'company:id,name,brand_name',
-                'employee:id,full_name,employee_code',
-                'project:id,name,client_id', 'project.client:id,name',
-                'vehicle:id,plate_number,brand,model',
+                'employee' => fn ($q) => $q->withoutGlobalScope(CompanyScope::class)->select('id', 'full_name', 'employee_code'),
+                'project' => fn ($q) => $q->withoutGlobalScope(CompanyScope::class)->select('id', 'name', 'client_id'),
+                'project.client:id,name',
+                'vehicle' => fn ($q) => $q->withoutGlobalScope(CompanyScope::class)->select('id', 'plate_number', 'brand', 'model'),
                 'category:id,name',
                 'escalatedBy:id,name',
             ])
