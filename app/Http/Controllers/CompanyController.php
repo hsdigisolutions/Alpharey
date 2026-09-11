@@ -41,7 +41,17 @@ class CompanyController extends Controller
         return Inertia::render('Companies/Index', [
             'companies' => Company::query()
                 ->withCount('users')
-                ->with(['documents' => fn ($q) => $q->with('uploader:id,name')->orderByDesc('version')])
+                // Companies is a Super-Admin-only screen that lists EVERY company,
+                // so each company's documents must load by ownership
+                // (documentable_id + the doc's own company_id), NOT filtered to the
+                // SA's header-selected session company. Document is company-scoped,
+                // so without dropping CompanyScope a SA with any company selected
+                // sees every OTHER company's panel as all-"Missing" (the uploaded
+                // doc is saved fine — it is just scoped out of the display query).
+                // store() and DocumentPanelPayload::single() drop it for the same
+                // reason.
+                ->with(['documents' => fn ($q) => $q->withoutGlobalScope(CompanyScope::class)
+                    ->with('uploader:id,name')->orderByDesc('version')])
                 ->orderBy('name')
                 ->get()
                 ->map(function (Company $company) use ($status, $panel, $employeeCounts): array {

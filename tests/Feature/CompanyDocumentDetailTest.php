@@ -3,6 +3,7 @@
 use App\Models\Company;
 use App\Models\Document;
 use App\Models\User;
+use App\Support\CurrentCompany;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Testing\TestResponse;
@@ -385,4 +386,30 @@ it('keeps every OTHER response frame-locked (only the preview route is framable)
     $doc = Document::query()->where('type_key', 'poliza_rc')->firstOrFail();
     $dl = $this->get("/documents/{$doc->id}/download")->assertOk();
     expect($dl->headers->get('x-frame-options'))->toBe('DENY');
+});
+
+it('shows a company its OWN uploaded documents even when the SA has a DIFFERENT company selected', function (): void {
+    // Regression (2026-09): the Companies screen is Super-Admin-only and lists
+    // EVERY company, but the documents eager-load was CompanyScope-filtered to
+    // the SA's header-selected session company — so a doc uploaded to company B
+    // vanished from B's panel (all "Missing") whenever another company was
+    // selected, even though it saved correctly. The upload company_id follows
+    // the document's OWNING company, so the display must too.
+    $selected = Company::factory()->create(['name' => 'AAA Selected']);
+    $target = Company::factory()->create(['name' => 'BBB Target']);
+
+    $this->actingAs($this->sa);
+    // SA is acting inside a DIFFERENT company than the one being uploaded to.
+    app(CurrentCompany::class)->select($selected);
+
+    uploadCompanyDoc($target, 'poliza_rc', ['metadata' => ['policy_number' => 'OWN-1']])
+        ->assertSessionHasNoErrors();
+
+    // Ordered by name: 0 = AAA Selected (no docs), 1 = BBB Target (its own doc).
+    $this->get('/companies')->assertInertia(fn (AssertableInertia $page) => $page
+        ->component('Companies/Index')
+        ->has('companies.0.documents', 0)
+        ->has('companies.1.documents', 1)
+        ->where('companies.1.documents.0.type_key', 'poliza_rc')
+        ->where('companies.1.documents.0.metadata.policy_number', 'OWN-1'));
 });
