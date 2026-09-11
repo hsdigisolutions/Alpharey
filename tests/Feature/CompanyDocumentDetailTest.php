@@ -372,6 +372,28 @@ it('refuses a preview across companies (tenancy)', function (): void {
     $this->actingAs($admin)->get("/documents/{$doc->id}/preview")->assertNotFound();
 });
 
+it('lets a Super Admin reach a company document action route with a DIFFERENT company selected', function (): void {
+    // Regression (2026-09): Document is CompanyScope-bound on route-model
+    // binding, so a SA who had another company selected 404'd on preview /
+    // download / etc. for a doc owned by company B — even though the panel now
+    // lists it. resolveRouteBinding drops the scope for a SA (cross-company by
+    // right); non-SA users stay scoped (see the cross-company tenancy test).
+    $selected = Company::factory()->create();
+    $target = Company::factory()->create();
+
+    $this->actingAs($this->sa);
+    app(CurrentCompany::class)->select($selected);
+
+    uploadCompanyDoc($target, 'poliza_rc')->assertSessionHasNoErrors();
+    $doc = Document::query()->withoutGlobalScopes()
+        ->where('company_id', $target->id)->where('type_key', 'poliza_rc')->firstOrFail();
+    $doc->update(['mime' => 'application/pdf']);
+
+    // With company `$selected` active, the company-`$target` doc must still resolve.
+    $this->get("/documents/{$doc->id}/preview")->assertOk();
+    $this->get("/documents/{$doc->id}/download")->assertOk();
+});
+
 it('keeps every OTHER response frame-locked (only the preview route is framable)', function (): void {
     $this->actingAs($this->sa);
 

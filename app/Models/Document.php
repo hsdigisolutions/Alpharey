@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Models\Concerns\Auditable;
 use App\Models\Concerns\BelongsToCompany;
+use App\Models\Scopes\CompanyScope;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -68,6 +69,26 @@ class Document extends Model
             'metadata' => 'array',
             'contacts' => 'array',
         ];
+    }
+
+    /**
+     * A Super Admin is authorized across companies, so the session's SELECTED
+     * company must not 404 an action route (download / preview / replace /
+     * metadata / destroy / panel / exempt) for a document owned by a DIFFERENT
+     * company — the document panels already list them cross-company. Everyone
+     * else stays CompanyScope-bound to their own company, so the tenancy
+     * guarantee on document actions is fully intact (company docs additionally
+     * require an admin role via assertCompanyDocumentAccess()).
+     */
+    public function resolveRouteBinding($value, $field = null): ?Model
+    {
+        $query = $this->resolveRouteBindingQuery($this, $value, $field);
+
+        if (request()->user()?->isSuperAdmin() === true) {
+            $query->withoutGlobalScope(CompanyScope::class);
+        }
+
+        return $query->first();
     }
 
     /**
