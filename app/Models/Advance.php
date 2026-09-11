@@ -19,6 +19,9 @@ use Illuminate\Support\Carbon;
  * @property AdvanceStatus $status
  * @property Carbon $request_date
  * @property string|null $payroll_month
+ * @property string|null $payment_method
+ * @property string|null $receipt_path
+ * @property string|null $receipt_name
  */
 class Advance extends Model
 {
@@ -36,11 +39,13 @@ class Advance extends Model
     /** @var list<string> */
     protected $fillable = [
         'employee_id', 'advance_category_id', 'amount', 'reason', 'status',
-        'request_date', 'payment_date', 'payroll_month',
+        'request_date', 'payment_date', 'payroll_month', 'payment_method',
     ];
 
+    // receipt_path stays out of every payload — the file is reached only through
+    // the gated + audited download route (Rule 10), never a public URL.
     /** @var list<string> */
-    protected $hidden = ['amount'];
+    protected $hidden = ['amount', 'receipt_path'];
 
     protected function casts(): array
     {

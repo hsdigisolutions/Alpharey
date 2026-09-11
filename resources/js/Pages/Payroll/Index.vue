@@ -9,6 +9,7 @@
  */
 import { computed, ref, watch } from 'vue';
 import { Head, router, useForm, usePage } from '@inertiajs/vue3';
+import { t } from '@/translate';
 import AppIcon from '@/Components/AppIcon.vue';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import FormField from '@/Components/ui/FormField.vue';
@@ -26,6 +27,7 @@ const props = defineProps({
     month: { type: String, required: true },
     rows: { type: Array, required: true },
     summary: { type: Object, required: true },
+    advances: { type: Array, default: () => [] },
     locked: { type: Boolean, default: false },
     can: { type: Object, required: true },
 });
@@ -108,26 +110,55 @@ function hoursHM(h) {
     return `${hh}h ${String(mm).padStart(2, '0')}m`;
 }
 
-/* ---------- new advance ---------- */
+/* ---------- new / edit advance ---------- */
 const advanceOpen = ref(false);
+const editingAdvanceId = ref(null);
 const advanceForm = useForm({
     employee_id: '', amount: null, reason: '',
     request_date: props.month + '-01', payroll_month: props.month,
+    payment_method: 'cash', receipt: null,
     // Added from Payroll = approve + deduct this month immediately.
     approve: true,
 });
 function openAdvance() {
+    editingAdvanceId.value = null;
     advanceForm.reset();
     advanceForm.request_date = props.month + '-01';
     advanceForm.payroll_month = props.month;
+    advanceForm.payment_method = 'cash';
     advanceOpen.value = true;
 }
+function openEditAdvance(a) {
+    editingAdvanceId.value = a.id;
+    advanceForm.reset();
+    advanceForm.employee_id = a.employee_id;
+    advanceForm.amount = a.amount;
+    advanceForm.reason = a.reason ?? '';
+    advanceForm.request_date = a.request_date;
+    advanceForm.payroll_month = a.payroll_month ?? props.month;
+    advanceForm.payment_method = a.payment_method ?? 'cash';
+    advanceForm.receipt = null;
+    advanceOpen.value = true;
+}
+function pickReceipt(e) {
+    advanceForm.receipt = e.target.files?.[0] ?? null;
+}
 function submitAdvance() {
+    const url = editingAdvanceId.value ? `/advances/${editingAdvanceId.value}` : '/advances';
     advanceForm.transform((d) => ({ ...d, reason: d.reason || null }))
-        .post('/advances', {
+        .post(url, {
+            forceFormData: true, // a bank-transfer receipt file may be attached
             preserveScroll: true,
-            onSuccess: () => { advanceOpen.value = false; advanceForm.reset(); },
+            onSuccess: () => { advanceOpen.value = false; advanceForm.reset(); editingAdvanceId.value = null; },
         });
+}
+function deleteAdvance(a) {
+    if (window.confirm(t('advances.delete_confirm'))) {
+        router.delete(`/advances/${a.id}`, { preserveScroll: true });
+    }
+}
+function advStatus(s) {
+    return { pending: 'warn', approved: 'ok', rejected: 'danger', deducted: 'info' }[s] ?? 'neutral';
 }
 
 /* ---------- manual adjustments ---------- */
@@ -318,6 +349,48 @@ const columns = [
             </button>
         </div>
 
+        <!-- Advances this month (Issue 1) — the editable list -->
+        <section v-if="advances.length" class="mt-8">
+            <h2 class="mb-2 text-section font-semibold text-ink"><Bilingual k="advances.title" inline /></h2>
+            <div class="overflow-x-auto rounded-lg border border-line">
+                <table class="w-full text-sm">
+                    <thead class="bg-surface-sunken text-xs uppercase text-muted">
+                        <tr>
+                            <th class="px-3 py-2 text-start">{{ $t('payroll.advance_employee') }}</th>
+                            <th class="px-3 py-2 text-end">{{ $t('payroll.advance_amount') }}</th>
+                            <th class="px-3 py-2 text-start">{{ $t('advances.payment_method') }}</th>
+                            <th class="px-3 py-2 text-start">{{ $t('advances.status_col') }}</th>
+                            <th class="px-3 py-2 text-end"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr v-for="a in advances" :key="a.id" class="border-t border-line bg-surface-raised">
+                            <td class="px-3 py-2.5 text-ink">{{ a.employee }}</td>
+                            <td class="px-3 py-2.5 text-end tabular-nums font-medium text-ink">{{ eur(a.amount) }}</td>
+                            <td class="px-3 py-2.5 text-ink-soft">
+                                <span v-if="a.payment_method">{{ $t('advances.pm_' + a.payment_method) }}</span>
+                                <span v-else class="text-muted">—</span>
+                                <a v-if="a.has_receipt" :href="`/advances/${a.id}/receipt`" target="_blank" rel="noopener"
+                                    class="ms-2 text-xs text-accent hover:underline">{{ $t('advances.receipt') }}</a>
+                            </td>
+                            <td class="px-3 py-2.5">
+                                <VBadge :status="advStatus(a.status)"><Bilingual :k="'advances.status_' + a.status" inline /></VBadge>
+                            </td>
+                            <td class="px-3 py-2.5 text-end">
+                                <span class="flex items-center justify-end gap-1">
+                                    <VButton v-if="can.edit && a.editable" variant="ghost" size="sm" icon="edit"
+                                        :title="$t('advances.edit')" @click="openEditAdvance(a)" />
+                                    <VButton v-if="can.edit && a.editable" variant="ghost" size="sm" icon="trash"
+                                        :title="$t('common.delete')" @click="deleteAdvance(a)" />
+                                    <span v-if="!a.editable" class="text-xs text-muted"><Bilingual k="advances.settled" inline /></span>
+                                </span>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
         <!-- Bulk mark-paid confirmation -->
         <VModal :open="showPaidConfirm" title-key="payroll.bulk_mark_paid" size="sm" @close="showPaidConfirm = false">
             <p class="text-sm text-ink-soft"><Bilingual k="payroll.bulk_paid_confirm" /></p>
@@ -462,11 +535,11 @@ const columns = [
             </template>
         </VModal>
 
-        <!-- New advance (deducted from the chosen payroll month) -->
-        <VModal :open="advanceOpen" title-key="payroll.new_advance" @close="advanceOpen = false">
+        <!-- New / edit advance (deducted from the chosen payroll month) -->
+        <VModal :open="advanceOpen" :title-key="editingAdvanceId ? 'advances.edit' : 'payroll.new_advance'" @close="advanceOpen = false">
             <form id="advance-form" class="grid gap-4 sm:grid-cols-2" @submit.prevent="submitAdvance">
                 <FormField k="payroll.advance_employee" :error="advanceForm.errors.employee_id" class="sm:col-span-2">
-                    <VSelect v-model="advanceForm.employee_id">
+                    <VSelect v-model="advanceForm.employee_id" :disabled="!!editingAdvanceId">
                         <option value="" disabled>—</option>
                         <option v-for="r in rows" :key="r.employee_id" :value="r.employee_id">{{ r.employee }}</option>
                     </VSelect>
@@ -480,8 +553,20 @@ const columns = [
                 <FormField k="payroll.advance_date" :error="advanceForm.errors.request_date">
                     <VInput v-model="advanceForm.request_date" type="date" />
                 </FormField>
+                <!-- How it was paid out (Issue 2) -->
+                <FormField k="advances.payment_method" :error="advanceForm.errors.payment_method">
+                    <VSelect v-model="advanceForm.payment_method">
+                        <option value="cash">{{ $t('advances.pm_cash') }}</option>
+                        <option value="bank_transfer">{{ $t('advances.pm_bank_transfer') }}</option>
+                    </VSelect>
+                </FormField>
+                <!-- Bank transfer → proof-of-transfer receipt; Cash → reason below. -->
+                <FormField v-if="advanceForm.payment_method === 'bank_transfer'" k="advances.receipt" :error="advanceForm.errors.receipt">
+                    <input type="file" accept=".jpg,.jpeg,.png,.webp,.pdf" class="block w-full text-sm text-ink-soft file:mr-3 file:rounded-md file:border-0 file:bg-surface-sunken file:px-3 file:py-1.5 file:text-sm file:text-ink" @change="pickReceipt" />
+                    <p v-if="advanceForm.receipt" class="mt-1 truncate text-xs text-ink-soft">{{ advanceForm.receipt.name }}</p>
+                </FormField>
                 <FormField k="payroll.advance_reason" class="sm:col-span-2">
-                    <VTextarea v-model="advanceForm.reason" :rows="2" />
+                    <VTextarea v-model="advanceForm.reason" :rows="2" :placeholder="$t('advances.reason_hint')" />
                 </FormField>
             </form>
             <template #footer>

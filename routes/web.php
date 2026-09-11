@@ -442,6 +442,8 @@ Route::middleware(['auth', 'active', 'two_factor', 'not_worker'])->group(functio
 
     // Salary advances (payroll module)
     Route::post('/advances', [AdvanceController::class, 'store'])->name('advances.store');
+    Route::get('/advances/{advance}/receipt', [AdvanceController::class, 'downloadReceipt'])->name('advances.receipt');
+    Route::post('/advances/{advance}', [AdvanceController::class, 'update'])->name('advances.update');
     Route::post('/advances/{advance}/decide', [AdvanceController::class, 'decide'])->name('advances.decide');
     Route::delete('/advances/{advance}', [AdvanceController::class, 'destroy'])->name('advances.destroy');
     Route::post('/advance-categories', [AdvanceController::class, 'storeCategory'])->name('advance-categories.store');

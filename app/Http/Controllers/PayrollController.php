@@ -2,11 +2,13 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\AdvanceStatus;
 use App\Enums\NotificationType;
 use App\Enums\PaymentMethod;
 use App\Enums\PayrollStatus;
 use App\Exports\PayrollExport;
 use App\Http\Controllers\Admin\Concerns\ResolvesCompanyContext;
+use App\Models\Advance;
 use App\Models\LockedPeriod;
 use App\Models\Payroll;
 use App\Services\Audit\AuditLogger;
@@ -67,6 +69,7 @@ class PayrollController extends Controller
             'month' => $month,
             'rows' => $rows,
             'summary' => $this->summary($rows),
+            'advances' => $this->advancesFor($companyId, $month),
             'locked' => LockedPeriod::query()
                 ->where('company_id', $companyId)->where('month', $month)->exists(),
             'paymentMethods' => array_map(fn ($m) => $m->value, PaymentMethod::cases()),
@@ -78,6 +81,41 @@ class PayrollController extends Controller
                 'download' => Gate::allows('payroll.download'),
             ],
         ]);
+    }
+
+    /**
+     * This month's advances for the company (Issue 1 — the editable list). Amount
+     * is pay data, but the whole Payroll screen already requires payroll.view.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function advancesFor(?int $companyId, string $month): array
+    {
+        if ($companyId === null) {
+            return [];
+        }
+
+        return Advance::query()
+            ->where('company_id', $companyId)
+            ->where('payroll_month', $month)
+            ->with('employee:id,full_name')
+            ->orderByDesc('id')
+            ->get()
+            ->map(fn (Advance $a): array => [
+                'id' => $a->id,
+                'employee_id' => $a->employee_id,
+                'employee' => $a->employee?->full_name,
+                'amount' => (float) $a->amount,
+                'status' => $a->status->value,
+                'request_date' => $a->request_date->toDateString(),
+                'payroll_month' => $a->payroll_month,
+                'reason' => $a->reason,
+                'payment_method' => $a->payment_method,
+                'has_receipt' => $a->receipt_path !== null,
+                // A Deducted advance is settled (off a paid payroll) → not editable.
+                'editable' => $a->status !== AdvanceStatus::Deducted,
+            ])
+            ->all();
     }
 
     public function calculate(Request $request, PayrollService $service): RedirectResponse
