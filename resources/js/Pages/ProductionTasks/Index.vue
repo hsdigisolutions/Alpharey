@@ -80,7 +80,7 @@ const logOpen = ref(false);
 const logTask = ref(null);
 const presentWorkers = ref([]);
 const loadingWorkers = ref(false);
-const logForm = useForm({ date: new Date().toISOString().slice(0, 10), quantity: null, employee_ids: [], notes: '', photo: null });
+const logForm = useForm({ date: new Date().toISOString().slice(0, 10), quantity: null, employee_ids: [], notes: '', photo: null, is_rework: false });
 
 async function fetchPresentWorkers() {
     if (!logTask.value) return;
@@ -100,6 +100,7 @@ function openLog(t) {
     logForm.employee_ids = [];
     logForm.notes = '';
     logForm.photo = null;
+    logForm.is_rework = false;
     logForm.clearErrors();
     presentWorkers.value = [];
     logOpen.value = true;
@@ -233,7 +234,15 @@ function openPhoto(p) {
                 <FormField k="task_progress.photo" :error="logForm.errors.photo">
                     <input type="file" accept="image/*,.pdf" capture="environment" class="block w-full text-sm text-ink-soft file:mr-3 file:rounded-md file:border-0 file:bg-surface-sunken file:px-3 file:py-1.5 file:text-sm" @change="(e) => (logForm.photo = e.target.files[0] ?? null)" />
                 </FormField>
-                <FormField k="task_progress.notes" :error="logForm.errors.notes"><VTextarea v-model="logForm.notes" :rows="2" /></FormField>
+                <!-- Rework: client rejected the previous work; this redo is a company penalty, never billed again -->
+                <label class="flex items-start gap-2 rounded-md border border-line bg-surface-sunken/40 p-2.5 text-sm">
+                    <input type="checkbox" v-model="logForm.is_rework" class="mt-0.5 accent-accent" />
+                    <span>
+                        <Bilingual k="task_progress.rework_label" class="font-medium" />
+                        <span class="mt-0.5 block text-xs text-muted">{{ $t('task_progress.rework_hint') }}</span>
+                    </span>
+                </label>
+                <FormField :k="logForm.is_rework ? 'task_progress.reject_reason' : 'task_progress.notes'" :error="logForm.errors.notes"><VTextarea v-model="logForm.notes" :rows="2" /></FormField>
             </div>
             <template #footer>
                 <VButton variant="ghost" @click="logOpen = false"><Bilingual k="common.cancel" inline /></VButton>

@@ -113,7 +113,7 @@ const columns = [
             <VTable :columns="columns" :sort="{ key: filters.sort, dir: filters.dir }" @sort="sortBy">
                 <tr v-for="p in projects.data" :key="p.id" class="cursor-pointer hover:bg-surface-hover" @click="router.get(`/projects/${p.id}`)">
                     <td class="tabular-nums px-3 py-2.5 text-sm">{{ p.code }}</td>
-                    <td class="px-3 py-2.5 text-sm font-medium">{{ p.name }}</td>
+                    <td class="px-3 py-2.5 text-sm font-medium">{{ p.name }}<span v-if="p.material_supply" class="ms-1.5 rounded-sm bg-surface-sunken px-1 py-0.5 text-[10px] font-normal text-muted">{{ $t(`projects.material_chip_${p.material_supply}`) }}</span></td>
                     <td class="px-3 py-2.5 text-sm text-ink-soft">{{ p.client ?? '—' }}</td>
                     <td class="px-3 py-2.5"><VBadge :status="statusBadge[p.status]"><Bilingual :k="`projects.status_${p.status}`" inline /></VBadge></td>
                     <td class="px-3 py-2.5"><VBadge :status="priorityBadge[p.priority]"><Bilingual :k="`projects.priority_${p.priority}`" inline /></VBadge></td>
@@ -139,6 +139,7 @@ const columns = [
                         @click="router.get(`/projects/${p.id}`)">
                         <p class="text-sm font-medium">{{ p.name }}</p>
                         <p class="text-xs text-muted">{{ p.client ?? '—' }}</p>
+                        <p v-if="p.material_supply" class="text-[10px] text-muted">{{ $t(`projects.material_chip_${p.material_supply}`) }}</p>
                         <div class="mt-1.5 flex items-center justify-between">
                             <VBadge :status="priorityBadge[p.priority]"><Bilingual :k="`projects.priority_${p.priority}`" inline /></VBadge>
                             <span class="tabular-nums text-[11px] text-muted">{{ p.workers }} 👷</span>

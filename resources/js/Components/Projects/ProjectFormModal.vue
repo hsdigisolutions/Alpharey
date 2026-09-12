@@ -30,7 +30,7 @@ const emit = defineEmits(['close']);
 
 const blank = {
     code: '', client_id: '', name: '', project_type: '', status: 'active', priority: 'medium',
-    billing_type: '', vat_rate: null,
+    billing_type: '', material_supply: '', vat_rate: null,
     site_manager_id: null, foreman_id: null, safety_id: null, coordinator_id: null,
     start_date: null, end_date: null, budget: null,
     estimated_hours: null, estimated_meters: null, description: '',
@@ -53,6 +53,7 @@ function submit() {
         ...d,
         client_id: d.client_id || null,
         billing_type: d.billing_type || null,
+        material_supply: d.material_supply || null,
         site_manager_id: d.site_manager_id || null,
         foreman_id: d.foreman_id || null,
         safety_id: d.safety_id || null,
@@ -70,6 +71,8 @@ const priorities = ['low', 'medium', 'high', 'urgent'];
 // per_meter retired in favour of task_based (revenue from Production-Task
 // progress). Any legacy per_meter project keeps its value; it's just not offered.
 const billingTypes = ['fixed', 'hourly', 'task_based', 'milestone'];
+// Descriptive material-supply label (Item 3) — no calculation impact.
+const materialSupplies = ['client_included', 'client_separate', 'company'];
 
 // "Name · Designation" for the manager/foreman/safety/coordinator dropdowns.
 function employeeLabel(e) {
@@ -99,6 +102,12 @@ function employeeLabel(e) {
                     <VSelect v-model="form.billing_type">
                         <option value="">—</option>
                         <option v-for="b in billingTypes" :key="b" :value="b">{{ $t(`projects.billing_${b}`) }}</option>
+                    </VSelect>
+                </FormField>
+                <FormField k="projects.material_supply">
+                    <VSelect v-model="form.material_supply">
+                        <option value="">—</option>
+                        <option v-for="m in materialSupplies" :key="m" :value="m">{{ $t(`projects.material_${m}`) }}</option>
                     </VSelect>
                 </FormField>
                 <FormField k="projects.status" required>

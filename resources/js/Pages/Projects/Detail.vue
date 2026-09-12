@@ -584,6 +584,7 @@ const noteStatus = { internal: 'neutral', client_call: 'info', client_email: 'ac
                     <dl class="divide-y divide-line">
                         <div class="flex justify-between py-2"><dt><Bilingual k="projects.budget" class="text-xs text-muted" /></dt><dd class="tabular-nums text-sm">{{ project.budget ?? '—' }}</dd></div>
                         <div class="flex justify-between py-2"><dt><Bilingual k="projects.billing_type" class="text-xs text-muted" /></dt><dd class="text-sm">{{ project.billing_type ? $t(`projects.billing_${project.billing_type}`) : '—' }}</dd></div>
+                        <div class="flex justify-between py-2"><dt><Bilingual k="projects.material_supply" class="text-xs text-muted" /></dt><dd class="text-sm">{{ project.material_supply ? $t(`projects.material_${project.material_supply}`) : '—' }}</dd></div>
                         <div class="flex justify-between py-2"><dt><Bilingual k="projects.vat" class="text-xs text-muted" /></dt><dd class="text-sm">{{ project.vat_rate ? $t(`vat.${project.vat_rate}`) : $t('vat.not_applicable') }}</dd></div>
                         <div class="flex justify-between py-2"><dt><Bilingual k="projects.start" class="text-xs text-muted" /></dt><dd class="tabular-nums text-sm">{{ project.start_date ?? '—' }} → {{ project.end_date ?? '—' }}</dd></div>
                         <div class="flex justify-between gap-3 py-2">

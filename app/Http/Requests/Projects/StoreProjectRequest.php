@@ -3,6 +3,7 @@
 namespace App\Http\Requests\Projects;
 
 use App\Enums\BillingType;
+use App\Enums\MaterialSupply;
 use App\Enums\ProjectPriority;
 use App\Enums\ProjectStatus;
 use App\Enums\VatRate;
@@ -44,6 +45,8 @@ class StoreProjectRequest extends FormRequest
             'status' => ['required', Rule::enum(ProjectStatus::class)],
             'priority' => ['required', Rule::enum(ProjectPriority::class)],
             'billing_type' => ['nullable', Rule::enum(BillingType::class)],
+            // Descriptive material-supply label only — no calculation impact.
+            'material_supply' => ['nullable', Rule::enum(MaterialSupply::class)],
             'vat_rate' => ['nullable', Rule::enum(VatRate::class)],
             // The project's people are now links to EMPLOYEE records of the
             // acting company (the legacy free-text columns stay untouched as a

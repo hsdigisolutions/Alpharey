@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\BillingType;
+use App\Enums\MaterialSupply;
 use App\Enums\ProjectPriority;
 use App\Enums\ProjectStatus;
 use App\Enums\VatRate;
@@ -28,6 +29,7 @@ use Illuminate\Support\Carbon;
  * @property ProjectStatus $status
  * @property ProjectPriority $priority
  * @property BillingType|null $billing_type
+ * @property MaterialSupply|null $material_supply
  * @property VatRate|null $vat_rate
  * @property Carbon|null $start_date
  * @property Carbon|null $end_date
@@ -58,7 +60,7 @@ class Project extends Model
     protected $fillable = [
         'client_id', 'name', 'project_type', 'status', 'priority',
         'latitude', 'longitude', 'geofence_radius',
-        'billing_type', 'vat_rate', 'jefe_de_obra', 'jefe_phone', 'jefe_email',
+        'billing_type', 'material_supply', 'vat_rate', 'jefe_de_obra', 'jefe_phone', 'jefe_email',
         'encargado', 'seguridad', 'coordinator', 'start_date', 'end_date',
         'site_manager_id', 'foreman_id', 'safety_id', 'coordinator_id',
         'budget', 'estimated_hours', 'estimated_meters', 'outsourced',
@@ -74,6 +76,7 @@ class Project extends Model
             'status' => ProjectStatus::class,
             'priority' => ProjectPriority::class,
             'billing_type' => BillingType::class,
+            'material_supply' => MaterialSupply::class,
             'vat_rate' => VatRate::class,
             'start_date' => 'date:Y-m-d',
             'end_date' => 'date:Y-m-d',
