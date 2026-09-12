@@ -9,6 +9,7 @@ use App\Enums\ExpenseType;
 use App\Enums\MeasurementStatus;
 use App\Enums\ProjectRateType;
 use App\Models\Attendance;
+use App\Models\Employee;
 use App\Models\Expense;
 use App\Models\Invoice;
 use App\Models\Measurement;
@@ -20,6 +21,7 @@ use App\Models\Subcontractor;
 use App\Models\SubcontractorPayment;
 use App\Models\TaskProgress;
 use App\Services\Attendance\AttendanceService;
+use App\Services\Settings\SettingsService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
@@ -193,6 +195,16 @@ class ProfitabilityService
         $revenue = round($revenue, 2);
         $profit = round($revenue - $cost, 2);
 
+        // Item 7 — operational overhead (cost-tracking ONLY, ADDITIVE): a separate
+        // line = Σ(non-exempt worker frozen day total × the company's op %). It
+        // never changes revenue/cost/profit above; only own-attendance labour has
+        // overhead (an externalised project's crew is not ours), and it is shown
+        // only when the % is set. Payroll is untouched.
+        $opPct = $this->operationalCostPct($project->company_id);
+        $overhead = ($opPct > 0 && ! $hasSubcontractor && ! $outsourced)
+            ? round($this->operationalBase($project->company_id, $from, $to, $project->id) * $opPct / 100, 2)
+            : 0.0;
+
         [$margin, $health] = $this->classify($revenue, $cost, $profit);
 
         // A project with no revenue basis configured at all (no billing rate, no
@@ -229,6 +241,10 @@ class ProfitabilityService
             'profit' => $profit,
             'margin' => $margin,
             'health' => $health,
+            // Item 7 — additive operational-overhead line (0 % → dormant/hidden).
+            'operational_cost_pct' => $opPct,
+            'operational_overhead' => $overhead,
+            'profit_after_overhead' => round($profit - $overhead, 2),
             // Item 4 — the two labeled expense sections + per-expense detail.
             'expense_breakdown' => [
                 'operational' => ['total' => $exp['operational'], 'items' => $exp['items']['operational']],
@@ -638,6 +654,15 @@ class ProfitabilityService
         // Client-billable) + per-expense detail, for the daily-view display.
         $exp = $this->expensesByBearer($companyId, $from, $to, $project->id);
 
+        // Item 7 — operational overhead (cost-tracking ONLY, ADDITIVE), matching
+        // forProject(): Σ(non-exempt worker frozen day total × op %) over the same
+        // attendance rows, gated on op %>0 and OUR labour (never an externalised
+        // crew). Payroll untouched; the existing profit above is unchanged.
+        $opPct = $this->operationalCostPct($companyId);
+        $overhead = ($opPct > 0 && ! $externalLabour)
+            ? round($this->operationalBase($companyId, $from, $to, $project->id) * $opPct / 100, 2)
+            : 0.0;
+
         return [
             'days' => $days,
             'months' => $monthRows,
@@ -649,6 +674,10 @@ class ProfitabilityService
                 'cost' => $totalCost,
                 'profit' => $totalProfit,
                 'margin' => $totalMargin,
+                // Item 7 — additive overhead line (0 % → dormant/hidden).
+                'operational_cost_pct' => $opPct,
+                'operational_overhead' => $overhead,
+                'profit_after_overhead' => round($totalProfit - $overhead, 2),
             ],
             'expense_breakdown' => [
                 'operational' => ['total' => $exp['operational'], 'items' => $exp['items']['operational']],
@@ -800,6 +829,33 @@ class ProfitabilityService
     private function breakMinutes(int $companyId): int
     {
         return $this->breakMinutesCache[$companyId] ??= app(AttendanceService::class)->breakDurationMinutes($companyId);
+    }
+
+    /**
+     * The company's operational-cost % (Item 7). 0 = off (the overhead line is
+     * hidden). A per-company Setting, edited on Settings.
+     */
+    private function operationalCostPct(int $companyId): float
+    {
+        return (float) app(SettingsService::class)->get("operational.cost_pct.{$companyId}", 0);
+    }
+
+    /**
+     * The labour the overhead % applies to: Σ frozen day totals of the project's
+     * NON-EXEMPT workers over the range (the same worked rows the P&L costs). A
+     * soft-deleted worker still counts — their labour was still a real cost.
+     */
+    private function operationalBase(int $companyId, ?string $from, ?string $to, int $projectId): float
+    {
+        return (float) Attendance::query()->withoutGlobalScope(CompanyScope::class)
+            ->join('employees', 'employees.id', '=', 'attendance.employee_id')
+            ->where('attendance.company_id', $companyId)
+            ->where('attendance.project_id', $projectId)
+            ->whereIn('attendance.status', self::WORKED_STATUSES)
+            ->where('employees.operational_cost_exempt', false)
+            ->when($from !== null, fn ($q) => $q->whereDate('attendance.date', '>=', $from))
+            ->when($to !== null, fn ($q) => $q->whereDate('attendance.date', '<=', $to))
+            ->sum('attendance.total_amount');
     }
 
     /**
@@ -1391,8 +1447,14 @@ class ProfitabilityService
             ->where('company_id', $companyId)->max('updated_at');
         $tsk = ProductionTask::query()->withoutGlobalScope(CompanyScope::class)
             ->where('company_id', $companyId)->max('updated_at');
+        // Item 7 — the op % setting (literal) + the exempt flag (employees
+        // MAX updated_at) both change the overhead line, so they must bust the
+        // cache the moment they change, not wait out the TTL.
+        $opPct = $this->operationalCostPct($companyId);
+        $emp = Employee::query()->withoutGlobalScope(CompanyScope::class)
+            ->where('company_id', $companyId)->max('updated_at');
 
-        return implode('|', [(string) $att, (string) $exp, (string) $prj, (string) $sub, (string) $mea, (string) $inv, (string) $deal, (string) $tp, (string) $tsk]);
+        return implode('|', [(string) $att, (string) $exp, (string) $prj, (string) $sub, (string) $mea, (string) $inv, (string) $deal, (string) $tp, (string) $tsk, (string) $opPct, (string) $emp]);
     }
 
     /** Portable "year-month" grouping — SQLite in tests, MySQL in production. */

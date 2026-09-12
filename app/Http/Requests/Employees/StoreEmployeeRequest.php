@@ -82,6 +82,7 @@ class StoreEmployeeRequest extends FormRequest
             // Works at height → the height-only required PPE (arnés) applies in
             // the compliance check.
             'works_at_height' => ['boolean'],
+            'operational_cost_exempt' => ['boolean'],
             'notes' => ['nullable', 'string', 'max:5000'],
         ];
     }

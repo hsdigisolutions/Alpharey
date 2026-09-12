@@ -580,6 +580,18 @@ const noteStatus = { internal: 'neutral', client_call: 'info', client_email: 'ac
                             </p>
                         </div>
                     </div>
+                    <!-- Item 7 — additive operational-overhead line (only when op % > 0). -->
+                    <div v-if="profitability.operational_cost_pct > 0"
+                        class="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-line bg-surface-sunken px-4 py-3">
+                        <div>
+                            <p class="text-xs uppercase tracking-wide text-muted">{{ $t('profitability.operational_overhead') }} ({{ profitability.operational_cost_pct.toLocaleString('es-ES') }} %)</p>
+                            <p class="tabular-nums text-lg font-semibold text-ink-soft">− {{ eur(profitability.operational_overhead) }}</p>
+                        </div>
+                        <div class="text-end">
+                            <p class="text-xs uppercase tracking-wide text-muted">{{ $t('profitability.profit_after_overhead') }}</p>
+                            <p class="tabular-nums text-xl font-semibold" :class="profitability.profit_after_overhead >= 0 ? 'text-status-ok' : 'text-status-danger'">{{ eur(profitability.profit_after_overhead) }}</p>
+                        </div>
+                    </div>
                     <p v-if="profitability.outsourced" class="mt-3 text-xs text-ink-soft">{{ $t('profitability.outsourced_note') }}</p>
                 </VCard>
 
@@ -879,6 +891,19 @@ const noteStatus = { internal: 'neutral', client_call: 'info', client_email: 'ac
                                     <td class="tabular-nums px-4 py-2.5 text-end">{{ eur(dailyPnl.totals.profit) }}</td>
                                     <td class="tabular-nums px-4 py-2.5 text-end">{{ pct(dailyPnl.totals.margin) }}</td>
                                 </tr>
+                                <!-- Item 7 — additive operational-overhead lines (only when op % > 0). -->
+                                <template v-if="dailyPnl.days.length > 0 && dailyPnl.totals.operational_cost_pct > 0">
+                                    <tr class="border-t border-line text-ink-soft">
+                                        <td class="px-4 py-2" colspan="6">{{ $t('profitability.operational_overhead') }} ({{ dailyPnl.totals.operational_cost_pct.toLocaleString('es-ES') }} %)</td>
+                                        <td class="tabular-nums px-4 py-2 text-end">− {{ eur(dailyPnl.totals.operational_overhead) }}</td>
+                                        <td></td>
+                                    </tr>
+                                    <tr class="font-semibold">
+                                        <td class="px-4 py-2" colspan="6">{{ $t('profitability.profit_after_overhead') }}</td>
+                                        <td class="tabular-nums px-4 py-2 text-end" :class="dailyPnl.totals.profit_after_overhead >= 0 ? 'text-status-ok' : 'text-status-danger'">{{ eur(dailyPnl.totals.profit_after_overhead) }}</td>
+                                        <td></td>
+                                    </tr>
+                                </template>
                             </tbody>
                         </table>
                     </div>

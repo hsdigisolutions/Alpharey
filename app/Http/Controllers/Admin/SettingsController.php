@@ -66,6 +66,11 @@ class SettingsController extends Controller
             // displayed hours (08:00–17:00 → 8 h). Display only.
             'breakDurationMinutes' => app(AttendanceService::class)
                 ->breakDurationMinutes(app(CurrentCompany::class)->id() ?? 0),
+            // Item 7 — the acting company's operational-cost % (0 = off). Drives
+            // the additive overhead line on the Project P&L. Display/cost only.
+            'operationalCostPct' => (float) $settings->get(
+                'operational.cost_pct.'.(app(CurrentCompany::class)->id() ?? 0), 0
+            ),
             // Company profile (name / CIF / address / logo) of the acting company
             // — feeds invoices + payslips. Null when no single company is selected.
             'companyProfile' => $this->companyProfilePayload(),
@@ -290,6 +295,29 @@ class SettingsController extends Controller
         $settings->set("attendance.max_location_distance.{$companyId}", (float) $validated['max_location_distance']);
         $settings->set("attendance.off_site_alert_distance.{$companyId}", (int) $validated['off_site_alert_distance']);
         $settings->set("attendance.break_duration_minutes.{$companyId}", (int) $validated['break_duration_minutes']);
+
+        return back()->with('success', __('ui.settings.saved'));
+    }
+
+    /**
+     * Item 7 — the company operational-cost % (0–100, 0 = off). Drives the
+     * ADDITIVE "operational overhead" line on the Project P&L (Rentabilidad +
+     * Resumen). Reporting/display only — it never touches payroll or the
+     * existing profit figure.
+     */
+    public function updateOperational(Request $request, SettingsService $settings): RedirectResponse
+    {
+        $user = $request->user();
+        abort_unless($user !== null && ($user->isSuperAdmin() || $user->isCompanyAdmin()), 403);
+
+        $companyId = app(CurrentCompany::class)->id();
+        abort_if($companyId === null, 403);
+
+        $validated = $request->validate([
+            'cost_pct' => ['required', 'numeric', 'min:0', 'max:100'],
+        ]);
+
+        $settings->set("operational.cost_pct.{$companyId}", (float) $validated['cost_pct']);
 
         return back()->with('success', __('ui.settings.saved'));
     }

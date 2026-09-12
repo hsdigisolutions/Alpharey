@@ -44,7 +44,8 @@ const blank = {
     active: true, is_contracted: false, default_check_in: '08:00', default_check_out: '17:00',
     wage_type: '', wage_rate: null, base_salary: null, daily_wage: null, per_meter_rate: null,
     commission_percent: null, payment_method: '', iban: '', bank_name: '',
-    has_driving_license: false, has_company_vehicle: false, can_use_vehicles: false, works_at_height: false, notes: '',
+    has_driving_license: false, has_company_vehicle: false, can_use_vehicles: false, works_at_height: false,
+    operational_cost_exempt: false, notes: '',
 };
 
 const form = useForm({ ...blank });
@@ -217,6 +218,7 @@ const showBank = computed(() => !form.payment_method || form.payment_method === 
                     <VCheckbox v-model="form.has_driving_license"><Bilingual k="employees.driving_license" inline class="text-sm" /></VCheckbox>
                     <VCheckbox v-model="form.has_company_vehicle"><Bilingual k="employees.company_vehicle" inline class="text-sm" /></VCheckbox>
                     <VCheckbox v-model="form.works_at_height"><Bilingual k="employees.works_at_height" inline class="text-sm" /></VCheckbox>
+                    <VCheckbox v-model="form.operational_cost_exempt"><Bilingual k="employees.operational_cost_exempt" inline class="text-sm" /></VCheckbox>
                 </div>
                 <FormField k="employees.notes" class="mt-3" :error="form.errors.notes">
                     <VTextarea v-model="form.notes" :rows="2" />

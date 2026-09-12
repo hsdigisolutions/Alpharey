@@ -589,6 +589,8 @@ Route::middleware(['auth', 'active', 'two_factor', 'not_worker'])->group(functio
         Route::put('/settings/general', [SettingsController::class, 'updateGeneral'])->name('settings.general');
         // Per-company auto day-type thresholds (Screen 26).
         Route::put('/settings/attendance', [SettingsController::class, 'updateAttendance'])->name('settings.attendance');
+        // Item 7 — per-company operational-cost % (drives the P&L overhead line).
+        Route::put('/settings/operational', [SettingsController::class, 'updateOperational'])->name('settings.operational');
         // Legal → worker-consent notice version (brand-wide re-accept trigger).
         Route::put('/settings/legal', [SettingsController::class, 'updateLegal'])->name('settings.legal');
         // Settings → Company profile (name/CIF/address/logo) + working days

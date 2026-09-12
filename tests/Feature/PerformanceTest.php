@@ -94,10 +94,12 @@ it('builds the dashboard with a bounded query count', function (): void {
 
     // ~8 KPIs + 3 charts + 2 panels: a fixed set of aggregate queries, none
     // per-employee. The P&L cache signature adds a small CONSTANT set of
-    // MAX(updated_at) reads (measurements, invoices, and now task_progress +
-    // production_tasks for task-based billing) so approving production, marking
-    // an invoice paid, or logging task work refreshes the widget at once.
-    expect($count)->toBeLessThan(44);
+    // MAX(updated_at) reads (measurements, invoices, task_progress +
+    // production_tasks for task-based billing, and now the operational-cost %
+    // setting + employees MAX for the Item 7 overhead line) so approving
+    // production, marking an invoice paid, logging task work, or changing the
+    // operational % / an exempt flag refreshes the widget at once.
+    expect($count)->toBeLessThan(46);
 });
 
 it('serves the dashboard from cache on the second hit', function (): void {

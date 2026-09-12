@@ -29,6 +29,7 @@ const props = defineProps({
     maxLocationDistance: { type: Number, default: 500 },
     offSiteAlertDistance: { type: Number, default: 2000 },
     breakDurationMinutes: { type: Number, default: 60 },
+    operationalCostPct: { type: Number, default: 0 },
     consentVersion: { type: String, default: '' },
     companyProfile: { type: Object, default: null },
     workingDays: { type: Array, default: () => [1, 2, 3, 4, 5] },
@@ -101,6 +102,12 @@ function saveLegal() {
 
 function saveThresholds() {
     thresholdForm.put('/admin/settings/attendance', { preserveScroll: true });
+}
+
+/* --- Item 7: operational-cost % (drives the Project P&L overhead line) --- */
+const operationalForm = useForm({ cost_pct: props.operationalCostPct });
+function saveOperational() {
+    operationalForm.put('/admin/settings/operational', { preserveScroll: true });
 }
 
 /* --- Overtime policies --- */
@@ -379,6 +386,21 @@ function deletePolicy(p) {
                         <span v-if="thresholdForm.errors.break_duration_minutes" class="text-xs text-status-danger">{{ thresholdForm.errors.break_duration_minutes }}</span>
                     </label>
                     <VButton type="submit" :loading="thresholdForm.processing"><Bilingual k="common.save" inline /></VButton>
+                </form>
+            </VCard>
+
+            <!-- Item 7 — operational-cost % (drives the Project P&L overhead line) -->
+            <VCard title-key="settings.operational_section" class="lg:col-span-2">
+                <p class="mb-4 text-sm text-ink-soft">{{ $t('settings.operational_hint') }}</p>
+                <form class="flex flex-wrap items-end gap-4" @submit.prevent="saveOperational">
+                    <label class="flex flex-col gap-1">
+                        <span class="text-xs font-medium text-ink-soft">{{ $t('settings.operational_cost_pct') }}</span>
+                        <input v-model="operationalForm.cost_pct" type="number" step="0.5" min="0" max="100"
+                            class="w-40 rounded-md border border-line-strong bg-surface-sunken px-3 py-1.5 text-sm text-ink focus:border-accent focus:outline-none" />
+                        <span class="text-xs text-muted">{{ $t('settings.operational_cost_pct_hint') }}</span>
+                        <span v-if="operationalForm.errors.cost_pct" class="text-xs text-status-danger">{{ operationalForm.errors.cost_pct }}</span>
+                    </label>
+                    <VButton type="submit" :loading="operationalForm.processing"><Bilingual k="common.save" inline /></VButton>
                 </form>
             </VCard>
 
