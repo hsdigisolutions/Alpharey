@@ -392,7 +392,9 @@ class VehicleController extends Controller
                 'amount' => (float) $e->amount,
                 'description' => $e->description,
                 'date' => $e->date->toDateString(),
-                'receipt_url' => $e->receipt_path !== null ? route('worker-expenses.receipt', $e->id) : null,
+                // Item 5 — the receipt is downloaded through the mirror Expense
+                // (the Worker Expenses tab is gone); every submission now has one.
+                'receipt_url' => $e->auto_expense_id !== null ? route('expenses.receipt', $e->auto_expense_id) : null,
             ])->values()->all();
 
         $fines = $finesForVehicle

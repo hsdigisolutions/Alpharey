@@ -7,6 +7,7 @@ use App\Enums\ExpenseType;
 use App\Enums\NotificationType;
 use App\Enums\PaymentStatus;
 use App\Enums\WorkerExpenseStatus;
+use App\Models\Employee;
 use App\Models\Expense;
 use App\Models\ExpenseCategory;
 use App\Models\Scopes\CompanyScope;
@@ -52,6 +53,20 @@ class WorkerFuelExpenseService
             return null;
         }
 
+        return $this->createMirror($workerExpense, null);
+    }
+
+    /**
+     * Item 5 — mint the mirror Expense the moment a worker submits from the PWA,
+     * as UNAPPROVED / pending (review_status null), so the submission shows in the
+     * regular Expenses tab immediately (the Worker Expenses admin tab is gone).
+     * Idempotent (createMirror no-ops if already mirrored). It is bearable_by =
+     * employee + is_reimbursable, so on FINAL approval payroll reimburses the
+     * worker once + it books as a project cost once — and pwaExpensesFor never
+     * counts it (auto_expense_id now set), so there is no double count.
+     */
+    public function mirrorOnSubmission(WorkerExpense $workerExpense): ?Expense
+    {
         return $this->createMirror($workerExpense, null);
     }
 
@@ -133,7 +148,12 @@ class WorkerFuelExpenseService
             }
         }
 
-        $worker = $workerExpense->employee?->full_name;
+        // Resolve the worker unscoped — the mirror is minted at submission time
+        // (worker PWA session / backfill), where the CompanyScope would hide the
+        // employee and drop the name from the note. Same pattern as the vehicle.
+        $worker = Employee::query()->withoutGlobalScope(CompanyScope::class)
+            ->where('company_id', $workerExpense->company_id)
+            ->find($workerExpense->employee_id)?->full_name;
         if ($worker !== null && $worker !== '') {
             $parts[] = $worker;
         }

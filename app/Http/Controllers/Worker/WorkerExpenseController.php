@@ -8,14 +8,17 @@ use App\Models\Employee;
 use App\Models\Scopes\CompanyScope;
 use App\Models\WorkerExpense;
 use App\Services\Notifications\NotificationDispatcher;
+use App\Services\Workers\WorkerFuelExpenseService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 
 /**
  * Feature 2 — Worker-submitted expense at (or after) check-out.
  *
- * Workers may submit multiple expenses. Each one starts as `pending` and waits
- * for an admin to approve or reject via WorkerExpenseAdminController.
+ * Workers may submit multiple expenses. Each one starts as `pending` and, from
+ * Item 5, immediately mints a mirror Expense so the admin reviews it in the
+ * regular Expenses tab (approve/reject/escalate) — there is no separate Worker
+ * Expenses admin tab.
  *
  * company_id comes from the employee's company, never from request input.
  */
@@ -52,6 +55,10 @@ class WorkerExpenseController extends Controller
 
         $expense->save();
 
+        // Item 5 — mint the pending mirror Expense now, so admins review the
+        // submission in the regular Expenses tab (the Worker Expenses tab is gone).
+        app(WorkerFuelExpenseService::class)->mirrorOnSubmission($expense);
+
         // Ping the admins/managers that a receipt is waiting for review.
         app(NotificationDispatcher::class)->dispatch(
             NotificationType::ExpensePending,
@@ -59,7 +66,7 @@ class WorkerExpenseController extends Controller
             [
                 'title_es' => "Nuevo gasto de {$employee->full_name}",
                 'title_en' => "New expense from {$employee->full_name}",
-                'entity' => $employee->full_name, 'url' => '/worker-expenses',
+                'entity' => $employee->full_name, 'url' => '/expenses',
             ],
         );
 

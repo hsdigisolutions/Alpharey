@@ -9,12 +9,16 @@ use App\Models\User;
 use App\Models\WorkerExpense;
 use App\Notifications\SystemNotification;
 use App\Services\Payroll\PayrollService;
+use App\Services\Workers\WorkerFuelExpenseService;
 use Illuminate\Support\Facades\Notification;
 use Inertia\Testing\AssertableInertia as Assert;
 
 /**
  * Part C — "Send to review": either approval level can escalate an expense to a
- * Super-Admin-only queue whose decision is final.
+ * Super-Admin-only queue whose decision is final. Item 5 — a worker submission
+ * mints its mirror Expense immediately; escalation happens on that mirror in the
+ * regular Expenses tab (/expenses/{expense}/review), the Worker Expenses tab is
+ * gone.
  */
 beforeEach(function (): void {
     $this->company = Company::factory()->create();
@@ -23,23 +27,26 @@ beforeEach(function (): void {
     $this->employee = Employee::factory()->create(['company_id' => $this->company->id, 'full_name' => 'León Paz', 'wage_type' => 'daily', 'daily_wage' => '50']);
 });
 
-function fuelWorkerExpense(Company $company, Employee $employee, string $amount = '40'): WorkerExpense
+/** Submit a worker fuel expense (mints its pending mirror), returning [WorkerExpense, mirror Expense]. */
+function submitFuelWorkerExpense(Company $company, Employee $employee, string $amount = '40'): array
 {
-    return WorkerExpense::factory()->create([
+    $we = WorkerExpense::factory()->create([
         'company_id' => $company->id, 'employee_id' => $employee->id,
         'category' => 'fuel', 'amount' => $amount, 'date' => '2026-08-10',
     ]);
+    $mirror = app(WorkerFuelExpenseService::class)->mirrorOnSubmission($we);
+
+    return [$we->fresh(), $mirror];
 }
 
 it('manager sends a worker expense to review — mirror is in_review and payroll does not count it', function (): void {
-    $we = fuelWorkerExpense($this->company, $this->employee, '40');
+    [$we, $mirror] = submitFuelWorkerExpense($this->company, $this->employee, '40');
 
-    $this->actingAs($this->admin)->post("/worker-expenses/{$we->id}/review")->assertRedirect();
+    $this->actingAs($this->admin)->post("/expenses/{$mirror->id}/review")->assertRedirect();
 
-    expect($we->fresh()->status)->toBe(WorkerExpenseStatus::InReview);
-    $mirror = Expense::withoutGlobalScopes()->where('source', 'worker_fuel')->firstOrFail();
-    expect($mirror->review_status)->toBe('in_review')
-        ->and($mirror->approved)->toBeFalse();
+    expect($we->fresh()->status)->toBe(WorkerExpenseStatus::InReview)
+        ->and($mirror->fresh()->review_status)->toBe('in_review')
+        ->and($mirror->fresh()->approved)->toBeFalse();
 
     // Not counted while in review.
     $payroll = app(PayrollService::class)->calculateFor($this->employee, $this->company->id, '2026-08');
@@ -52,9 +59,8 @@ it('the review queue is Super-Admin only', function (): void {
 });
 
 it('super admin approves from the queue — final approval releases the money', function (): void {
-    $we = fuelWorkerExpense($this->company, $this->employee, '75');
-    $this->actingAs($this->admin)->post("/worker-expenses/{$we->id}/review");
-    $mirror = Expense::withoutGlobalScopes()->where('source', 'worker_fuel')->firstOrFail();
+    [$we, $mirror] = submitFuelWorkerExpense($this->company, $this->employee, '75');
+    $this->actingAs($this->admin)->post("/expenses/{$mirror->id}/review");
 
     // It shows in the SA queue.
     $this->actingAs($this->sa)->get('/expense-review')
@@ -72,9 +78,8 @@ it('super admin approves from the queue — final approval releases the money', 
 });
 
 it('super admin rejects from the queue — counts nowhere', function (): void {
-    $we = fuelWorkerExpense($this->company, $this->employee, '90');
-    $this->actingAs($this->admin)->post("/worker-expenses/{$we->id}/review");
-    $mirror = Expense::withoutGlobalScopes()->where('source', 'worker_fuel')->firstOrFail();
+    [$we, $mirror] = submitFuelWorkerExpense($this->company, $this->employee, '90');
+    $this->actingAs($this->admin)->post("/expenses/{$mirror->id}/review");
 
     $this->actingAs($this->sa)->post("/expense-review/{$mirror->id}/reject")->assertRedirect();
     expect($mirror->fresh()->approved)->toBeFalse()
@@ -93,18 +98,17 @@ it('admin can send an already-created expense to review from the Expenses tab', 
 });
 
 it('escalation records the escalator + note and never stamps the worker expense as approved (BUG 3)', function (): void {
-    $we = fuelWorkerExpense($this->company, $this->employee, '40');
+    [$we, $mirror] = submitFuelWorkerExpense($this->company, $this->employee, '40');
 
     $this->actingAs($this->admin)
-        ->post("/worker-expenses/{$we->id}/review", ['review_note' => 'Need SA sign-off'])
+        ->post("/expenses/{$mirror->id}/review", ['review_note' => 'Need SA sign-off'])
         ->assertRedirect();
 
     expect($we->fresh()->status)->toBe(WorkerExpenseStatus::InReview)
         ->and($we->fresh()->approved_by)->toBeNull(); // NOT "approved by {manager}"
 
-    $mirror = Expense::withoutGlobalScopes()->where('source', 'worker_fuel')->firstOrFail();
-    expect($mirror->escalated_by)->toBe($this->admin->id)
-        ->and($mirror->review_note)->toBe('Need SA sign-off');
+    expect($mirror->fresh()->escalated_by)->toBe($this->admin->id)
+        ->and($mirror->fresh()->review_note)->toBe('Need SA sign-off');
 });
 
 it('notifies the worker + records the SA as decider when approved from the review queue (BUG 4)', function (): void {
@@ -113,9 +117,8 @@ it('notifies the worker + records the SA as decider when approved from the revie
     $this->employee->user_id = $workerUser->id;
     $this->employee->save();
 
-    $we = fuelWorkerExpense($this->company, $this->employee, '55');
-    $this->actingAs($this->admin)->post("/worker-expenses/{$we->id}/review");
-    $mirror = Expense::withoutGlobalScopes()->where('source', 'worker_fuel')->firstOrFail();
+    [$we, $mirror] = submitFuelWorkerExpense($this->company, $this->employee, '55');
+    $this->actingAs($this->admin)->post("/expenses/{$mirror->id}/review");
 
     $this->actingAs($this->sa)->post("/expense-review/{$mirror->id}/approve")->assertRedirect();
 
@@ -130,9 +133,8 @@ it('notifies the worker when rejected from the review queue', function (): void 
     $this->employee->user_id = $workerUser->id;
     $this->employee->save();
 
-    $we = fuelWorkerExpense($this->company, $this->employee, '55');
-    $this->actingAs($this->admin)->post("/worker-expenses/{$we->id}/review");
-    $mirror = Expense::withoutGlobalScopes()->where('source', 'worker_fuel')->firstOrFail();
+    [$we, $mirror] = submitFuelWorkerExpense($this->company, $this->employee, '55');
+    $this->actingAs($this->admin)->post("/expenses/{$mirror->id}/review");
 
     $this->actingAs($this->sa)->post("/expense-review/{$mirror->id}/reject")->assertRedirect();
 
@@ -141,12 +143,11 @@ it('notifies the worker when rejected from the review queue', function (): void 
 });
 
 it('payroll follows the mirror Expense approval, never the WorkerExpense.status (payroll safety, BUG 3)', function (): void {
-    $we = fuelWorkerExpense($this->company, $this->employee, '60');
-    $this->actingAs($this->admin)->post("/worker-expenses/{$we->id}/review");
+    [$we, $mirror] = submitFuelWorkerExpense($this->company, $this->employee, '60');
+    $this->actingAs($this->admin)->post("/expenses/{$mirror->id}/review");
 
     // Force the WorkerExpense to 'approved' WITHOUT approving the mirror — payroll
-    // must still count 0 (it reads the mirror's `approved`, not the status). The
-    // counted case (final approval → 60) is proven by the queue-approve test above.
+    // must still count 0 (it reads the mirror's `approved`, not the status).
     $we->status = WorkerExpenseStatus::Approved; // status is not fillable — set directly
     $we->save();
     $payroll = app(PayrollService::class)->calculateFor($this->employee, $this->company->id, '2026-08');
@@ -154,8 +155,8 @@ it('payroll follows the mirror Expense approval, never the WorkerExpense.status 
 });
 
 it('exposes an in-review filter + KPI on the Expenses screen (BUG 4)', function (): void {
-    $we = fuelWorkerExpense($this->company, $this->employee, '40');
-    $this->actingAs($this->admin)->post("/worker-expenses/{$we->id}/review", ['review_note' => 'check this']);
+    [, $mirror] = submitFuelWorkerExpense($this->company, $this->employee, '40');
+    $this->actingAs($this->admin)->post("/expenses/{$mirror->id}/review", ['review_note' => 'check this']);
 
     $this->actingAs($this->admin)->get('/expenses?approval=in_review')
         ->assertInertia(fn (Assert $p) => $p->component('Expenses/Index')
@@ -166,8 +167,8 @@ it('exposes an in-review filter + KPI on the Expenses screen (BUG 4)', function 
 });
 
 it('ships full receipt-detail context to the review queue (BUG 2 + BUG 4)', function (): void {
-    $we = fuelWorkerExpense($this->company, $this->employee, '40');
-    $this->actingAs($this->admin)->post("/worker-expenses/{$we->id}/review", ['review_note' => 'please verify']);
+    [, $mirror] = submitFuelWorkerExpense($this->company, $this->employee, '40');
+    $this->actingAs($this->admin)->post("/expenses/{$mirror->id}/review", ['review_note' => 'please verify']);
 
     $this->actingAs($this->sa)->get('/expense-review')
         ->assertInertia(fn (Assert $p) => $p->component('Admin/ExpenseReview')

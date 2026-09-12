@@ -12,6 +12,7 @@ use App\Models\VehicleSession;
 use App\Models\WorkerExpense;
 use App\Services\Notifications\NotificationDispatcher;
 use App\Services\Workers\VehicleSessionService;
+use App\Services\Workers\WorkerFuelExpenseService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -186,6 +187,10 @@ class WorkerVehicleController extends Controller
 
         $expense->save();
 
+        // Item 5 — mint the pending mirror Expense now (reviewed in the regular
+        // Expenses tab; the Worker Expenses admin tab is gone).
+        app(WorkerFuelExpenseService::class)->mirrorOnSubmission($expense);
+
         // Fuel logged as a worker expense is a receipt awaiting admin review.
         app(NotificationDispatcher::class)->dispatch(
             NotificationType::ExpensePending,
@@ -193,7 +198,7 @@ class WorkerVehicleController extends Controller
             [
                 'title_es' => "Nuevo gasto de combustible de {$employee->full_name}",
                 'title_en' => "New fuel expense from {$employee->full_name}",
-                'entity' => $employee->full_name, 'url' => '/worker-expenses',
+                'entity' => $employee->full_name, 'url' => '/expenses',
             ],
         );
 

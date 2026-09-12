@@ -7,6 +7,7 @@ use App\Models\Expense;
 use App\Models\User;
 use App\Models\Vehicle;
 use App\Models\WorkerExpense;
+use App\Services\Workers\WorkerFuelExpenseService;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 
@@ -16,36 +17,30 @@ beforeEach(function (): void {
     $this->employee = Employee::factory()->create(['company_id' => $this->company->id, 'full_name' => 'Carlos García']);
 });
 
-function fuelExpense(Company $company, Employee $employee, ?Vehicle $vehicle = null, string $amount = '45.50', string $date = '2026-08-10'): WorkerExpense
+/** Item 5 — a worker submission mints its mirror Expense immediately (pending). */
+function submitFuelExpense(Company $company, Employee $employee, ?Vehicle $vehicle = null, string $amount = '45.50', string $date = '2026-08-10'): WorkerExpense
 {
     $we = WorkerExpense::factory()->create([
-        'company_id' => $company->id,
-        'employee_id' => $employee->id,
-        'category' => 'fuel',
-        'amount' => $amount,
-        'date' => $date,
-        'description' => 'Diesel lleno',
+        'company_id' => $company->id, 'employee_id' => $employee->id,
+        'category' => 'fuel', 'amount' => $amount, 'date' => $date, 'description' => 'Diesel lleno',
     ]);
     if ($vehicle !== null) {
         $we->vehicle_id = $vehicle->id;
         $we->save();
     }
+    app(WorkerFuelExpenseService::class)->mirrorOnSubmission($we);
 
-    return $we;
+    return $we->fresh();
 }
 
-it('creates a company expense when a fuel expense is approved', function (): void {
+it('mints a company mirror expense the moment a fuel expense is submitted', function (): void {
     $vehicle = Vehicle::factory()->create([
         'company_id' => $this->company->id, 'plate_number' => '1234-ABC', 'brand' => 'Ford', 'model' => 'Transit',
     ]);
-    $we = fuelExpense($this->company, $this->employee, $vehicle);
+    $we = submitFuelExpense($this->company, $this->employee, $vehicle);
 
-    $this->actingAs($this->admin)->post("/worker-expenses/{$we->id}/approve")->assertRedirect();
-
-    $we->refresh();
     expect($we->auto_expense_id)->not->toBeNull();
-
-    $expense = Expense::query()->find($we->auto_expense_id);
+    $expense = Expense::query()->withoutGlobalScopes()->find($we->auto_expense_id);
     expect((float) $expense->total)->toBe(45.50)
         ->and((float) $expense->subtotal)->toBe(45.50)
         ->and($expense->company_id)->toBe($this->company->id)
@@ -55,16 +50,19 @@ it('creates a company expense when a fuel expense is approved', function (): voi
         ->and($expense->category?->name)->toBe('Combustible')
         ->and($expense->notes)->toContain('Combustible')
         ->and($expense->notes)->toContain('1234-ABC')
-        ->and($expense->notes)->toContain('Carlos García');
+        ->and($expense->notes)->toContain('Carlos García')
+        // Starts UNAPPROVED — needs final approval in the Expenses tab.
+        ->and($expense->approved)->toBeFalse();
 });
 
-it('does not create a duplicate when approved twice', function (): void {
-    $we = fuelExpense($this->company, $this->employee);
+it('does not create a duplicate mirror when approved twice', function (): void {
+    submitFuelExpense($this->company, $this->employee);
+    $mirror = Expense::query()->withoutGlobalScopes()->where('source', 'worker_fuel')->firstOrFail();
 
-    $this->actingAs($this->admin)->post("/worker-expenses/{$we->id}/approve");
-    $this->actingAs($this->admin)->post("/worker-expenses/{$we->id}/approve");
+    $this->actingAs($this->admin)->post("/expenses/{$mirror->id}/approve", ['approved' => true]);
+    $this->actingAs($this->admin)->post("/expenses/{$mirror->id}/approve", ['approved' => true]);
 
-    expect(Expense::query()->where('source', 'worker_fuel')->count())->toBe(1);
+    expect(Expense::query()->withoutGlobalScopes()->where('source', 'worker_fuel')->count())->toBe(1);
 });
 
 it('creates a reimbursable mirror expense for a non-fuel worker expense too', function (): void {
@@ -72,10 +70,9 @@ it('creates a reimbursable mirror expense for a non-fuel worker expense too', fu
         'company_id' => $this->company->id, 'employee_id' => $this->employee->id,
         'category' => 'materials', 'amount' => '30.00', 'date' => '2026-08-10',
     ]);
+    app(WorkerFuelExpenseService::class)->mirrorOnSubmission($we);
 
-    $this->actingAs($this->admin)->post("/worker-expenses/{$we->id}/approve");
-
-    $mirror = Expense::query()->find($we->fresh()->auto_expense_id);
+    $mirror = Expense::query()->withoutGlobalScopes()->find($we->fresh()->auto_expense_id);
     expect($mirror)->not->toBeNull()
         ->and($mirror->source)->toBe('worker_expense')
         ->and($mirror->employee_id)->toBe($this->employee->id)
@@ -84,36 +81,31 @@ it('creates a reimbursable mirror expense for a non-fuel worker expense too', fu
         ->and($mirror->approved)->toBeFalse();
 });
 
-it('keeps the auto expense when the worker expense is later rejected', function (): void {
-    $we = fuelExpense($this->company, $this->employee);
-    $this->actingAs($this->admin)->post("/worker-expenses/{$we->id}/approve");
-    $autoId = $we->fresh()->auto_expense_id;
+it('keeps the mirror when the worker expense is rejected in the Expenses tab', function (): void {
+    $we = submitFuelExpense($this->company, $this->employee);
+    $mirror = Expense::query()->withoutGlobalScopes()->where('source', 'worker_fuel')->firstOrFail();
 
-    $this->actingAs($this->admin)->post("/worker-expenses/{$we->id}/reject", ['reason' => 'Duplicado']);
+    $this->actingAs($this->admin)->post("/expenses/{$mirror->id}/approve", ['approved' => false]);
 
-    expect(Expense::query()->find($autoId))->not->toBeNull();
+    expect(Expense::query()->withoutGlobalScopes()->find($mirror->id))->not->toBeNull()
+        ->and($we->fresh()->status->value)->toBe('rejected');
 });
 
 it('degrades the description gracefully when no vehicle is linked', function (): void {
-    $we = fuelExpense($this->company, $this->employee); // no vehicle
-
-    $this->actingAs($this->admin)->post("/worker-expenses/{$we->id}/approve");
-
-    $expense = Expense::query()->find($we->fresh()->auto_expense_id);
+    $we = submitFuelExpense($this->company, $this->employee); // no vehicle
+    $expense = Expense::query()->withoutGlobalScopes()->find($we->auto_expense_id);
     expect($expense->notes)->toContain('Combustible')->toContain('Carlos García');
 });
 
 it('lets the admin give final approval to the fuel mirror in the Expenses tab', function (): void {
-    $we = fuelExpense($this->company, $this->employee);
-    $this->actingAs($this->admin)->post("/worker-expenses/{$we->id}/approve");
-    $mirror = Expense::query()->where('source', 'worker_fuel')->firstOrFail();
+    $we = submitFuelExpense($this->company, $this->employee);
+    $mirror = Expense::query()->withoutGlobalScopes()->where('source', 'worker_fuel')->firstOrFail();
 
-    // The old auto_fuel_locked guard is gone — the admin's final approval is now
-    // exactly what releases the money into payroll.
     $this->actingAs($this->admin)->post("/expenses/{$mirror->id}/approve", ['approved' => true])
         ->assertRedirect();
 
-    expect($mirror->fresh()->approved)->toBeTrue();
+    expect($mirror->fresh()->approved)->toBeTrue()
+        ->and($we->fresh()->status->value)->toBe('approved');
 });
 
 it('does not delete the shared worker receipt when the mirror expense is removed', function (): void {
@@ -124,28 +116,48 @@ it('does not delete the shared worker receipt when the mirror expense is removed
     ]);
     $we->receipt_path = UploadedFile::fake()->image('recibo.jpg')->store('worker-expense-receipts', 'local');
     $we->save();
+    app(WorkerFuelExpenseService::class)->mirrorOnSubmission($we);
 
-    $this->actingAs($this->admin)->post("/worker-expenses/{$we->id}/approve");
-    $mirror = Expense::query()->where('source', 'worker_fuel')->firstOrFail();
+    $mirror = Expense::query()->withoutGlobalScopes()->where('source', 'worker_fuel')->firstOrFail();
     expect($mirror->file_path)->toBe($we->receipt_path);
 
     $this->actingAs($this->admin)->delete("/expenses/{$mirror->id}")->assertRedirect();
 
     // The mirror row is gone but the worker's receipt file survives.
-    expect(Expense::query()->find($mirror->id))->toBeNull();
+    expect(Expense::query()->withoutGlobalScopes()->find($mirror->id))->toBeNull();
     Storage::disk('local')->assertExists($we->receipt_path);
 });
 
-it('creates the auto expense in the worker expense own company (tenancy)', function (): void {
+it('backfills mirrors for PENDING worker expenses only, leaving approved legacy rows alone', function (): void {
+    // A pending submission with NO mirror (submitted pre-cutover).
+    $pending = WorkerExpense::factory()->create([
+        'company_id' => $this->company->id, 'employee_id' => $this->employee->id,
+        'category' => 'materials', 'amount' => '20', 'date' => '2026-08-10', 'status' => 'pending',
+    ]);
+    // An APPROVED legacy row with no mirror — paid via PayrollService::pwaExpensesFor;
+    // it must be LEFT ALONE (minting an unapproved mirror would unpay the worker).
+    $legacy = WorkerExpense::factory()->create([
+        'company_id' => $this->company->id, 'employee_id' => $this->employee->id,
+        'category' => 'materials', 'amount' => '30', 'date' => '2026-08-10', 'status' => 'approved',
+    ]);
+
+    $this->artisan('worker-expenses:backfill-mirrors')->assertSuccessful();
+
+    expect($pending->fresh()->auto_expense_id)->not->toBeNull()  // mirrored
+        ->and($legacy->fresh()->auto_expense_id)->toBeNull();     // untouched
+    // The minted mirror is UNAPPROVED (awaiting review in the Expenses tab).
+    expect(Expense::query()->withoutGlobalScopes()->find($pending->fresh()->auto_expense_id)->approved)->toBeFalse();
+});
+
+it('mints the mirror in the worker expense own company (tenancy)', function (): void {
     $other = Company::factory()->create();
     $otherAdmin = User::factory()->create(['role' => UserRole::Admin, 'company_id' => $other->id]);
-    $we = fuelExpense($this->company, $this->employee);
+    submitFuelExpense($this->company, $this->employee);
+    $mirror = Expense::query()->withoutGlobalScopes()->where('source', 'worker_fuel')->firstOrFail();
 
-    // An admin of another company cannot even reach it — route binding 404s.
-    $this->actingAs($otherAdmin)->post("/worker-expenses/{$we->id}/approve")->assertNotFound();
-    expect($we->fresh()->auto_expense_id)->toBeNull();
+    expect($mirror->company_id)->toBe($this->company->id);
 
-    // The owning company's admin approves → expense lands in the right company.
-    $this->actingAs($this->admin)->post("/worker-expenses/{$we->id}/approve");
-    expect(Expense::query()->find($we->fresh()->auto_expense_id)->company_id)->toBe($this->company->id);
+    // An admin of another company cannot reach the mirror — route binding 404s.
+    $this->actingAs($otherAdmin)->post("/expenses/{$mirror->id}/approve", ['approved' => true])->assertNotFound();
+    expect($mirror->fresh()->approved)->toBeFalse();
 });

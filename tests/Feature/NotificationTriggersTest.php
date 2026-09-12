@@ -20,6 +20,7 @@ use App\Models\Vehicle;
 use App\Models\VehicleSession;
 use App\Models\WorkerExpense;
 use App\Notifications\SystemNotification;
+use App\Services\Workers\WorkerFuelExpenseService;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Route;
@@ -121,13 +122,15 @@ it('notifies the worker when their expense is approved', function (): void {
     [$company, $admin] = companyWithAdmin();
     [$workerUser, $employee] = linkedWorker($company);
 
-    $expense = WorkerExpense::factory()->create([
+    $we = WorkerExpense::factory()->create([
         'company_id' => $company->id,
         'employee_id' => $employee->id,
         'status' => WorkerExpenseStatus::Pending,
     ]);
+    // Item 5 — the submission mirror is approved in the regular Expenses tab.
+    $mirror = app(WorkerFuelExpenseService::class)->mirrorOnSubmission($we);
 
-    $this->actingAs($admin)->post("/worker-expenses/{$expense->id}/approve")
+    $this->actingAs($admin)->post("/expenses/{$mirror->id}/approve", ['approved' => true])
         ->assertRedirect()->assertSessionHasNoErrors();
 
     Notification::assertSentTo($workerUser, SystemNotification::class);

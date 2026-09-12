@@ -9,6 +9,7 @@ use App\Models\Vehicle;
 use App\Models\VehicleFuelRecord;
 use App\Models\WorkerExpense;
 use App\Services\Payroll\PayrollService;
+use App\Services\Workers\WorkerFuelExpenseService;
 use Illuminate\Support\Facades\Gate;
 
 /**
@@ -39,7 +40,7 @@ it('separates duties: a manager with expenses.approve cannot give final approval
         'company_id' => $this->company->id, 'employee_id' => $this->employee->id,
         'category' => 'fuel', 'amount' => '40', 'date' => '2026-08-10',
     ]);
-    $this->actingAs($this->admin)->post("/worker-expenses/{$we->id}/approve");
+    app(WorkerFuelExpenseService::class)->mirrorOnSubmission($we);
     $mirror = Expense::withoutGlobalScopes()->where('source', 'worker_fuel')->firstOrFail();
 
     // The manager CANNOT final-approve in the Expenses tab.
@@ -60,7 +61,7 @@ it('payroll counts a worker fuel reimbursement ONLY after final approval', funct
     ]);
 
     // Manager approval — mirror created, but payroll must NOT count it yet.
-    $this->actingAs($this->admin)->post("/worker-expenses/{$we->id}/approve");
+    app(WorkerFuelExpenseService::class)->mirrorOnSubmission($we);
     $mirror = Expense::withoutGlobalScopes()->where('source', 'worker_fuel')->firstOrFail();
 
     $before = app(PayrollService::class)->calculateFor($this->employee, $this->company->id, '2026-08');
@@ -81,7 +82,7 @@ it('creates a linked VehicleFuelRecord on final approval so the vehicle Fuel tab
     $we->vehicle_id = $vehicle->id;
     $we->save();
 
-    $this->actingAs($this->admin)->post("/worker-expenses/{$we->id}/approve");
+    app(WorkerFuelExpenseService::class)->mirrorOnSubmission($we);
     $mirror = Expense::withoutGlobalScopes()->where('source', 'worker_fuel')->firstOrFail();
     expect($mirror->vehicle_id)->toBe($vehicle->id);
 

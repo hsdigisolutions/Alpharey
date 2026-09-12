@@ -70,7 +70,6 @@ use App\Http\Controllers\Worker\WorkerExpenseController;
 use App\Http\Controllers\Worker\WorkerVehicleController;
 use App\Http\Controllers\Worker\WorkerVoiceNoteController;
 use App\Http\Controllers\WorkerAccessController;
-use App\Http\Controllers\WorkerExpenseAdminController;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -404,13 +403,10 @@ Route::middleware(['auth', 'active', 'two_factor', 'not_worker'])->group(functio
     Route::put('/expense-categories/{expenseCategory}', [ExpenseCategoryController::class, 'update'])->name('expense-categories.update');
     Route::delete('/expense-categories/{expenseCategory}', [ExpenseCategoryController::class, 'destroy'])->name('expense-categories.destroy');
 
-    // Feature 2 — Worker PWA expense review (admin)
-    Route::get('/worker-expenses', [WorkerExpenseAdminController::class, 'index'])->name('worker-expenses.index');
-    Route::post('/worker-expenses', [WorkerExpenseAdminController::class, 'store'])->name('worker-expenses.store');
-    Route::post('/worker-expenses/{workerExpense}/approve', [WorkerExpenseAdminController::class, 'approve'])->name('worker-expenses.approve');
-    Route::post('/worker-expenses/{workerExpense}/review', [WorkerExpenseAdminController::class, 'sendToReview'])->name('worker-expenses.review');
-    Route::post('/worker-expenses/{workerExpense}/reject', [WorkerExpenseAdminController::class, 'reject'])->name('worker-expenses.reject');
-    Route::get('/worker-expenses/{workerExpense}/receipt', [WorkerExpenseAdminController::class, 'downloadReceipt'])->name('worker-expenses.receipt');
+    // Item 5 (2026-09-12) — the Worker Expenses admin tab was removed. Worker PWA
+    // submissions now mint a mirror Expense at submission and are reviewed in the
+    // regular Expenses tab (approve/reject via /expenses/{expense}/approve,
+    // escalate via /expenses/{expense}/review, SA queue at /expense-review).
 
     // Feature 1 — Voice note admin download
     Route::get('/attendance/voice-notes/{voiceNote}/download', [AttendanceVoiceNoteController::class, 'download'])->name('attendance.voice-note.download');

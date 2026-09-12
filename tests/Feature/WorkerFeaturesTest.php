@@ -17,6 +17,7 @@ use App\Models\WorkerExpense;
 use App\Services\Employees\EmployeeTransferService;
 use App\Services\Payroll\PayrollService;
 use App\Services\Workers\VehicleSessionService;
+use App\Services\Workers\WorkerFuelExpenseService;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -56,30 +57,26 @@ it('shows the CURRENT company branding on the worker home after a transfer', fun
         ->assertInertia(fn ($p) => $p->where('worker.company', $companyB->displayName()));
 });
 
-it('adds a worker expense from the CRM — payroll counts it only after FINAL approval', function () {
+it('worker submits an expense — payroll counts it only after FINAL approval (Item 5)', function () {
     [, $employee, $company] = workerWithEmployee(['daily_wage' => '50']);
     $admin = User::factory()->companyAdmin()->forCompany($company)->create();
 
-    $this->actingAs($admin)->post('/worker-expenses', [
-        'employee_id' => $employee->id, 'date' => '2026-05-04',
-        'amount' => '25', 'category' => 'fuel', 'description' => 'Diesel',
-    ])->assertRedirect()->assertSessionHasNoErrors();
+    // A worker submission mints a pending mirror Expense (reviewed in the
+    // regular Expenses tab — the Worker Expenses admin tab is gone).
+    $we = WorkerExpense::factory()->for($employee)->for($company)->create([
+        'category' => 'fuel', 'amount' => '25', 'date' => '2026-05-04', 'description' => 'Diesel',
+    ]);
+    $mirror = app(WorkerFuelExpenseService::class)->mirrorOnSubmission($we);
 
-    $expense = WorkerExpense::withoutGlobalScopes()->where('employee_id', $employee->id)->firstOrFail();
-    expect($expense->status)->toBe(WorkerExpenseStatus::Approved)
-        ->and($expense->company_id)->toBe($company->id);
-
-    // Manager-level approval created the mirror Expense, but it is NOT yet
-    // approved → payroll must NOT count it (the whole point of the two-gate flow).
-    $mirror = Expense::withoutGlobalScopes()->where('source', 'worker_fuel')->firstOrFail();
+    // NOT yet approved → payroll must NOT count it (the two-gate flow).
     $before = app(PayrollService::class)->calculateFor($employee, $company->id, '2026-05');
     expect((float) $before->getAttribute('reimbursements'))->toBe(0.0);
 
     // Admin FINAL approval in the Expenses tab releases the money into payroll.
-    // (Re-use the same payroll row so we recompute rather than insert a second.)
     $this->actingAs($admin)->post("/expenses/{$mirror->id}/approve", ['approved' => true])->assertRedirect();
     $after = app(PayrollService::class)->calculateFor($employee, $company->id, '2026-05', $before);
-    expect((float) $after->getAttribute('reimbursements'))->toBe(25.0);
+    expect((float) $after->getAttribute('reimbursements'))->toBe(25.0)
+        ->and($we->fresh()->status)->toBe(WorkerExpenseStatus::Approved);
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -350,44 +347,45 @@ describe('Feature 2 – worker expense', function () {
         expect($expense->company_id)->toBe($employee->company_id);
     });
 
-    it('admin can approve an expense (admin bypasses permission matrix)', function () {
+    it('admin can approve a worker expense via the mirror (admin bypasses permission matrix)', function () {
         [$workerUser, $employee, $company] = workerWithEmployee();
         // Admin role bypasses the module permission matrix — no rows needed.
         $admin = User::factory()->admin()->forCompany($company)->create();
 
-        $expense = WorkerExpense::factory()->for($employee)->for($company)->create(['status' => 'pending']);
+        $we = WorkerExpense::factory()->for($employee)->for($company)->create(['status' => 'pending']);
+        $mirror = app(WorkerFuelExpenseService::class)->mirrorOnSubmission($we);
 
         $this->actingAs($admin)
-            ->post("/worker-expenses/{$expense->id}/approve")
+            ->post("/expenses/{$mirror->id}/approve", ['approved' => true])
             ->assertRedirect();
 
-        expect($expense->fresh()->status)->toBe(WorkerExpenseStatus::Approved);
+        expect($we->fresh()->status)->toBe(WorkerExpenseStatus::Approved);
     });
 
-    it('admin can reject an expense with a reason', function () {
+    it('admin can reject a worker expense via the mirror', function () {
         [$workerUser, $employee, $company] = workerWithEmployee();
         $admin = User::factory()->admin()->forCompany($company)->create();
 
-        $expense = WorkerExpense::factory()->for($employee)->for($company)->create(['status' => 'pending']);
+        $we = WorkerExpense::factory()->for($employee)->for($company)->create(['status' => 'pending']);
+        $mirror = app(WorkerFuelExpenseService::class)->mirrorOnSubmission($we);
 
         $this->actingAs($admin)
-            ->post("/worker-expenses/{$expense->id}/reject", ['reason' => 'Not a valid work expense'])
+            ->post("/expenses/{$mirror->id}/approve", ['approved' => false])
             ->assertRedirect();
 
-        $expense->refresh();
-        expect($expense->status)->toBe(WorkerExpenseStatus::Rejected);
-        expect($expense->rejection_reason)->toBe('Not a valid work expense');
+        expect($we->fresh()->status)->toBe(WorkerExpenseStatus::Rejected);
     });
 
-    it('manager without expenses.approve permission is denied', function () {
+    it('manager without expenses.approve_final permission is denied', function () {
         [$workerUser, $employee, $company] = workerWithEmployee();
         // Manager role with no permission rows → Gate returns false → 403.
         $user = User::factory()->manager()->forCompany($company)->create();
 
-        $expense = WorkerExpense::factory()->for($employee)->for($company)->create(['status' => 'pending']);
+        $we = WorkerExpense::factory()->for($employee)->for($company)->create(['status' => 'pending']);
+        $mirror = app(WorkerFuelExpenseService::class)->mirrorOnSubmission($we);
 
         $this->actingAs($user)
-            ->post("/worker-expenses/{$expense->id}/approve")
+            ->post("/expenses/{$mirror->id}/approve", ['approved' => true])
             ->assertForbidden();
     });
 
@@ -628,16 +626,17 @@ describe('tenancy isolation', function () {
             ->not->toBe($otherCompany->id);
     });
 
-    it('admin cannot approve expenses from a different company (tenant 404)', function () {
+    it('admin cannot approve a worker expense mirror from a different company (tenant 404)', function () {
         [$workerUser, $employee, $company] = workerWithEmployee();
         $otherCompany = Company::factory()->create();
         $admin = User::factory()->admin()->forCompany($otherCompany)->create();
 
-        $expense = WorkerExpense::factory()->for($employee)->for($company)->create(['status' => 'pending']);
+        $we = WorkerExpense::factory()->for($employee)->for($company)->create(['status' => 'pending']);
+        $mirror = app(WorkerFuelExpenseService::class)->mirrorOnSubmission($we);
 
-        // CompanyScope makes the expense invisible → 404 (not 403).
+        // CompanyScope makes the mirror Expense invisible → 404 (not 403).
         $this->actingAs($admin)
-            ->post("/worker-expenses/{$expense->id}/approve")
+            ->post("/expenses/{$mirror->id}/approve", ['approved' => true])
             ->assertNotFound();
     });
 });
