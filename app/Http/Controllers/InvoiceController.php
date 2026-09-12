@@ -211,6 +211,8 @@ class InvoiceController extends Controller
                         'payment_date' => $p->payment_date->toDateString(),
                         'payment_method' => $p->payment_method?->value,
                         'reference' => $p->reference,
+                        // Item 6 — proof-of-payment receipt (download link when present).
+                        'has_receipt' => $p->receipt_path !== null,
                     ])->all(),
                     'notes' => $invoice->notes,
                 ]),

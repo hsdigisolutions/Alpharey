@@ -19,6 +19,7 @@ import VBadge from '@/Components/ui/VBadge.vue';
 import VEmptyState from '@/Components/ui/VEmptyState.vue';
 import VModal from '@/Components/ui/VModal.vue';
 import VPageHeader from '@/Components/ui/VPageHeader.vue';
+import VTextarea from '@/Components/ui/VTextarea.vue';
 
 defineProps({
     expenses: { type: Array, required: true },
@@ -30,12 +31,23 @@ const detailRow = ref(null);
 function openDetail(e) { detailRow.value = e; }
 
 function decide(id, action) {
-    router.post(`/expense-review/${id}/${action}`, {}, { preserveScroll: true });
+    // Rejection captures an optional reason (Item 5 follow-up) — the worker sees it.
+    if (action === 'reject') { rejectId.value = id; rejectReason.value = ''; return; }
+    router.post(`/expense-review/${id}/approve`, {}, { preserveScroll: true });
 }
 function decideFromDetail(action) {
     if (!detailRow.value) return;
     decide(detailRow.value.id, action);
     detailRow.value = null;
+}
+
+const rejectId = ref(null);
+const rejectReason = ref('');
+function confirmReject() {
+    if (!rejectId.value) return;
+    router.post(`/expense-review/${rejectId.value}/reject`,
+        { reason: rejectReason.value || null },
+        { preserveScroll: true, onSuccess: () => { rejectId.value = null; } });
 }
 </script>
 
@@ -92,6 +104,16 @@ function decideFromDetail(action) {
                 <VButton @click="decideFromDetail('approve')">
                     <Bilingual k="expenses.review_approve" inline />
                 </VButton>
+            </template>
+        </VModal>
+
+        <!-- Reject with an optional reason (Item 5 follow-up) — shown to the worker -->
+        <VModal :open="!!rejectId" size="sm" title-key="expenses.review_reject" @close="rejectId = null">
+            <p class="mb-2 text-xs text-ink-soft">{{ $t('expenses.reject_reason_hint') }}</p>
+            <VTextarea v-model="rejectReason" :rows="3" :placeholder="$t('expenses.reject_reason_placeholder')" />
+            <template #footer>
+                <VButton variant="ghost" @click="rejectId = null"><Bilingual k="common.cancel" inline /></VButton>
+                <VButton variant="danger" @click="confirmReject"><Bilingual k="expenses.review_reject" inline /></VButton>
             </template>
         </VModal>
     </AppLayout>

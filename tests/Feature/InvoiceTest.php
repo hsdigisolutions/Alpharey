@@ -12,6 +12,8 @@ use App\Models\Payment;
 use App\Models\Project;
 use App\Models\User;
 use App\Models\Vendor;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 use Inertia\Testing\AssertableInertia as Assert;
 
 beforeEach(function (): void {
@@ -141,6 +143,50 @@ it('derives payment status from the payment records', function (): void {
 
     expect($invoice->fresh()->payment_status)->toBe(PaymentStatus::Paid)
         ->and((float) $invoice->fresh()->paid_amount)->toBe(1000.0);
+});
+
+it('stores a proof-of-payment receipt, serves it gated + audited, and never changes the paid status (Item 6)', function (): void {
+    Storage::fake('local');
+    $this->actingAs($this->admin)->post('/invoices', invoicePayload())->assertRedirect();
+    $invoice = Invoice::withoutGlobalScopes()->firstOrFail();
+
+    // Full payment WITH a receipt → status derives to Paid exactly as without one.
+    $this->actingAs($this->admin)->post("/invoices/{$invoice->id}/payments", [
+        'amount' => 1000, 'payment_date' => '2026-07-05', 'payment_method' => 'bank_transfer',
+        'reference' => 'TRF-99', 'receipt' => UploadedFile::fake()->create('proof.pdf', 100, 'application/pdf'),
+    ])->assertRedirect()->assertSessionHasNoErrors();
+
+    expect($invoice->fresh()->payment_status)->toBe(PaymentStatus::Paid)
+        ->and((float) $invoice->fresh()->paid_amount)->toBe(1000.0);
+
+    $payment = Payment::withoutGlobalScopes()->where('invoice_id', $invoice->id)->firstOrFail();
+    expect($payment->receipt_path)->not->toBeNull()
+        ->and($payment->receipt_name)->toBe('proof.pdf');
+    Storage::disk('local')->assertExists($payment->receipt_path);
+
+    // Gated + audited download.
+    $this->actingAs($this->admin)->get("/payments/{$payment->id}/receipt")->assertOk();
+    $this->assertDatabaseHas('audit_logs', ['action' => 'viewed', 'model_type' => (new Payment)->getMorphClass(), 'model_id' => $payment->id]);
+
+    // Deleting the payment removes the receipt file too.
+    $path = $payment->receipt_path;
+    $this->actingAs($this->admin)->delete("/payments/{$payment->id}")->assertRedirect();
+    Storage::disk('local')->assertMissing($path);
+});
+
+it('records a payment WITHOUT a receipt exactly as before (control)', function (): void {
+    $this->actingAs($this->admin)->post('/invoices', invoicePayload())->assertRedirect();
+    $invoice = Invoice::withoutGlobalScopes()->firstOrFail();
+
+    $this->actingAs($this->admin)->post("/invoices/{$invoice->id}/payments", [
+        'amount' => 1000, 'payment_date' => '2026-07-05',
+    ])->assertRedirect();
+
+    $payment = Payment::withoutGlobalScopes()->where('invoice_id', $invoice->id)->firstOrFail();
+    expect($payment->receipt_path)->toBeNull()
+        ->and($invoice->fresh()->payment_status)->toBe(PaymentStatus::Paid);
+    // No receipt → 404 on the download route.
+    $this->actingAs($this->admin)->get("/payments/{$payment->id}/receipt")->assertNotFound();
 });
 
 it('falls the payment status back when a payment is removed', function (): void {

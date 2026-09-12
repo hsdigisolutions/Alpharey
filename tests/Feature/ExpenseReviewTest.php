@@ -90,6 +90,26 @@ it('super admin rejects from the queue — counts nowhere', function (): void {
     expect((float) $payroll->getAttribute('reimbursements'))->toBe(0.0);
 });
 
+it('records the rejection reason on the worker record when rejected via the mirror (Item 5 follow-up)', function (): void {
+    [$we, $mirror] = submitFuelWorkerExpense($this->company, $this->employee, '40');
+
+    $this->actingAs($this->admin)
+        ->post("/expenses/{$mirror->id}/approve", ['approved' => false, 'reason' => 'Recibo ilegible'])
+        ->assertRedirect();
+
+    expect($we->fresh()->status)->toBe(WorkerExpenseStatus::Rejected)
+        ->and($we->fresh()->rejection_reason)->toBe('Recibo ilegible');
+});
+
+it('records the rejection reason from the SA review queue', function (): void {
+    [$we, $mirror] = submitFuelWorkerExpense($this->company, $this->employee, '40');
+    $this->actingAs($this->admin)->post("/expenses/{$mirror->id}/review");
+
+    $this->actingAs($this->sa)->post("/expense-review/{$mirror->id}/reject", ['reason' => 'Duplicado'])->assertRedirect();
+
+    expect($we->fresh()->rejection_reason)->toBe('Duplicado');
+});
+
 it('admin can send an already-created expense to review from the Expenses tab', function (): void {
     $expense = Expense::factory()->for($this->company)->create(['approved' => false]);
 

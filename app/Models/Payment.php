@@ -17,6 +17,9 @@ use Illuminate\Support\Carbon;
  * @property numeric-string $amount
  * @property Carbon $payment_date
  * @property PaymentMethod|null $payment_method
+ * @property string|null $reference
+ * @property string|null $receipt_path
+ * @property string|null $receipt_name
  */
 class Payment extends Model
 {

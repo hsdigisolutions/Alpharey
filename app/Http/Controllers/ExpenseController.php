@@ -427,7 +427,11 @@ class ExpenseController extends Controller
         // expenses.approve on the Worker Expenses screen.
         Gate::authorize('expenses.approve_final');
 
-        $validated = $request->validate(['approved' => ['required', 'boolean']]);
+        $validated = $request->validate([
+            'approved' => ['required', 'boolean'],
+            // Optional rejection reason for a worker-sourced mirror (Item 5 follow-up).
+            'reason' => ['nullable', 'string', 'max:1000'],
+        ]);
 
         // A subcontractor payment's auto-posted Gasto must never be APPROVED:
         // the P&L already counts the payment itself, and the approved-expense
@@ -481,7 +485,9 @@ class ExpenseController extends Controller
         // the Worker Expenses tab + the worker's view show the true outcome, and
         // the worker is notified. Money is untouched: payroll counts the mirror
         // Expense via its own `approved` flag (this only syncs status + notifies).
-        app(WorkerFuelExpenseService::class)->applyFinalDecisionToWorker($expense, $expense->approved, $expense->approved_by);
+        app(WorkerFuelExpenseService::class)->applyFinalDecisionToWorker(
+            $expense, $expense->approved, $expense->approved_by, $validated['reason'] ?? null,
+        );
 
         return back()->with('success', __('ui.expenses.'.($validated['approved'] ? 'approved' : 'rejected')));
     }

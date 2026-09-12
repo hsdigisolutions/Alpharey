@@ -175,11 +175,12 @@ watch(() => form.is_taxable, (taxable) => {
     if (!taxable) { form.vat_rate = null; form.vat_custom_percent = null; }
 });
 
-// On THIS tab, an Employee-borne expense means "deduct from salary" (worker
-// reimbursements go through the Worker Expense tab). Default the toggle on when
-// Employee is picked, and clear it otherwise — the admin can still override.
-watch(() => form.bearable_by, (bearer) => {
-    form.deduct_from_salary = bearer === 'employee';
+// An Employee-borne expense is a REIMBURSEMENT by default (the worker fronted the
+// cost → added to their pay); the admin ticks "deduct from salary" only for a
+// company-card cost the worker must repay. Clear the toggle whenever the bearer
+// changes so the common reimbursement case needs no extra click.
+watch(() => form.bearable_by, () => {
+    form.deduct_from_salary = false;
 });
 
 // The specific company card only applies to the Company-card method — clear it
@@ -308,7 +309,19 @@ function submit() {
 }
 
 function approve(row, value) {
-    router.post(`/expenses/${row.id}/approve`, { approved: value }, { preserveScroll: true });
+    // Rejection captures an optional reason (Item 5 follow-up) — the worker sees it.
+    if (value === false) { openReject(row); return; }
+    router.post(`/expenses/${row.id}/approve`, { approved: true }, { preserveScroll: true });
+}
+
+const rejectTarget = ref(null);
+const rejectReason = ref('');
+function openReject(row) { rejectTarget.value = row; rejectReason.value = ''; }
+function confirmReject() {
+    if (!rejectTarget.value) return;
+    router.post(`/expenses/${rejectTarget.value.id}/approve`,
+        { approved: false, reason: rejectReason.value || null },
+        { preserveScroll: true, onSuccess: () => { rejectTarget.value = null; } });
 }
 
 // Send to the Super-Admin review queue with an optional note (BUG 4).
@@ -768,9 +781,8 @@ const columns = [
                         <span class="text-sm">{{ $t('expenses.deduct_from_salary_label') }}</span>
                     </VCheckbox>
                 </label>
-                <!-- Steer worker reimbursements to the Worker Expense tab (this
-                     tab's Employee option is for DEDUCTIONS, not reimbursements). -->
-                <p class="sm:col-span-2 -mt-2 rounded-md bg-status-info-soft px-3 py-2 text-xs text-status-info">
+                <!-- Employee-borne: reimburse (worker fronted it) unless "deduct" is ticked. -->
+                <p v-if="form.bearable_by === 'employee'" class="sm:col-span-2 -mt-2 rounded-md bg-status-info-soft px-3 py-2 text-xs text-status-info">
                     {{ $t('expenses.bearable_reimburse_hint') }}
                 </p>
                 <p class="sm:col-span-2 text-xs text-muted">{{ $t('expenses.bearable_hint') }}</p>
@@ -959,6 +971,16 @@ const columns = [
                 <VButton type="submit" form="review-note-form" :loading="reviewNoteForm.processing">
                     <Bilingual k="expenses.send_to_review" inline />
                 </VButton>
+            </template>
+        </VModal>
+
+        <!-- Reject with an optional reason (Item 5 follow-up) — shown to the worker -->
+        <VModal :open="!!rejectTarget" size="sm" title-key="expenses.reject" @close="rejectTarget = null">
+            <p class="mb-2 text-xs text-ink-soft">{{ $t('expenses.reject_reason_hint') }}</p>
+            <VTextarea v-model="rejectReason" :rows="3" :placeholder="$t('expenses.reject_reason_placeholder')" />
+            <template #footer>
+                <VButton variant="ghost" @click="rejectTarget = null"><Bilingual k="common.cancel" inline /></VButton>
+                <VButton variant="danger" @click="confirmReject"><Bilingual k="expenses.reject" inline /></VButton>
             </template>
         </VModal>
     </AppLayout>

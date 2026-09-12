@@ -9,6 +9,7 @@ use App\Services\Expenses\ExpenseReceiptExport;
 use App\Services\Vehicles\VehicleExpenseSyncService;
 use App\Services\Workers\WorkerFuelExpenseService;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -78,9 +79,10 @@ class ExpenseReviewController extends Controller
         return back()->with('success', __('ui.expenses.approved'));
     }
 
-    public function reject(int $expense): RedirectResponse
+    public function reject(Request $request, int $expense): RedirectResponse
     {
         $e = $this->resolveInReview($expense);
+        $reason = $request->validate(['reason' => ['nullable', 'string', 'max:1000']])['reason'] ?? null;
 
         $e->approved = false;
         $e->approved_by = Auth::id();
@@ -88,7 +90,7 @@ class ExpenseReviewController extends Controller
         $e->review_status = null;
         $e->save();
 
-        app(WorkerFuelExpenseService::class)->applyFinalDecisionToWorker($e, false, $e->approved_by);
+        app(WorkerFuelExpenseService::class)->applyFinalDecisionToWorker($e, false, $e->approved_by, $reason);
 
         return back()->with('success', __('ui.expenses.rejected'));
     }

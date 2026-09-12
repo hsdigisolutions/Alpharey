@@ -211,7 +211,7 @@ class WorkerFuelExpenseService
      * WorkerExpense is excluded from PayrollService::pwaExpensesFor), so this is
      * a status/tracking sync only.
      */
-    public function applyFinalDecisionToWorker(Expense $expense, bool $approved, ?int $deciderId): void
+    public function applyFinalDecisionToWorker(Expense $expense, bool $approved, ?int $deciderId, ?string $reason = null): void
     {
         $workerExpense = $this->linkedWorkerExpense($expense);
         if ($workerExpense === null) {
@@ -224,6 +224,9 @@ class WorkerFuelExpenseService
         $workerExpense->status = $newStatus;
         $workerExpense->approved_by = $deciderId;
         $workerExpense->approved_at = now();
+        // Carry the rejection reason to the worker's record (Item 5 follow-up) so
+        // the worker sees WHY it was rejected, as the old Worker Expenses tab did.
+        $workerExpense->rejection_reason = $approved ? null : $reason;
         $workerExpense->save();
 
         // Notify only on a real transition — a worker escalated then approved is

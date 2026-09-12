@@ -283,7 +283,7 @@ function openEdit(row) {
 }
 
 /* ---------- payment log (edit mode only) ---------- */
-const payForm = useForm({ amount: '', payment_date: '', payment_method: '', reference: '' });
+const payForm = useForm({ amount: '', payment_date: '', payment_method: '', reference: '', receipt: null });
 const editingPayments = computed(() => props.editing?.payments ?? []);
 
 // Paid / outstanding / status summary so recording a payment gives clear feedback.
@@ -299,6 +299,7 @@ function logPayment() {
     payForm.post(`/invoices/${editingId.value}/payments`, {
         preserveScroll: true,
         preserveState: true,
+        forceFormData: true, // a receipt file may be attached (Item 6)
         onSuccess: () => {
             payForm.reset();
             router.get(`/invoices/${editingId.value}`, {}, { only: ['editing'], preserveScroll: true, preserveState: true });
@@ -638,6 +639,10 @@ const columns = computed(() => [
                             <span class="text-ink-soft">{{ p.payment_date }}</span>
                             <span class="text-ink-soft">{{ p.payment_method ?? '—' }}</span>
                             <span class="text-ink-soft">{{ p.reference ?? '—' }}</span>
+                            <a v-if="p.has_receipt" :href="`/payments/${p.id}/receipt`" target="_blank"
+                                class="inline-flex items-center gap-1 text-accent hover:underline" :title="$t('invoices.receipt')">
+                                <AppIcon name="file" class="h-3.5 w-3.5" />
+                            </a>
                             <button v-if="can.edit" class="rounded-sm p-1 text-muted hover:text-status-danger"
                                 @click="deletePayment(p.id)">
                                 <AppIcon name="trash" class="h-3.5 w-3.5" />
@@ -668,6 +673,11 @@ const columns = computed(() => [
                             </FormField>
                             <FormField k="invoices.reference" :error="payForm.errors.reference">
                                 <VInput v-model="payForm.reference" />
+                            </FormField>
+                            <!-- Item 6 — optional proof-of-payment receipt (mainly a bank transfer) -->
+                            <FormField k="invoices.receipt" :error="payForm.errors.receipt" class="sm:col-span-2">
+                                <input type="file" accept="image/*,.pdf" class="block w-full text-sm text-ink-soft file:mr-3 file:rounded-md file:border-0 file:bg-surface-sunken file:px-3 file:py-1.5 file:text-sm" @change="(e) => (payForm.receipt = e.target.files[0] ?? null)" />
+                                <p class="mt-1 text-xs text-muted">{{ $t('invoices.receipt_hint') }}</p>
                             </FormField>
                         </div>
                         <div class="flex justify-end">
