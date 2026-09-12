@@ -4,6 +4,7 @@ namespace App\Services\Reports;
 
 use App\Enums\BillingType;
 use App\Enums\ExpenseResponsibility;
+use App\Enums\ExpenseType;
 use App\Enums\MeasurementStatus;
 use App\Enums\ProjectRateType;
 use App\Models\Attendance;
@@ -267,6 +268,12 @@ class ProfitabilityService
         $expensesByDate = Expense::query()
             ->withoutGlobalScope(CompanyScope::class)
             ->where('company_id', $companyId)->where('project_id', $project->id)->where('approved', true)
+            // internal_deployment cross-charges are NEVER a project P&L cost: the
+            // deployed worker's attendance is already counted as labour under the
+            // host company_id, so counting the reimbursement expense too would
+            // double it. Excluded by TYPE (not by approved flag) so the deployment
+            // settlement flow may approve the expense without reopening Item A.
+            ->where('type', '!=', ExpenseType::InternalDeployment->value)
             ->when($from !== null, fn ($q) => $q->whereDate('date', '>=', $from))
             ->when($to !== null, fn ($q) => $q->whereDate('date', '<=', $to))
             ->selectRaw('date, COALESCE(SUM(total),0) as total')
@@ -772,6 +779,11 @@ class ProfitabilityService
             ->where('company_id', $companyId)
             ->where('project_id', $projectId)
             ->where('approved', true)
+            // internal_deployment cross-charges are NEVER a project P&L cost —
+            // excluded by TYPE, not by the approved flag, so the deployment
+            // settlement flow can approve the expense without double-counting the
+            // deployed labour (already counted via host-company attendance).
+            ->where('type', '!=', ExpenseType::InternalDeployment->value)
             ->when($from !== null, fn ($q) => $q->whereDate('date', '>=', $from))
             ->when($to !== null, fn ($q) => $q->whereDate('date', '<=', $to))
             ->sum('total');

@@ -150,6 +150,38 @@ it('costs an outsourced project by its flat fee, not our attendance', function (
         ->and($r['profit'])->toBe(1500.0);
 });
 
+it('never counts an internal_deployment cross-charge in project P&L, even when APPROVED (double-count guard)', function (): void {
+    // The deployed worker's attendance is already counted as labour under the
+    // HOST company_id, so the reimbursement expense must add NOTHING to project
+    // P&L. Item A used to enforce this by keeping the expense unapproved; the
+    // deployment-settlement flow now needs to APPROVE it (to mark the home
+    // invoice paid), so the guard moved to a TYPE exclusion — proven here by
+    // approving a cross-charge and showing the P&L does not move.
+    $project = Project::factory()->create([
+        'company_id' => $this->company->id, 'billing_type' => 'hourly', 'client_hour_rate' => '20',
+    ]);
+    punch($this->company, $this->employee, $project, '2026-06-01', 10, 100); // labour 100
+
+    // A NORMAL approved expense DOES count — the baseline.
+    Expense::factory()->create([
+        'company_id' => $this->company->id, 'project_id' => $project->id,
+        'type' => 'other', 'approved' => true, 'total' => '30', 'date' => '2026-06-01',
+    ]);
+    $before = $this->service->forProject($project->fresh());
+
+    // An APPROVED internal_deployment cross-charge of 999 must change nothing.
+    Expense::factory()->create([
+        'company_id' => $this->company->id, 'project_id' => $project->id,
+        'type' => 'internal_deployment', 'approved' => true, 'total' => '999', 'date' => '2026-06-01',
+    ]);
+    $after = $this->service->forProject($project->fresh());
+
+    expect($after['expenses'])->toBe(30.0)                 // the 999 cross-charge is NOT counted
+        ->and($after['labour_cost'])->toBe(100.0)
+        ->and($after['cost'])->toBe($before['cost'])       // byte-identical to before
+        ->and($after['profit'])->toBe($before['profit']);
+});
+
 it('costs a budgeted deal by the FULL agreed budget — Scenario A', function (): void {
     // Confirmed model: the budget is committed money the moment the deal is
     // active — cost 80 immediately, even though only 5 has been paid out.
