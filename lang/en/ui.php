@@ -1744,6 +1744,11 @@ return [
         'eff_margin' => 'Margin/h',
         'rework' => 'Rework',
         'not_billed' => 'Not billed',
+        // Item 4 — expense sections split by who bears them
+        'company_costs' => 'Company operational costs',
+        'client_costs' => 'Client-billable costs',
+        'client_costs_recovered' => 'Recoverable from client — does not reduce profit.',
+        'client_costs_invoiced' => 'Already included in the project invoices.',
         'total' => 'TOTAL',
         'month' => 'Month',
         'days_worked' => 'Days worked',

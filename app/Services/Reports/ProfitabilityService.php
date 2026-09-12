@@ -2,6 +2,7 @@
 
 namespace App\Services\Reports;
 
+use App\Enums\BearableBy;
 use App\Enums\BillingType;
 use App\Enums\ExpenseResponsibility;
 use App\Enums\ExpenseType;
@@ -125,7 +126,16 @@ class ProfitabilityService
             ? $this->approvedMeters($project->id, $from, $to)
             : $agg['meters'];
 
-        $expenses = $this->expenseTotal($project->company_id, $from, $to, $project->id);
+        // Item 4 — expenses split by who bears them. COMPANY-side (company /
+        // employee / unbillable) are always our cost; CLIENT-billable are a
+        // pass-through the client reimburses: excluded from cost on unit-billed
+        // projects (hourly/task/per_meter — revenue doesn't include them), kept in
+        // cost on invoice-billed projects (fixed/milestone — the paid invoice
+        // already includes them, so they net; excluding would double-credit).
+        $exp = $this->expensesByBearer($project->company_id, $from, $to, $project->id);
+        $isUnitBilled = $this->isUnitBilled($project);
+        $clientInCost = ! $isUnitBilled;
+        $expenses = round($exp['operational'] + ($clientInCost ? $exp['client'] : 0.0), 2);
         $subcontract = $this->subcontractorTotal($project->company_id, $from, $to, $project->id);
 
         [$revenue, $revenueBasis] = $this->resolveRevenue($project, $hours, $meters, $from, $to);
@@ -219,6 +229,11 @@ class ProfitabilityService
             'profit' => $profit,
             'margin' => $margin,
             'health' => $health,
+            // Item 4 — the two labeled expense sections + per-expense detail.
+            'expense_breakdown' => [
+                'operational' => ['total' => $exp['operational'], 'items' => $exp['items']['operational']],
+                'client_billable' => ['total' => $exp['client'], 'in_cost' => $clientInCost, 'items' => $exp['items']['client']],
+            ],
         ];
 
         if ($withBreakdown) {
@@ -265,20 +280,30 @@ class ProfitabilityService
             ->orderBy('date')
             ->get();
 
-        /** @var Collection<string, float> $expensesByDate */
-        $expensesByDate = Expense::query()
+        // Item 4 — split the per-day expenses by who bears them. OPERATIONAL
+        // (company/employee/unbillable/null bearer) is always our cost; CLIENT-
+        // billable is a reimbursed pass-through, in the day cost only when the
+        // project is invoice-billed (else it is recoverable and excluded).
+        // internal_deployment is excluded by TYPE (already counted via attendance).
+        $expenseRows = Expense::query()
             ->withoutGlobalScope(CompanyScope::class)
             ->where('company_id', $companyId)->where('project_id', $project->id)->where('approved', true)
-            // internal_deployment cross-charges are NEVER a project P&L cost: the
-            // deployed worker's attendance is already counted as labour under the
-            // host company_id, so counting the reimbursement expense too would
-            // double it. Excluded by TYPE (not by approved flag) so the deployment
-            // settlement flow may approve the expense without reopening Item A.
             ->where('type', '!=', ExpenseType::InternalDeployment->value)
             ->when($from !== null, fn ($q) => $q->whereDate('date', '>=', $from))
             ->when($to !== null, fn ($q) => $q->whereDate('date', '<=', $to))
-            ->selectRaw('date, COALESCE(SUM(total),0) as total')
-            ->groupBy('date')->pluck('total', 'date');
+            ->selectRaw('date, bearable_by, COALESCE(SUM(total),0) as total')
+            ->groupBy('date', 'bearable_by')->get();
+        $opByDate = [];      // operational (our cost) per date
+        $clientByDate = [];  // client-billable per date
+        foreach ($expenseRows as $er) {
+            $d = substr((string) $er->getAttribute('date'), 0, 10);
+            $amt = (float) $er->getAttribute('total');
+            if ($er->bearable_by === BearableBy::Client) {
+                $clientByDate[$d] = ($clientByDate[$d] ?? 0.0) + $amt;
+            } else {
+                $opByDate[$d] = ($opByDate[$d] ?? 0.0) + $amt;
+            }
+        }
 
         // Per-meter billing earns from APPROVED measurements (spec C8): income
         // per worker/day = their approved measured quantity × the client meter
@@ -514,7 +539,11 @@ class ProfitabilityService
         $tHours = $tIncome = $tLabour = $tExpenses = 0.0;
 
         foreach ($byDate as $date => $d) {
-            $expenses = (float) ($expensesByDate[$date] ?? 0);
+            // Operational is always cost; client-billable only on invoice-billed
+            // projects (nets the invoice). Unit-billed → recoverable, excluded.
+            $op = (float) ($opByDate[$date] ?? 0);
+            $cl = (float) ($clientByDate[$date] ?? 0);
+            $expenses = round($op + ($isInvoiceBilled ? $cl : 0.0), 2);
             $cost = round($d['labour'] + $expenses, 2);
             $income = round($d['income'], 2);
             $profit = round($income - $cost, 2);
@@ -605,6 +634,10 @@ class ProfitabilityService
         [$totalMargin] = $isInvoiceBilled ? [null] : $this->classify(round($tIncome, 2), $totalCost, $totalProfit);
         $totalMargin ??= 0.0;
 
+        // Item 4 — the two labeled expense sections (Company operational /
+        // Client-billable) + per-expense detail, for the daily-view display.
+        $exp = $this->expensesByBearer($companyId, $from, $to, $project->id);
+
         return [
             'days' => $days,
             'months' => $monthRows,
@@ -616,6 +649,10 @@ class ProfitabilityService
                 'cost' => $totalCost,
                 'profit' => $totalProfit,
                 'margin' => $totalMargin,
+            ],
+            'expense_breakdown' => [
+                'operational' => ['total' => $exp['operational'], 'items' => $exp['items']['operational']],
+                'client_billable' => ['total' => $exp['client'], 'in_cost' => $isInvoiceBilled, 'items' => $exp['items']['client']],
             ],
             'kpis' => $this->pnlKpis($project, $days, $monthRows, $totalProfit, $totalMargin),
         ];
@@ -914,21 +951,80 @@ class ProfitabilityService
             ->when($to !== null, fn ($q) => $q->whereDate('task_progress.date', '<=', $to));
     }
 
-    private function expenseTotal(int $companyId, ?string $from, ?string $to, int $projectId): float
+    /**
+     * Unit-billed = the client is billed by hours / tasks / metres (revenue does
+     * NOT already include materials). Fixed / milestone / unset are invoice-billed
+     * (revenue = paid invoices, which may already include billed materials).
+     */
+    private function isUnitBilled(Project $project): bool
     {
-        return (float) Expense::query()
+        return in_array($project->billing_type, [BillingType::Hourly, BillingType::PerMeter, BillingType::TaskBased], true);
+    }
+
+    /**
+     * Approved project expenses split by who bears them (Item 4), with per-expense
+     * detail for the two labeled P&L sections.
+     *
+     *   operational — company / employee / unbillable bearable: always OUR cost.
+     *   client      — client bearable: money the client reimburses (a pass-through
+     *                 at cost, profit-neutral). The CALLER decides whether it sits
+     *                 in cost (invoice-billed) or is excluded (unit-billed).
+     *
+     * internal_deployment cross-charges are excluded by TYPE (never a project P&L
+     * cost — the deployed labour is already counted via host-company attendance).
+     *
+     * @return array{operational: float, client: float, items: array{operational: list<array<string, mixed>>, client: list<array<string, mixed>>}}
+     */
+    private function expensesByBearer(int $companyId, ?string $from, ?string $to, int $projectId): array
+    {
+        $rows = Expense::query()
             ->withoutGlobalScope(CompanyScope::class)
             ->where('company_id', $companyId)
             ->where('project_id', $projectId)
             ->where('approved', true)
-            // internal_deployment cross-charges are NEVER a project P&L cost —
-            // excluded by TYPE, not by the approved flag, so the deployment
-            // settlement flow can approve the expense without double-counting the
-            // deployed labour (already counted via host-company attendance).
             ->where('type', '!=', ExpenseType::InternalDeployment->value)
             ->when($from !== null, fn ($q) => $q->whereDate('date', '>=', $from))
             ->when($to !== null, fn ($q) => $q->whereDate('date', '<=', $to))
-            ->sum('total');
+            ->with(['vendor:id,name', 'category:id,name'])
+            ->get(['id', 'vendor_id', 'expense_category_id', 'date', 'total', 'bearable_by', 'notes']);
+
+        $operational = 0.0;
+        $client = 0.0;
+        $opItems = [];
+        $clItems = [];
+        foreach ($rows as $e) {
+            $amount = round((float) $e->total, 2);
+            // FK-guarded (a belongsTo may resolve null): vendor name → else category
+            // → else the free-text note → else a dash, so the row always has a label.
+            $categoryName = $e->expense_category_id !== null ? $e->category->name : null;
+            $label = '—';
+            if ($e->vendor_id !== null) {
+                $label = $e->vendor->name;
+            } elseif ($categoryName !== null) {
+                $label = $categoryName;
+            } elseif ($e->notes !== null && $e->notes !== '') {
+                $label = $e->notes;
+            }
+            $item = [
+                'vendor' => $label,
+                'category' => $categoryName,
+                'amount' => $amount,
+                'date' => $e->date->toDateString(),
+            ];
+            if ($e->bearable_by === BearableBy::Client) {
+                $client += $amount;
+                $clItems[] = $item;
+            } else {
+                $operational += $amount;
+                $opItems[] = $item;
+            }
+        }
+
+        return [
+            'operational' => round($operational, 2),
+            'client' => round($client, 2),
+            'items' => ['operational' => $opItems, 'client' => $clItems],
+        ];
     }
 
     private function subcontractorTotal(int $companyId, ?string $from, ?string $to, int $projectId): float

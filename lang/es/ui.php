@@ -1746,6 +1746,11 @@ return [
         'eff_margin' => 'Margen/h',
         'rework' => 'Repetición',
         'not_billed' => 'No facturado',
+        // Item 4 — expense sections split by who bears them
+        'company_costs' => 'Costes operativos de la empresa',
+        'client_costs' => 'Costes facturables al cliente',
+        'client_costs_recovered' => 'Recuperable del cliente — no reduce el beneficio.',
+        'client_costs_invoiced' => 'Ya incluido en las facturas del proyecto.',
         'total' => 'TOTAL',
         'month' => 'Mes',
         'days_worked' => 'Días trabajados',

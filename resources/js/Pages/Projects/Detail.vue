@@ -10,6 +10,7 @@ import { t } from '@/translate';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import AppIcon from '@/Components/AppIcon.vue';
 import ProjectFormModal from '@/Components/Projects/ProjectFormModal.vue';
+import ExpenseBreakdown from '@/Components/Projects/ExpenseBreakdown.vue';
 import DocumentsPanel from '@/Components/Documents/DocumentsPanel.vue';
 import FormField from '@/Components/ui/FormField.vue';
 import VAlert from '@/Components/ui/VAlert.vue';
@@ -552,6 +553,8 @@ const noteStatus = { internal: 'neutral', client_call: 'info', client_email: 'ac
                                 <dd class="tabular-nums">{{ eur(profitability.subcontractor_cost) }}</dd>
                             </div>
                         </dl>
+                        <!-- Item 4 — expense sections split by who bears them -->
+                        <ExpenseBreakdown :breakdown="profitability.expense_breakdown" class="mt-3" />
                     </div>
                     <!-- No revenue basis configured: show cost-to-date, NOT a fake −100 % loss. -->
                     <div v-if="profitability.revenue_basis === 'not_configured'"
@@ -911,6 +914,9 @@ const noteStatus = { internal: 'neutral', client_call: 'info', client_email: 'ac
                         </table>
                     </div>
                 </VCard>
+
+                <!-- Item 4 — expense sections (Company operational / Client-billable) with per-expense detail -->
+                <ExpenseBreakdown :breakdown="dailyPnl.expense_breakdown" class="mt-4" />
             </div>
 
             <!-- Workers -->
