@@ -361,7 +361,7 @@ const logOpen = ref(false);
 const logTask = ref(null);
 const presentWorkers = ref([]);
 const loadingWorkers = ref(false);
-const logForm = useForm({ date: new Date().toISOString().slice(0, 10), quantity: null, employee_ids: [], notes: '', photo: null });
+const logForm = useForm({ date: new Date().toISOString().slice(0, 10), quantity: null, employee_ids: [], notes: '', photo: null, is_rework: false });
 
 async function fetchPresentWorkers() {
     loadingWorkers.value = true;
@@ -382,6 +382,7 @@ function openLog(t) {
     logForm.employee_ids = [];
     logForm.notes = '';
     logForm.photo = null;
+    logForm.is_rework = false;
     logForm.clearErrors();
     presentWorkers.value = [];
     logOpen.value = true;
@@ -789,6 +790,17 @@ const noteStatus = { internal: 'neutral', client_call: 'info', client_email: 'ac
                                                         <td class="tabular-nums py-1 text-end font-medium">{{ eur(p.income) }}</td>
                                                     </tr>
                                                     <tr v-if="!d.production || d.production.length === 0"><td colspan="4" class="py-1 text-muted">—</td></tr>
+                                                </tbody>
+                                            </table>
+                                            <!-- Rework (client rejected): billed nothing; its labour is the penalty (profit drop) -->
+                                            <table v-if="d.rework && d.rework.length" class="mt-1 w-full text-xs">
+                                                <tbody>
+                                                    <tr v-for="(rw, i) in d.rework" :key="'rw' + i" class="border-t border-line/60">
+                                                        <td class="py-1 text-status-danger">{{ $t('profitability.rework') }}: {{ rw.task }}</td>
+                                                        <td class="tabular-nums py-1 text-end text-status-danger">{{ fmtQty(rw.quantity) }} {{ rw.unit }}</td>
+                                                        <td class="py-1 text-end text-muted">{{ $t('profitability.not_billed') }}</td>
+                                                        <td class="tabular-nums py-1 text-end font-medium text-status-danger">{{ eur(0) }}</td>
+                                                    </tr>
                                                 </tbody>
                                             </table>
                                             <!-- Effective rates: what we produced/billed/paid per hour of labour -->
@@ -1242,7 +1254,7 @@ const noteStatus = { internal: 'neutral', client_call: 'info', client_email: 'ac
                                                             <tbody>
                                                                 <tr v-for="b in c.batches" :key="b.batch_id" class="border-b border-line/60 last:border-0">
                                                                     <td class="py-1.5 pe-3 tabular-nums text-ink-soft">{{ b.date }}</td>
-                                                                    <td class="py-1.5 pe-3 tabular-nums font-medium">{{ b.quantity }} {{ c.unit }}</td>
+                                                                    <td class="py-1.5 pe-3 tabular-nums font-medium">{{ b.quantity }} {{ c.unit }}<span v-if="b.is_rework" class="ms-1 rounded-sm bg-status-danger-soft px-1 text-[10px] font-normal text-status-danger">{{ $t('task_progress.rework_badge') }}</span></td>
                                                                     <td class="py-1.5 pe-3 text-ink-soft">{{ b.workers.join(', ') || '—' }}</td>
                                                                     <td class="py-1.5 pe-3 text-muted">{{ b.notes }}</td>
                                                                     <td class="py-1.5 pe-3">
@@ -1270,7 +1282,7 @@ const noteStatus = { internal: 'neutral', client_call: 'info', client_email: 'ac
                                                     <tbody>
                                                         <tr v-for="b in t.batches" :key="b.batch_id" class="border-b border-line/60 last:border-0">
                                                             <td class="py-1.5 pe-3 tabular-nums text-ink-soft">{{ b.date }}</td>
-                                                            <td class="py-1.5 pe-3 tabular-nums font-medium">{{ b.quantity }} {{ t.unit }}</td>
+                                                            <td class="py-1.5 pe-3 tabular-nums font-medium">{{ b.quantity }} {{ t.unit }}<span v-if="b.is_rework" class="ms-1 rounded-sm bg-status-danger-soft px-1 text-[10px] font-normal text-status-danger">{{ $t('task_progress.rework_badge') }}</span></td>
                                                             <td class="py-1.5 pe-3 text-ink-soft">{{ b.workers.join(', ') || '—' }}</td>
                                                             <td class="py-1.5 pe-3 text-muted">{{ b.notes }}</td>
                                                             <td class="py-1.5 pe-3">
@@ -1602,7 +1614,15 @@ const noteStatus = { internal: 'neutral', client_call: 'info', client_email: 'ac
                 <FormField k="task_progress.photo" :error="logForm.errors.photo">
                     <input type="file" accept="image/*,.pdf" capture="environment" class="block w-full text-sm text-ink-soft file:mr-3 file:rounded-md file:border-0 file:bg-surface-sunken file:px-3 file:py-1.5 file:text-sm" @change="(e) => (logForm.photo = e.target.files[0] ?? null)" />
                 </FormField>
-                <FormField k="task_progress.notes" :error="logForm.errors.notes">
+                <!-- Rework: client rejected the previous work; this redo is a company penalty, never billed again -->
+                <label class="flex items-start gap-2 rounded-md border border-line bg-surface-sunken/40 p-2.5 text-sm">
+                    <input type="checkbox" v-model="logForm.is_rework" class="mt-0.5 accent-accent" />
+                    <span>
+                        <Bilingual k="task_progress.rework_label" class="font-medium" />
+                        <span class="mt-0.5 block text-xs text-muted">{{ $t('task_progress.rework_hint') }}</span>
+                    </span>
+                </label>
+                <FormField :k="logForm.is_rework ? 'task_progress.reject_reason' : 'task_progress.notes'" :error="logForm.errors.notes">
                     <VTextarea v-model="logForm.notes" :rows="2" />
                 </FormField>
             </div>

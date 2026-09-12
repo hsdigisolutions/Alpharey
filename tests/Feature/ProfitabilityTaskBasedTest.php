@@ -9,6 +9,7 @@ use App\Models\Project;
 use App\Models\TaskProgress;
 use App\Models\User;
 use App\Notifications\SystemNotification;
+use App\Services\ProductionTasks\TaskProgressService;
 use App\Services\Reports\ProfitabilityService;
 use Illuminate\Support\Facades\Notification;
 
@@ -88,6 +89,53 @@ it('builds the task-based daily P&L display: production sub-lines, effective rat
     expect((float) $day['workers'][0]['meters'])->toBe(6.0)
         ->and($day['workers'][0]['unit'])->toBe('m²')
         ->and((float) $day['workers'][0]['cost'])->toBe(60.0);
+});
+
+it('treats client-rejected rework as a penalty: billed once, cost still counts, profit drops (Item 2)', function (): void {
+    $this->actingAs($this->admin); // the service fills task_progress.company_id from the active company
+    $project = Project::factory()->create(['company_id' => $this->company->id, 'billing_type' => 'task_based']);
+    $task = ProductionTask::factory()->create([
+        'company_id' => $this->company->id, 'project_id' => $project->id,
+        'name' => 'Alicatado', 'unit' => 'm²', 'client_rate' => '13', 'planned_quantity' => '12',
+    ]);
+
+    // Both days: the worker is present a full 8 h day (€120 labour each).
+    punchTaskDay($this->company, $this->employee, $project, '2026-06-01', 120);
+    punchTaskDay($this->company, $this->employee, $project, '2026-06-02', 120);
+
+    $svc = app(TaskProgressService::class);
+    // Day 1: 12 m² produced (billable).
+    $svc->logWork($task, ['date' => '2026-06-01', 'quantity' => 12, 'employee_ids' => [$this->employee->id]]);
+    // Day 2: client rejected it → redo the SAME 12 m² as REWORK (must not bill again).
+    $svc->logWork($task, ['date' => '2026-06-02', 'quantity' => 12, 'employee_ids' => [$this->employee->id], 'is_rework' => true, 'notes' => 'Cliente rechazó el acabado']);
+
+    // completed_quantity stays 12 (a redo, not new completion — never 24).
+    expect((float) $task->fresh()->completed_quantity)->toBe(12.0);
+
+    $pnl = app(ProfitabilityService::class)->forProject($project->fresh());
+    // Billed ONCE: 12 × 13 = 156 (never 24 × 13). Cost is BOTH days (240 — the
+    // rework day's labour is the penalty). Profit 156 − 240 = −84.
+    expect($pnl['revenue'])->toBe(156.0)
+        ->and($pnl['labour_cost'])->toBe(240.0)
+        ->and($pnl['profit'])->toBe(-84.0);
+
+    // Daily view: the normal day earns 156; the rework day earns 0 but carries a
+    // "not billed" rework line and its full labour (−120 profit = the penalty).
+    $days = collect(app(ProfitabilityService::class)->dailyPnl($project->fresh())['days']);
+    $normal = $days->firstWhere('date', '2026-06-01');
+    $rework = $days->firstWhere('date', '2026-06-02');
+
+    expect((float) $normal['income'])->toBe(156.0)
+        ->and($normal['rework'])->toBe([])
+        ->and((float) $rework['income'])->toBe(0.0)
+        ->and((float) $rework['labour'])->toBe(120.0)
+        ->and((float) $rework['profit'])->toBe(-120.0);
+    expect($rework['rework'])->toHaveCount(1);
+    expect($rework['rework'][0]['task'])->toBe('Alicatado')
+        ->and((float) $rework['rework'][0]['quantity'])->toBe(12.0);
+    // The normal day's production still bills correctly (rework excluded from it).
+    expect($normal['production'])->toHaveCount(1)
+        ->and((float) $normal['production'][0]['income'])->toBe(156.0);
 });
 
 it('reads task-based revenue as neutral/not-configured when no task has a client_rate', function (): void {

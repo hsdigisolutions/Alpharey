@@ -617,6 +617,8 @@ class ProjectController extends Controller
                 'workers' => $rows->map(fn (TaskProgress $r) => $r->employee?->full_name)->filter()->values()->all(),
                 'notes' => $first->notes,
                 'photo_id' => $rows->firstWhere('photo_path', '!=', null)?->id,
+                // Client-rejected redo: billed nothing, its notes hold the reason.
+                'is_rework' => (bool) $first->is_rework,
             ];
         }
 

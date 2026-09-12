@@ -365,6 +365,7 @@ class ProfitabilityService
         // so the sub-line income sums to the day income to the cent.
         $taskProductionByDate = [];
         $taskWorkerQtyByDate = [];
+        $taskReworkByDate = [];
         if ($isTaskBased) {
             $prodRows = $this->taskProgressQuery($project->id, $from, $to)
                 ->selectRaw('task_progress.date as d, task_progress.employee_id as emp, production_tasks.id as tid, production_tasks.name as tname, production_tasks.unit as tunit, production_tasks.client_rate as trate, COALESCE(SUM(task_progress.quantity),0) as qty')
@@ -400,6 +401,27 @@ class ProfitabilityService
                         'income' => round($qty * $t['rate'], 2),
                     ];
                 }
+            }
+
+            // Rework (client-rejected redo) — shown as a "not billed" line so the
+            // penalty is visible; it earns €0 (excluded from revenue above) but its
+            // labour is already in the day's cost, so profit drops accordingly.
+            $reworkRows = TaskProgress::query()->withoutGlobalScope(CompanyScope::class)
+                ->join('production_tasks', 'task_progress.production_task_id', '=', 'production_tasks.id')
+                ->where('production_tasks.project_id', $project->id)
+                ->where('task_progress.is_rework', true)
+                ->when($from !== null, fn ($q) => $q->whereDate('task_progress.date', '>=', $from))
+                ->when($to !== null, fn ($q) => $q->whereDate('task_progress.date', '<=', $to))
+                ->selectRaw('task_progress.date as d, production_tasks.name as tname, production_tasks.unit as tunit, COALESCE(SUM(task_progress.quantity),0) as qty')
+                ->groupBy('task_progress.date', 'production_tasks.id', 'production_tasks.name', 'production_tasks.unit')
+                ->get();
+            foreach ($reworkRows as $rr) {
+                $d = substr((string) $rr->getAttribute('d'), 0, 10);
+                $taskReworkByDate[$d][] = [
+                    'task' => (string) $rr->getAttribute('tname'),
+                    'unit' => (string) ($rr->getAttribute('tunit') ?? ''),
+                    'quantity' => round((float) $rr->getAttribute('qty'), 2),
+                ];
             }
         }
 
@@ -529,6 +551,7 @@ class ProfitabilityService
                 }
                 $h = $d['hours'];
                 $dayRow['production'] = $prod;
+                $dayRow['rework'] = $taskReworkByDate[$date] ?? [];
                 $dayRow['effective'] = [
                     'per_hour_billed' => $h > 0 ? round($income / $h, 2) : null,
                     'per_hour_labour' => $h > 0 ? round($d['labour'] / $h, 2) : null,
@@ -881,6 +904,12 @@ class ProfitabilityService
             ->join('production_tasks', 'task_progress.production_task_id', '=', 'production_tasks.id')
             ->where('production_tasks.project_id', $projectId)
             ->whereNotNull('production_tasks.client_rate')
+            // Rework (client rejected the work) never bills — the client pays once
+            // for the accepted quantity; the redo is a company penalty (its labour
+            // still counts via attendance). Excluded here so EVERY revenue reader
+            // (project P&L, day/month breakdowns, the daily production lines) drops
+            // it in one place. The rework lines are surfaced separately for display.
+            ->where('task_progress.is_rework', false)
             ->when($from !== null, fn ($q) => $q->whereDate('task_progress.date', '>=', $from))
             ->when($to !== null, fn ($q) => $q->whereDate('task_progress.date', '<=', $to));
     }

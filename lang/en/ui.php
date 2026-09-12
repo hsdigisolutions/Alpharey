@@ -1361,6 +1361,11 @@ return [
         'photo' => 'Photo',
         'notes' => 'Notes',
         'save_btn' => 'Log',
+        // Rework (client rejected the work) — Item 2
+        'rework_label' => 'Rework — client rejected the previous work',
+        'rework_hint' => 'Not billed to the client. The labour counts as cost (penalty).',
+        'reject_reason' => 'Rejection reason',
+        'rework_badge' => 'Rework',
     ],
 
     'task_report' => [
@@ -1729,6 +1734,8 @@ return [
         'eff_billed' => 'Billed/h',
         'eff_labour' => 'Labour/h',
         'eff_margin' => 'Margin/h',
+        'rework' => 'Rework',
+        'not_billed' => 'Not billed',
         'total' => 'TOTAL',
         'month' => 'Month',
         'days_worked' => 'Days worked',

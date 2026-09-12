@@ -24,12 +24,17 @@ use Illuminate\Validation\ValidationException;
 class TaskProgressService
 {
     /**
-     * @param  array{date: string, quantity: numeric, employee_ids: list<int>, notes?: string|null}  $data
+     * @param  array{date: string, quantity: numeric, employee_ids: list<int>, notes?: string|null, is_rework?: bool}  $data
      *
      * @throws ValidationException
      */
     public function logWork(ProductionTask $task, array $data, ?UploadedFile $photo = null): void
     {
+        // Rework (client rejected the previous work) is a cost/penalty only —
+        // server-set here, never mass-assigned. It bills nothing and does not add
+        // to completed_quantity (the meters were already produced once).
+        $isRework = (bool) ($data['is_rework'] ?? false);
+
         $employeeIds = array_values(array_unique(array_map('intval', $data['employee_ids'])));
 
         $this->assertPresentOnProject($task, $data['date'], $employeeIds);
@@ -46,7 +51,7 @@ class TaskProgressService
             $photoPath = $photo->store("task-progress/{$task->company_id}/{$task->id}", 'local');
         }
 
-        DB::transaction(function () use ($task, $employeeIds, $count, $total, $split, $batchId, $photoPath, $photoName, $data): void {
+        DB::transaction(function () use ($task, $employeeIds, $count, $total, $split, $batchId, $photoPath, $photoName, $data, $isRework): void {
             foreach ($employeeIds as $i => $employeeId) {
                 // Last worker carries the rounding remainder so the batch sums exactly.
                 $qty = $i === $count - 1
@@ -64,6 +69,7 @@ class TaskProgressService
                 $row->logged_by = Auth::id();
                 $row->photo_path = $photoPath;
                 $row->photo_name = $photoName;
+                $row->is_rework = $isRework; // server-set, not fillable
                 // company_id is filled from the active company by BelongsToCompany.
                 $row->save();
             }
@@ -126,8 +132,11 @@ class TaskProgressService
      */
     public function recompute(ProductionTask $task): void
     {
+        // Rework quantity is a redo of already-produced work — it must NOT inflate
+        // completion past 100%, so completed_quantity counts non-rework rows only.
         $sum = (float) TaskProgress::query()
             ->where('production_task_id', $task->id)
+            ->where('is_rework', false)
             ->sum('quantity');
 
         $task->completed_quantity = (string) round($sum, 2);

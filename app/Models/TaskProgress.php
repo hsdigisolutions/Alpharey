@@ -26,6 +26,7 @@ use Illuminate\Support\Carbon;
  * @property int|null $logged_by
  * @property Carbon $date
  * @property numeric-string $quantity
+ * @property bool $is_rework
  * @property string|null $notes
  * @property string|null $photo_path
  * @property string|null $photo_name
@@ -57,6 +58,7 @@ class TaskProgress extends Model
         return [
             'date' => 'date:Y-m-d',
             'quantity' => 'decimal:2',
+            'is_rework' => 'boolean',
         ];
     }
 

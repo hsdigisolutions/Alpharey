@@ -35,6 +35,10 @@ class StoreTaskProgressRequest extends FormRequest
             // StoreAttendanceRequest allows. Without this a deployed worker is
             // rejected ("does not belong to this company") and the log silently 422s.
             'employee_ids.*' => ['integer', new OwnCompanyEmployee(allowDeployed: true)],
+            // Rework of client-rejected work: this batch is a cost/penalty only —
+            // it never bills the client again (see TaskProgressService + the
+            // task-based revenue reader). When set, `notes` is the rejection reason.
+            'is_rework' => ['nullable', 'boolean'],
             'notes' => ['nullable', 'string', 'max:2000'],
             'photo' => ['nullable', 'file', 'mimes:jpg,jpeg,png,webp,pdf', 'max:8192'],
         ];

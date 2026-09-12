@@ -1362,6 +1362,11 @@ return [
         'photo' => 'Foto',
         'notes' => 'Notas',
         'save_btn' => 'Registrar',
+        // Rework (client rejected the work) — Item 2
+        'rework_label' => 'Repetición — el cliente rechazó el trabajo anterior',
+        'rework_hint' => 'No se factura al cliente. La mano de obra cuenta como coste (penalización).',
+        'reject_reason' => 'Motivo del rechazo',
+        'rework_badge' => 'Repetición',
     ],
 
     'task_report' => [
@@ -1731,6 +1736,8 @@ return [
         'eff_billed' => 'Facturado/h',
         'eff_labour' => 'Coste/h',
         'eff_margin' => 'Margen/h',
+        'rework' => 'Repetición',
+        'not_billed' => 'No facturado',
         'total' => 'TOTAL',
         'month' => 'Mes',
         'days_worked' => 'Días trabajados',
