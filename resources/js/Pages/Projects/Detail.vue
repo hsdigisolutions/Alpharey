@@ -182,6 +182,14 @@ function hoursHM(h) {
     return `${hh}h ${String(mm).padStart(2, '0')}m`;
 }
 function pct(v) { return `${Number(v ?? 0).toFixed(1)}%`; }
+// Quantity (meters / units) — no currency, trims trailing zeros.
+function fmtQty(v) {
+    if (v === null || v === undefined) return '—';
+    return Number(v).toLocaleString('es-ES', { maximumFractionDigits: 2 });
+}
+// Task-based projects bill per task (meters × client rate), so the daily P&L
+// expand uses a production-focused layout instead of the per-hour columns.
+const isTaskBased = computed(() => props.project?.billing_type === 'task_based');
 // Row background by margin: >15 green · 5–15 amber · <5/neg red.
 function rowTone(margin) {
     const m = Number(margin);
@@ -768,7 +776,52 @@ const noteStatus = { internal: 'neutral', client_call: 'info', client_email: 'ac
                                         <td class="tabular-nums px-4 py-2.5 text-end font-semibold">{{ eur(d.profit) }}</td>
                                         <td class="tabular-nums px-4 py-2.5 text-end">{{ pct(d.margin) }}</td>
                                     </tr>
-                                    <tr v-if="expandedDay === d.date">
+                                    <!-- Task-based expand: production (per task) + effective rates + per-worker real cost -->
+                                    <tr v-if="expandedDay === d.date && isTaskBased">
+                                        <td colspan="8" class="bg-surface-sunken/40 px-4 py-3">
+                                            <p class="mb-1 text-[10px] uppercase tracking-wide text-muted">{{ $t('profitability.production') }}</p>
+                                            <table class="w-full text-xs">
+                                                <tbody>
+                                                    <tr v-for="(p, i) in d.production" :key="i" class="border-t border-line">
+                                                        <td class="py-1">{{ p.task }}</td>
+                                                        <td class="tabular-nums py-1 text-end">{{ fmtQty(p.quantity) }} {{ p.unit }}</td>
+                                                        <td class="tabular-nums py-1 text-end text-muted">× {{ eur(p.rate) }}</td>
+                                                        <td class="tabular-nums py-1 text-end font-medium">{{ eur(p.income) }}</td>
+                                                    </tr>
+                                                    <tr v-if="!d.production || d.production.length === 0"><td colspan="4" class="py-1 text-muted">—</td></tr>
+                                                </tbody>
+                                            </table>
+                                            <!-- Effective rates: what we produced/billed/paid per hour of labour -->
+                                            <div class="mt-2 flex flex-wrap gap-x-5 gap-y-1 border-t border-line pt-2 text-xs">
+                                                <span v-if="d.effective.qty_per_hour !== null"><span class="text-muted">{{ $t('profitability.eff_production') }}:</span> <span class="tabular-nums">{{ fmtQty(d.effective.qty_per_hour) }} {{ d.effective.unit }}/h</span></span>
+                                                <span><span class="text-muted">{{ $t('profitability.eff_billed') }}:</span> <span class="tabular-nums">{{ eur(d.effective.per_hour_billed) }}/h</span></span>
+                                                <span><span class="text-muted">{{ $t('profitability.eff_labour') }}:</span> <span class="tabular-nums">{{ eur(d.effective.per_hour_labour) }}/h</span></span>
+                                                <span :class="(d.effective.per_hour_margin ?? 0) >= 0 ? 'text-status-ok' : 'text-status-danger'"><span class="text-muted">{{ $t('profitability.eff_margin') }}:</span> <span class="tabular-nums">{{ eur(d.effective.per_hour_margin) }}/h</span></span>
+                                            </div>
+                                            <!-- Per-worker: their real cost only (client income stays at task level above) -->
+                                            <table class="mt-3 w-full text-xs">
+                                                <thead class="text-[10px] uppercase text-muted">
+                                                    <tr>
+                                                        <th class="py-1 text-start"><Bilingual k="profitability.worker" inline /></th>
+                                                        <th class="py-1 text-start"><Bilingual k="profitability.designation" inline /></th>
+                                                        <th class="py-1 text-end"><Bilingual k="profitability.total_hours" inline /></th>
+                                                        <th class="py-1 text-end"><Bilingual k="profitability.produced" inline /></th>
+                                                        <th class="py-1 text-end"><Bilingual k="profitability.labour_cost" inline /></th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    <tr v-for="(w, i) in d.workers" :key="i" class="border-t border-line">
+                                                        <td class="py-1">{{ w.worker }}</td>
+                                                        <td class="py-1 text-ink-soft">{{ w.designation ?? '—' }}</td>
+                                                        <td class="tabular-nums py-1 text-end">{{ hoursHM(w.hours) }}</td>
+                                                        <td class="tabular-nums py-1 text-end">{{ w.meters !== null ? `${fmtQty(w.meters)} ${w.unit ?? ''}`.trim() : '—' }}</td>
+                                                        <td class="tabular-nums py-1 text-end">{{ eur(w.cost) }}</td>
+                                                    </tr>
+                                                </tbody>
+                                            </table>
+                                        </td>
+                                    </tr>
+                                    <tr v-else-if="expandedDay === d.date">
                                         <td colspan="8" class="bg-surface-sunken/40 px-4 py-3">
                                             <table class="w-full text-xs">
                                                 <thead class="text-[10px] uppercase text-muted">

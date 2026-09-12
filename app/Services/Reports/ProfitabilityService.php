@@ -355,6 +355,54 @@ class ProfitabilityService
             $taskIncomeByDate[$tDate][$emp] = ($taskIncomeByDate[$tDate][$emp] ?? 0.0) + (float) $ti->getAttribute('inc');
         }
 
+        // Task-based DISPLAY detail (Item 1) — DISPLAY ONLY, no money change:
+        //   $taskProductionByDate: date => list<{task, unit, rate, quantity, income}>
+        //     one sub-line per TASK worked that day, so a mixed-unit day reads
+        //     task by task (Alicatado 12 m² × 13 € + Griferías 5 u × 20 €).
+        //   $taskWorkerQtyByDate:  date => [employee_id => {qty, units set}] so the
+        //     per-worker expand can show what each worker produced (their meters).
+        // Both derive from the SAME task_progress × client_rate as taskIncomeByDate,
+        // so the sub-line income sums to the day income to the cent.
+        $taskProductionByDate = [];
+        $taskWorkerQtyByDate = [];
+        if ($isTaskBased) {
+            $prodRows = $this->taskProgressQuery($project->id, $from, $to)
+                ->selectRaw('task_progress.date as d, task_progress.employee_id as emp, production_tasks.id as tid, production_tasks.name as tname, production_tasks.unit as tunit, production_tasks.client_rate as trate, COALESCE(SUM(task_progress.quantity),0) as qty')
+                ->groupBy('task_progress.date', 'task_progress.employee_id', 'production_tasks.id', 'production_tasks.name', 'production_tasks.unit', 'production_tasks.client_rate')
+                ->get();
+
+            $byDateTask = [];
+            foreach ($prodRows as $pr) {
+                $d = substr((string) $pr->getAttribute('d'), 0, 10);
+                $tid = (int) $pr->getAttribute('tid');
+                $qty = (float) $pr->getAttribute('qty');
+                $unit = (string) ($pr->getAttribute('tunit') ?? '');
+                $byDateTask[$d][$tid] ??= [
+                    'task' => (string) $pr->getAttribute('tname'),
+                    'unit' => $unit,
+                    'rate' => (float) $pr->getAttribute('trate'),
+                    'quantity' => 0.0,
+                ];
+                $byDateTask[$d][$tid]['quantity'] += $qty;
+
+                $emp = $pr->getAttribute('emp') ?? 0;
+                $taskWorkerQtyByDate[$d][$emp]['qty'] = ($taskWorkerQtyByDate[$d][$emp]['qty'] ?? 0.0) + $qty;
+                $taskWorkerQtyByDate[$d][$emp]['units'][$unit] = true;
+            }
+            foreach ($byDateTask as $d => $tasks) {
+                foreach ($tasks as $t) {
+                    $qty = round($t['quantity'], 2);
+                    $taskProductionByDate[$d][] = [
+                        'task' => $t['task'],
+                        'unit' => $t['unit'],
+                        'rate' => round($t['rate'], 2),
+                        'quantity' => $qty,
+                        'income' => round($qty * $t['rate'], 2),
+                    ];
+                }
+            }
+        }
+
         // Group rows by date, building the per-worker lines as we go.
         // Net (displayed) hours — a full-day worker reads 8 h here, not the raw 0.
         $break = $this->breakMinutes($project->company_id);
@@ -383,6 +431,10 @@ class ProfitabilityService
             $byDate[$date]['hours'] += $hours;
             $byDate[$date]['income'] += $income;
             $byDate[$date]['labour'] += $cost;
+            // Task-based: what this worker produced today (their logged quantity),
+            // with a unit only when all their production shares one unit.
+            $wq = $isTaskBased ? ($taskWorkerQtyByDate[$date][$r->employee_id] ?? null) : null;
+
             $byDate[$date]['workers'][] = [
                 'worker' => $r->employee?->full_name,
                 'designation' => $r->employee?->designation,
@@ -392,6 +444,9 @@ class ProfitabilityService
                 'income' => round($income, 2),
                 'cost' => round($cost, 2),
                 'profit' => round($income - $cost, 2),
+                // Task-based-only display fields (null for other billing types).
+                'meters' => $wq !== null ? round((float) $wq['qty'], 2) : null,
+                'unit' => ($wq !== null && count($wq['units']) === 1) ? (string) array_key_first($wq['units']) : null,
             ];
         }
 
@@ -447,7 +502,7 @@ class ProfitabilityService
                 : $this->classify($income, $cost, $profit);
             $margin ??= 0.0;
 
-            $days[] = [
+            $dayRow = [
                 'date' => $date,
                 'workers_count' => count($d['workers']),
                 'hours' => round($d['hours'], 2),
@@ -459,6 +514,31 @@ class ProfitabilityService
                 'health' => $health,
                 'workers' => $d['workers'],
             ];
+
+            // Task-based DISPLAY extras (Item 1): per-task production sub-lines for
+            // the day + the derived effective rates (billed / labour / margin per
+            // hour, and quantity per hour when the day is a single unit). Money
+            // (income/labour/profit) is untouched — these are ratios of it.
+            if ($isTaskBased) {
+                $prod = $taskProductionByDate[$date] ?? [];
+                $totalQty = 0.0;
+                $units = [];
+                foreach ($prod as $p) {
+                    $totalQty += (float) $p['quantity'];
+                    $units[$p['unit']] = true;
+                }
+                $h = $d['hours'];
+                $dayRow['production'] = $prod;
+                $dayRow['effective'] = [
+                    'per_hour_billed' => $h > 0 ? round($income / $h, 2) : null,
+                    'per_hour_labour' => $h > 0 ? round($d['labour'] / $h, 2) : null,
+                    'per_hour_margin' => $h > 0 ? round(($income - $d['labour']) / $h, 2) : null,
+                    'qty_per_hour' => ($h > 0 && count($units) === 1) ? round($totalQty / $h, 2) : null,
+                    'unit' => count($units) === 1 ? (string) array_key_first($units) : null,
+                ];
+            }
+
+            $days[] = $dayRow;
 
             $tHours += $d['hours'];
             $tIncome += $d['income'];

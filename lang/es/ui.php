@@ -1724,6 +1724,13 @@ return [
         'designation' => 'Tipo',
         'client_rate' => 'Tarifa cliente',
         'worker_rate' => 'Tarifa trabajador',
+        // Task-based daily P&L display (Item 1) — production + effective rates
+        'production' => 'Producción',
+        'produced' => 'Producido',
+        'eff_production' => 'Producción/h',
+        'eff_billed' => 'Facturado/h',
+        'eff_labour' => 'Coste/h',
+        'eff_margin' => 'Margen/h',
         'total' => 'TOTAL',
         'month' => 'Mes',
         'days_worked' => 'Días trabajados',

@@ -1722,6 +1722,13 @@ return [
         'designation' => 'Type',
         'client_rate' => 'Client rate',
         'worker_rate' => 'Worker rate',
+        // Task-based daily P&L display (Item 1) — production + effective rates
+        'production' => 'Production',
+        'produced' => 'Produced',
+        'eff_production' => 'Output/h',
+        'eff_billed' => 'Billed/h',
+        'eff_labour' => 'Labour/h',
+        'eff_margin' => 'Margin/h',
         'total' => 'TOTAL',
         'month' => 'Month',
         'days_worked' => 'Days worked',

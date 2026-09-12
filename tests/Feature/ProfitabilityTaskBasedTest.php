@@ -46,6 +46,50 @@ it('sources task-based revenue from task progress × client_rate, never unit_pri
         ->and($pnl['profit'])->toBe(100.0);
 });
 
+it('builds the task-based daily P&L display: production sub-lines, effective rates, per-worker meters (Item 1)', function (): void {
+    $project = Project::factory()->create(['company_id' => $this->company->id, 'billing_type' => 'task_based']);
+    $task = ProductionTask::factory()->create([
+        'company_id' => $this->company->id, 'project_id' => $project->id,
+        'name' => 'Alicatado', 'unit' => 'm²', 'client_rate' => '13',
+    ]);
+    $w2 = Employee::factory()->forCompany($this->company)->create();
+
+    // Two workers, a full 8 h day each (€60 labour each). Together 12 m² @ 13 €/m².
+    punchTaskDay($this->company, $this->employee, $project, '2026-09-11', 60);
+    punchTaskDay($this->company, $w2, $project, '2026-09-11', 60);
+    TaskProgress::factory()->create(['company_id' => $this->company->id, 'production_task_id' => $task->id, 'employee_id' => $this->employee->id, 'date' => '2026-09-11', 'quantity' => '6']);
+    TaskProgress::factory()->create(['company_id' => $this->company->id, 'production_task_id' => $task->id, 'employee_id' => $w2->id, 'date' => '2026-09-11', 'quantity' => '6']);
+
+    $day = collect(app(ProfitabilityService::class)->dailyPnl($project->fresh())['days'])
+        ->firstWhere('date', '2026-09-11');
+
+    // Money is UNCHANGED (display redesign only): income 12×13=156, cost 120, profit 36.
+    expect((float) $day['income'])->toBe(156.0)
+        ->and((float) $day['labour'])->toBe(120.0)
+        ->and((float) $day['profit'])->toBe(36.0)
+        ->and((float) $day['hours'])->toBe(16.0);
+
+    // Production sub-line: one task, 12 m² × 13 € = 156 €.
+    expect($day['production'])->toHaveCount(1);
+    expect($day['production'][0]['task'])->toBe('Alicatado')
+        ->and($day['production'][0]['unit'])->toBe('m²')
+        ->and((float) $day['production'][0]['quantity'])->toBe(12.0)
+        ->and((float) $day['production'][0]['rate'])->toBe(13.0)
+        ->and((float) $day['production'][0]['income'])->toBe(156.0);
+
+    // Effective rates: 0.75 m²/h · billed 9.75 €/h · labour 7.50 €/h · margin 2.25 €/h.
+    expect((float) $day['effective']['qty_per_hour'])->toBe(0.75)
+        ->and($day['effective']['unit'])->toBe('m²')
+        ->and((float) $day['effective']['per_hour_billed'])->toBe(9.75)
+        ->and((float) $day['effective']['per_hour_labour'])->toBe(7.5)
+        ->and((float) $day['effective']['per_hour_margin'])->toBe(2.25);
+
+    // Per-worker line: their produced quantity + real cost, no artificial client split.
+    expect((float) $day['workers'][0]['meters'])->toBe(6.0)
+        ->and($day['workers'][0]['unit'])->toBe('m²')
+        ->and((float) $day['workers'][0]['cost'])->toBe(60.0);
+});
+
 it('reads task-based revenue as neutral/not-configured when no task has a client_rate', function (): void {
     $project = Project::factory()->create(['company_id' => $this->company->id, 'billing_type' => 'task_based']);
     $task = ProductionTask::factory()->create([
