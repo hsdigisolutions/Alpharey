@@ -20,6 +20,19 @@ class UpdateProductionTaskRequest extends FormRequest
     }
 
     /**
+     * `unit_price` is the INTERNAL cost and the DB column is NOT NULL (default
+     * 0) — a cleared field arrives as null (empty-string→null middleware) and
+     * would 500 on save (the reported white screen). Blank internal cost means
+     * 0. `client_rate` is deliberately left nullable — null = "not billable".
+     */
+    protected function prepareForValidation(): void
+    {
+        if (in_array($this->input('unit_price'), [null, ''], true)) {
+            $this->merge(['unit_price' => 0]);
+        }
+    }
+
+    /**
      * @return array<string, mixed>
      */
     public function rules(): array

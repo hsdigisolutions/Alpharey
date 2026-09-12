@@ -20,6 +20,30 @@ class StoreProductionTaskRequest extends FormRequest
     }
 
     /**
+     * `unit_price` (internal cost) maps to a NOT NULL column (default 0), so a
+     * blank field must become 0, never null — same guard as the edit form.
+     * `client_rate` stays nullable (null = not billable).
+     */
+    protected function prepareForValidation(): void
+    {
+        $tasks = $this->input('tasks');
+        if (! is_array($tasks)) {
+            return;
+        }
+
+        foreach ($tasks as $i => $task) {
+            if (! is_array($task)) {
+                continue;
+            }
+            if (! array_key_exists('unit_price', $task) || in_array($task['unit_price'], [null, ''], true)) {
+                $tasks[$i]['unit_price'] = 0;
+            }
+        }
+
+        $this->merge(['tasks' => $tasks]);
+    }
+
+    /**
      * @return array<string, mixed>
      */
     public function rules(): array

@@ -72,6 +72,36 @@ it('updates and deletes a task; completed_quantity is not mass-assignable', func
     expect(ProductionTask::withoutGlobalScopes()->whereKey($task->id)->exists())->toBeFalse();
 });
 
+it('coerces a blank internal price to 0 on update instead of a NOT-NULL 500 (white-screen bug)', function (): void {
+    $task = ProductionTask::factory()->create([
+        'company_id' => $this->companyA->id, 'project_id' => $this->project->id, 'unit_price' => '13.00',
+    ]);
+
+    // The edit form clears the internal-price field → arrives as null. The DB
+    // column is NOT NULL, so before the fix this 500'd (white screen). It must
+    // now save cleanly with unit_price = 0.
+    $this->actingAs($this->admin)->put("/projects/{$this->project->id}/tasks/{$task->id}", [
+        'name' => 'Task', 'category' => 'civil', 'planned_quantity' => 10, 'status' => 'open',
+        'unit_price' => null, 'client_rate' => null,
+    ])->assertRedirect()->assertSessionHasNoErrors();
+
+    expect((float) $task->fresh()->unit_price)->toBe(0.0);
+});
+
+it('coerces a blank internal price to 0 on bulk add (never null)', function (): void {
+    $this->actingAs($this->admin)->post("/projects/{$this->project->id}/tasks", [
+        'tasks' => [
+            ['name' => 'No price', 'category' => 'civil', 'planned_quantity' => 5, 'status' => 'open', 'unit_price' => null],
+            ['name' => 'Empty price', 'category' => 'civil', 'planned_quantity' => 5, 'status' => 'open', 'unit_price' => ''],
+        ],
+    ])->assertRedirect()->assertSessionHasNoErrors();
+
+    $prices = ProductionTask::withoutGlobalScopes()->where('project_id', $this->project->id)
+        ->whereIn('name', ['No price', 'Empty price'])->pluck('unit_price');
+    expect($prices)->toHaveCount(2)
+        ->and($prices->every(fn ($p) => (float) $p === 0.0))->toBeTrue();
+});
+
 it('cannot manage tasks on another company project (404)', function (): void {
     $foreignProject = Project::factory()->forCompany($this->companyB)->create();
     $foreignTask = ProductionTask::factory()->create(['company_id' => $this->companyB->id, 'project_id' => $foreignProject->id]);
