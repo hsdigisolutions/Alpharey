@@ -4,6 +4,83 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Status: Phase 9 in progress — hardening (2026-08-01)
 
+### Universal hours fix — P&L + deployments read NET hours everywhere (2026-09-12, DONE, deployed to prod)
+
+**The bug the client reported:** on hourly-billed project Plaza del Carmen (#125)
+the daily Rentabilidad tab showed a full-day worker as **0 h / €0 client income**
+(09-10 read 8 h / €200 while 09-11 read 40 h / €1000 — the difference was whether
+the clerk had typed a raw `hours_worked` value). **1328 Pest tests.**
+
+**Root cause — the September net-hours migration missed the reporting engine.**
+The Sept "08:00–17:00 net hours (DISPLAY ONLY)" change routed every hours DISPLAY
+through `Attendance::displayHoursNet()`, but `ProfitabilityService` (and the
+deployment cross-charge units) were **not** on that list — they still summed the
+raw `hours_worked` column. A full/half day is paid a fixed daily rate, so its
+`hours_worked` is legitimately **0**; `displayHoursNet()` derives the real hours
+from the 08:00–17:00 clock span (full → 8 h, half → 4 h). Reading the raw column
+made those days count as 0 billable hours → €0 hourly revenue.
+
+**The rule (now consistent):** hours are determined from the attendance
+`day_type`, **NOT** the project billing type — **full = 8 h, half = 4 h, hourly =
+actual logged hours** — via `displayHoursNet($break)` everywhere hours are shown,
+calculated, or billed. The stored `hours_worked` column is never changed.
+
+**The 6 locations fixed** (all keyed off `day_type`, applied for EVERY billing
+type):
+- `ProfitabilityService` — **5 spots**: `attendanceAggregate` (project-level hours
+  + hourly revenue), `dailyPnl` loop, `rowIncome` (per-worker client income),
+  `dayBreakdown`, `monthBreakdown`. Added a per-company `breakMinutes` cache +
+  `AttendanceService` import; the `$rows`/`$byDate`/`$byMonth` queries fetch rows
+  (no `SUM(hours_worked)`) so each row goes through `displayHoursNet`.
+- `DeploymentChargeService` — **1 spot** (two call sites): `accruedUnits` +
+  `summary['units']` for an hourly `rate_type` now show NET hours (a full-day
+  deployed worker reads 8 units, not 0). The reimbursement **amount is untouched**
+  — it is the sum of frozen `total_amount`, never units × rate.
+
+**⚠️ Raw `hours_worked` reads that are LEGITIMATE — do NOT "fix" these:**
+- `PayrollService` (lines ~120/144/351/375/422) — **pay paths**. The Sept
+  load-bearing rule: payroll NEVER routes through the display helper; hourly pay =
+  `hours_worked × rate`, and full/half pay is a fixed daily rate. Changing these
+  would corrupt wages.
+- `AttendanceService` (autoDayType grading, `hoursFromClock` writer, `hourlyTotal`
+  pricing) — it is the WRITER of `hours_worked` + the pricing engine.
+- `Attendance::displayHoursNet` / fillable / cast — the net-hours authority itself.
+- `AttendanceController::payload` + `EmployeeController::attendanceEditingPayload`
+  — the **editable field** shown in the attendance edit modal (an admin edits the
+  raw stored hours). Every *display* `hours` in those controllers already uses
+  `displayHoursNet`; only the edit-field carries the raw value.
+- `WorkerAttendanceService::notifyIfShortShift` — fires on a real PWA punch where
+  `hours_worked > 0`, so raw == net; it measures actual clocked time.
+- `ReportService` / `WorkerDashboardService` SELECT column lists — they only LOAD
+  the column so the rows can then be summed via `displayHoursNet` (already correct
+  since Sept).
+- Importers / `AutoAbsentCommand` / `LeaveService` / Store requests — writers,
+  validation, historical carry-over.
+
+**Revenue safety:** only the HOURLY revenue arm multiplies by hours. Task-based /
+fixed / per-invoice / per-meter revenue is byte-unchanged (they bill from task
+progress / paid invoices / approved measurements). Their **hours DISPLAY** is now
+correct too (day/month/daily breakdowns compute hours via `displayHoursNet` for
+every billing type). Labour **cost** (frozen `total_amount`) is unchanged.
+
+**Full production scope (read-only probe over real data — 6 hourly projects):**
+5 of 6 had raw-vs-net divergence; the two with a `client_hour_rate` set had a real
+income correction:
+- **#96 Gandásegui no 2 Bilbao** — 27 rows, €36 584 → €42 203 (**+€5 619**)
+- **#125 Plaza del Carmen** — 45 rows, €53 568 → €62 617 (**+€9 049**)
+- **#150 Quintes / #151 Trops SAT 2803 / #152 Agriculture Lanak** — hours display
+  corrected (0→40, 267→291, 86→190) but **no `client_hour_rate` configured**, so
+  €0 income either way (the client sets those rates; when they do, the hours are
+  now right by construction).
+- Total real client-income correction: **+€14 668.63** across #96 + #125.
+
+Deployed backend-only (2 service files, no migration/asset build): SCP → opcache
+reset → `cache:clear` (the P&L cache is signatured on data, not code, so a code
+deploy needs the flush). Verified live: `dailyPnl(#125)` returns 09-10 = 40 h /
+€1000 / €665 profit, matching 09-11. Tests: `ProfitabilityDailyTest` (+1 —
+full-day jornada = 8 net h in daily + project P&L), `DeploymentTest` (+1 —
+full-day deployed worker = 8 net units, amount unchanged).
+
 ### Deployment settlement → real inter-company INVOICE + approval cascade (2026-09-12, DONE, deployed to prod)
 
 **The client corrected the earlier "settlement record is enough" decision: a

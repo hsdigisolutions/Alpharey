@@ -18,6 +18,7 @@ use App\Models\Scopes\CompanyScope;
 use App\Models\Subcontractor;
 use App\Models\SubcontractorPayment;
 use App\Models\TaskProgress;
+use App\Services\Attendance\AttendanceService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
@@ -355,15 +356,17 @@ class ProfitabilityService
         }
 
         // Group rows by date, building the per-worker lines as we go.
+        // Net (displayed) hours — a full-day worker reads 8 h here, not the raw 0.
+        $break = $this->breakMinutes($project->company_id);
         $byDate = [];
         foreach ($rows as $r) {
             $date = $r->date->toDateString();
-            $hours = (float) $r->hours_worked;
+            $hours = $r->displayHoursNet($break);
             $income = match (true) {
                 $isPerMeter => round((float) ($measuredByDate[$date][$r->employee_id] ?? 0) * $clientMeter, 2),
                 $isTaskBased => round((float) ($taskIncomeByDate[$date][$r->employee_id] ?? 0), 2),
                 $isInvoiceBilled => 0.0,
-                default => $this->rowIncome($r, $rates, $clientHour, $clientMeter),
+                default => $this->rowIncome($r, $rates, $clientHour, $clientMeter, $break),
             };
             // External labour (subcontracted / outsourced): the crew's wages
             // are the thaekedar's cost, not ours.
@@ -521,9 +524,10 @@ class ProfitabilityService
      *
      * @param  Collection<int, ProjectDesignationRate>  $rates
      */
-    private function rowIncome(Attendance $r, Collection $rates, float $clientHour, float $clientMeter): float
+    private function rowIncome(Attendance $r, Collection $rates, float $clientHour, float $clientMeter, int $break): float
     {
-        $hours = (float) $r->hours_worked;
+        // Net billable hours (a full 08:00–17:00 jornada = 8 h), never the raw 0.
+        $hours = $r->displayHoursNet($break);
         $qty = (float) ($r->quantity ?? 0);
         $isHalf = $r->day_type?->value === 'half';
         $isPerMeter = $r->day_type?->value === 'per_meter';
@@ -645,15 +649,36 @@ class ProfitabilityService
         return $projects->map(fn (Project $p): array => $this->forProject($p, $from, $to, false))->all();
     }
 
+    /** @var array<int, int> per-company break minutes, memoised for the request */
+    private array $breakMinutesCache = [];
+
+    /**
+     * The per-company break length that Attendance::displayHoursNet() uses, so
+     * the P&L's billable hours match every OTHER surface (grid, Today's Report,
+     * Reports). Resolved once per company per request.
+     */
+    private function breakMinutes(int $companyId): int
+    {
+        return $this->breakMinutesCache[$companyId] ??= app(AttendanceService::class)->breakDurationMinutes($companyId);
+    }
+
     /**
      * Grouped attendance sums for ONE project: hours, per-meter quantity, and
      * labour cost (the frozen day totals).
+     *
+     * HOURS use Attendance::displayHoursNet() — NOT the raw hours_worked column,
+     * which is 0 for a full-day (jornada) worker. On an hourly-billed project
+     * that made a full-day worker earn €0 client income; every other surface
+     * already uses the net figure, so this makes the P&L agree with them (a
+     * full 08:00–17:00 day = 8 net hours). Cost (frozen day totals) and per-
+     * meter quantity are unaffected.
      *
      * @return array{hours: float, meters: float, labour: float}
      */
     private function attendanceAggregate(int $companyId, ?string $from, ?string $to, int $projectId): array
     {
-        $row = Attendance::query()
+        $break = $this->breakMinutes($companyId);
+        $rows = Attendance::query()
             ->withoutGlobalScope(CompanyScope::class)
             ->where('company_id', $companyId)
             ->where('project_id', $projectId)
@@ -662,15 +687,23 @@ class ProfitabilityService
             ->whereIn('status', self::WORKED_STATUSES)
             ->when($from !== null, fn ($q) => $q->whereDate('date', '>=', $from))
             ->when($to !== null, fn ($q) => $q->whereDate('date', '<=', $to))
-            ->selectRaw('COALESCE(SUM(hours_worked),0) as hours')
-            ->selectRaw('COALESCE(SUM(total_amount),0) as labour')
-            ->selectRaw("COALESCE(SUM(CASE WHEN day_type = 'per_meter' THEN quantity ELSE 0 END),0) as meters")
-            ->first();
+            ->get();
+
+        $hours = 0.0;
+        $labour = 0.0;
+        $meters = 0.0;
+        foreach ($rows as $r) {
+            $hours += $r->displayHoursNet($break);
+            $labour += (float) $r->total_amount;
+            if ($r->day_type?->value === 'per_meter') {
+                $meters += (float) ($r->quantity ?? 0);
+            }
+        }
 
         return [
-            'hours' => (float) ($row?->getAttribute('hours') ?? 0),
-            'labour' => (float) ($row?->getAttribute('labour') ?? 0),
-            'meters' => (float) ($row?->getAttribute('meters') ?? 0),
+            'hours' => round($hours, 2),
+            'labour' => round($labour, 2),
+            'meters' => round($meters, 2),
         ];
     }
 
@@ -884,6 +917,9 @@ class ProfitabilityService
      */
     private function dayBreakdown(Project $project, ?string $from, ?string $to): array
     {
+        // Fetched (not SQL-summed) so HOURS can use displayHoursNet — a full-day
+        // jornada reads 8 h, not the raw 0 that made hourly income read €0.
+        $break = $this->breakMinutes($project->company_id);
         $rows = Attendance::query()
             ->withoutGlobalScope(CompanyScope::class)
             ->where('company_id', $project->company_id)
@@ -891,13 +927,19 @@ class ProfitabilityService
             ->whereIn('status', self::WORKED_STATUSES)
             ->when($from !== null, fn ($q) => $q->whereDate('date', '>=', $from))
             ->when($to !== null, fn ($q) => $q->whereDate('date', '<=', $to))
-            ->selectRaw('date')
-            ->selectRaw('COALESCE(SUM(hours_worked),0) as hours')
-            ->selectRaw('COALESCE(SUM(total_amount),0) as labour')
-            ->selectRaw("COALESCE(SUM(CASE WHEN day_type = 'per_meter' THEN quantity ELSE 0 END),0) as meters")
-            ->groupBy('date')
-            ->orderBy('date')
             ->get();
+
+        /** @var array<string, array{hours: float, labour: float, meters: float}> $byDate */
+        $byDate = [];
+        foreach ($rows as $r) {
+            $date = $r->date->toDateString();
+            $byDate[$date] ??= ['hours' => 0.0, 'labour' => 0.0, 'meters' => 0.0];
+            $byDate[$date]['hours'] += $r->displayHoursNet($break);
+            $byDate[$date]['labour'] += (float) $r->total_amount;
+            if ($r->day_type?->value === 'per_meter') {
+                $byDate[$date]['meters'] += (float) ($r->quantity ?? 0);
+            }
+        }
 
         // Per-meter billing: the day's metres come from APPROVED measurements.
         $isPerMeter = $project->billing_type === BillingType::PerMeter;
@@ -906,23 +948,21 @@ class ProfitabilityService
         $isTaskBased = $project->billing_type === BillingType::TaskBased;
         $taskRev = $isTaskBased ? $this->taskProgressRevenueBy('date', $project->id, $from, $to) : collect();
 
-        // Both maps key on plain Y-m-d (the raw SQL key has no time part; the
-        // hydrated attendance date is a Carbon — normalise to compare).
-        $days = $rows->map(function (Attendance $r) use ($project, $isPerMeter, $isTaskBased, $measured, $taskRev): array {
-            $date = substr((string) $r->getAttribute('date'), 0, 10);
-            $hours = (float) $r->getAttribute('hours');
-            $meters = $isPerMeter ? (float) ($measured[$date] ?? 0) : (float) $r->getAttribute('meters');
-            $cost = round((float) $r->getAttribute('labour'), 2);
+        $days = [];
+        foreach ($byDate as $date => $agg) {
+            $hours = round($agg['hours'], 2);
+            $meters = $isPerMeter ? (float) ($measured[$date] ?? 0) : $agg['meters'];
+            $cost = round($agg['labour'], 2);
             $revenue = $isTaskBased ? round((float) ($taskRev[$date] ?? 0), 2) : $this->unitRevenue($project, $hours, $meters);
 
-            return [
+            $days[] = [
                 'date' => $date,
-                'hours' => round($hours, 2),
+                'hours' => $hours,
                 'revenue' => $revenue,
                 'cost' => $cost,
                 'profit' => $revenue !== null ? round($revenue - $cost, 2) : null,
             ];
-        })->all();
+        }
 
         // A day with approved production but no attendance still earned money.
         $attDates = array_column($days, 'date');
@@ -952,8 +992,9 @@ class ProfitabilityService
      */
     private function monthBreakdown(Project $project, ?string $from, ?string $to): array
     {
-        $monthExpr = $this->monthExpression();
-
+        // Fetched (not SQL-summed) so month HOURS use displayHoursNet too — a
+        // full-day jornada reads 8 h, consistent with the day breakdown above.
+        $break = $this->breakMinutes($project->company_id);
         $rows = Attendance::query()
             ->withoutGlobalScope(CompanyScope::class)
             ->where('company_id', $project->company_id)
@@ -961,13 +1002,19 @@ class ProfitabilityService
             ->whereIn('status', self::WORKED_STATUSES)
             ->when($from !== null, fn ($q) => $q->whereDate('date', '>=', $from))
             ->when($to !== null, fn ($q) => $q->whereDate('date', '<=', $to))
-            ->selectRaw("{$monthExpr} as ym")
-            ->selectRaw('COALESCE(SUM(hours_worked),0) as hours')
-            ->selectRaw('COALESCE(SUM(total_amount),0) as labour')
-            ->selectRaw("COALESCE(SUM(CASE WHEN day_type = 'per_meter' THEN quantity ELSE 0 END),0) as meters")
-            ->groupByRaw($monthExpr)
-            ->orderByRaw($monthExpr)
             ->get();
+
+        /** @var array<string, array{hours: float, labour: float, meters: float}> $byMonth */
+        $byMonth = [];
+        foreach ($rows as $r) {
+            $ym = $r->date->format('Y-m');
+            $byMonth[$ym] ??= ['hours' => 0.0, 'labour' => 0.0, 'meters' => 0.0];
+            $byMonth[$ym]['hours'] += $r->displayHoursNet($break);
+            $byMonth[$ym]['labour'] += (float) $r->total_amount;
+            if ($r->day_type?->value === 'per_meter') {
+                $byMonth[$ym]['meters'] += (float) ($r->quantity ?? 0);
+            }
+        }
 
         // Per-meter billing: the month's metres come from APPROVED measurements.
         $isPerMeter = $project->billing_type === BillingType::PerMeter;
@@ -980,23 +1027,23 @@ class ProfitabilityService
             ? $this->taskProgressRevenueBy($this->monthExpression(), $project->id, $from, $to)
             : collect();
 
-        $monthsOut = $rows->map(function (Attendance $r) use ($project, $isPerMeter, $isTaskBased, $measured, $taskRev): array {
-            $ym = (string) $r->getAttribute('ym');
-            $hours = (float) $r->getAttribute('hours');
-            $meters = $isPerMeter ? (float) ($measured[$ym] ?? 0) : (float) $r->getAttribute('meters');
-            $cost = round((float) $r->getAttribute('labour'), 2);
+        $monthsOut = [];
+        foreach ($byMonth as $ym => $agg) {
+            $hours = round($agg['hours'], 2);
+            $meters = $isPerMeter ? (float) ($measured[$ym] ?? 0) : $agg['meters'];
+            $cost = round($agg['labour'], 2);
             $revenue = $isTaskBased ? round((float) ($taskRev[$ym] ?? 0), 2) : $this->unitRevenue($project, $hours, $meters);
             $profit = $revenue !== null ? round($revenue - $cost, 2) : null;
 
-            return [
+            $monthsOut[] = [
                 'month' => $ym,
-                'hours' => round($hours, 2),
+                'hours' => $hours,
                 'revenue' => $revenue,
                 'cost' => $cost,
                 'profit' => $profit,
                 'margin' => ($revenue !== null && $revenue > 0.0) ? round(($profit / $revenue) * 100, 1) : null,
             ];
-        })->all();
+        }
 
         // A month with approved production but no attendance still earned money.
         $attMonths = array_column($monthsOut, 'month');

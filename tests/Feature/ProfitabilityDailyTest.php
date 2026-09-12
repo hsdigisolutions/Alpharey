@@ -1,6 +1,7 @@
 <?php
 
 use App\Enums\ProjectRateType;
+use App\Models\Attendance;
 use App\Models\Company;
 use App\Models\Designation;
 use App\Models\Employee;
@@ -79,4 +80,47 @@ it('computes daily P&L income from designation client rates and cost from profil
     expect((float) $pnl['totals']['income'])->toBe(600.0)
         ->and((float) $pnl['totals']['profit'])->toBe(440.0)
         ->and((float) $pnl['months'][0]['income'])->toBe(600.0);
+});
+
+// Universal hours fix (2026-09): a FULL-DAY (jornada) worker whose pay is a fixed
+// daily rate leaves hours_worked = 0, yet is present a full 08:00–17:00 day. Every
+// hours surface derives 8 net hours from that span via displayHoursNet(); the P&L
+// must too, so an hourly-billed project bills the client for the 8 hours (it used
+// to read 0 h → €0). The fix is UNIVERSAL: it keys off the attendance day_type,
+// not the project billing type, and never touches the stored pay column.
+it('counts a full-day jornada worker as 8 net hours in daily P&L (not the raw 0)', function (): void {
+    $svc = app(AttendanceService::class);
+
+    // Daily-wage worker, no designation → income uses the project client_hour_rate.
+    $emp = Employee::factory()->forCompany($this->company)->create([
+        'wage_type' => 'daily', 'daily_wage' => '100', 'designation_id' => null,
+    ]);
+
+    $svc->create([
+        'employee_id' => $emp->id, 'project_id' => $this->project->id, 'date' => '2026-09-10',
+        'mode' => 'project_based', 'day_type' => 'full', 'status' => 'present',
+        'check_in' => '08:00', 'check_out' => '17:00',
+    ]);
+
+    $row = Attendance::withoutGlobalScopes()->firstOrFail();
+    // The stored PAY field is untouched (full days are a fixed daily rate)…
+    expect((float) $row->hours_worked)->toBe(0.0)
+        // …but the DISPLAY/billing hours derive 8 from the 08:00–17:00 span
+        // (9 h span − 1 h break, default 60 min).
+        ->and($row->displayHoursNet(60))->toBe(8.0);
+
+    $pnl = app(ProfitabilityService::class)->dailyPnl($this->project->fresh());
+    $day = $pnl['days'][0];
+
+    // Before the fix: 0 h → €0 income. Now: 8 net h × 20 €/h client = €160.
+    // Cost stays the frozen daily rate (100) — the money side is unchanged.
+    expect((float) $day['hours'])->toBe(8.0)
+        ->and((float) $day['income'])->toBe(160.0)
+        ->and((float) $day['labour'])->toBe(100.0)
+        ->and((float) $day['profit'])->toBe(60.0);
+
+    // Project-level P&L agrees (revenue folds the same 8 net hours).
+    $summary = app(ProfitabilityService::class)->forProject($this->project->fresh());
+    expect((float) $summary['hours'])->toBe(8.0)
+        ->and((float) $summary['revenue'])->toBe(160.0);
 });

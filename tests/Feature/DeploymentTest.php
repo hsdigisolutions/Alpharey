@@ -145,6 +145,34 @@ it('generates an Option A cross-charge = EXACT frozen cost on completion', funct
         ->and($expense->notes)->not->toContain($this->homeEmployee->full_name);
 });
 
+// Universal hours fix (2026-09): the units column on an hourly-rate deployment is
+// a DISPLAY figure and must derive net hours the same way every other surface does
+// — a full-day deployed worker (hours_worked = 0, 08:00–17:00 span) reads 8 units,
+// not the raw 0. The amount (frozen day totals) is unaffected.
+it('shows a full-day deployed worker as 8 net units, not the raw 0 (hourly rate_type)', function (): void {
+    $this->actingAs($this->admin)->post('/deployments', deploymentPayload([
+        'deployment_start' => '2026-07-01', 'deployment_end' => '2026-07-31', 'rate_type' => 'hourly',
+    ]))->assertRedirect();
+    $deployment = EmployeeDeployment::query()->firstOrFail();
+
+    // A clerk-entered FULL day on the host project: paid a fixed daily rate, so
+    // hours_worked stays 0, but a standard 08:00–17:00 span is present.
+    Attendance::factory()->create([
+        'company_id' => $this->host->id, 'employee_id' => $this->homeEmployee->id,
+        'project_id' => $this->hostProject->id, 'date' => '2026-07-02',
+        'status' => 'present', 'day_type' => 'full', 'hours_worked' => '0',
+        'check_in' => '08:00', 'check_out' => '17:00', 'total_amount' => '90',
+    ]);
+
+    $svc = app(DeploymentChargeService::class);
+    $summary = $svc->summary($deployment);
+
+    expect($svc->accruedUnits($deployment))->toBe(8.0)
+        ->and($summary['units'])->toBe(8.0)
+        // The amount stays the frozen day total — the units display never feeds it.
+        ->and($summary['amount'])->toBe(90.0);
+});
+
 it('accrues the cross-charge LIVE as attendance is logged for an active deployment', function (): void {
     // A daily wage so a full day prices non-zero (the exact cost the host owes).
     $this->homeEmployee->update(['wage_type' => 'daily', 'daily_wage' => '90']);

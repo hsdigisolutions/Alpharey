@@ -15,6 +15,7 @@ use App\Models\Expense;
 use App\Models\Invoice;
 use App\Models\InvoiceLineItem;
 use App\Models\Scopes\CompanyScope;
+use App\Services\Attendance\AttendanceService;
 use App\Services\Invoices\InvoiceTotals;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
@@ -50,21 +51,38 @@ class DeploymentChargeService
             ->where('project_id', $deployment->project_id)
             ->whereBetween('date', [$deployment->deployment_start->toDateString(), $end])
             ->whereIn('status', ['present', 'late', 'early_leave'])
-            ->get(['id', 'hours_worked', 'total_amount', 'status']);
+            ->get(['id', 'hours_worked', 'total_amount', 'status', 'check_in', 'check_out', 'day_type', 'wage_type_snapshot', 'company_id']);
+    }
+
+    /**
+     * The host company's break length, so the NET-hours units below match the
+     * hours shown everywhere else. Resolved once per host company.
+     */
+    private function breakMinutes(EmployeeDeployment $deployment): int
+    {
+        return app(AttendanceService::class)
+            ->breakDurationMinutes((int) $deployment->host_company_id);
     }
 
     /**
      * Units (days or hours) the employee logged on the host project — shown in
-     * the cross-charge summary alongside the amount.
+     * the cross-charge summary alongside the amount. HOURS go through
+     * Attendance::displayHoursNet() (a clerk full day reads 8 h, not the raw 0),
+     * so the units column agrees with the hours shown everywhere else. This is a
+     * DISPLAY figure only — the amount below is the exact frozen day-total sum,
+     * never units × rate.
      */
     public function accruedUnits(EmployeeDeployment $deployment): float
     {
         $records = $this->windowRecords($deployment);
 
-        return match ($deployment->rate_type) {
-            DeploymentRateType::Daily => (float) $records->count(),
-            default => round((float) $records->sum(fn (Attendance $r) => (float) $r->hours_worked), 2),
-        };
+        if ($deployment->rate_type === DeploymentRateType::Daily) {
+            return (float) $records->count();
+        }
+
+        $break = $this->breakMinutes($deployment);
+
+        return round((float) $records->sum(fn (Attendance $r) => $r->displayHoursNet($break)), 2);
     }
 
     /**
@@ -79,12 +97,13 @@ class DeploymentChargeService
     {
         $records = $this->windowRecords($deployment);
         $days = $records->count();
+        $break = $this->breakMinutes($deployment);
 
         return [
             'days' => $days,
             'units' => $deployment->rate_type === DeploymentRateType::Daily
                 ? (float) $days
-                : round((float) $records->sum(fn (Attendance $r) => (float) $r->hours_worked), 2),
+                : round((float) $records->sum(fn (Attendance $r) => $r->displayHoursNet($break)), 2),
             'amount' => round((float) $records->sum(fn (Attendance $r) => (float) $r->total_amount), 2),
         ];
     }
