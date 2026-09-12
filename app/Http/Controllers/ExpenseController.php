@@ -29,6 +29,7 @@ use App\Rules\OwnCompanyEmployee;
 use App\Rules\OwnCompanyProject;
 use App\Services\Audit\AuditLogger;
 use App\Services\Deployments\DeploymentChargeService;
+use App\Services\Deployments\DeploymentSettlementService;
 use App\Services\Expenses\ExpenseReceiptExport;
 use App\Services\Vehicles\VehicleExpenseSyncService;
 use App\Services\Workers\WorkerFuelExpenseService;
@@ -439,16 +440,22 @@ class ExpenseController extends Controller
             ]);
         }
 
-        // The cross-charge engine's internal_deployment Gasto must never be
-        // APPROVED either: the deployed worker's attendance is logged under the
-        // HOST company_id, so the host project P&L already counts that labour
-        // once (ProfitabilityService::attendanceAggregate). Approving this
-        // expense would add the SAME cost a second time. Its non-approval is
-        // load-bearing — see PAYROLL_DEPLOYMENTS.md / the deployment redesign.
-        if ($validated['approved'] && $expense->type === ExpenseType::InternalDeployment) {
-            throw ValidationException::withMessages([
-                'approved' => __('ui.expenses.internal_deployment_locked'),
-            ]);
+        // An internal_deployment cross-charge is the HOST's payable for a
+        // completed deployment. Approving it here is the host CONFIRMING the
+        // settlement — it cascades to mark the linked HOME invoice Paid + the
+        // DeploymentCharge settled (reversible on un-approve). Routed through the
+        // single settlement writer so it is byte-identical to the Deployments
+        // "Mark as paid" control. This no longer reopens the double-count:
+        // ProfitabilityService excludes this expense TYPE from project P&L
+        // (Step 1), so its approval adds nothing to any project's cost.
+        if ($expense->type === ExpenseType::InternalDeployment) {
+            $charge = DeploymentCharge::query()->withoutGlobalScope(CompanyScope::class)
+                ->where('expense_id', $expense->id)->first();
+            abort_if($charge === null, 422, __('ui.expenses.internal_deployment_no_charge'));
+
+            app(DeploymentSettlementService::class)->settle($charge, $validated['approved'], Auth::id());
+
+            return back()->with('success', __('ui.expenses.'.($validated['approved'] ? 'approved' : 'rejected')));
         }
 
         // Not mass-assignable — set directly (Measurement/Document convention).

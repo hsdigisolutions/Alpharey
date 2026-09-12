@@ -12,14 +12,19 @@ use App\Models\Company;
 use App\Models\DeploymentCharge;
 use App\Models\Employee;
 use App\Models\EmployeeDeployment;
+use App\Models\Invoice;
 use App\Models\Project;
 use App\Models\Scopes\CompanyScope;
+use App\Services\Audit\AuditLogger;
 use App\Services\Deployments\DeploymentChargeService;
+use App\Services\Deployments\DeploymentSettlementService;
 use App\Services\Notifications\NotificationDispatcher;
 use App\Support\CurrentCompany;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response as HttpResponse;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
@@ -59,10 +64,19 @@ class DeploymentController extends Controller
             ->get()
             ->keyBy('employee_deployment_id');
 
+        // The formal inter-company invoice for each charge (the home issues it;
+        // the host reads it via the deployment, never its own Invoices module).
+        // Unscoped: the link is by charge id, and both sides may open the PDF.
+        $invoiceMap = Invoice::query()->withoutGlobalScopes()
+            ->whereIn('deployment_charge_id', $chargeMap->pluck('id')->all())
+            ->get(['id', 'number', 'deployment_charge_id'])
+            ->keyBy('deployment_charge_id');
+
         $deployments = $paginator
-            ->through(function (EmployeeDeployment $d) use ($charges, $companyId, $isSuperAdmin, $chargeMap): array {
+            ->through(function (EmployeeDeployment $d) use ($charges, $companyId, $isSuperAdmin, $chargeMap, $invoiceMap): array {
                 $summary = $charges->summary($d);
                 $charge = $chargeMap->get($d->id);
+                $invoice = $charge !== null ? $invoiceMap->get($charge->id) : null;
 
                 // A charge becomes payable/settleable only once the deployment
                 // COMPLETES (the charge locks and invoiced_at is stamped); while
@@ -97,6 +111,12 @@ class DeploymentController extends Controller
                     'billing_method' => $d->billing_method->value,
                     'status' => $d->status->value,
                     'settlement' => $settlement,
+                    // The formal invoice: both sides may open the read-only PDF
+                    // (served via the deployment, not the Invoices module).
+                    'invoice' => [
+                        'has' => $invoice !== null,
+                        'number' => $invoice?->number,
+                    ],
                 ];
 
                 if ($hostOnly) {
@@ -342,14 +362,43 @@ class DeploymentController extends Controller
         // settleable.
         abort_if($charge === null || $charge->invoiced_at === null, 422, __('ui.deployments.not_payable'));
 
-        // Server-set directly (not mass-assignable) — the settlement columns
-        // only. Expense.approved is intentionally never referenced here.
-        $charge->settlement_status = $validated['paid'] ? 'paid' : 'unpaid';
-        $charge->paid_at = $validated['paid'] ? now() : null;
-        $charge->paid_by = $validated['paid'] ? $request->user()?->id : null;
-        $charge->save();
+        // Route through the SINGLE settlement writer so this control and the
+        // host's Expense approval produce byte-identical state across all three
+        // linked records (host expense.approved, home invoice paid, charge).
+        app(DeploymentSettlementService::class)->settle($charge, $validated['paid'], $request->user()?->id);
 
         return back()->with('success', __('ui.deployments.'.($validated['paid'] ? 'marked_paid' : 'marked_unpaid')));
+    }
+
+    /**
+     * The inter-company invoice PDF, served through the DEPLOYMENT (visibleTo
+     * home OR host), NOT the Invoices module — so the HOST gets a read-only copy
+     * of what it is billed WITHOUT breaking invoice tenancy (it never appears in
+     * their own Invoices list). The document is worker-free by construction, so
+     * the host learns no worker identity from it.
+     */
+    public function invoicePdf(EmployeeDeployment $deployment, AuditLogger $audit): HttpResponse
+    {
+        Gate::authorize('deployments.view');
+        $this->assertVisible($deployment);
+
+        $charge = DeploymentCharge::query()->where('employee_deployment_id', $deployment->id)->first();
+        abort_if($charge === null, 404);
+
+        $invoice = Invoice::query()->withoutGlobalScope(CompanyScope::class)
+            ->with(['lineItems', 'counterpartyCompany', 'company'])
+            ->where('deployment_charge_id', $charge->id)
+            ->first();
+        abort_if($invoice === null, 404);
+
+        $audit->log('exported', $invoice, null, null, 'Deployment invoice PDF', 'deployments');
+
+        $pdf = Pdf::loadView('exports.invoice-pdf', [
+            'invoice' => $invoice,
+            'logo' => null,
+        ]);
+
+        return $pdf->download('factura-'.$invoice->number.'.pdf');
     }
 
     /**

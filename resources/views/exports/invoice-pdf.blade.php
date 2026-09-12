@@ -1,6 +1,10 @@
 @php
     $eur = fn ($n) => number_format((float) ($n ?? 0), 2, ',', '.') . ' €';
-    $party = $invoice->type->value === 'sale' ? $invoice->client : $invoice->vendor;
+    // An inter-company deployment invoice bills another COMPANY (the host),
+    // not an external client/vendor. Worker-free by construction.
+    $party = $invoice->counterparty_company_id
+        ? $invoice->counterpartyCompany
+        : ($invoice->type->value === 'sale' ? $invoice->client : $invoice->vendor);
     $logo = $logo ?? null;
     $co = $invoice->company;
     $cityLine = trim(collect([$co?->postal_code, $co?->city])->filter()->implode(' '));

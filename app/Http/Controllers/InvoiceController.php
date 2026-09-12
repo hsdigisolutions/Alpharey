@@ -64,7 +64,7 @@ class InvoiceController extends Controller
     {
         return Invoice::query()
             ->where('type', $tab->value)
-            ->with(['client:id,name', 'vendor:id,name', 'project:id,name', 'company:id,name'])
+            ->with(['client:id,name', 'vendor:id,name', 'project:id,name', 'company:id,name', 'counterpartyCompany:id,name'])
             ->when($request->filled('search'), function ($q) use ($request) {
                 $term = '%'.$request->string('search').'%';
                 $q->where(fn ($w) => $w->where('number', 'like', $term)
@@ -408,8 +408,11 @@ class InvoiceController extends Controller
             'number' => $i->number,
             'type' => $i->type->value,
             'sub_type' => $i->sub_type->value,
-            'client' => $i->client?->name,
+            // A deployment invoice bills another COMPANY, not a client — show
+            // the counterparty there so the row isn't blank.
+            'client' => $i->client_id !== null ? $i->client->name : $i->counterpartyCompany?->name,
             'client_id' => $i->client_id,
+            'is_deployment' => $i->isDeploymentInvoice(),
             'vendor' => $i->vendor?->name,
             'vendor_id' => $i->vendor_id,
             'project' => $i->project?->name,

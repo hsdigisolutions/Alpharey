@@ -458,6 +458,7 @@ Route::middleware(['auth', 'active', 'two_factor', 'not_worker'])->group(functio
     Route::post('/deployments/{deployment}/cancel', [DeploymentController::class, 'cancel'])->name('deployments.cancel');
     // Host-side settlement: mark the cross-charge paid/unpaid (never touches P&L).
     Route::post('/deployments/{deployment}/settlement', [DeploymentController::class, 'settlement'])->name('deployments.settlement');
+    Route::get('/deployments/{deployment}/invoice-pdf', [DeploymentController::class, 'invoicePdf'])->name('deployments.invoice_pdf');
 
     // Screen 13 — Call Panel (Phase 7). Same employee_call_logs rows as the
     // employee Llamadas tab, with follow-up triage on top.

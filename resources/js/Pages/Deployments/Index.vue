@@ -239,6 +239,10 @@ function eur(n) {
                                     {{ d.settlement.status === 'paid' ? $t('deployments.settled_on', { date: d.settlement.paid_at }) : $t('deployments.pending_payment') }}
                                 </VBadge>
                             </div>
+                            <a v-if="d.invoice && d.invoice.has" :href="`/deployments/${d.id}/invoice-pdf`"
+                                class="mt-1 flex items-center gap-1 px-1 text-[11px] font-medium text-accent hover:underline">
+                                <AppIcon name="download" class="h-3 w-3" /> {{ $t('deployments.invoice') }} {{ d.invoice.number }}
+                            </a>
                         </template>
                         <!-- HOST: a completed deployment is a payable they can settle;
                              an active one is still accruing (no amount). -->
@@ -262,6 +266,10 @@ function eur(n) {
                                         <Bilingual k="deployments.mark_unpaid" inline />
                                     </VButton>
                                 </div>
+                                <a v-if="d.invoice && d.invoice.has" :href="`/deployments/${d.id}/invoice-pdf`"
+                                    class="mt-2 flex items-center gap-1 text-[11px] font-medium text-accent hover:underline">
+                                    <AppIcon name="download" class="h-3 w-3" /> {{ $t('deployments.invoice') }} {{ d.invoice.number }}
+                                </a>
                             </div>
                             <p v-else class="rounded-lg bg-surface-sunken px-4 py-3 text-sm text-ink-soft">
                                 {{ $t('deployments.host_presence', { days: d.days_present }) }}
@@ -333,6 +341,8 @@ function eur(n) {
                                         class="rounded-sm px-2 py-0.5 text-xs text-accent hover:underline" @click="markPaid(d, true)">
                                         {{ $t('deployments.mark_paid') }}
                                     </button>
+                                    <a v-if="d.invoice && d.invoice.has" :href="`/deployments/${d.id}/invoice-pdf`"
+                                        class="text-xs text-accent hover:underline" :title="d.invoice.number">{{ $t('deployments.invoice_pdf') }}</a>
                                 </div>
                                 <span v-else class="text-muted">—</span>
                             </td>

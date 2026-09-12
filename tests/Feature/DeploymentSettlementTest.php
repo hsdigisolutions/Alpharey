@@ -19,11 +19,13 @@ use App\Services\Deployments\DeploymentChargeService;
 use App\Services\Reports\ProfitabilityService;
 
 /**
- * Invoice-based deployment settlement (2026-09). The HOST marks the cross-charge
- * paid once it reimburses the HOME company. The load-bearing guarantee: this is
- * a STANDALONE status write that never touches Expense.approved — so Item A's
- * P&L double-count protection stays intact (the deployed labour is still counted
- * exactly once, via attendance).
+ * Deployment settlement (2026-09, invoice cascade 2026-09-12). The HOST marks the
+ * cross-charge paid once it reimburses the HOME company. As of the invoice
+ * redesign the settlement is a CASCADE that keeps three records in lockstep
+ * (host Expense.approved, home Invoice paid, DeploymentCharge). The load-bearing
+ * guarantee moved: Item A's double-count protection is now STRUCTURAL — the
+ * internal_deployment type is excluded from project P&L (ProfitabilityService),
+ * so approving the expense as part of settlement adds nothing to project cost.
  */
 beforeEach(function (): void {
     $this->home = Company::factory()->create(['name' => 'Shizukani']);
@@ -110,7 +112,7 @@ it('forbids the HOME company from marking it paid (host-only action)', function 
     expect(chargeFor($d)->settlement_status)->toBe('unpaid');
 });
 
-it('CRITICAL: marking paid never sets Expense.approved (Item A protection intact)', function (): void {
+it('marking paid now approves the host expense in lockstep, and un-marking reverts it', function (): void {
     $d = settleDeployment(3, 100.0);
     app(DeploymentChargeService::class)->generateCharge($d->fresh());
 
@@ -118,13 +120,17 @@ it('CRITICAL: marking paid never sets Expense.approved (Item A protection intact
         ->where('type', ExpenseType::InternalDeployment->value)->firstOrFail();
     expect($expense->approved)->toBeFalse();
 
+    // Mark paid → the host expense is approved as part of the single cascade.
     $this->actingAs($this->hostAdmin)->post("/deployments/{$d->id}/settlement", ['paid' => true])->assertRedirect();
+    $expense->refresh();
+    expect($expense->approved)->toBeTrue()
+        ->and($expense->approved_by)->toBe($this->hostAdmin->id);
 
-    // The expense is UNTOUCHED by settlement — still unapproved, no approver.
+    // Reversible: un-mark → the expense goes back to unapproved (correction).
+    $this->actingAs($this->hostAdmin)->post("/deployments/{$d->id}/settlement", ['paid' => false])->assertRedirect();
     $expense->refresh();
     expect($expense->approved)->toBeFalse()
-        ->and($expense->approved_by)->toBeNull()
-        ->and($expense->approved_at)->toBeNull();
+        ->and($expense->approved_by)->toBeNull();
 });
 
 it('CRITICAL: marking paid does not change the project P&L (labour still counted once)', function (): void {

@@ -50,6 +50,8 @@ use Illuminate\Support\Carbon;
  * @property numeric-string $total
  * @property numeric-string $paid_amount
  * @property bool $is_taxable
+ * @property int|null $counterparty_company_id
+ * @property int|null $deployment_charge_id
  */
 class Invoice extends Model
 {
@@ -120,6 +122,30 @@ class Invoice extends Model
     }
 
     /**
+     * Next inter-company deployment invoice number: DEP-{companyId}-{seq}, a
+     * SEPARATE series from the client-facing F… numbers so the two never
+     * interleave (audit clarity — client decision 2026-09-12).
+     */
+    public static function nextDeploymentNumber(int $companyId): string
+    {
+        $last = static::query()->withoutGlobalScopes()
+            ->where('company_id', $companyId)
+            ->where('number', 'like', 'DEP-'.$companyId.'-%')
+            ->orderByDesc('id')
+            ->value('number');
+
+        $seq = is_string($last) && preg_match('/(\d+)$/', $last, $m) ? ((int) $m[1]) + 1 : 1;
+
+        return sprintf('DEP-%d-%05d', $companyId, $seq);
+    }
+
+    /** A deployment invoice bills another company, not an external client. */
+    public function isDeploymentInvoice(): bool
+    {
+        return $this->deployment_charge_id !== null;
+    }
+
+    /**
      * @return HasMany<InvoiceLineItem, $this>
      */
     public function lineItems(): HasMany
@@ -141,6 +167,26 @@ class Invoice extends Model
     public function client(): BelongsTo
     {
         return $this->belongsTo(Client::class);
+    }
+
+    /**
+     * The company being billed on an inter-company deployment invoice (the
+     * host). NOT tenancy-scoped — Company has no CompanyScope — so it resolves
+     * for both the home issuer and, on the Deployments PDF, the host viewer.
+     *
+     * @return BelongsTo<Company, $this>
+     */
+    public function counterpartyCompany(): BelongsTo
+    {
+        return $this->belongsTo(Company::class, 'counterparty_company_id');
+    }
+
+    /**
+     * @return BelongsTo<DeploymentCharge, $this>
+     */
+    public function deploymentCharge(): BelongsTo
+    {
+        return $this->belongsTo(DeploymentCharge::class);
     }
 
     /**

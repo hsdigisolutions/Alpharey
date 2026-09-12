@@ -5,11 +5,18 @@ namespace App\Services\Deployments;
 use App\Enums\BillingMethod;
 use App\Enums\DeploymentRateType;
 use App\Enums\ExpenseType;
+use App\Enums\InvoiceStatus;
+use App\Enums\InvoiceSubType;
+use App\Enums\InvoiceType;
 use App\Models\Attendance;
 use App\Models\DeploymentCharge;
 use App\Models\EmployeeDeployment;
 use App\Models\Expense;
+use App\Models\Invoice;
+use App\Models\InvoiceLineItem;
 use App\Models\Scopes\CompanyScope;
+use App\Services\Invoices\InvoiceTotals;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
@@ -152,6 +159,15 @@ class DeploymentChargeService
 
             $this->postHostExpense($charge, $deployment, $amount, $periodEnd);
 
+            // On completion (finalize) the HOME company issues a real invoice to
+            // the HOST for the deployed labour — the formal document minted from
+            // this charge. Only at finalize: an accruing charge has no invoice
+            // yet, and a later attendance edit returns early above (locked), so
+            // the invoice is generated exactly once.
+            if ($finalize) {
+                $this->postHomeInvoice($charge, $deployment, $amount, $periodEnd);
+            }
+
             return $charge;
         });
     }
@@ -214,5 +230,99 @@ class DeploymentChargeService
             $charge->expense_id = $expense->id;
             $charge->save();
         }
+    }
+
+    /**
+     * Backfill: mint the home invoice for an already-completed charge WITHOUT
+     * recomputing the amount (the charge is locked — its stored amount is final).
+     * Idempotent: postHomeInvoice keys off deployment_charge_id.
+     */
+    public function ensureHomeInvoice(DeploymentCharge $charge): void
+    {
+        $deployment = EmployeeDeployment::query()->withoutGlobalScopes()->find($charge->employee_deployment_id);
+        if ($deployment === null) {
+            return;
+        }
+
+        $period = $charge->period_end ?? $charge->period_start;
+
+        $this->postHomeInvoice(
+            $charge,
+            $deployment,
+            (float) $charge->amount,
+            Carbon::parse($period)->toDateString(),
+        );
+    }
+
+    /**
+     * Post (or refresh) the HOME company's inter-company invoice for the charge
+     * (2026-09-12). This is the formal receivable document; the host's payable
+     * stays the internal_deployment Expense above. The two are the cross-module
+     * mirror (WorkerExpense ↔ Expense pattern) — no invoice tenancy is broken.
+     *
+     * Safe by construction:
+     *  - keyed off deployment_charge_id, so re-running never duplicates;
+     *  - company_id = HOME (never the acting session), counterparty = HOST;
+     *  - NON-TAXABLE (is_taxable=false, no VAT line) per the standing "no
+     *    inter-company VAT" decision — a one-field change if the gestoría later
+     *    rules VAT applies;
+     *  - project_id stays NULL: the host's project is not a home project, so
+     *    this never leaks into any home project's P&L (only company revenue);
+     *  - the line description names the PROJECT + period, NEVER the worker, so
+     *    the host-facing PDF stays anonymised.
+     */
+    private function postHomeInvoice(
+        DeploymentCharge $charge,
+        EmployeeDeployment $deployment,
+        float $amount,
+        string $periodEnd,
+    ): void {
+        $invoice = Invoice::query()->withoutGlobalScope(CompanyScope::class)
+            ->where('deployment_charge_id', $charge->id)->first() ?? new Invoice;
+        $isNew = ! $invoice->exists;
+
+        $deployment->loadMissing(['project:id,name', 'hostCompany:id,name']);
+        $periodStart = $deployment->deployment_start->toDateString();
+
+        $invoice->fill([
+            'type' => InvoiceType::Sale->value,
+            'sub_type' => InvoiceSubType::Final->value,
+            'invoice_date' => $periodEnd,
+            'is_taxable' => false,
+            'vat_rate' => null,
+            'status' => InvoiceStatus::Sent->value,
+            'notes' => __('ui.deployments.invoice_note', [
+                'company' => $deployment->hostCompany->name ?? '—',
+            ]),
+        ]);
+        $invoice->company_id = $deployment->home_company_id;      // HOME issues
+        $invoice->counterparty_company_id = $deployment->host_company_id;
+        $invoice->deployment_charge_id = $charge->id;
+        $invoice->client_id = null;
+        $invoice->project_id = null;
+        if ($isNew) {
+            $invoice->number = Invoice::nextDeploymentNumber($deployment->home_company_id);
+        }
+        $invoice->save();
+
+        // Single worker-free line: project + period only.
+        $invoice->lineItems()->delete();
+        $line = new InvoiceLineItem([
+            'description' => __('ui.deployments.invoice_line', [
+                'project' => $deployment->project->name ?? '—',
+                'start' => $periodStart,
+                'end' => $periodEnd,
+            ]),
+            'quantity' => '1',
+            'unit_price' => (string) $amount,
+            'line_total' => (string) $amount,
+            'sort_order' => 0,
+        ]);
+        $line->invoice_id = $invoice->id;
+        $line->save();
+
+        // Derives subtotal/total (no VAT) + payment_status from the (as yet
+        // absent) payments — leaves it Unpaid until the host settles.
+        app(InvoiceTotals::class)->apply($invoice);
     }
 }

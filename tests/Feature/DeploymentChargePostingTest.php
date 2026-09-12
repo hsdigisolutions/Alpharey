@@ -163,13 +163,15 @@ it('refuses an internal_deployment type submitted through the expense form', fun
 });
 
 /*
- * Item A (2026-09) — the internal_deployment Gasto is read-only money safety.
- * The deployed worker's attendance is already counted ONCE as host project
- * labour (ProfitabilityService::attendanceAggregate), so APPROVING this expense
- * would double-count it. And a host admin must not edit or delete the engine's
- * own record. All three paths are refused server-side.
+ * Item A → settlement cascade (2026-09-12). Approving the internal_deployment
+ * Gasto is no longer refused: it is the host CONFIRMING the settlement, which
+ * cascades to mark the linked home invoice + charge paid. This stays P&L-safe
+ * because ProfitabilityService now excludes the type from project P&L by
+ * construction (the deployed labour is still counted once via attendance) — so
+ * the approval adds nothing to project cost. A host admin still must not edit
+ * or delete the engine's own record.
  */
-it('refuses to APPROVE an internal_deployment expense (double-count guard)', function (): void {
+it('APPROVES an internal_deployment expense as settlement (was refused; now cascades) — still P&L-safe', function (): void {
     $hostAdmin = User::factory()->create(['role' => UserRole::Admin, 'company_id' => $this->host->id]);
     app(DeploymentChargeService::class)->generateCharge(deploymentWithAttendance(2, 100.0));
 
@@ -177,9 +179,11 @@ it('refuses to APPROVE an internal_deployment expense (double-count guard)', fun
         ->where('type', ExpenseType::InternalDeployment->value)->firstOrFail();
 
     $this->actingAs($hostAdmin)->post("/expenses/{$expense->id}/approve", ['approved' => true])
-        ->assertSessionHasErrors('approved');
+        ->assertRedirect()->assertSessionHasNoErrors();
 
-    expect($expense->fresh()->approved)->toBeFalse();
+    // Approval now succeeds and marks the settlement paid — but the type is
+    // excluded from project P&L, so the deployed labour is never double-counted.
+    expect($expense->fresh()->approved)->toBeTrue();
 });
 
 it('refuses to EDIT an internal_deployment expense', function (): void {
