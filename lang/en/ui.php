@@ -1702,6 +1702,7 @@ return [
         'revenue_basis' => 'Revenue basis',
         'basis_hourly' => 'Hourly rate',
         'basis_per_meter' => 'Per-metre rate',
+        'basis_task_based' => 'Task progress (× client rate)',
         'basis_paid_invoices' => 'Paid invoices',
         'basis_fixed_budget' => 'Fixed budget',
         'basis_not_configured' => 'Not configured',

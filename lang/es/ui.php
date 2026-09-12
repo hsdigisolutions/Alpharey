@@ -1703,6 +1703,7 @@ return [
         'revenue_basis' => 'Base de ingresos',
         'basis_hourly' => 'Tarifa por hora',
         'basis_per_meter' => 'Tarifa por metro',
+        'basis_task_based' => 'Avance de tareas (× tarifa cliente)',
         'basis_paid_invoices' => 'Facturas cobradas',
         'basis_fixed_budget' => 'Presupuesto fijo',
         'basis_not_configured' => 'Sin configurar',
