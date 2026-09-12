@@ -135,6 +135,8 @@ class DeploymentController extends Controller
                     'employee' => $d->employee?->full_name,
                     'employee_id' => $d->employee_id,
                     'home_company_id' => $d->home_company_id,
+                    // The TYPED rate (drives the edit form), kept distinct from
+                    // the displayed exact-cost rate below.
                     'rate' => $d->rate_during_deployment,
                     'rate_type' => $d->rate_type->value,
                     'split_pct' => $d->split_pct,
@@ -142,6 +144,12 @@ class DeploymentController extends Controller
                     'units' => $summary['units'],
                     // Live exact-cost the host owes the home company.
                     'accrued_cost' => $summary['amount'],
+                    // The real exact-cost rate = amount ÷ units (mixed day types
+                    // average out) — what the "RATE (exact cost)" label shows,
+                    // NOT the typed rate_during_deployment.
+                    'exact_rate' => $summary['units'] > 0
+                        ? round($summary['amount'] / $summary['units'], 2)
+                        : null,
                 ];
             });
 

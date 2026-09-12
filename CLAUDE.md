@@ -4,6 +4,98 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Status: Phase 9 in progress — hardening (2026-08-01)
 
+### Deployment settlement → real inter-company INVOICE + approval cascade (2026-09-12, DONE, deployed to prod)
+
+**The client corrected the earlier "settlement record is enough" decision: a
+completed deployment now generates a REAL invoice in the Invoices module.** When
+a deployment completes, the HOME company (owns the worker) issues a real invoice
+to the HOST company (used the labour); the host settles it by APPROVING their
+`internal_deployment` expense, which cascades the invoice to Paid. Built in TWO
+deployed steps, safety first. **1322 Pest tests.**
+
+**⚠️ STEP 1 (deployed alone, verified byte-identical FIRST) — the P&L safety
+fix.** The old Item A protection kept the `internal_deployment` expense
+`approved=false` so it never entered project P&L (the deployed labour is already
+counted once via host-company attendance). The new flow NEEDS the host to approve
+that expense, so the guard was moved from the approved-flag to a **structural
+TYPE exclusion**: `ProfitabilityService::expenseTotal()` AND the `dailyPnl`
+per-day expense query now exclude `type = internal_deployment` regardless of
+`approved` (project-P&L-ONLY — company-level expense/financial reports still see
+it, since there is no host payroll cost for the deployed worker). Proven on prod
+byte-identical across all 6 projects carrying such an expense; a Pest guard proves
+an APPROVED €999 cross-charge adds nothing to project cost. **Do NOT reintroduce
+a dependency on `approved=false` for double-count safety — it is now the type
+exclusion.**
+
+**STEP 2 — the invoice + cascade.**
+- **Schema** (migration `2026_09_12_000001`): `invoices.counterparty_company_id`
+  (the invoice bills another COMPANY, not an external client — chosen OVER virtual
+  clients, which would pollute the shared Clients pool) + `invoices.deployment_
+  charge_id` (1:1 link to the calculating `DeploymentCharge`; its presence is what
+  marks a deployment invoice — `Invoice::isDeploymentInvoice()`). Both server-set,
+  NOT fillable, nullable — every normal invoice is unaffected.
+- **`DeploymentCharge` stays the calculation engine.** The invoice is the formal
+  document MINTED from it at completion (`DeploymentChargeService::postHomeInvoice`,
+  called only when `$finalize`), never a replacement. The host-side payable stays
+  the `internal_deployment` Expense. So three records, distinct roles: charge =
+  calc + link; home Invoice = receivable document; host Expense = payable + the
+  settle action. The home↔host pair is the cross-module mirror (like WorkerExpense
+  ↔ Expense) — NO invoice tenancy is broken.
+- **Invoice shape:** Sale, `company_id`=HOME, `counterparty_company_id`=HOST,
+  `client_id`=null, **`project_id`=null** (the host's project is not a home
+  project — never leaks into a home project's P&L; it does show as home company
+  revenue, which is correct/desired — it offsets the payroll cost of lending the
+  worker). **NON-TAXABLE** (`is_taxable=false`, `vat_rate=null`) — see VAT flag
+  below. Line description names the PROJECT + period, **NEVER the worker** (the
+  host sees this PDF). **`DEP-{homeCompanyId}-{seq}`** numbering — a SEPARATE
+  series from client-facing `F…` invoices (`Invoice::nextDeploymentNumber`).
+- **The settlement cascade** (`DeploymentSettlementService::settle` — the SINGLE
+  writer) keeps THREE records in lockstep: host `Expense.approved` ↔ home Invoice
+  `payment_status` ↔ `DeploymentCharge.settlement_status`. Routed through BOTH
+  entry points so they are byte-identical: (a) the HOST approving the expense
+  (`ExpenseController::approve` now delegates for `internal_deployment` instead of
+  refusing), and (b) the Deployments-screen "Mark as paid" (`settlement()` now
+  delegates too). **Fully REVERSIBLE** (un-approve → Unpaid: the settlement
+  `Payment` is deleted, status re-derived). The invoice paid-status is derived
+  from a `Payment` (giving "when paid" history), but the sum is computed
+  **UNSCOPED** — the payment lives on the HOME company while the acting admin is
+  the HOST, so a scoped `payments()->sum()` would miss it and wrongly read Unpaid
+  (the one bug caught in build). Payment `company_id` is set to the invoice's
+  (home) company, never the acting session.
+- **Payroll-safe:** the `internal_deployment` expense has no `employee_id` /
+  `is_reimbursable`, so payroll never counts it — approving it changes nothing in
+  payroll. `update`/`destroy` on the type stay 422-guarded.
+- **Host read-only PDF:** `GET /deployments/{deployment}/invoice-pdf`
+  (`deployments.view` + `visibleTo` home-OR-host) serves the invoice PDF THROUGH
+  the deployment — NOT the host's own Invoices module, so invoice tenancy is
+  intact (the host never sees the home's other invoices) and the document is
+  worker-free. Linked from the Deployments cards + table on both sides. The
+  Invoices list shows the counterparty company where a deployment invoice has no
+  client.
+- **Backfill:** `deployments:backfill-invoices` (idempotent) mints invoices for
+  already-completed charges from their STORED locked amount (no recompute); an
+  already-paid charge is settled through the same cascade. Run on prod for the two
+  live completed deployments → DEP-3-00001 (Muhammad Anar Begum) + DEP-3-00002
+  (Mudassar Mushtaq), Shizukani→Alovar, €300 each, non-taxable, Unpaid, worker
+  hidden. Approve→paid cascade proven on prod in a ROLLED-BACK transaction (both
+  left genuinely Unpaid — Alovar has not actually paid yet).
+- **⚠️ VAT — PENDING the client's gestoría/accountant.** Currently NON-TAXABLE
+  (no VAT line), consistent with the prior "no inter-company VAT" decision. The
+  client is confirming whether Spanish inter-company deployment invoicing needs
+  **21% VAT or reverse-charge**. If so it is a ONE-FIELD change on the generator +
+  backfill (`is_taxable=true` + `vat_rate`) — the design already supports it, no
+  redesign. Do NOT guess this; wait for their ruling.
+- **The card "RATE (exact cost)" now shows the true exact cost** = amount ÷ units
+  (`exact_rate` in the index payload), not the typed `rate_during_deployment`
+  (which still drives the edit modal via the separate `rate` field).
+- Tests: `ProfitabilityTest` (+1 Step-1 double-count guard), `DeploymentInvoiceTest`
+  (8 — generation at completion non-taxable/DEP/counterparty/worker-free;
+  approve→Paid cascade all synced; un-approve reversal; Deployments Mark-as-paid
+  same state; double-count byte-identical after approval; host PDF via deployment
+  but 404 via Invoices module; home cannot touch host expense; backfill
+  idempotent). Updated the two prior Item-A tests that asserted the old
+  "approval refused" behaviour.
+
 ### Form draft autosave + live search suggestions (2026-09-11, DONE, deployed to prod)
 
 Two client-confirmed UX changes. **1313 Pest tests.**

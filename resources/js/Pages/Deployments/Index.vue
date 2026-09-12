@@ -214,7 +214,7 @@ function eur(n) {
                             </div>
                             <div>
                                 <dt class="text-[11px] font-medium uppercase tracking-wide text-muted">{{ $t('deployments.rate') }} <span class="normal-case text-muted">({{ $t('deployments.exact_cost') }})</span></dt>
-                                <dd class="mt-0.5 tabular-nums text-ink">{{ d.rate ? eur(d.rate) : '—' }}</dd>
+                                <dd class="mt-0.5 tabular-nums text-ink">{{ d.exact_rate ? eur(d.exact_rate) : '—' }}</dd>
                             </div>
                         </template>
                     </dl>
