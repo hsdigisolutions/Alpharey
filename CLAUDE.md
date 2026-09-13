@@ -6,6 +6,24 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### True labour cost — employer social-security tax + operational cost, 3-level visibility (2026-09-13, DONE, deployed to prod)
 
+**Follow-up (2026-09-13, DONE, deployed) — per-day & per-month view in the
+Rentabilidad tab.** `dailyPnl()` now emits `operational_overhead`,
+`profit_after_overhead` and `margin_after` on EVERY day row, month row, and the
+totals, so the project Profitability tab shows the full picture (day → month →
+project) after cutting employer tax + operational cost, for every billing type.
+The daily table's labour column is now TRUE labour (wages + employer tax); the
+per-day overhead is `op% × that day's non-exempt true labour` (accumulated from a
+per-row `oh_base` = wage + tax for non-exempt workers), and the **totals overhead
+is Σ of the per-day overheads** (not a separate whole-range SQL calc) so the daily
+table reconciles to the cent — day rows sum exactly to the total line. `Detail.vue`
+shows conditional "Op. cost" + "Final profit" columns on the daily AND monthly
+tables (only when op% > 0), dynamic colspans, and `margin_after` tinting; the old
+separate totals-overhead footer rows were removed. Verified on prod (rolled-back
+tx) on #151 Trops SAT 2803 (3 workers, €30/day, 15% → per-day/month overhead
+reconciles to 539.25) and #96 Gandásegui (matches the Phase-1 proof: true labour
+19.964,98, tax 5.670, overhead 2.994,75, after-overhead 13.398,27; day margin-after
+35.6% vs 44% pre-overhead). Test in `ProfitabilityOperationalOverheadTest`.
+
 **The corrected P&L cost model, confirmed by the client through several rounds.**
 Two distinct concepts, layered:
 
