@@ -47,22 +47,37 @@ class ReportController extends Controller
 
     public function index(Request $request): Response
     {
-        $this->contextCompanyId();
         Gate::authorize('reports.view');
 
         $module = $this->resolveModule($request);
+
+        // Level 3 — a Super Admin with NO single company selected sees the ALL-
+        // COMPANIES group view for profitability (one row per company + a grand
+        // total). Every other case needs a single company context (redirect if
+        // a Super Admin has none).
+        $user = $request->user();
+        $groupMode = $module === 'profitability'
+            && app(CurrentCompany::class)->id() === null
+            && $user !== null && $user->isSuperAdmin();
+
+        if (! $groupMode) {
+            $this->contextCompanyId();
+        }
 
         return Inertia::render('Reports/Index', [
             'module' => $module,
             'filters' => $this->filters($request),
             'modules' => $this->availableModules(),
-            'report' => $this->canSee($module) ? $this->reports->for($module, $this->filters($request)) : null,
+            'report' => $this->canSee($module)
+                ? ($groupMode ? $this->reports->group($this->filters($request)) : $this->reports->for($module, $this->filters($request)))
+                : null,
             'blocked' => ! $this->canSee($module),
+            'groupMode' => $groupMode,
             // Profitability offers project + client dropdowns; other modules
-            // don't need them, so only pay for the query on that module.
-            'projectOptions' => $module === 'profitability'
+            // don't need them (and the group view has no per-project filter).
+            'projectOptions' => ($module === 'profitability' && ! $groupMode)
                 ? Project::query()->orderBy('name')->get(['id', 'name'])->all() : [],
-            'clientOptions' => $module === 'profitability'
+            'clientOptions' => ($module === 'profitability' && ! $groupMode)
                 ? Client::query()->orderBy('name')->get(['id', 'name'])->all() : [],
         ]);
     }

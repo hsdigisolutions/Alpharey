@@ -523,3 +523,49 @@ it('does not credit the whole budget to a filtered period (budget is whole-contr
     expect($r['revenue_basis'])->toBe('not_configured')
         ->and($r['revenue'])->toBe(0.0);
 });
+
+// Phase 2 visibility (2026-09-13) — Level 2: the company-wide Profitability report
+// carries the true-labour / employer-tax / other-costs breakdown.
+it('ships the true-labour + employer-tax + other-costs breakdown on the report', function (): void {
+    $admin = User::factory()->create(['role' => 'admin', 'company_id' => $this->company->id]);
+    $project = Project::factory()->create(['company_id' => $this->company->id, 'billing_type' => 'hourly', 'client_hour_rate' => '20']);
+    $this->employee->update(['employer_tax_per_day' => '25']);
+    punch($this->company, $this->employee, $project, '2026-06-01', 100, 1450);
+
+    $this->actingAs($admin)->get('/reports?module=profitability')->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('groupMode', false)
+            // employer tax = €25 × 1 worked day; true labour = 1450 + 25.
+            ->where('report.rows.0.employer_tax', 25)
+            ->where('report.rows.0.coste_mo', 1475)
+            ->has('report.figures.total_employer_tax')
+            ->has('report.figures.total_true_labour')
+            ->has('report.figures.total_expenses_company')
+            ->has('report.figures.total_expenses_client'));
+});
+
+// Level 3 — a Super Admin with NO single company selected gets the all-companies
+// group view: one aggregated row per company + a grand total across the group.
+it('serves the all-companies group view to a Super Admin with no company selected', function (): void {
+    $sa = User::factory()->create(['role' => 'super_admin', 'company_id' => null]);
+
+    // Company A: one project earning revenue.
+    $projA = Project::factory()->create(['company_id' => $this->company->id, 'billing_type' => 'hourly', 'client_hour_rate' => '20']);
+    punch($this->company, $this->employee, $projA, '2026-06-01', 100, 1000); // 2000 revenue, 1000 labour
+
+    // Company B: its own project + worker.
+    $companyB = Company::factory()->create();
+    $empB = Employee::factory()->forCompany($companyB)->create();
+    $projB = Project::factory()->create(['company_id' => $companyB->id, 'billing_type' => 'hourly', 'client_hour_rate' => '10']);
+    punch($companyB, $empB, $projB, '2026-06-02', 50, 300); // 500 revenue, 300 labour
+
+    $this->actingAs($sa)->get('/reports?module=profitability')->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('groupMode', true)
+            ->where('report.group', true)
+            // one row per company (2 companies with data here)
+            ->has('report.rows', 2)
+            // grand total sums revenue across the whole group: 2000 + 500 = 2500.
+            ->where('report.figures.total_revenue', 2500)
+            ->where('report.figures.total_true_labour', 1300)); // 1000 + 300
+});

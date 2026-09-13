@@ -23,6 +23,7 @@ const props = defineProps({
     modules: { type: Array, required: true },
     report: { type: Object, default: null },
     blocked: { type: Boolean, default: false },
+    groupMode: { type: Boolean, default: false },
     projectOptions: { type: Array, default: () => [] },
     clientOptions: { type: Array, default: () => [] },
 });
@@ -220,19 +221,67 @@ const tableColumns = computed(() => (table.value ? Object.keys(table.value[0]) :
 
             <!-- Profitability: colour-coded P&L table + optional drill-down -->
             <template v-if="isProfit">
-                <VCard class="mt-6" :padded="false">
+                <!-- Level 3 — Super-Admin ALL-COMPANIES group view (no company selected) -->
+                <VCard v-if="groupMode" class="mt-6" :padded="false">
+                    <p class="border-b border-line px-3 py-2 text-xs text-muted">{{ $t('profitability.group_hint') }}</p>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm">
+                            <thead>
+                                <tr class="border-b border-line text-xs uppercase text-muted">
+                                    <th class="px-3 py-2 text-start font-medium">{{ $t('profitability.col_company') }}</th>
+                                    <th class="px-3 py-2 text-end font-medium">{{ $t('profitability.col_revenue') }}</th>
+                                    <th class="px-3 py-2 text-end font-medium">{{ $t('profitability.col_true_labour') }}</th>
+                                    <th class="px-3 py-2 text-end font-medium">{{ $t('profitability.col_employer_tax') }}</th>
+                                    <th class="px-3 py-2 text-end font-medium">{{ $t('profitability.col_other_company') }}</th>
+                                    <th class="px-3 py-2 text-end font-medium">{{ $t('profitability.col_other_client') }}</th>
+                                    <th class="px-3 py-2 text-end font-medium">{{ $t('profitability.col_overhead') }}</th>
+                                    <th class="px-3 py-2 text-end font-medium">{{ $t('profitability.col_profit') }}</th>
+                                    <th class="px-3 py-2 text-end font-medium">{{ $t('profitability.col_profit_after') }}</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr v-for="(c, i) in (report.rows ?? [])" :key="i" class="border-b border-line">
+                                    <td class="px-3 py-2 font-medium text-ink">{{ c.company }}</td>
+                                    <td class="tabular-nums px-3 py-2 text-end">{{ eur(c.revenue) }}</td>
+                                    <td class="tabular-nums px-3 py-2 text-end">{{ eur(c.true_labour) }}</td>
+                                    <td class="tabular-nums px-3 py-2 text-end text-ink-soft">{{ Number(c.employer_tax) > 0 ? eur(c.employer_tax) : '—' }}</td>
+                                    <td class="tabular-nums px-3 py-2 text-end">{{ eur(c.expenses_company) }}</td>
+                                    <td class="tabular-nums px-3 py-2 text-end text-ink-soft">{{ Number(c.expenses_client) > 0 ? eur(c.expenses_client) : '—' }}</td>
+                                    <td class="tabular-nums px-3 py-2 text-end text-ink-soft">{{ Number(c.operational_overhead) > 0 ? eur(c.operational_overhead) : '—' }}</td>
+                                    <td class="tabular-nums px-3 py-2 text-end font-medium" :class="c.profit >= 0 ? 'text-status-ok' : 'text-status-danger'">{{ eur(c.profit) }}</td>
+                                    <td class="tabular-nums px-3 py-2 text-end font-medium" :class="c.profit_after_overhead >= 0 ? 'text-status-ok' : 'text-status-danger'">{{ eur(c.profit_after_overhead) }}</td>
+                                </tr>
+                                <tr class="border-t-2 border-line-strong font-semibold">
+                                    <td class="px-3 py-2.5">{{ $t('profitability.grand_total') }}</td>
+                                    <td class="tabular-nums px-3 py-2.5 text-end">{{ eur(report.figures.total_revenue) }}</td>
+                                    <td class="tabular-nums px-3 py-2.5 text-end">{{ eur(report.figures.total_true_labour) }}</td>
+                                    <td class="tabular-nums px-3 py-2.5 text-end">{{ eur(report.figures.total_employer_tax) }}</td>
+                                    <td class="tabular-nums px-3 py-2.5 text-end">{{ eur(report.figures.total_expenses_company) }}</td>
+                                    <td class="tabular-nums px-3 py-2.5 text-end">{{ eur(report.figures.total_expenses_client) }}</td>
+                                    <td class="tabular-nums px-3 py-2.5 text-end">{{ eur(report.figures.total_operational_overhead) }}</td>
+                                    <td class="tabular-nums px-3 py-2.5 text-end" :class="report.figures.total_profit >= 0 ? 'text-status-ok' : 'text-status-danger'">{{ eur(report.figures.total_profit) }}</td>
+                                    <td class="tabular-nums px-3 py-2.5 text-end" :class="report.figures.total_profit_after_overhead >= 0 ? 'text-status-ok' : 'text-status-danger'">{{ eur(report.figures.total_profit_after_overhead) }}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </VCard>
+
+                <!-- Level 2 — per-project table (one company), now with true-labour +
+                     employer-tax + other-costs company/client split. -->
+                <VCard v-else class="mt-6" :padded="false">
                     <div class="overflow-x-auto">
                         <table class="w-full text-sm">
                             <thead>
                                 <tr class="border-b border-line text-xs uppercase text-muted">
                                     <th class="px-3 py-2 text-start font-medium">{{ $t('profitability.col_project') }}</th>
                                     <th class="px-3 py-2 text-start font-medium">{{ $t('profitability.col_client') }}</th>
-                                    <th class="px-3 py-2 text-end font-medium">{{ $t('profitability.col_hours') }}</th>
                                     <th class="px-3 py-2 text-end font-medium">{{ $t('profitability.col_revenue') }}</th>
-                                    <th class="px-3 py-2 text-end font-medium">{{ $t('profitability.col_labour') }}</th>
-                                    <th class="px-3 py-2 text-end font-medium">{{ $t('profitability.col_expenses') }}</th>
+                                    <th class="px-3 py-2 text-end font-medium">{{ $t('profitability.col_true_labour') }}</th>
+                                    <th class="px-3 py-2 text-end font-medium">{{ $t('profitability.col_employer_tax') }}</th>
+                                    <th class="px-3 py-2 text-end font-medium">{{ $t('profitability.col_other_company') }}</th>
+                                    <th class="px-3 py-2 text-end font-medium">{{ $t('profitability.col_other_client') }}</th>
                                     <th class="px-3 py-2 text-end font-medium">{{ $t('profitability.col_profit') }}</th>
-                                    <th class="px-3 py-2 text-end font-medium">{{ $t('profitability.col_margin') }}</th>
                                     <th class="px-3 py-2 text-end font-medium">{{ $t('profitability.col_overhead') }}</th>
                                 </tr>
                             </thead>
@@ -245,14 +294,12 @@ const tableColumns = computed(() => (table.value ? Object.keys(table.value[0]) :
                                         <span v-if="row.revenue_basis" class="mt-0.5 block text-xs font-normal text-muted">{{ $t(`profitability.basis_${row.revenue_basis}`) }}</span>
                                     </td>
                                     <td class="px-3 py-2 text-ink-soft">{{ row.client }}</td>
-                                    <td class="tabular-nums px-3 py-2 text-end">{{ row.hours }}</td>
                                     <td class="tabular-nums px-3 py-2 text-end">{{ row.revenue_basis === 'not_configured' ? '—' : eur(row.revenue) }}</td>
                                     <td class="tabular-nums px-3 py-2 text-end">{{ eur(row.coste_mo) }}</td>
-                                    <td class="tabular-nums px-3 py-2 text-end">{{ eur(row.gastos) }}</td>
+                                    <td class="tabular-nums px-3 py-2 text-end text-ink-soft">{{ Number(row.employer_tax) > 0 ? eur(row.employer_tax) : '—' }}</td>
+                                    <td class="tabular-nums px-3 py-2 text-end text-ink-soft">{{ eur(row.expenses_company) }}</td>
+                                    <td class="tabular-nums px-3 py-2 text-end text-ink-soft">{{ Number(row.expenses_client) > 0 ? eur(row.expenses_client) : '—' }}</td>
                                     <td class="tabular-nums px-3 py-2 text-end font-medium" :class="marginClass(row)">{{ row.revenue_basis === 'not_configured' ? '—' : eur(row.profit) }}</td>
-                                    <td class="tabular-nums px-3 py-2 text-end font-medium" :class="marginClass(row)">
-                                        {{ row.margin !== null ? `${row.margin.toLocaleString('es-ES')} %` : '—' }}
-                                    </td>
                                     <td class="tabular-nums px-3 py-2 text-end text-ink-soft">{{ Number(row.operational_overhead) > 0 ? eur(row.operational_overhead) : '—' }}</td>
                                 </tr>
                                 <tr v-if="!(report.rows ?? []).length">

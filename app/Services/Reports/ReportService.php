@@ -85,6 +85,31 @@ class ReportService
             return $this->profitability->report($this->currentCompany->id() ?? 0, $filters);
         }
 
+        return $this->forOther($module, $filters);
+    }
+
+    /**
+     * Level 3 — the all-companies group profitability report (Super Admin, no
+     * single company selected).
+     *
+     * @param  array{from?: string|null, to?: string|null}  $filters
+     * @return array<string, mixed>
+     */
+    public function group(array $filters): array
+    {
+        $from = ($filters['from'] ?? null) ?: null;
+        $to = ($filters['to'] ?? null) ?: null;
+
+        return $this->profitability->groupReport($from, $to);
+    }
+
+    /**
+     * @param  array{from?: string|null, to?: string|null}  $filters
+     * @return array<string, mixed>
+     */
+    private function forOther(string $module, array $filters): array
+    {
+
         [$from, $to] = $this->range($filters);
 
         return match ($module) {

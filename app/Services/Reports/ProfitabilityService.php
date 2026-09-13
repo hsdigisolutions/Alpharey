@@ -9,6 +9,7 @@ use App\Enums\ExpenseType;
 use App\Enums\MeasurementStatus;
 use App\Enums\ProjectRateType;
 use App\Models\Attendance;
+use App\Models\Company;
 use App\Models\Employee;
 use App\Models\Expense;
 use App\Models\Invoice;
@@ -106,6 +107,75 @@ class ProfitabilityService
                 'selected' => null,
             ];
         });
+    }
+
+    /**
+     * Level 3 — the Super-Admin ALL-companies group view: one aggregated row per
+     * company (revenue, true labour, other costs company/client, operational
+     * overhead, profit, profit-after-overhead) + a grand total across the whole
+     * group. Shown when a Super Admin has no single company selected. Cached
+     * behind a global change signature.
+     *
+     * @return array{group: true, rows: list<array<string, mixed>>, figures: array<string, float>, selected: null}
+     */
+    public function groupReport(?string $from = null, ?string $to = null): array
+    {
+        $key = 'profit:group:'.md5(($from ?? '').'|'.($to ?? '').'|'.$this->groupSignature());
+
+        return Cache::remember($key, self::CACHE_TTL_SECONDS, function () use ($from, $to): array {
+            $cols = ['revenue', 'true_labour', 'employer_tax', 'expenses_company', 'expenses_client', 'operational_overhead', 'profit', 'profit_after_overhead'];
+            $rows = [];
+            $grand = array_fill_keys($cols, 0.0);
+
+            foreach (Company::query()->orderBy('name')->get(['id', 'name']) as $company) {
+                $sum = array_fill_keys($cols, 0.0);
+                foreach ($this->companyRows((int) $company->id, $from, $to, null) as $d) {
+                    $sum['revenue'] += (float) $d['revenue'];
+                    $sum['true_labour'] += (float) $d['labour_cost'];
+                    $sum['employer_tax'] += (float) ($d['employer_tax'] ?? 0);
+                    $sum['expenses_company'] += (float) ($d['expense_breakdown']['operational']['total'] ?? 0);
+                    $sum['expenses_client'] += (float) ($d['expense_breakdown']['client_billable']['total'] ?? 0);
+                    $sum['operational_overhead'] += (float) ($d['operational_overhead'] ?? 0);
+                    $sum['profit'] += (float) $d['profit'];
+                    $sum['profit_after_overhead'] += (float) ($d['profit_after_overhead'] ?? $d['profit']);
+                }
+                foreach ($cols as $c) {
+                    $grand[$c] += $sum[$c];
+                }
+                $rows[] = array_merge(
+                    ['company' => $company->name, 'company_id' => (int) $company->id],
+                    array_map(fn (float $v): float => round($v, 2), $sum),
+                );
+            }
+
+            return [
+                'group' => true,
+                'rows' => $rows,
+                'figures' => [
+                    'total_revenue' => round($grand['revenue'], 2),
+                    'total_true_labour' => round($grand['true_labour'], 2),
+                    'total_employer_tax' => round($grand['employer_tax'], 2),
+                    'total_expenses_company' => round($grand['expenses_company'], 2),
+                    'total_expenses_client' => round($grand['expenses_client'], 2),
+                    'total_operational_overhead' => round($grand['operational_overhead'], 2),
+                    'total_profit' => round($grand['profit'], 2),
+                    'total_profit_after_overhead' => round($grand['profit_after_overhead'], 2),
+                ],
+                'selected' => null,
+            ];
+        });
+    }
+
+    /** Global change signature for the group view (cost inputs + op-cost settings). */
+    private function groupSignature(): string
+    {
+        $att = Attendance::query()->withoutGlobalScope(CompanyScope::class)->max('updated_at');
+        $exp = Expense::query()->withoutGlobalScope(CompanyScope::class)->max('updated_at');
+        $prj = Project::query()->withoutGlobalScope(CompanyScope::class)->max('updated_at');
+        $emp = Employee::query()->withoutGlobalScope(CompanyScope::class)->max('updated_at');
+        $set = DB::table('settings')->where('key', 'like', 'operational.%')->max('updated_at');
+
+        return implode('|', [(string) $att, (string) $exp, (string) $prj, (string) $emp, (string) $set]);
     }
 
     /**
@@ -1440,6 +1510,9 @@ class ProfitabilityService
             'labour_wages' => (float) ($d['labour_wages'] ?? 0),
             'employer_tax' => (float) ($d['employer_tax'] ?? 0),
             'gastos' => round((float) $d['expenses'] + (float) $d['subcontractor_cost'], 2),
+            // Item 4 — other costs split by who bears them (company vs client).
+            'expenses_company' => (float) ($d['expense_breakdown']['operational']['total'] ?? 0),
+            'expenses_client' => (float) ($d['expense_breakdown']['client_billable']['total'] ?? 0),
             'profit' => $d['profit'],
             'margin' => $d['margin'],
             'health' => $d['health'],
@@ -1460,10 +1533,18 @@ class ProfitabilityService
         $revenue = array_sum(array_map(fn (array $r): float => (float) $r['revenue'], $rows));
         $cost = array_sum(array_map(fn (array $r): float => (float) $r['cost'], $rows));
         $overhead = array_sum(array_map(fn (array $r): float => (float) ($r['operational_overhead'] ?? 0), $rows));
+        $trueLabour = array_sum(array_map(fn (array $r): float => (float) ($r['labour_cost'] ?? 0), $rows));
+        $employerTax = array_sum(array_map(fn (array $r): float => (float) ($r['employer_tax'] ?? 0), $rows));
+        $expCompany = array_sum(array_map(fn (array $r): float => (float) ($r['expense_breakdown']['operational']['total'] ?? 0), $rows));
+        $expClient = array_sum(array_map(fn (array $r): float => (float) ($r['expense_breakdown']['client_billable']['total'] ?? 0), $rows));
         $profit = round($revenue - $cost, 2);
 
         return [
             'total_revenue' => round($revenue, 2),
+            'total_true_labour' => round((float) $trueLabour, 2),
+            'total_employer_tax' => round((float) $employerTax, 2),
+            'total_expenses_company' => round((float) $expCompany, 2),
+            'total_expenses_client' => round((float) $expClient, 2),
             'total_cost' => round($cost, 2),
             'total_profit' => $profit,
             'avg_margin' => $revenue > 0.0 ? round(($profit / $revenue) * 100, 1) : 0.0,
