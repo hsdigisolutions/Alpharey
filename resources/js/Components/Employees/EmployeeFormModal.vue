@@ -46,7 +46,7 @@ const blank = {
     department: '', department_id: '', designation: '', designation_id: '', joining_date: null, leaving_date: null,
     active: true, is_contracted: false, default_check_in: '08:00', default_check_out: '17:00',
     wage_type: '', wage_rate: null, base_salary: null, daily_wage: null, per_meter_rate: null,
-    commission_percent: null, payment_method: '', iban: '', bank_name: '',
+    commission_percent: null, employer_tax_per_day: null, payment_method: '', iban: '', bank_name: '',
     has_driving_license: false, has_company_vehicle: false, can_use_vehicles: false, works_at_height: false,
     operational_cost_exempt: false,
     referred_by_employee_id: '', referral_rate_type: '', referral_amount: null, referral_window_months: 6,
@@ -191,6 +191,9 @@ const showBank = computed(() => !form.payment_method || form.payment_method === 
                     </FormField>
                     <FormField k="employees.commission" :error="form.errors.commission_percent">
                         <VInput v-model="form.commission_percent" type="number" step="0.01" />
+                    </FormField>
+                    <FormField k="employees.employer_tax_per_day" :error="form.errors.employer_tax_per_day">
+                        <VCurrencyInput v-model="form.employer_tax_per_day" />
                     </FormField>
                     <FormField k="employees.payment_method" :error="form.errors.payment_method">
                         <VSelect v-model="form.payment_method">

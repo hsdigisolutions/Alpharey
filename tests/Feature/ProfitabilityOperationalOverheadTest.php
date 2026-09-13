@@ -110,3 +110,64 @@ it('never adds overhead on an externalised (subcontracted) project', function ()
 
     expect((float) $summary['operational_overhead'])->toBe(0.0);
 });
+
+// Employer social-security tax (2026-09-13) — the fixed €/day the company pays per
+// worker is added to the TRUE labour cost (before profit), and the operational
+// overhead is Option A on that true labour cost (wages + employer tax).
+it('adds employer tax to true labour cost and the overhead base', function (): void {
+    app(SettingsService::class)->set("operational.cost_pct.{$this->company->id}", 10);
+    $w = overheadWorker();
+    $w->update(['employer_tax_per_day' => '30']);
+    logFullDay($w); // 1 worked day
+
+    $s = app(ProfitabilityService::class)->forProject($this->project->fresh());
+
+    // revenue 8h × 20 = 160; wages 100; employer tax 30 (1 day) → true labour 130.
+    expect((float) $s['revenue'])->toBe(160.0)
+        ->and((float) $s['labour_wages'])->toBe(100.0)
+        ->and((float) $s['employer_tax'])->toBe(30.0)
+        ->and((float) $s['labour_cost'])->toBe(130.0)
+        ->and((float) $s['profit'])->toBe(30.0)          // 160 − 130
+        ->and((float) $s['operational_overhead'])->toBe(13.0)   // 10% of 130
+        ->and((float) $s['profit_after_overhead'])->toBe(17.0); // 30 − 13
+});
+
+it('multiplies employer tax by worked days and reflects it in the daily P&L', function (): void {
+    $w = overheadWorker();
+    $w->update(['employer_tax_per_day' => '20']);
+    logFullDay($w, '2026-09-10');
+    logFullDay($w, '2026-09-11');
+
+    $s = app(ProfitabilityService::class)->forProject($this->project->fresh());
+    // 2 days × €20 = €40 employer tax; wages 2 × 100 = 200 → true labour 240.
+    expect((float) $s['employer_tax'])->toBe(40.0)
+        ->and((float) $s['labour_cost'])->toBe(240.0);
+
+    $pnl = app(ProfitabilityService::class)->dailyPnl($this->project->fresh());
+    expect((float) $pnl['totals']['employer_tax'])->toBe(40.0)
+        ->and((float) $pnl['totals']['labour'])->toBe(200.0)  // wages only
+        ->and((float) $pnl['totals']['cost'])->toBe(240.0);   // wages + tax
+});
+
+it('keeps employer tax in labour cost even for an operational-exempt worker, but out of the overhead base', function (): void {
+    app(SettingsService::class)->set("operational.cost_pct.{$this->company->id}", 10);
+    $exempt = overheadWorker(exempt: true);
+    $exempt->update(['employer_tax_per_day' => '50']);
+    logFullDay($exempt);
+
+    $s = app(ProfitabilityService::class)->forProject($this->project->fresh());
+    // Employer tax IS a real cost on everyone: true labour = 100 + 50 = 150.
+    expect((float) $s['labour_cost'])->toBe(150.0)
+        // …but the exempt worker contributes NOTHING to the overhead base.
+        ->and((float) $s['operational_overhead'])->toBe(0.0);
+});
+
+it('is byte-identical when employer tax is 0 (the default)', function (): void {
+    logFullDay(overheadWorker()); // no employer tax set → default 0
+
+    $s = app(ProfitabilityService::class)->forProject($this->project->fresh());
+    // wages only, exactly as before the feature.
+    expect((float) $s['employer_tax'])->toBe(0.0)
+        ->and((float) $s['labour_cost'])->toBe(100.0)
+        ->and((float) $s['profit'])->toBe(60.0);
+});

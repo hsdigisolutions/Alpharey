@@ -37,6 +37,7 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $active_since
  * @property bool $can_use_vehicles
  * @property bool $operational_cost_exempt
+ * @property numeric-string $employer_tax_per_day
  * @property int|null $referred_by_employee_id
  * @property ReferralRateType|null $referral_rate_type
  * @property numeric-string|null $referral_amount
@@ -76,7 +77,7 @@ class Employee extends Model
         'daily_wage', 'per_meter_rate', 'commission_percent', 'payment_method',
         'overtime_policy_id', 'supervisor_overtime_policy_id', 'iban',
         'bank_name', 'has_driving_license', 'has_company_vehicle',
-        'can_use_vehicles', 'works_at_height', 'operational_cost_exempt',
+        'can_use_vehicles', 'works_at_height', 'operational_cost_exempt', 'employer_tax_per_day',
         'referred_by_employee_id', 'referral_rate_type', 'referral_amount', 'referral_window_months',
         'notes',
     ];
@@ -118,6 +119,7 @@ class Employee extends Model
             'can_use_vehicles' => 'boolean',
             'works_at_height' => 'boolean',
             'operational_cost_exempt' => 'boolean',
+            'employer_tax_per_day' => 'decimal:2',
             'commission_percent' => 'decimal:2',
             'referral_rate_type' => ReferralRateType::class,
             'referral_amount' => 'decimal:2',

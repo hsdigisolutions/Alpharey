@@ -330,6 +330,8 @@ class EmployeeController extends Controller
                 'base_salary' => $canSeeWages ? $employee->getAttribute('base_salary') : null,
                 'daily_wage' => $canSeeWages ? $employee->getAttribute('daily_wage') : null,
                 'per_meter_rate' => $canSeeWages ? $employee->getAttribute('per_meter_rate') : null,
+                // Employer social-security tax €/day — a cost figure, wage-gated.
+                'employer_tax_per_day' => $canSeeWages ? (float) $employee->getAttribute('employer_tax_per_day') : null,
             ]),
             // Read-only historical view: the acting company is not this worker's
             // current company (they transferred away). Drives the banner + hides

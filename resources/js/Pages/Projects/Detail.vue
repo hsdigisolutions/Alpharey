@@ -544,6 +544,15 @@ const noteStatus = { internal: 'neutral', client_call: 'info', client_email: 'ac
                                 <dt class="text-ink-soft">{{ $t('profitability.labour_cost') }}</dt>
                                 <dd class="tabular-nums">{{ eur(profitability.labour_cost) }}</dd>
                             </div>
+                            <!-- True-labour breakdown: wages + employer tax (only when tax > 0). -->
+                            <div v-if="Number(profitability.employer_tax) > 0" class="flex justify-between py-1 ps-4 text-xs text-muted">
+                                <dt>{{ $t('profitability.labour_wages') }}</dt>
+                                <dd class="tabular-nums">{{ eur(profitability.labour_wages) }}</dd>
+                            </div>
+                            <div v-if="Number(profitability.employer_tax) > 0" class="flex justify-between py-1 ps-4 text-xs text-muted">
+                                <dt>{{ $t('profitability.employer_tax') }}</dt>
+                                <dd class="tabular-nums">+ {{ eur(profitability.employer_tax) }}</dd>
+                            </div>
                             <div class="flex justify-between py-2">
                                 <dt class="text-ink-soft">{{ $t('profitability.other_expenses') }}</dt>
                                 <dd class="tabular-nums">{{ eur(profitability.expenses) }}</dd>
@@ -890,6 +899,12 @@ const noteStatus = { internal: 'neutral', client_call: 'info', client_email: 'ac
                                     <td class="tabular-nums px-4 py-2.5 text-end">{{ eur(dailyPnl.totals.expenses) }}</td>
                                     <td class="tabular-nums px-4 py-2.5 text-end">{{ eur(dailyPnl.totals.profit) }}</td>
                                     <td class="tabular-nums px-4 py-2.5 text-end">{{ pct(dailyPnl.totals.margin) }}</td>
+                                </tr>
+                                <!-- Employer tax component of the true labour cost (only when > 0). -->
+                                <tr v-if="dailyPnl.days.length > 0 && Number(dailyPnl.totals.employer_tax) > 0" class="text-xs text-muted">
+                                    <td class="px-4 py-1.5" colspan="4">{{ $t('profitability.employer_tax_note') }}</td>
+                                    <td class="tabular-nums px-4 py-1.5 text-end">+ {{ eur(dailyPnl.totals.employer_tax) }}</td>
+                                    <td colspan="3"></td>
                                 </tr>
                                 <!-- Item 7 — additive operational-overhead lines (only when op % > 0). -->
                                 <template v-if="dailyPnl.days.length > 0 && dailyPnl.totals.operational_cost_pct > 0">

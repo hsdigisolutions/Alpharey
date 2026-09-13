@@ -117,10 +117,13 @@ const opFiltered = computed(() => {
 const opIncludedCount = computed(() => opEmployees.value.filter((e) => e.included).length);
 function opSetAll(v) { opEmployees.value.forEach((e) => (e.included = v)); }
 
-const operationalForm = useForm({ cost_pct: props.operationalCostPct, exempt_ids: [] });
+const operationalForm = useForm({ cost_pct: props.operationalCostPct, exempt_ids: [], employer_tax: {} });
 function saveOperational() {
-    // Send the EXEMPT (unchecked) ids; the server flips the flags to match.
+    // Send the EXEMPT (unchecked) ids + each worker's employer tax (€/day).
     operationalForm.exempt_ids = opEmployees.value.filter((e) => !e.included).map((e) => e.id);
+    operationalForm.employer_tax = Object.fromEntries(
+        opEmployees.value.map((e) => [e.id, Number(e.employer_tax) || 0]),
+    );
     operationalForm.put('/admin/settings/operational', { preserveScroll: true });
 }
 
@@ -415,8 +418,10 @@ function deletePolicy(p) {
                         <span v-if="operationalForm.errors.cost_pct" class="text-xs text-status-danger">{{ operationalForm.errors.cost_pct }}</span>
                     </label>
 
-                    <!-- Employee roster: checked = included in the overhead. -->
+                    <!-- Employee roster: checked = included in the overhead; each
+                         row also carries the worker's employer tax (€/day). -->
                     <div v-if="opEmployees.length" class="rounded-lg border border-line">
+                        <p class="border-b border-line px-3 pt-2 text-xs text-muted">{{ $t('settings.employer_tax_hint') }}</p>
                         <div class="flex flex-wrap items-center justify-between gap-2 border-b border-line px-3 py-2">
                             <span class="text-xs font-medium text-ink-soft">
                                 {{ $t('settings.operational_employees') }}
@@ -431,12 +436,19 @@ function deletePolicy(p) {
                             <input v-model="opSearch" type="search" :placeholder="$t('settings.operational_employees_search')"
                                 class="mb-2 w-full rounded-md border border-line-strong bg-surface-sunken px-3 py-1.5 text-sm text-ink placeholder:text-muted focus:border-accent focus:outline-none" />
                             <div class="max-h-64 space-y-1 overflow-y-auto">
-                                <label v-for="e in opFiltered" :key="e.id"
-                                    class="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 hover:bg-surface-hover">
-                                    <input v-model="e.included" type="checkbox" class="rounded border-line-strong text-accent focus:ring-accent" />
-                                    <span class="text-sm text-ink">{{ e.name }}</span>
-                                    <span class="text-xs text-muted">{{ e.code }}</span>
-                                </label>
+                                <div v-for="e in opFiltered" :key="e.id"
+                                    class="flex items-center gap-2 rounded-md px-2 py-1.5 hover:bg-surface-hover">
+                                    <label class="flex flex-1 cursor-pointer items-center gap-2">
+                                        <input v-model="e.included" type="checkbox" class="rounded border-line-strong text-accent focus:ring-accent" />
+                                        <span class="text-sm text-ink">{{ e.name }}</span>
+                                        <span class="text-xs text-muted">{{ e.code }}</span>
+                                    </label>
+                                    <label class="flex items-center gap-1.5 text-xs text-muted">
+                                        <span class="shrink-0">{{ $t('settings.employer_tax_short') }}</span>
+                                        <input v-model="e.employer_tax" type="number" step="0.01" min="0"
+                                            class="w-24 rounded-md border border-line-strong bg-surface-sunken px-2 py-1 text-end text-sm text-ink focus:border-accent focus:outline-none" />
+                                    </label>
+                                </div>
                                 <p v-if="!opFiltered.length" class="px-2 py-3 text-center text-xs text-muted">{{ $t('common.search_no_results') }}</p>
                             </div>
                         </div>

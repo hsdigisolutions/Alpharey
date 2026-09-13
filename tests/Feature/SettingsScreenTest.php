@@ -187,3 +187,23 @@ it('never writes an exemption to another company employee', function (): void {
     $fresh = Employee::withoutGlobalScope(CompanyScope::class)->find($foreign->id);
     expect($fresh->operational_cost_exempt)->toBeFalse();
 });
+
+// Employer social-security tax (2026-09-13) — set per employee in bulk from the
+// Settings roster (€/day), alongside the operational-cost inclusion checkbox.
+it('sets per-employee employer tax from the settings roster', function (): void {
+    $a = Employee::factory()->forCompany($this->company)->create(['employer_tax_per_day' => '0']);
+    $b = Employee::factory()->forCompany($this->company)->create(['employer_tax_per_day' => '0']);
+
+    $this->actingAs($this->companyAdmin)->put('/admin/settings/operational', [
+        'cost_pct' => 10,
+        'exempt_ids' => [],
+        'employer_tax' => [(string) $a->id => 30, (string) $b->id => 45.5],
+    ])->assertRedirect();
+
+    expect((float) $a->fresh()->getAttribute('employer_tax_per_day'))->toBe(30.0)
+        ->and((float) $b->fresh()->getAttribute('employer_tax_per_day'))->toBe(45.5);
+
+    // The roster payload ships each worker's current employer tax.
+    $this->actingAs($this->companyAdmin)->get('/admin/settings')
+        ->assertInertia(fn (Assert $page) => $page->has('operationalEmployees', 2));
+});

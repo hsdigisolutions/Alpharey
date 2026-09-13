@@ -139,12 +139,14 @@ class SettingsController extends Controller
         }
 
         return Employee::query()->active()->orderBy('full_name')
-            ->get(['id', 'full_name', 'employee_code', 'operational_cost_exempt'])
+            ->get(['id', 'full_name', 'employee_code', 'operational_cost_exempt', 'employer_tax_per_day'])
             ->map(fn (Employee $e): array => [
                 'id' => $e->id,
                 'name' => $e->full_name,
                 'code' => (string) $e->employee_code,
                 'included' => ! $e->operational_cost_exempt,
+                // Item: per-employee employer social-security tax (€/day).
+                'employer_tax' => (float) $e->getAttribute('employer_tax_per_day'),
             ])->all();
     }
 
@@ -345,19 +347,32 @@ class SettingsController extends Controller
             // The EXEMPT (unchecked) employee ids from the Settings roster.
             'exempt_ids' => ['array'],
             'exempt_ids.*' => ['integer'],
+            // Per-employee employer social-security tax (€/day), keyed by id.
+            'employer_tax' => ['array'],
+            'employer_tax.*' => ['nullable', 'numeric', 'min:0', 'max:99999'],
         ]);
 
         $settings->set("operational.cost_pct.{$companyId}", (float) $validated['cost_pct']);
 
-        // Apply the roster: flip operational_cost_exempt for the acting company's
-        // active employees. Foreign ids are intersected out (never a cross-company
-        // write); only rows that actually change are saved (audited per change).
+        // Apply the roster: flip operational_cost_exempt AND set the employer tax
+        // for the acting company's active employees. Foreign ids never match the
+        // scoped query (no cross-company write); only rows that actually change are
+        // saved (audited per change).
         $exempt = array_map('intval', $validated['exempt_ids'] ?? []);
-        Employee::query()->active()->get(['id', 'operational_cost_exempt', 'full_name'])
-            ->each(function (Employee $e) use ($exempt): void {
-                $should = in_array($e->id, $exempt, true);
-                if ($e->operational_cost_exempt !== $should) {
-                    $e->operational_cost_exempt = $should;
+        $taxes = $validated['employer_tax'] ?? [];
+        Employee::query()->active()->get(['id', 'operational_cost_exempt', 'employer_tax_per_day', 'full_name'])
+            ->each(function (Employee $e) use ($exempt, $taxes): void {
+                $shouldExempt = in_array($e->id, $exempt, true);
+                if ($e->operational_cost_exempt !== $shouldExempt) {
+                    $e->operational_cost_exempt = $shouldExempt;
+                }
+                if (array_key_exists((string) $e->id, $taxes)) {
+                    $newTax = round((float) $taxes[(string) $e->id], 2);
+                    if ((float) $e->getAttribute('employer_tax_per_day') !== $newTax) {
+                        $e->employer_tax_per_day = (string) $newTax;
+                    }
+                }
+                if ($e->isDirty()) {
                     $e->save();
                 }
             });

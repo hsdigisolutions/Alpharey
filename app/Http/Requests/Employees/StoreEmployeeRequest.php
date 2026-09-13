@@ -81,6 +81,9 @@ class StoreEmployeeRequest extends FormRequest
             'daily_wage' => ['nullable', 'numeric', 'gt:0', 'max:99999'],
             'per_meter_rate' => ['nullable', 'numeric', 'gt:0', 'max:99999'],
             'commission_percent' => ['nullable', 'numeric', 'min:0', 'max:100'],
+            // Employer social-security tax the COMPANY pays per worked day (€/day),
+            // a real P&L cost. 0 allowed (unconfigured). Never touches worker pay.
+            'employer_tax_per_day' => ['nullable', 'numeric', 'min:0', 'max:99999'],
             'payment_method' => ['nullable', Rule::enum(PaymentMethod::class)],
             'overtime_policy_id' => ['nullable', 'integer', Rule::exists('overtime_policies', 'id')],
             'supervisor_overtime_policy_id' => ['nullable', 'integer', Rule::exists('overtime_policies', 'id')],
