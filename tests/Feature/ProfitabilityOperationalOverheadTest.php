@@ -1,7 +1,9 @@
 <?php
 
+use App\Models\Attendance;
 use App\Models\Company;
 use App\Models\Employee;
+use App\Models\EmployeeDeployment;
 use App\Models\Project;
 use App\Models\Subcontractor;
 use App\Models\User;
@@ -195,4 +197,63 @@ it('shows per-day and per-month operational cost + final profit in the daily P&L
         ->and((float) $pnl['months'][0]['profit_after_overhead'])->toBe(56.0)
         ->and((float) $pnl['totals']['operational_overhead'])->toBe(24.0)
         ->and((float) $pnl['totals']['profit_after_overhead'])->toBe(56.0);
+});
+
+// F1 (audit fix) — employer social-security tax is a cost of EMPLOYING the worker,
+// borne by their HOME company. A DEPLOYED-IN worker's days (logged under the host)
+// must NOT add their employer tax to the host project's P&L — the host reimburses
+// wages only. Scoped to actual deployment windows so a TRANSFERRED worker, who was
+// genuinely employed by the company on those dates, keeps their historical tax.
+it('excludes a deployed-in worker employer tax from the host project P&L', function (): void {
+    $own = overheadWorker();
+    $own->update(['employer_tax_per_day' => '30']);
+    logFullDay($own, '2026-09-10');
+
+    // A worker employed by ANOTHER company, DEPLOYED into this host project.
+    $home = Company::factory()->create();
+    $deployed = Employee::factory()->forCompany($home)->create([
+        'wage_type' => 'daily', 'daily_wage' => '100',
+        'employer_tax_per_day' => '100', 'designation_id' => null,
+    ]);
+    EmployeeDeployment::factory()->create([
+        'employee_id' => $deployed->id, 'home_company_id' => $home->id,
+        'host_company_id' => $this->company->id, 'project_id' => $this->project->id,
+        'deployment_start' => '2026-09-01', 'deployment_end' => null,
+        'billing_method' => 'option_a', 'status' => 'active',
+    ]);
+    Attendance::factory()->create([
+        'company_id' => $this->company->id, 'employee_id' => $deployed->id,
+        'project_id' => $this->project->id, 'date' => '2026-09-11',
+        'status' => 'present', 'day_type' => 'full', 'hours_worked' => '8', 'total_amount' => '100',
+    ]);
+
+    $s = app(ProfitabilityService::class)->forProject($this->project->fresh());
+
+    // Employer tax = the host's OWN worker only (30), never the deployed worker's 100.
+    expect((float) $s['employer_tax'])->toBe(30.0)
+        // The deployed worker's WAGES still count as host cost (own 100 + deployed
+        // 100), so true labour = 200 wages + 30 own tax = 230.
+        ->and((float) $s['labour_cost'])->toBe(230.0);
+});
+
+it('keeps a foreign-company worker employer tax when there is NO deployment (transfer artifact)', function (): void {
+    // A worker whose CURRENT company is elsewhere but who worked on this project
+    // with NO deployment record — a transfer artifact. The company DID employ them
+    // on that date, so their employer tax stays a legitimate cost here.
+    $elsewhere = Company::factory()->create();
+    $moved = Employee::factory()->forCompany($elsewhere)->create([
+        'wage_type' => 'daily', 'daily_wage' => '100',
+        'employer_tax_per_day' => '40', 'designation_id' => null,
+    ]);
+    Attendance::factory()->create([
+        'company_id' => $this->company->id, 'employee_id' => $moved->id,
+        'project_id' => $this->project->id, 'date' => '2026-09-11',
+        'status' => 'present', 'day_type' => 'full', 'hours_worked' => '8', 'total_amount' => '100',
+    ]);
+
+    $s = app(ProfitabilityService::class)->forProject($this->project->fresh());
+
+    // No deployment window → tax is NOT stripped: 40 counts, true labour = 140.
+    expect((float) $s['employer_tax'])->toBe(40.0)
+        ->and((float) $s['labour_cost'])->toBe(140.0);
 });

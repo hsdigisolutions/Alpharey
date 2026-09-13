@@ -992,6 +992,14 @@ class ProfitabilityService
      * the operational overhead applies to (the exempt flag is about overhead, not
      * this tax — the tax is a genuine cost on ALL workers). Read live (default 0 →
      * no effect until amounts are set).
+     *
+     * DEPLOYED-IN workers are excluded: employer tax is a cost of EMPLOYING the
+     * worker, borne by their HOME company. A deployment logs the worker's days under
+     * the HOST company, but the host only reimburses wages (the deployment
+     * cross-charge, no tax) — so a day covered by a deployment INTO this project must
+     * not add employer tax to the host's P&L. This is scoped to actual deployment
+     * windows (not the worker's current company_id) so a TRANSFERRED worker — who was
+     * genuinely employed by this company on those dates — keeps their historical tax.
      */
     private function employerTaxTotal(int $companyId, ?string $from, ?string $to, int $projectId, bool $nonExemptOnly = false): float
     {
@@ -1000,6 +1008,19 @@ class ProfitabilityService
             ->where('attendance.company_id', $companyId)
             ->where('attendance.project_id', $projectId)
             ->whereIn('attendance.status', self::WORKED_STATUSES)
+            ->whereNotExists(function ($q) use ($companyId): void {
+                // Any deployment INTO this company covering the day — matched by
+                // company + date, NOT project: a worker deployed here is employed by
+                // their home company for EVERY host project they touch during the
+                // window, so their tax is excluded from all of them, not just the
+                // deployment's named project.
+                $q->selectRaw('1')->from('employee_deployments as d')
+                    ->whereColumn('d.employee_id', 'attendance.employee_id')
+                    ->where('d.host_company_id', $companyId)
+                    ->whereColumn('d.deployment_start', '<=', 'attendance.date')
+                    ->where(fn ($w) => $w->whereNull('d.deployment_end')
+                        ->orWhereColumn('d.deployment_end', '>=', 'attendance.date'));
+            })
             ->when($nonExemptOnly, fn ($q) => $q->where('employees.operational_cost_exempt', false))
             ->when($from !== null, fn ($q) => $q->whereDate('attendance.date', '>=', $from))
             ->when($to !== null, fn ($q) => $q->whereDate('attendance.date', '<=', $to))
