@@ -6,6 +6,27 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### True labour cost — employer social-security tax + operational cost, 3-level visibility (2026-09-13, DONE, deployed to prod)
 
+**Audit fix F1 (2026-09-13, DONE, deployed) — deployed-in worker employer tax
+excluded from the HOST project P&L.** Employer tax is a cost of EMPLOYING the
+worker, borne by their HOME company; a deployment logs the worker's days under the
+host, but the host only reimburses wages (the cross-charge, no tax). `forProject`
+(via the new one-pass `overheadInputs()`) AND `dailyPnl` (via a preloaded
+deployment-window map + `rowIsDeployed()`) now exclude a day covered by a
+deployment INTO the project's company. **Scoped to actual `employee_deployments`
+windows (matched by employee + host company + date), NOT the worker's current
+`company_id`** — the single-record transfer model flips `company_id` but leaves
+historical attendance, so a `company_id` filter would wrongly strip TRANSFERRED
+workers who WERE employed by the company on those dates. The proof caught this: on
+prod, a `company_id` filter changed 40 projects / 610 transfer rows, whereas the
+deployment-window filter touches only the 85 genuine deployment rows across 9
+projects (transfers retained; summary and daily agree). Deployed WAGES still count
+as host cost (via attendance / the overhead base); only the tax drops. Dormant at
+tax=0. **Audit fix F2:** `forProject` folded the 3 overhead/tax scans
+(`employerTaxTotal`×2 + `operationalBase`) into one `overheadInputs()` aggregate
+(the two tax columns carry the deployment exclusion, the base does not) — proven
+byte-identical on 79 prod projects; the dashboard perf test now seeds projects so
+the per-project P&L path is actually measured.
+
 **Follow-up (2026-09-13, DONE, deployed) — per-day & per-month view in the
 Rentabilidad tab.** `dailyPnl()` now emits `operational_overhead`,
 `profit_after_overhead` and `margin_after` on EVERY day row, month row, and the
@@ -235,10 +256,13 @@ fix.** The old Item A protection kept the `internal_deployment` expense
 `approved=false` so it never entered project P&L (the deployed labour is already
 counted once via host-company attendance). The new flow NEEDS the host to approve
 that expense, so the guard was moved from the approved-flag to a **structural
-TYPE exclusion**: `ProfitabilityService::expenseTotal()` AND the `dailyPnl`
+TYPE exclusion**: `ProfitabilityService::expensesByBearer()` AND the `dailyPnl`
 per-day expense query now exclude `type = internal_deployment` regardless of
 `approved` (project-P&L-ONLY — company-level expense/financial reports still see
-it, since there is no host payroll cost for the deployed worker). Proven on prod
+it, since there is no host payroll cost for the deployed worker). (Doc note
+2026-09-13: the exclusion lives in `expensesByBearer()` — the single expense
+reader `forProject()` uses since the Item 4 bearable-by split; the older
+`expenseTotal()` method no longer exists.) Proven on prod
 byte-identical across all 6 projects carrying such an expense; a Pest guard proves
 an APPROVED €999 cross-charge adds nothing to project cost. **Do NOT reintroduce
 a dependency on `approved=false` for double-count safety — it is now the type
