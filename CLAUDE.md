@@ -4,6 +4,84 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Status: Phase 9 in progress — hardening (2026-08-01)
 
+### Client feature batch — Items 1–10 + Bonus + 3 investigations (2026-09-13, DONE, all deployed to prod)
+
+A large one-at-a-time batch of client-requested changes, each built →
+investigate-and-propose (money items) → 5 gates → before/after proof on real prod
+data (money items, rolled-back txns) → deploy → commit. **~1363 Pest tests.** The
+money items were verified byte-identical against real production data before/after
+deploy. Full arc, newest-relevant load-bearing notes:
+
+- **Item 1** — task-based Profitability tab (production sub-lines + effective
+  rates + per-worker meters; display only).
+- **Item 2** — task rework penalty (`is_rework`, excluded from revenue).
+- **Item 3** — project `material_supply` label (client_included / client_separate
+  / company; metadata only).
+- **Item 4** — P&L expenses split by `bearable_by` (company-operational subtract
+  vs client-billable; billing-type-aware — unit-billed excludes client, invoice-
+  billed keeps it). `ProfitabilityService::expensesByBearer()`.
+- **Item 5** — removed the Worker Expenses admin tab; workers still submit via
+  PWA, admin reviews in the regular Expenses tab (mirror-at-submission +
+  `worker-expenses:backfill-mirrors`). Payroll double-count guard intact.
+- **Item 6** — invoice payment receipt (bank/cash + reference + upload).
+- **Item 7 — operational cost % overhead (ADDITIVE, cost-tracking only).**
+  Per-company Setting `operational.cost_pct.{companyId}` (0–100, default 0/off);
+  per-employee `operational_cost_exempt` flag (default false = included). Overhead
+  = Σ(non-exempt worker frozen day total × op %) over the same attendance rows the
+  P&L reads, gated on op %>0 AND own labour (never a subcontracted/outsourced
+  crew). Shown as "Operational overhead" + "Profit after overhead" on the
+  Rentabilidad tab + Resumen card **only when op %>0**; also a company-wide
+  **Reports → Profitability** column + total (follow-up). **Payroll is physically
+  untouched — no reference to the setting or flag in PayrollService** (proven:
+  46 Aug payslips byte-identical with op %=15 + a worker exempted). The existing
+  profit/cost/revenue/margin are byte-unchanged (proven: 79-project money hash
+  identical before/after deploy). Follow-up: a bulk employee **roster on the
+  Settings op-cost card** (checkbox list + search; checked = included) writes the
+  exempt flags in one place — the per-employee-form checkbox stays too.
+  **⚠️ op % is PER-COMPANY** — only the companies whose % is set >0 show overhead
+  (as of go-live only Alovar =10%; Shizukani/Lanak have workers but % still 0).
+  **0 employees are exempt system-wide** (included-by-default works correctly).
+- **Item 8 — worker referral commission.** A referrer earns a commission from a
+  REFERRED worker's attendance, folded into the referrer's own monthly payroll
+  (`payrolls.referral_commission`, encrypted). Set on the REFERRED worker's form
+  (`employees.referred_by_employee_id` + `referral_rate_type` per_day/per_hour/
+  per_month/one_time + `referral_amount` + `referral_window_months`). Accrues only
+  while BOTH parties are active, within the window; per_hour uses `displayHoursNet`
+  (a derived bonus, not the referred worker's wage — allowed to use the display
+  helper); one_time pays once in the first worked month.
+  `PayrollService::referralAccrualByWorker()` is the single accrual authority the
+  payslip line, the referrer-profile "Referrals made" card, AND the Commissions
+  "Referral commissions" sub-tab all read. **⚠️ WINDOW ANCHOR = referral SETUP
+  date** (`employees.referral_started_at`, a server-set stamp: model hook sets it
+  on first configuration, clears it on removal; existing configured referrals were
+  backfilled to now) — NOT joining_date (92% of real workers have none, so a
+  joining-anchored window silently never applied). Window is `[setup month,
+  +N months)` bounded on both sides. Never touches the referred worker's pay or the
+  sales-commission module. Proven on prod: Haris earns €70 (Sep, within window),
+  €0 from Oct (expired).
+- **Item 9** — clear the post-transfer "documents pending re-upload" reminder (a
+  dismiss button → `PATCH /employees/{employee}/documents-reuploaded`; the flag was
+  set on transfer and never cleared).
+- **Item 10 — location-mandatory check-in (Worker PWA).** A DELIBERATE reversal of
+  "GPS is evidence, not a gate" **for CHECK-IN ONLY** (client-confirmed, tradeoff
+  accepted: poor-signal/indoor workers are blocked too). Check-in now REQUIRES a
+  usable fix: the client fetches+validates it before the selfie and blocks with a
+  clear message (`ui.worker.location_required`); the server always reads the fix
+  (no longer gated by the GPS-consent flag) and `WorkerAttendanceService::checkIn`
+  refuses a punch with no lat/lng; the consent screen makes GPS consent required
+  (no app-side opt-out). **Check-OUT is unchanged — still evidence, not a gate.**
+- **Bonus** — invoice date-range filter (already functional; got clear From/To
+  labels).
+
+**Three investigations (data/config, NOT code bugs):** (1) the referral "€0 on the
+payslip" report was a **stale payroll snapshot** — payroll is a frozen monthly
+recompute; setting a referral (like an expense/advance/fine) needs a re-Calculate,
+proven by running the real `calculateMonth` path → €70. A recalc hint was added to
+the referral form. (2) The Commissions tab is the separate sales/invoice-based
+commission — referral commission got its own labeled sub-tab. (3) Operational cost
+is calculating correctly (real prod numbers); "not showing" was per-company % not
+being set + no company-wide view (both addressed).
+
 ### Universal hours fix — P&L + deployments read NET hours everywhere (2026-09-12, DONE, deployed to prod)
 
 **The bug the client reported:** on hourly-billed project Plaza del Carmen (#125)
