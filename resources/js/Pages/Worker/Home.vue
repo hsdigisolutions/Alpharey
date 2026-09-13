@@ -254,9 +254,27 @@ const statusLine = ref('');
 // A check-in failure must never be silent — the worker sees why (before this,
 // a rejected punch just reset the screen with no feedback).
 const checkInError = ref('');
+// Item 10 — the validated location fix captured in beginCheckIn(), required for
+// the punch. Never null by the time submitCheckIn() runs (it blocks otherwise).
+const pendingLoc = ref(null);
 
 async function beginCheckIn() {
     checkInError.value = '';
+
+    // Item 10 — location is REQUIRED to check in (a deliberate reversal of "GPS
+    // is evidence, not a gate" for check-in only). Get + validate the fix FIRST,
+    // before the selfie, so a worker who denies/can't get location is stopped
+    // immediately with a clear message and never wastes a selfie. Our UI never
+    // offers a "skip location" path; a browser-level denial is caught here.
+    statusLine.value = t('worker.getting_location');
+    const loc = await getLocation();
+    statusLine.value = '';
+    if (loc.denied || loc.lat == null || loc.lng == null) {
+        checkInError.value = t('worker.location_required');
+        return; // BLOCKED — cannot check in without location
+    }
+    pendingLoc.value = loc;
+
     // Selfie consent withheld → skip the camera step entirely and punch in.
     if (!props.consent.photo) {
         submitCheckIn();
@@ -280,20 +298,22 @@ function onCameraError() {
 }
 
 async function submitCheckIn() {
+    // The location fix was obtained + validated in beginCheckIn(); a check-in
+    // without it is impossible (Item 10). Guard again in case the flow is reached
+    // without one.
+    const loc = pendingLoc.value;
+    if (!loc || loc.lat == null || loc.lng == null) {
+        checkInError.value = t('worker.location_required');
+        cameraOpen.value = false;
+        return;
+    }
     busy.value = true;
 
-    // GPS only when consent is given; otherwise punch with no location.
-    let loc = { lat: null, lng: null, accuracy: null, denied: false };
-    if (props.consent.gps) {
-        statusLine.value = t('worker.getting_location');
-        loc = await getLocation();
-    }
-
     const data = new FormData();
-    data.append('lat', loc.lat ?? '');
-    data.append('lng', loc.lng ?? '');
+    data.append('lat', loc.lat);
+    data.append('lng', loc.lng);
     data.append('accuracy', loc.accuracy ?? '');
-    data.append('denied', loc.denied ? '1' : '0');
+    data.append('denied', '0');
     // The chosen site (weekday only; a weekend offer locks it server-side). A
     // project-less punch is allowed, so send nothing when none is selected.
     if (selectedProjectId.value != null && selectedProjectId.value !== '') {

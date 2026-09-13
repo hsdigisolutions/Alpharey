@@ -101,8 +101,9 @@ it('refuses acceptance without the mandatory attendance acknowledgement', functi
 it('lets the worker punch once the notice is accepted', function (): void {
     [$user, $employee] = unacknowledgedWorker($this->company);
 
-    $this->actingAs($user)->post('/worker/privacy-ack', ['consent_attendance' => true]);
-    $this->actingAs($user)->post('/worker/check-in', ['denied' => true])->assertRedirect();
+    $this->actingAs($user)->post('/worker/privacy-ack', ['consent_attendance' => true, 'consent_gps' => true]);
+    // Item 10 — a check-in needs a location fix; send one so the punch stands.
+    $this->actingAs($user)->post('/worker/check-in', ['lat' => 40.4168, 'lng' => -3.7038, 'denied' => false])->assertRedirect();
 
     expect(Attendance::withoutGlobalScopes()->where('employee_id', $employee->id)->exists())->toBeTrue();
 });
@@ -118,17 +119,22 @@ it('re-gates a worker whose accepted version is behind the current one', functio
     expect($employee->fresh()->hasAcknowledgedPrivacyNotice())->toBeFalse();
 });
 
-it('skips GPS capture and the GPS-missing alert when GPS consent is withheld', function (): void {
+// Item 10 — location is now MANDATORY for CHECK-IN, so it is captured regardless
+// of the (legacy) optional GPS-consent flag; the going-forward consent screen
+// makes GPS consent required. The old "withheld GPS consent → no location at
+// check-in" behaviour is deliberately gone. (Check-OUT still honours consent.)
+it('captures check-in location even when the legacy GPS-consent flag is off', function (): void {
     Notification::fake();
     $user = User::factory()->create(['role' => UserRole::Worker, 'company_id' => $this->company->id]);
     User::factory()->companyAdmin()->forCompany($this->company)->create();
     $employee = Employee::factory()->forCompany($this->company)->privacyAcknowledged(gps: false)->create(['user_id' => $user->id]);
 
-    // Even if coordinates are POSTed, no GPS consent → none stored, no alert.
     $this->actingAs($user)->post('/worker/check-in', ['lat' => 40.4, 'lng' => -3.7, 'accuracy' => 10, 'denied' => false])->assertRedirect();
 
     $row = Attendance::withoutGlobalScopes()->where('employee_id', $employee->id)->firstOrFail();
-    expect($row->check_in_lat)->toBeNull();
+    // Location IS stored now (mandatory for check-in), and the obsolete
+    // GPS-missing alert never fires (a punch always has a fix).
+    expect((float) $row->check_in_lat)->toBe(40.4);
     Notification::assertNotSentTo(
         User::where('role', 'admin')->where('company_id', $this->company->id)->get(),
         SystemNotification::class,
@@ -140,8 +146,9 @@ it('skips the selfie when photo consent is withheld', function (): void {
     $user = User::factory()->create(['role' => UserRole::Worker, 'company_id' => $this->company->id]);
     $employee = Employee::factory()->forCompany($this->company)->privacyAcknowledged(photo: false)->create(['user_id' => $user->id]);
 
+    // Item 10 — a check-in needs a location fix; photo consent is separate.
     $this->actingAs($user)->post('/worker/check-in', [
-        'denied' => true, 'photo' => UploadedFile::fake()->image('selfie.jpg'),
+        'lat' => 40.4, 'lng' => -3.7, 'denied' => false, 'photo' => UploadedFile::fake()->image('selfie.jpg'),
     ])->assertRedirect();
 
     $row = Attendance::withoutGlobalScopes()->where('employee_id', $employee->id)->firstOrFail();

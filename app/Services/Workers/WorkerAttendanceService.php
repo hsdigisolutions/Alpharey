@@ -94,6 +94,18 @@ class WorkerAttendanceService
             }
         }
 
+        // Item 10 — a check-in REQUIRES a usable location fix (client-confirmed
+        // reversal of "GPS is evidence, not a gate" for CHECK-IN only). A punch
+        // with no location is refused with a clear message; the worker must allow
+        // location to proceed. The app UI never offers a "skip location" path —
+        // this is the authoritative server gate behind it. (Accepted tradeoff:
+        // genuinely poor-signal / indoor workers are blocked too.)
+        if ($location['lat'] === null || $location['lng'] === null) {
+            throw ValidationException::withMessages([
+                'check_in' => __('ui.worker.location_required'),
+            ]);
+        }
+
         // Resolve the project the worker is punching into. A weekend offer LOCKS
         // the project to the offer's site; otherwise the worker may pick one of
         // their own assigned or deployed projects — or none at all (a

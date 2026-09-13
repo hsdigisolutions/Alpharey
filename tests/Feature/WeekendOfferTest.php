@@ -47,7 +47,8 @@ it('allows a weekend check-in for an invited worker and applies the offer rate',
     $this->travelTo('2026-08-08 09:00'); // Saturday
     makeOffer($this->company, '2026-08-08', [$this->employee->id], 'x2');
 
-    $att = $this->service->checkIn($this->employee, ['lat' => null, 'lng' => null, 'accuracy' => null, 'denied' => true], null);
+    // Item 10 — a check-in needs a location fix.
+    $att = $this->service->checkIn($this->employee, ['lat' => 40.4168, 'lng' => -3.7038, 'accuracy' => 15, 'denied' => false], null);
 
     expect($att->is_weekend)->toBeTrue()
         ->and($att->weekend_rate_type)->toBe(WeekendRateType::X2);
@@ -64,7 +65,8 @@ it('blocks a weekend check-in for a worker who was not invited', function (): vo
 it('allows a normal weekday check-in with no offer', function (): void {
     $this->travelTo('2026-08-10 09:00'); // Monday
 
-    $att = $this->service->checkIn($this->employee, ['lat' => null, 'lng' => null, 'accuracy' => null, 'denied' => true], null);
+    // Item 10 — a check-in needs a location fix.
+    $att = $this->service->checkIn($this->employee, ['lat' => 40.4168, 'lng' => -3.7038, 'accuracy' => 15, 'denied' => false], null);
 
     expect($att->status->value)->toBe('present')
         ->and($att->is_weekend)->toBeFalse();

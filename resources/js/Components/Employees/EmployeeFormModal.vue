@@ -206,7 +206,8 @@ const showBank = computed(() => !form.payment_method || form.payment_method === 
             <!-- Referral commission (Item 8) — a pay term, so wage-gated -->
             <section v-if="canSeeWages">
                 <Bilingual k="employees.section_referral" class="mb-3 text-[15px] font-semibold" />
-                <p class="mb-3 text-xs text-muted">{{ $t('employees.referral_hint') }}</p>
+                <p class="mb-1 text-xs text-muted">{{ $t('employees.referral_hint') }}</p>
+                <p class="mb-3 text-xs text-status-warn">{{ $t('employees.referral_recalc_hint') }}</p>
                 <div class="grid gap-4 sm:grid-cols-2">
                     <FormField k="employees.referred_by" :error="form.errors.referred_by_employee_id">
                         <VSelect v-model="form.referred_by_employee_id">

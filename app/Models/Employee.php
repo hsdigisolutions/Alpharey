@@ -41,6 +41,7 @@ use Illuminate\Support\Carbon;
  * @property ReferralRateType|null $referral_rate_type
  * @property numeric-string|null $referral_amount
  * @property int|null $referral_window_months
+ * @property Carbon|null $referral_started_at
  * @property WageType|null $wage_type
  * @property PaymentMethod|null $payment_method
  * @property Carbon|null $joining_date
@@ -121,6 +122,7 @@ class Employee extends Model
             'referral_rate_type' => ReferralRateType::class,
             'referral_amount' => 'decimal:2',
             'referral_window_months' => 'integer',
+            'referral_started_at' => 'datetime',
         ];
     }
 
@@ -156,6 +158,21 @@ class Employee extends Model
         static::saving(function (Employee $employee): void {
             if ($employee->isDirty('nif')) {
                 $employee->nif_hash = self::hashNif($employee->nif);
+            }
+        });
+
+        // Item 8 — stamp the referral WINDOW anchor (referral_started_at) the
+        // moment a referral is first configured, keep it across later edits, and
+        // clear it when the referral is removed. Server-set only (never fillable),
+        // so the window counts from setup, not the referred worker's joining date.
+        static::saving(function (Employee $employee): void {
+            $configured = $employee->referred_by_employee_id !== null
+                && $employee->referral_rate_type !== null;
+
+            if ($configured && $employee->referral_started_at === null) {
+                $employee->referral_started_at = now();
+            } elseif (! $configured) {
+                $employee->referral_started_at = null;
             }
         });
 

@@ -188,13 +188,14 @@ class WorkerController extends Controller
         $employee = $this->resolveEmployee($request);
         $this->requirePrivacyNotice($employee);
 
-        // Consent gates the extras: no GPS consent → no location captured & no
-        // GPS-missing alert; no selfie consent → no photo required or stored.
-        $gpsConsent = $employee->consentGps();
-        $location = $gpsConsent ? $request->location() : self::NO_LOCATION;
+        // Item 10 — location is REQUIRED to check in (a deliberate reversal of
+        // "GPS is evidence, not a gate" for CHECK-IN only, client-confirmed). The
+        // fix is always read (never gated by the consent flag) and the service
+        // blocks a punch with no usable location. Selfie stays consent-gated.
+        $location = $request->location();
         $photo = $employee->consentPhoto() ? $request->file('photo') : null;
 
-        $attendance = $this->attendance->checkIn($employee, $location, $photo, $gpsConsent, $request->projectId());
+        $attendance = $this->attendance->checkIn($employee, $location, $photo, true, $request->projectId());
 
         $redirect = redirect()->route('worker.home')->with('success', __('ui.worker.checked_in'));
 

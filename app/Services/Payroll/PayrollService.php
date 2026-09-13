@@ -602,13 +602,20 @@ class PayrollService
                 continue;
             }
 
-            // Capped window: earn only within [joining, joining + N months).
-            $joining = $worker->joining_date;
+            // Capped window: earn only for the N calendar months from the referral
+            // SETUP month (referral_started_at — a server-set stamp), NOT the
+            // referred worker's joining date (most real workers have none, and a
+            // retroactively-added referral should earn its full window from setup).
+            // Bounded on BOTH sides: no earning before the setup month, none after
+            // it expires. Null anchor (a not-yet-stamped legacy row) → no cap; the
+            // next save stamps it.
             $window = $worker->referral_window_months;
-            if ($joining !== null && $window !== null) {
-                $windowEnd = $joining->copy()->addMonthsNoOverflow($window);
-                if ($monthStart->gte($windowEnd)) {
-                    continue; // window has expired
+            $anchor = $worker->referral_started_at;
+            if ($anchor !== null && $window !== null) {
+                $anchorMonth = $anchor->copy()->startOfMonth();
+                $windowEnd = $anchorMonth->copy()->addMonthsNoOverflow($window); // exclusive
+                if ($monthStart->lt($anchorMonth) || $monthStart->gte($windowEnd)) {
+                    continue; // outside the window (before setup, or expired)
                 }
             }
 
@@ -635,16 +642,28 @@ class PayrollService
      */
     private function isFirstWorkedMonth(int $employeeId, string $month): bool
     {
-        $firstWorked = Attendance::query()->withoutGlobalScopes()
-            ->where('employee_id', $employeeId)
-            ->whereIn('status', self::WORKED)
-            ->min('date');
+        $firstWorked = $this->firstWorkedDate($employeeId);
 
         if ($firstWorked === null) {
             return false;
         }
 
-        return Carbon::parse($firstWorked)->format('Y-m') === $month;
+        return $firstWorked->format('Y-m') === $month;
+    }
+
+    /**
+     * The earliest date the worker recorded any WORKED attendance, or null if they
+     * never have. Reused for the one-time payout trigger and the referral-window
+     * fallback anchor (when joining_date is missing).
+     */
+    private function firstWorkedDate(int $employeeId): ?Carbon
+    {
+        $min = Attendance::query()->withoutGlobalScopes()
+            ->where('employee_id', $employeeId)
+            ->whereIn('status', self::WORKED)
+            ->min('date');
+
+        return $min !== null ? Carbon::parse($min) : null;
     }
 
     /**

@@ -67,7 +67,7 @@ it('logs a DEPLOYED-project self-punch under the HOST company (matches the clerk
     ]);
 
     $this->actingAs($this->worker)->post('/worker/check-in', [
-        'project_id' => $project->id, 'denied' => true,
+        'project_id' => $project->id, 'lat' => 40.4168, 'lng' => -3.7038, 'denied' => false,
     ])->assertRedirect();
 
     $att = Attendance::withoutGlobalScopes()->where('employee_id', $this->employee->id)->firstOrFail();
@@ -87,7 +87,7 @@ it('keeps a NORMAL own-project self-punch under the worker own company (guard)',
     $rate->save();
 
     $this->actingAs($this->worker)->post('/worker/check-in', [
-        'project_id' => $ownProject->id, 'denied' => true,
+        'project_id' => $ownProject->id, 'lat' => 40.4168, 'lng' => -3.7038, 'denied' => false,
     ])->assertRedirect();
 
     $att = Attendance::withoutGlobalScopes()->where('employee_id', $this->employee->id)->firstOrFail();
@@ -107,7 +107,7 @@ it('a project-less self-punch stays under the worker own company even with an ac
 
     // No project supplied and no GPS → project-less punch: must NOT inherit the
     // deployment's host company.
-    $this->actingAs($this->worker)->post('/worker/check-in', ['denied' => true])->assertRedirect();
+    $this->actingAs($this->worker)->post('/worker/check-in', ['lat' => 40.4168, 'lng' => -3.7038, 'denied' => false])->assertRedirect();
 
     $att = Attendance::withoutGlobalScopes()->where('employee_id', $this->employee->id)->firstOrFail();
     expect($att->project_id)->toBeNull()
@@ -127,7 +127,7 @@ it('Option A holds — the HOME company pays a deployed-under-host day, the host
 
     // A full deployed day: check in at 09:00, out at 17:00 → real hours on a
     // row that now belongs to the HOST company.
-    $this->actingAs($this->worker)->post('/worker/check-in', ['project_id' => $project->id, 'denied' => true])->assertRedirect();
+    $this->actingAs($this->worker)->post('/worker/check-in', ['project_id' => $project->id, 'lat' => 40.4168, 'lng' => -3.7038, 'denied' => false])->assertRedirect();
     $this->travelTo('2026-08-10 17:00');
     $this->actingAs($this->worker)->post('/worker/check-out', [
         'denied' => true, 'work_attachment' => UploadedFile::fake()->image('site.jpg'),
@@ -184,29 +184,21 @@ it('records a check-in with GPS and a selfie', function (): void {
     Storage::disk('local')->assertExists($row->check_in_photo_path);
 });
 
-it('records the punch but flags it when location is denied', function (): void {
+// Item 10 — a check-in with NO usable location is now BLOCKED (a deliberate
+// reversal of "GPS is evidence, not a gate" for check-in only). The punch is
+// refused with a clear message and no attendance row is written.
+it('blocks a check-in when location is denied or unavailable', function (): void {
     $this->actingAs($this->worker)->post('/worker/check-in', [
         'denied' => true,
-    ])->assertRedirect()->assertSessionHasNoErrors();
+    ])->assertSessionHasErrors('check_in');
 
-    $row = Attendance::withoutGlobalScopes()->where('employee_id', $this->employee->id)->firstOrFail();
-
-    expect($row->status)->toBe(AttendanceStatus::Present)
-        ->and($row->location_denied)->toBeTrue()
-        ->and($row->check_in_lat)->toBeNull();
+    expect(Attendance::withoutGlobalScopes()->where('employee_id', $this->employee->id)->exists())->toBeFalse();
 });
 
-it('notifies the company admins when a worker checks in without GPS', function (): void {
-    Notification::fake();
+it('the block message tells the worker to allow location', function (): void {
+    $response = $this->actingAs($this->worker)->from('/worker')->post('/worker/check-in', ['denied' => true]);
 
-    $this->actingAs($this->worker)->post('/worker/check-in', ['denied' => true])->assertRedirect();
-
-    // The company admin (created in beforeEach) is a recipient of the
-    // worker_gps_missing type by its coded default (Admin role).
-    Notification::assertSentTo(
-        User::where('role', 'admin')->where('company_id', $this->company->id)->get(),
-        SystemNotification::class,
-    );
+    $response->assertSessionHasErrors(['check_in' => __('ui.worker.location_required')]);
 });
 
 it('notifies admins about a short shift under the half-day threshold', function (): void {
@@ -214,7 +206,7 @@ it('notifies admins about a short shift under the half-day threshold', function 
 
     // Check in at 09:00 (beforeEach clock), then check out at 10:30 — 1.5 h,
     // under the default 3 h half-day threshold → a short-shift alert.
-    $this->actingAs($this->worker)->post('/worker/check-in', ['denied' => true])->assertRedirect();
+    $this->actingAs($this->worker)->post('/worker/check-in', ['lat' => 40.4168, 'lng' => -3.7038, 'denied' => false])->assertRedirect();
 
     $this->travelTo('2026-08-10 10:30');
     $this->actingAs($this->worker)->post('/worker/check-out', ['denied' => true, 'work_attachment' => UploadedFile::fake()->image('site.jpg')])->assertRedirect();
@@ -229,7 +221,7 @@ it('notifies admins about a short shift under the half-day threshold', function 
 it('does not raise a short-shift alert for a full-length day', function (): void {
     Notification::fake();
 
-    $this->actingAs($this->worker)->post('/worker/check-in', ['denied' => true])->assertRedirect();
+    $this->actingAs($this->worker)->post('/worker/check-in', ['lat' => 40.4168, 'lng' => -3.7038, 'denied' => false])->assertRedirect();
 
     // Check out after 8 h — well over the half-day threshold.
     $this->travelTo('2026-08-10 17:00');
@@ -312,9 +304,9 @@ it('does not flag a mismatch when check-out is close to an accurate check-in', f
 });
 
 it('refuses a second check-in on the same day', function (): void {
-    $this->actingAs($this->worker)->post('/worker/check-in', ['denied' => true]);
+    $this->actingAs($this->worker)->post('/worker/check-in', ['lat' => 40.4168, 'lng' => -3.7038, 'denied' => false]);
 
-    $this->actingAs($this->worker)->post('/worker/check-in', ['denied' => true])
+    $this->actingAs($this->worker)->post('/worker/check-in', ['lat' => 40.4168, 'lng' => -3.7038, 'denied' => false])
         ->assertSessionHasErrors('check_in');
 
     expect(Attendance::withoutGlobalScopes()->where('employee_id', $this->employee->id)->count())->toBe(1);
@@ -328,7 +320,7 @@ it('computes hours and pay on check-out from the frozen snapshot', function (): 
     $this->travelTo(now()->startOfDay()->addHours(8));
 
     // Check in, then travel the clock forward and check out.
-    $this->actingAs($this->worker)->post('/worker/check-in', ['denied' => true]);
+    $this->actingAs($this->worker)->post('/worker/check-in', ['lat' => 40.4168, 'lng' => -3.7038, 'denied' => false]);
 
     $this->travel(8)->hours();
 
@@ -348,7 +340,7 @@ it('computes hours and pay on check-out from the frozen snapshot', function (): 
 });
 
 it('requires a proof-of-work attachment to check out', function (): void {
-    $this->actingAs($this->worker)->post('/worker/check-in', ['denied' => true])->assertRedirect();
+    $this->actingAs($this->worker)->post('/worker/check-in', ['lat' => 40.4168, 'lng' => -3.7038, 'denied' => false])->assertRedirect();
     $this->travelTo('2026-08-10 17:00');
 
     // No work_attachment → validation refuses it and the day stays open.
@@ -360,7 +352,7 @@ it('requires a proof-of-work attachment to check out', function (): void {
 });
 
 it('stores the proof-of-work attachment on check-out', function (): void {
-    $this->actingAs($this->worker)->post('/worker/check-in', ['denied' => true])->assertRedirect();
+    $this->actingAs($this->worker)->post('/worker/check-in', ['lat' => 40.4168, 'lng' => -3.7038, 'denied' => false])->assertRedirect();
     $this->travelTo('2026-08-10 17:00');
 
     $this->actingAs($this->worker)->post('/worker/check-out', [
@@ -375,7 +367,7 @@ it('stores the proof-of-work attachment on check-out', function (): void {
 });
 
 it('serves the check-out attachment to an admin and audits it', function (): void {
-    $this->actingAs($this->worker)->post('/worker/check-in', ['denied' => true])->assertRedirect();
+    $this->actingAs($this->worker)->post('/worker/check-in', ['lat' => 40.4168, 'lng' => -3.7038, 'denied' => false])->assertRedirect();
     $this->travelTo('2026-08-10 17:00');
     $this->actingAs($this->worker)->post('/worker/check-out', [
         'denied' => true, 'work_attachment' => UploadedFile::fake()->image('site.jpg'),
@@ -389,7 +381,7 @@ it('serves the check-out attachment to an admin and audits it', function (): voi
 });
 
 it('saves a second and third check-out photo when supplied', function (): void {
-    $this->actingAs($this->worker)->post('/worker/check-in', ['denied' => true])->assertRedirect();
+    $this->actingAs($this->worker)->post('/worker/check-in', ['lat' => 40.4168, 'lng' => -3.7038, 'denied' => false])->assertRedirect();
     $this->travelTo('2026-08-10 17:00');
 
     $this->actingAs($this->worker)->post('/worker/check-out', [
@@ -408,7 +400,7 @@ it('saves a second and third check-out photo when supplied', function (): void {
 });
 
 it('allows check-out with only photo 1 — photos 2 and 3 are optional', function (): void {
-    $this->actingAs($this->worker)->post('/worker/check-in', ['denied' => true])->assertRedirect();
+    $this->actingAs($this->worker)->post('/worker/check-in', ['lat' => 40.4168, 'lng' => -3.7038, 'denied' => false])->assertRedirect();
     $this->travelTo('2026-08-10 17:00');
 
     $this->actingAs($this->worker)->post('/worker/check-out', [
@@ -422,7 +414,7 @@ it('allows check-out with only photo 1 — photos 2 and 3 are optional', functio
 });
 
 it('serves the second check-out photo to the owning admin but 404s cross-company', function (): void {
-    $this->actingAs($this->worker)->post('/worker/check-in', ['denied' => true])->assertRedirect();
+    $this->actingAs($this->worker)->post('/worker/check-in', ['lat' => 40.4168, 'lng' => -3.7038, 'denied' => false])->assertRedirect();
     $this->travelTo('2026-08-10 17:00');
     $this->actingAs($this->worker)->post('/worker/check-out', [
         'denied' => true,
@@ -440,7 +432,7 @@ it('serves the second check-out photo to the owning admin but 404s cross-company
 });
 
 it('never lets a client set the check-out photo paths directly', function (): void {
-    $this->actingAs($this->worker)->post('/worker/check-in', ['denied' => true])->assertRedirect();
+    $this->actingAs($this->worker)->post('/worker/check-in', ['lat' => 40.4168, 'lng' => -3.7038, 'denied' => false])->assertRedirect();
     $this->travelTo('2026-08-10 17:00');
 
     $this->actingAs($this->worker)->post('/worker/check-out', [
@@ -474,7 +466,7 @@ it('records an absence with the worker\'s reason for the CRM', function (): void
 });
 
 it('will not report an absence once already checked in', function (): void {
-    $this->actingAs($this->worker)->post('/worker/check-in', ['denied' => true]);
+    $this->actingAs($this->worker)->post('/worker/check-in', ['lat' => 40.4168, 'lng' => -3.7038, 'denied' => false]);
 
     $this->actingAs($this->worker)->post('/worker/absence', ['note' => 'changed my mind'])
         ->assertSessionHasErrors('note');
@@ -486,7 +478,7 @@ it('rejects a punch into a locked month', function (): void {
     $period->save();
     app(PeriodLock::class)->forget();
 
-    $this->actingAs($this->worker)->post('/worker/check-in', ['denied' => true])
+    $this->actingAs($this->worker)->post('/worker/check-in', ['lat' => 40.4168, 'lng' => -3.7038, 'denied' => false])
         ->assertSessionHasErrors('check_in');
 
     expect(Attendance::withoutGlobalScopes()->where('employee_id', $this->employee->id)->exists())->toBeFalse();
@@ -495,6 +487,6 @@ it('rejects a punch into a locked month', function (): void {
 it('does not let a normal CRM user reach the worker endpoints', function (): void {
     $user = User::factory()->forCompany($this->company)->create();
 
-    $this->actingAs($user)->post('/worker/check-in', ['denied' => true])->assertForbidden();
+    $this->actingAs($user)->post('/worker/check-in', ['lat' => 40.4168, 'lng' => -3.7038, 'denied' => false])->assertForbidden();
     $this->actingAs($user)->get('/worker')->assertForbidden();
 });

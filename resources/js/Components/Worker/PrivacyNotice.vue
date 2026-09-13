@@ -115,9 +115,11 @@ function accept() {
                         <input v-model="form.consent_attendance" type="checkbox" class="mt-0.5 h-5 w-5 shrink-0 accent-accent" />
                         <span class="text-sm text-ink">{{ $t('worker.privacy.consent_attendance') }}</span>
                     </label>
-                    <label class="flex items-start gap-3 rounded-lg border border-line bg-surface-raised p-3">
+                    <!-- Item 10 — GPS consent is REQUIRED (location gates check-in);
+                         no app-side opt-out. Styled like the mandatory acknowledgement. -->
+                    <label class="flex items-start gap-3 rounded-lg border border-line-strong bg-surface-raised p-3">
                         <input v-model="form.consent_gps" type="checkbox" class="mt-0.5 h-5 w-5 shrink-0 accent-accent" />
-                        <span class="text-sm text-ink-soft">{{ $t('worker.privacy.consent_gps') }}</span>
+                        <span class="text-sm text-ink">{{ $t('worker.privacy.consent_gps') }}</span>
                     </label>
                     <label class="flex items-start gap-3 rounded-lg border border-line bg-surface-raised p-3">
                         <input v-model="form.consent_photo" type="checkbox" class="mt-0.5 h-5 w-5 shrink-0 accent-accent" />
@@ -135,7 +137,7 @@ function accept() {
             <div class="mx-auto w-full max-w-md">
                 <button type="button"
                     class="w-full rounded-md bg-accent px-5 py-4 text-base font-medium text-on-accent shadow-card transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
-                    :disabled="!scrolledToBottom || !form.consent_attendance || form.processing"
+                    :disabled="!scrolledToBottom || !form.consent_attendance || !form.consent_gps || form.processing"
                     @click="accept">
                     {{ $t('worker.privacy.ack') }}
                 </button>

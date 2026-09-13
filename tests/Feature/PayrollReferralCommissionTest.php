@@ -12,11 +12,16 @@ use Inertia\Testing\AssertableInertia as Assert;
 // commission from the REFERRED worker's attendance, folded into the referrer's
 // own monthly payroll. Additive; never touches the referred worker's pay.
 beforeEach(function (): void {
+    // Fix the clock to the working month so a referral configured in a test stamps
+    // referral_started_at IN that month (the window anchors on the setup date).
+    $this->travelTo('2026-05-05 09:00');
     $this->company = Company::factory()->create();
     $this->admin = User::factory()->companyAdmin()->forCompany($this->company)->create();
     $this->actingAs($this->admin);
     $this->month = '2026-05';
 });
+
+afterEach(fn () => test()->travelBack());
 
 /** A worker; pass referral terms to make them a REFERRED worker of $referrer. */
 function refWorker(array $attrs = []): Employee
@@ -124,17 +129,59 @@ it('pays a one-time commission only in the first month with real attendance', fu
 });
 
 it('stops paying after the window expires', function (): void {
+    $this->travelTo('2026-01-10 09:00'); // referral set up in January
     $referrer = refWorker();
-    // Joined Jan, window 3 months → earns Jan/Feb/Mar; May is expired.
+    // Setup Jan, window 3 months → earns Jan/Feb/Mar; May is expired.
     $referred = refWorker([
-        'joining_date' => '2026-01-01',
         'referred_by_employee_id' => $referrer->id,
         'referral_rate_type' => 'per_day', 'referral_amount' => '5', 'referral_window_months' => 3,
     ]);
+
     workDays($referred, 3, $this->month); // May
 
     app(PayrollService::class)->calculateFor($referrer, $this->company->id, $this->month);
-    expect(referralOf($referrer))->toBe(0.0);
+    expect(referralOf($referrer))->toBe(0.0); // May is past the Jan+3 window
+});
+
+// Item 8 follow-up — the window is anchored at the referral SETUP date
+// (referral_started_at, stamped by a model hook), not joining_date. So a
+// retroactively-added referral earns its full window from when it was configured,
+// even for a worker with no joining_date.
+it('anchors the window at the referral setup date, not joining_date', function (): void {
+    $this->travelTo('2026-05-15 09:00'); // "setup" happens now
+    $referrer = refWorker();
+    $referred = refWorker([
+        'joining_date' => null, // no joining date (the common real case)
+        'referred_by_employee_id' => $referrer->id,
+        'referral_rate_type' => 'per_day', 'referral_amount' => '5', 'referral_window_months' => 1,
+    ]);
+    // The hook stamps referral_started_at = 2026-05-15 → window [05-15, 06-15).
+    expect($referred->fresh()->referral_started_at?->toDateString())->toBe('2026-05-15');
+
+    workDays($referred, 3, '2026-05');
+    workDays($referred, 4, '2026-07'); // beyond the window (July >= 06-15)
+
+    app(PayrollService::class)->calculateFor($referrer, $this->company->id, '2026-05');
+    app(PayrollService::class)->calculateFor($referrer, $this->company->id, '2026-07');
+
+    $may = Payroll::withoutGlobalScopes()->where('employee_id', $referrer->id)->where('month', '2026-05')->firstOrFail();
+    $july = Payroll::withoutGlobalScopes()->where('employee_id', $referrer->id)->where('month', '2026-07')->firstOrFail();
+
+    expect((float) $may->getAttribute('referral_commission'))->toBe(15.0)   // within window
+        ->and((float) $july->getAttribute('referral_commission'))->toBe(0.0); // window expired
+});
+
+it('clears the window anchor when the referral is removed', function (): void {
+    $referrer = refWorker();
+    $referred = refWorker([
+        'referred_by_employee_id' => $referrer->id,
+        'referral_rate_type' => 'per_day', 'referral_amount' => '5', 'referral_window_months' => 6,
+    ]);
+    expect($referred->fresh()->referral_started_at)->not->toBeNull();
+
+    // Remove the referral → the anchor is cleared.
+    $referred->update(['referred_by_employee_id' => null, 'referral_rate_type' => null, 'referral_amount' => null]);
+    expect($referred->fresh()->referral_started_at)->toBeNull();
 });
 
 it('does not accrue when either party is inactive', function (): void {
