@@ -30,6 +30,7 @@ import VKpiCard from '@/Components/ui/VKpiCard.vue';
 import VModal from '@/Components/ui/VModal.vue';
 import VehicleExpenseModal from '@/Components/Expenses/VehicleExpenseModal.vue';
 import VPageHeader from '@/Components/ui/VPageHeader.vue';
+import VBulkBar from '@/Components/ui/VBulkBar.vue';
 import VPagination from '@/Components/ui/VPagination.vue';
 import VSelect from '@/Components/ui/VSelect.vue';
 import VTable from '@/Components/ui/VTable.vue';
@@ -157,6 +158,7 @@ const showModal = ref(false);
 const showVehicleModal = ref(false);
 const editingId = ref(null);
 const editingApproved = ref(false); // approved expenses are view-only (locked server-side)
+const editingSubmitted = ref(null); // read-only "submitted" date (created_at) when editing
 const blank = {
     number: '', type: 'factura', expense_category_id: '', vendor_id: '', project_id: '',
     employee_id: '', company_card_id: '', date: null, due_date: null,
@@ -247,6 +249,7 @@ function openEdit(row) {
     }
     editingId.value = row.id;
     editingApproved.value = row.approved;
+    editingSubmitted.value = row.submitted ?? null;
     Object.assign(form, {
         number: row.number ?? '',
         type: row.type,
@@ -422,6 +425,7 @@ function eur(n) {
 
 const columns = [
     { key: 'date', labelKey: 'expenses.date' },
+    { key: 'submitted', labelKey: 'expenses.submitted' },
     { key: 'number', labelKey: 'expenses.number' },
     { key: 'type', labelKey: 'expenses.type' },
     { key: 'vendor', labelKey: 'expenses.vendor' },
@@ -432,6 +436,33 @@ const columns = [
     { key: 'approval', labelKey: 'expenses.approval' },
     { key: 'actions', labelKey: 'common.actions', align: 'end' },
 ];
+
+// Bulk final-approve (Issue 2) — select PENDING rows and approve them at once.
+// Eligible = a plain pending row (not approved, not escalated to the review queue,
+// not a deployment cross-charge); a subcontractor auto-expense is skipped
+// server-side and counted as "skipped" in the result.
+const canBulkApprove = computed(() => !!props.can?.approve_final);
+const isBulkEligible = (r) => !r.approved && r.review_status !== 'in_review' && !isDeployment(r);
+const selectedIds = ref(new Set());
+const isSelected = (id) => selectedIds.value.has(id);
+function toggleRow(id) {
+    const next = new Set(selectedIds.value);
+    next.has(id) ? next.delete(id) : next.add(id);
+    selectedIds.value = next;
+}
+const eligibleRows = computed(() => (props.expenses?.data ?? []).filter(isBulkEligible));
+const allEligibleSelected = computed(
+    () => eligibleRows.value.length > 0 && eligibleRows.value.every((r) => selectedIds.value.has(r.id)),
+);
+function toggleAllEligible(checked) {
+    selectedIds.value = checked ? new Set(eligibleRows.value.map((r) => r.id)) : new Set();
+}
+function clearSelection() { selectedIds.value = new Set(); }
+function bulkApprove() {
+    router.post('/expenses/bulk-approve', { ids: [...selectedIds.value] }, {
+        preserveScroll: true, onSuccess: clearSelection,
+    });
+}
 </script>
 
 <template>
@@ -516,10 +547,21 @@ const columns = [
             <VDateInput v-model="filters.to" @update:model-value="apply()" />
         </div>
 
-        <VTable :columns="columns">
+        <VBulkBar v-if="canBulkApprove" :count="selectedIds.size" @clear="clearSelection">
+            <VButton size="sm" @click="bulkApprove">
+                <Bilingual k="expenses.approve_selected" inline />
+            </VButton>
+        </VBulkBar>
+        <VTable :columns="columns" :selectable="canBulkApprove" :all-selected="allEligibleSelected" @toggle-all="toggleAllEligible">
             <tr v-for="r in expenses.data" :key="r.id" class="cursor-pointer hover:bg-surface-hover"
-                @click="openEdit(r)">
+                :class="isSelected(r.id) ? 'bg-accent-soft' : ''" @click="openEdit(r)">
+                <td v-if="canBulkApprove" class="px-3 py-2.5" @click.stop>
+                    <input v-if="isBulkEligible(r)" type="checkbox" :checked="isSelected(r.id)"
+                        class="h-4 w-4 rounded-sm accent-[var(--color-accent)]"
+                        :aria-label="r.number || String(r.id)" @change="toggleRow(r.id)" />
+                </td>
                 <td class="tabular-nums px-3 py-2.5 text-sm">{{ r.date }}</td>
+                <td class="tabular-nums px-3 py-2.5 text-sm text-ink-soft">{{ r.submitted ?? '—' }}</td>
                 <td class="px-3 py-2.5 text-sm font-medium text-ink">
                     {{ r.number ?? '—' }}
                     <VBadge v-if="r.source === 'worker_fuel'" status="info" class="ms-1" :title="$t('expenses.auto_fuel_hint')">
@@ -728,8 +770,10 @@ const columns = [
                 <FormField k="expenses.date" :error="form.errors.date" required>
                     <VDateInput v-model="form.date" />
                 </FormField>
-                <FormField k="expenses.due_date" :error="form.errors.due_date">
-                    <VDateInput v-model="form.due_date" />
+                <!-- Submitted date = when the record was entered (created_at), shown
+                     read-only when editing; it is set automatically on save. -->
+                <FormField v-if="editingId" k="expenses.submitted">
+                    <p class="px-1 py-2 text-sm text-ink-soft tabular-nums">{{ editingSubmitted ?? '—' }}</p>
                 </FormField>
 
                 <FormField k="expenses.subtotal" :error="form.errors.subtotal" required>

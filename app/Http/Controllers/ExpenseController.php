@@ -493,6 +493,57 @@ class ExpenseController extends Controller
     }
 
     /**
+     * Bulk FINAL-approve several pending expenses at once. Same gate + per-row
+     * effect as approve() (approved=true releases the reimbursement into payroll,
+     * mirrors a vehicle-linked row, and cascades the decision to a linked
+     * WorkerExpense so the worker is notified). Rows that are NOT a plain pending
+     * expense are silently SKIPPED, never errored: an already-approved row, an
+     * escalated (in_review) row that belongs to the SA queue, a deployment
+     * cross-charge (its own settlement flow), and a subcontractor auto-expense
+     * (approving would double-count the payment in the P&L). CompanyScope on the
+     * query drops any foreign id. Rejection is not offered in bulk — it needs a
+     * per-row reason.
+     */
+    public function bulkApprove(Request $request, WorkerFuelExpenseService $workerFuel, VehicleExpenseSyncService $vehicleSync): RedirectResponse
+    {
+        Gate::authorize('expenses.approve_final');
+
+        $validated = $request->validate([
+            'ids' => ['required', 'array', 'max:500'],
+            'ids.*' => ['integer'],
+        ]);
+
+        $expenses = Expense::query()->whereIn('id', $validated['ids'])->get();
+
+        $approved = 0;
+        $skipped = 0;
+        foreach ($expenses as $expense) {
+            if ($expense->approved
+                || $expense->review_status === 'in_review'
+                || $expense->type === ExpenseType::InternalDeployment
+                || SubcontractorPayment::query()->withoutGlobalScopes()->where('expense_id', $expense->id)->exists()) {
+                $skipped++;
+
+                continue;
+            }
+
+            // Same sequence as the single approve() (the Auditable observer logs
+            // each save automatically).
+            $expense->approved = true;
+            $expense->approved_by = Auth::id();
+            $expense->approved_at = now();
+            $expense->review_status = null;
+            $expense->save();
+
+            $vehicleSync->syncOnFinalApproval($expense);
+            $workerFuel->applyFinalDecisionToWorker($expense, true, $expense->approved_by, null);
+            $approved++;
+        }
+
+        return back()->with('success', __('ui.expenses.bulk_approved', ['approved' => $approved, 'skipped' => $skipped]));
+    }
+
+    /**
      * Send an expense to the Super-Admin review queue (Part C) instead of a
      * final approve/reject — for when the admin is unsure. The Super Admin's
      * decision in that queue is the final call.
@@ -749,6 +800,8 @@ class ExpenseController extends Controller
             ])->all(),
             'company_card_id' => $e->company_card_id,
             'date' => $e->date->toDateString(),
+            // "Submitted" date — when the record was entered into the system.
+            'submitted' => $e->created_at?->toDateString(),
             'due_date' => $e->due_date?->toDateString(),
             'subtotal' => (float) $e->subtotal,
             'vat_rate' => $e->vat_rate?->value,

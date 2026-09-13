@@ -54,24 +54,46 @@ class PayrollController extends Controller
         Gate::authorize('payroll.view');
 
         $companyId = $this->contextCompanyId();
-        $month = $this->resolveMonth($request);
+        $period = $this->resolvePeriod($request);
+        $search = trim($request->string('search')->value());
 
+        // Period: 'month' (default, the anchor for Calculate/Approve-All/Lock) or a
+        // READ-ONLY listing across a custom month range / all-time. Search filters by
+        // employee name or code in every mode.
         $rows = Payroll::query()
             ->where('company_id', $companyId)
-            ->where('month', $month)
-            ->with(['employee:id,full_name,designation', 'company:id,name'])
+            ->when($period['mode'] === 'month', fn ($q) => $q->where('month', $period['month']))
+            ->when($period['mode'] === 'range', fn ($q) => $q->whereBetween('month', [$period['from'], $period['to']]))
+            ->when($search !== '', fn ($q) => $q->whereHas('employee', fn ($e) => $e
+                ->where('full_name', 'like', "%{$search}%")
+                ->orWhere('employee_code', 'like', "%{$search}%")))
+            ->with(['employee:id,full_name,designation,employee_code', 'company:id,name'])
             ->get()
             ->map(fn (Payroll $p): array => $this->row($p))
             ->sortBy('employee')
             ->values();
 
+        // A multi-month / all-time view is read-only: Calculate / Approve-All / Lock
+        // and the advances panel are inherently per-month, so they stay bound to a
+        // single chosen month. Per-row bulk approve / mark-paid still work (they
+        // iterate rows and assert the lock per row).
+        $readonly = $period['mode'] !== 'month';
+
         return Inertia::render('Payroll/Index', [
-            'month' => $month,
+            'month' => $period['month'],
             'rows' => $rows,
             'summary' => $this->summary($rows),
-            'advances' => $this->advancesFor($companyId, $month),
-            'locked' => LockedPeriod::query()
-                ->where('company_id', $companyId)->where('month', $month)->exists(),
+            'advances' => $readonly ? [] : $this->advancesFor($companyId, $period['month']),
+            'locked' => ! $readonly && LockedPeriod::query()
+                ->where('company_id', $companyId)->where('month', $period['month'])->exists(),
+            'readonly' => $readonly,
+            'filters' => [
+                'mode' => $period['mode'],
+                'month' => $period['month'],
+                'from' => $period['from'],
+                'to' => $period['to'],
+                'search' => $search,
+            ],
             'paymentMethods' => array_map(fn ($m) => $m->value, PaymentMethod::cases()),
             'can' => [
                 'create' => Gate::allows('payroll.create'),
@@ -531,5 +553,41 @@ class PayrollController extends Controller
         return $raw !== '' && preg_match('/^\d{4}-\d{2}$/', $raw)
             ? $raw
             : Carbon::now()->format('Y-m');
+    }
+
+    /**
+     * Resolve the requested viewing period, mirroring the CallPanel/Reports date
+     * convention but in MONTH units (payroll is keyed by month):
+     *  - ?range=all           → all-time (read-only listing)
+     *  - ?from=YYYY-MM[&to=]  → a custom month range (read-only listing)
+     *  - else                 → a single month (?month=, default current) — the
+     *                           anchor for the per-month write actions.
+     *
+     * @return array{mode: string, month: string, from: string|null, to: string|null}
+     */
+    private function resolvePeriod(Request $request): array
+    {
+        if ($request->string('range')->value() === 'all') {
+            return ['mode' => 'all', 'month' => Carbon::now()->format('Y-m'), 'from' => null, 'to' => null];
+        }
+
+        $from = $this->validMonth($request->string('from')->value());
+        $to = $this->validMonth($request->string('to')->value());
+        if ($from !== null || $to !== null) {
+            $from ??= $to;
+            $to ??= $from;
+            if ($from > $to) {
+                [$from, $to] = [$to, $from];
+            }
+
+            return ['mode' => 'range', 'month' => $to, 'from' => $from, 'to' => $to];
+        }
+
+        return ['mode' => 'month', 'month' => $this->resolveMonth($request), 'from' => null, 'to' => null];
+    }
+
+    private function validMonth(string $raw): ?string
+    {
+        return $raw !== '' && preg_match('/^\d{4}-\d{2}$/', $raw) ? $raw : null;
     }
 }

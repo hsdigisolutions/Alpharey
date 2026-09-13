@@ -30,12 +30,45 @@ const props = defineProps({
     advances: { type: Array, default: () => [] },
     locked: { type: Boolean, default: false },
     can: { type: Object, required: true },
+    readonly: { type: Boolean, default: false },
+    filters: { type: Object, default: () => ({}) },
 });
 
 const page = usePage();
 
 function go(month) {
-    router.get('/payroll', { month }, { preserveScroll: true, preserveState: true });
+    router.get('/payroll', { month, search: search.value }, { preserveScroll: true, preserveState: true });
+}
+
+// --- Search + period filter (Issue 1) ---
+const search = ref(props.filters.search ?? '');
+const rangeFrom = ref(props.filters.from ?? '');
+const rangeTo = ref(props.filters.to ?? '');
+let searchTimer;
+function currentPeriodParams() {
+    if (props.filters.mode === 'range') return { from: props.filters.from, to: props.filters.to };
+    if (props.filters.mode === 'all') return { range: 'all' };
+    return { month: props.month };
+}
+function applySearch() {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => {
+        router.get('/payroll', { ...currentPeriodParams(), search: search.value }, { preserveScroll: true, preserveState: true });
+    }, 350);
+}
+function monthKey(offset = 0) {
+    const d = new Date();
+    d.setDate(1);
+    d.setMonth(d.getMonth() + offset);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+function viewMonth(m) { router.get('/payroll', { month: m, search: search.value }, { preserveScroll: true }); }
+function viewAll() { router.get('/payroll', { range: 'all', search: search.value }, { preserveScroll: true }); }
+function applyRange() {
+    if (!rangeFrom.value && !rangeTo.value) return;
+    router.get('/payroll', {
+        from: rangeFrom.value || rangeTo.value, to: rangeTo.value || rangeFrom.value, search: search.value,
+    }, { preserveScroll: true });
 }
 
 function changeMonth(delta) {
@@ -211,6 +244,7 @@ const columns = [
     <Head :title="$t('payroll.title')" />
     <AppLayout>
         <VPageHeader k="payroll.title">
+            <template v-if="!readonly">
             <VButton v-if="can.create && !locked" variant="secondary" icon="plus" @click="post('/payroll/calculate')">
                 <Bilingual k="payroll.calculate" inline />
             </VButton>
@@ -234,10 +268,37 @@ const columns = [
                 class="inline-flex items-center gap-2 rounded-md border border-line bg-surface-raised px-3.5 py-2 text-sm font-medium text-ink hover:bg-surface-hover">
                 <AppIcon name="download" class="h-4 w-4" /> PDF
             </a>
+            </template>
         </VPageHeader>
 
-        <!-- Month navigation + lock state -->
-        <div class="mb-4 flex flex-wrap items-center gap-3">
+        <!-- Search + period filter (Issue 1) -->
+        <div class="mb-4 flex flex-wrap items-end gap-3">
+            <div class="w-full sm:w-64">
+                <label class="mb-1 block text-xs font-medium text-ink-soft"><Bilingual k="payroll.search" inline /></label>
+                <input v-model="search" type="search" :placeholder="$t('payroll.search_ph')"
+                    class="w-full rounded-md border border-line-strong bg-surface-sunken px-3 py-2 text-sm text-ink placeholder:text-muted focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+                    @input="applySearch" />
+            </div>
+            <div class="flex flex-wrap items-center gap-1.5">
+                <VButton size="sm" variant="secondary" @click="viewMonth(monthKey(0))"><Bilingual k="payroll.this_month" inline /></VButton>
+                <VButton size="sm" variant="secondary" @click="viewMonth(monthKey(-1))"><Bilingual k="payroll.last_month" inline /></VButton>
+                <VButton size="sm" variant="secondary" @click="viewAll()"><Bilingual k="payroll.all_time" inline /></VButton>
+            </div>
+            <div class="flex items-end gap-1.5">
+                <div>
+                    <label class="mb-1 block text-xs font-medium text-ink-soft"><Bilingual k="payroll.range_from" inline /></label>
+                    <input v-model="rangeFrom" type="month" class="rounded-md border border-line-strong bg-surface-sunken px-2 py-2 text-sm text-ink" />
+                </div>
+                <div>
+                    <label class="mb-1 block text-xs font-medium text-ink-soft"><Bilingual k="payroll.range_to" inline /></label>
+                    <input v-model="rangeTo" type="month" class="rounded-md border border-line-strong bg-surface-sunken px-2 py-2 text-sm text-ink" />
+                </div>
+                <VButton size="sm" variant="secondary" @click="applyRange()"><Bilingual k="payroll.apply_range" inline /></VButton>
+            </div>
+        </div>
+
+        <!-- Single-month navigation (the anchor for calculate / approve-all / lock) -->
+        <div v-if="!readonly" class="mb-4 flex flex-wrap items-center gap-3">
             <button type="button" class="rounded-md border border-line p-1.5 hover:bg-surface-hover" @click="changeMonth(-1)">
                 <AppIcon name="chevron-left" class="h-4 w-4" />
             </button>
@@ -246,6 +307,15 @@ const columns = [
                 <AppIcon name="chevron-right" class="h-4 w-4" />
             </button>
             <VBadge v-if="locked" status="neutral"><Bilingual k="payroll.is_locked" inline /></VBadge>
+        </div>
+        <!-- Read-only multi-month / all-time listing -->
+        <div v-else class="mb-4 flex flex-wrap items-center gap-3">
+            <VBadge status="info">
+                <span v-if="filters.mode === 'all'"><Bilingual k="payroll.all_time" inline /></span>
+                <span v-else class="tabular-nums">{{ filters.from }} → {{ filters.to }}</span>
+            </VBadge>
+            <span class="text-xs text-muted"><Bilingual k="payroll.readonly_hint" /></span>
+            <VButton size="sm" variant="ghost" @click="viewMonth(monthKey(0))"><Bilingual k="payroll.back_to_month" inline /></VButton>
         </div>
 
         <!-- Summary -->

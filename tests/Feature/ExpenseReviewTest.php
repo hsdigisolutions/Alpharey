@@ -197,3 +197,43 @@ it('ships full receipt-detail context to the review queue (BUG 2 + BUG 4)', func
             ->where('expenses.0.escalated_by', $this->admin->name)
             ->where('expenses.0.review_note', 'please verify'));
 });
+
+// Issue 2 — bulk final-approve on the Expenses tab.
+it('bulk-approves pending expenses and skips in-review, already-approved, and cross-company rows', function (): void {
+    $p1 = Expense::factory()->create(['company_id' => $this->company->id, 'approved' => false]);
+    $p2 = Expense::factory()->create(['company_id' => $this->company->id, 'approved' => false]);
+    $done = Expense::factory()->create(['company_id' => $this->company->id, 'approved' => true, 'approved_at' => now()]);
+    $inReview = Expense::factory()->create(['company_id' => $this->company->id, 'approved' => false]);
+    $inReview->review_status = 'in_review';
+    $inReview->save();
+    $foreign = Expense::factory()->create(['company_id' => Company::factory()->create()->id, 'approved' => false]);
+
+    $this->actingAs($this->admin)->post('/expenses/bulk-approve', [
+        'ids' => [$p1->id, $p2->id, $done->id, $inReview->id, $foreign->id],
+    ])->assertRedirect();
+
+    expect($p1->fresh()->approved)->toBeTrue()
+        ->and($p2->fresh()->approved)->toBeTrue()
+        // Escalated + cross-company rows are silently skipped, never approved.
+        ->and($inReview->fresh()->approved)->toBeFalse()
+        ->and($inReview->fresh()->review_status)->toBe('in_review')
+        ->and($foreign->fresh()->approved)->toBeFalse();
+});
+
+it('bulk approve cascades the decision to a linked worker expense', function (): void {
+    [$we, $mirror] = submitFuelWorkerExpense($this->company, $this->employee, '40');
+
+    $this->actingAs($this->admin)->post('/expenses/bulk-approve', ['ids' => [$mirror->id]])->assertRedirect();
+
+    // The mirror is approved AND the worker's own record is synced (BUG 3/4 cascade).
+    expect($mirror->fresh()->approved)->toBeTrue()
+        ->and($we->fresh()->status)->toBe(WorkerExpenseStatus::Approved);
+});
+
+it('bulk approve requires the final-approval gate', function (): void {
+    $manager = User::factory()->create(['role' => UserRole::Manager, 'company_id' => $this->company->id]);
+    $e = Expense::factory()->create(['company_id' => $this->company->id, 'approved' => false]);
+
+    $this->actingAs($manager)->post('/expenses/bulk-approve', ['ids' => [$e->id]])->assertForbidden();
+    expect($e->fresh()->approved)->toBeFalse();
+});

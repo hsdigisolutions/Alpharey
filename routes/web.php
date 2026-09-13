@@ -393,6 +393,8 @@ Route::middleware(['auth', 'active', 'two_factor', 'not_worker'])->group(functio
     Route::post('/expenses', [ExpenseController::class, 'store'])->name('expenses.store');
     // Direct vehicle expense entry (Part D) — before /expenses/{expense}.
     Route::post('/expenses/vehicle', [ExpenseController::class, 'storeVehicle'])->name('expenses.vehicle.store');
+    // Bulk final-approve — literal path BEFORE /expenses/{expense} (decision 30).
+    Route::post('/expenses/bulk-approve', [ExpenseController::class, 'bulkApprove'])->name('expenses.bulk-approve');
     Route::get('/vehicles/{vehicle}/drivers-on-date', [ExpenseController::class, 'driversOnDate'])->name('vehicles.drivers-on-date');
     Route::get('/expenses/{expense}/receipt', [ExpenseController::class, 'downloadReceipt'])->name('expenses.receipt');
     Route::get('/expenses/{expense}/receipt/preview', [ExpenseReceiptController::class, 'preview'])->name('expenses.receipt.preview');

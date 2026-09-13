@@ -719,3 +719,27 @@ it('re-derives a jornada left at 0 by the day-type back-fill from the daily rate
     expect((float) $payroll->getAttribute('days_amount'))->toBe(200.0)
         ->and((float) $payroll->getAttribute('gross_pay'))->toBe(200.0);
 });
+
+// Issue 1 — payroll search + period (date) filter.
+it('filters payroll by employee search and offers a read-only all-time view', function (): void {
+    $alice = hourlyEmployee(rate: 20, days: 1);
+    $alice->update(['full_name' => 'Alicia Uno']);
+    $bob = hourlyEmployee(rate: 20, days: 1);
+    $bob->update(['full_name' => 'Roberto Dos']);
+    app(PayrollService::class)->calculateMonth($this->company->id, $this->month);
+
+    // Search by name → only the matching employee's row.
+    $this->actingAs($this->admin)->get("/payroll?month={$this->month}&search=Alicia")
+        ->assertInertia(fn (Assert $p) => $p->component('Payroll/Index')
+            ->has('rows', 1)
+            ->where('rows.0.employee', 'Alicia Uno')
+            ->where('filters.search', 'Alicia')
+            ->where('readonly', false));
+
+    // All-time view is a read-only listing (per-month actions hidden client-side).
+    $this->actingAs($this->admin)->get('/payroll?range=all')
+        ->assertInertia(fn (Assert $p) => $p->component('Payroll/Index')
+            ->where('readonly', true)
+            ->where('filters.mode', 'all')
+            ->has('rows', 2));
+});
