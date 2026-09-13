@@ -790,7 +790,10 @@ class PayrollService
             ->whereIn('status', [DeploymentStatus::Active->value, DeploymentStatus::Completed->value])
             ->where('deployment_start', '<=', $end)
             ->where(fn ($q) => $q->whereNull('deployment_end')->orWhere('deployment_end', '>=', $start))
-            ->with('hostCompany:id,name')
+            // withTrashed: a host company may be soft-deleted after the deployment
+            // (Company uses SoftDeletes); the historical note still needs its name,
+            // and a null relation would fatal on ->name below.
+            ->with(['hostCompany' => fn ($q) => $q->withTrashed()->select('id', 'name')])
             ->get();
 
         if ($deployments->isEmpty()) {

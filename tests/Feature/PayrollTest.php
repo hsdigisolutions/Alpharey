@@ -442,6 +442,35 @@ it('keeps a deployed worker on the HOME payroll with a transfer note (Option A)'
         ->and($payroll->deployment_notes[0])->toContain($host->name);
 });
 
+it('renders the deployment note even when the host company is soft-deleted (F6)', function (): void {
+    $host = Company::factory()->create();
+    $employee = Employee::factory()->forCompany($this->company)->create([
+        'wage_type' => 'hourly', 'wage_rate' => '20',
+    ]);
+    $hostProject = Project::factory()->forCompany($host)->create();
+    EmployeeDeployment::factory()->create([
+        'employee_id' => $employee->id, 'home_company_id' => $this->company->id,
+        'host_company_id' => $host->id, 'project_id' => $hostProject->id,
+        'deployment_start' => $this->month.'-01', 'deployment_end' => $this->month.'-28',
+    ]);
+    Attendance::factory()->create([
+        'company_id' => $host->id, 'employee_id' => $employee->id,
+        'project_id' => $hostProject->id, 'date' => $this->month.'-04',
+        'status' => 'present', 'hours_worked' => '8', 'overtime_hours' => '0',
+        'hourly_rate_snapshot' => '20', 'wage_type_snapshot' => 'hourly', 'total_amount' => '160',
+    ]);
+
+    // The host company is soft-deleted after the deployment — payroll must not fatal
+    // on a null hostCompany; the historical note still carries its (trashed) name.
+    $host->delete();
+
+    app(PayrollService::class)->calculateMonth($this->company->id, $this->month);
+
+    $payroll = Payroll::withoutGlobalScopes()->where('employee_id', $employee->id)->firstOrFail();
+    expect($payroll->deployment_notes)->toHaveCount(1)
+        ->and($payroll->deployment_notes[0])->toContain($host->name);
+});
+
 it('never rewrites a payroll that has already been paid', function (): void {
     $employee = hourlyEmployee(rate: 20, days: 1, hours: 8);
     $service = app(PayrollService::class);
