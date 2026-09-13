@@ -359,8 +359,10 @@ class ProjectController extends Controller
     {
         return Invoice::query()
             ->where('project_id', $project->id)
+            // Newest billing period first (the invoiced-periods history); invoices
+            // with no period fall back to the invoice date.
+            ->orderByRaw('COALESCE(billing_period_start, invoice_date) DESC')
             ->with('client:id,name')
-            ->orderByDesc('invoice_date')
             ->get()
             ->map(fn (Invoice $i): array => [
                 'id' => $i->id,
@@ -369,6 +371,11 @@ class ProjectController extends Controller
                 'date' => $i->invoice_date->toDateString(),
                 'total' => (float) $i->total,
                 'status' => $i->payment_status->value,
+                // Structured billing period (the record-keeping history) + legacy
+                // free-text fallback for imported invoices.
+                'period_start' => $i->billing_period_start?->toDateString(),
+                'period_end' => $i->billing_period_end?->toDateString(),
+                'period_text' => $i->billing_period,
             ])
             ->all();
     }

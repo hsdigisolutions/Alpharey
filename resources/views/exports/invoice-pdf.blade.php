@@ -58,6 +58,11 @@
                     @if ($invoice->due_date)
                         <br>Vencimiento: {{ $invoice->due_date->format('d/m/Y') }}
                     @endif
+                    @if ($invoice->billing_period_start && $invoice->billing_period_end)
+                        <br>Periodo facturado: {{ $invoice->billing_period_start->format('d/m/Y') }} – {{ $invoice->billing_period_end->format('d/m/Y') }}
+                    @elseif ($invoice->billing_period)
+                        <br>Periodo facturado: {{ $invoice->billing_period }}
+                    @endif
                 </div>
             </td>
         </tr>

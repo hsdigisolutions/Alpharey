@@ -465,3 +465,70 @@ it('ignores a preset for another company project (no preset shipped)', function 
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page->missing('preset'));
 });
+
+// Billing period (2026-09-13) — a structured date range recording which period
+// of work/cost an invoice bills for (record-keeping; no P&L change).
+it('saves a structured billing period range', function (): void {
+    $project = Project::factory()->forCompany($this->company)->create();
+
+    $this->actingAs($this->admin)->post('/invoices', invoicePayload([
+        'project_id' => $project->id,
+        'billing_period_start' => '2026-08-01',
+        'billing_period_end' => '2026-08-31',
+    ]))->assertRedirect()->assertSessionHasNoErrors();
+
+    $invoice = Invoice::withoutGlobalScopes()->latest('id')->firstOrFail();
+    expect($invoice->billing_period_start?->toDateString())->toBe('2026-08-01')
+        ->and($invoice->billing_period_end?->toDateString())->toBe('2026-08-31');
+});
+
+it('rejects a period end before its start, and a half-filled range', function (): void {
+    $this->actingAs($this->admin)->post('/invoices', invoicePayload([
+        'billing_period_start' => '2026-08-31', 'billing_period_end' => '2026-08-01',
+    ]))->assertSessionHasErrors('billing_period_end');
+
+    $this->actingAs($this->admin)->post('/invoices', invoicePayload([
+        'billing_period_start' => '2026-08-01', // end missing
+    ]))->assertSessionHasErrors('billing_period_end');
+});
+
+it('flags overlapping billing periods on the same project (advisory)', function (): void {
+    $project = Project::factory()->forCompany($this->company)->create();
+    // An existing August invoice on the project.
+    $existing = Invoice::factory()->create([
+        'company_id' => $this->company->id, 'client_id' => $this->client->id,
+        'project_id' => $project->id, 'type' => 'sale',
+        'billing_period_start' => '2026-08-01', 'billing_period_end' => '2026-08-31',
+    ]);
+
+    // A new mid-August period overlaps → the advisory endpoint reports it.
+    $res = $this->actingAs($this->admin)->getJson(
+        "/invoices/period-overlap?project_id={$project->id}&start=2026-08-15&end=2026-09-15"
+    )->assertOk();
+    expect($res->json('overlaps'))->toHaveCount(1)
+        ->and($res->json('overlaps.0.number'))->toBe($existing->number);
+
+    // A September-only period does NOT overlap.
+    $this->actingAs($this->admin)->getJson(
+        "/invoices/period-overlap?project_id={$project->id}&start=2026-09-01&end=2026-09-30"
+    )->assertOk()->assertJsonCount(0, 'overlaps');
+
+    // The invoice being edited is excluded from its own overlap check.
+    $this->actingAs($this->admin)->getJson(
+        "/invoices/period-overlap?project_id={$project->id}&start=2026-08-01&end=2026-08-31&exclude={$existing->id}"
+    )->assertOk()->assertJsonCount(0, 'overlaps');
+});
+
+it('shows each invoice billing period in the project invoices history', function (): void {
+    $project = Project::factory()->forCompany($this->company)->create();
+    Invoice::factory()->create([
+        'company_id' => $this->company->id, 'client_id' => $this->client->id,
+        'project_id' => $project->id, 'type' => 'sale',
+        'billing_period_start' => '2026-08-01', 'billing_period_end' => '2026-08-31',
+    ]);
+
+    $this->actingAs($this->admin)->get("/projects/{$project->id}")->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('invoices.0.period_start', '2026-08-01')
+            ->where('invoices.0.period_end', '2026-08-31'));
+});

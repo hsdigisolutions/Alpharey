@@ -281,6 +281,46 @@ class InvoiceController extends Controller
      * Only CLIENT-bearable expenses count (the Bearable-By rule). Returns JSON;
      * the totals are still (re)derived server-side by InvoiceTotals on save.
      */
+    /**
+     * Advisory (never blocking) check: does a proposed billing period overlap an
+     * existing SALE invoice's period on the same project? Drives the soft warning
+     * in the invoice form — the admin can still save (corrections, credit notes,
+     * split billing are legitimate). Company-scoped via the Invoice global scope.
+     */
+    public function periodOverlap(Request $request): JsonResponse
+    {
+        Gate::authorize('invoices.view');
+
+        $data = $request->validate([
+            'project_id' => ['required', 'integer'],
+            'start' => ['required', 'date'],
+            'end' => ['required', 'date', 'after_or_equal:start'],
+            'exclude' => ['nullable', 'integer'], // the invoice being edited
+        ]);
+
+        $overlaps = Invoice::query()
+            ->where('type', InvoiceType::Sale->value)
+            ->where('project_id', (int) $data['project_id'])
+            ->whereNotNull('billing_period_start')
+            ->whereNotNull('billing_period_end')
+            ->when($data['exclude'] ?? null, fn (Builder $q, int $id) => $q->where('id', '!=', $id))
+            // Two ranges overlap when existing.start <= new.end AND existing.end >= new.start.
+            ->whereDate('billing_period_start', '<=', $data['end'])
+            ->whereDate('billing_period_end', '>=', $data['start'])
+            ->orderByDesc('billing_period_start')
+            ->get(['id', 'number', 'billing_period_start', 'billing_period_end', 'total', 'payment_status']);
+
+        return response()->json([
+            'overlaps' => $overlaps->map(fn (Invoice $i): array => [
+                'number' => $i->number,
+                'start' => $i->billing_period_start?->toDateString(),
+                'end' => $i->billing_period_end?->toDateString(),
+                'total' => (float) $i->total,
+                'status' => $i->payment_status->value,
+            ])->all(),
+        ]);
+    }
+
     public function projectCosts(Request $request): JsonResponse
     {
         Gate::authorize('invoices.create');
@@ -424,6 +464,8 @@ class InvoiceController extends Controller
             'due_date' => $i->due_date?->toDateString(),
             'billing_type' => $i->billing_type,
             'billing_period' => $i->billing_period,
+            'billing_period_start' => $i->billing_period_start?->toDateString(),
+            'billing_period_end' => $i->billing_period_end?->toDateString(),
             'subtotal' => (float) $i->subtotal,
             // null vat_rate renders as "—", never as 0% (design-skill VAT rule)
             'vat_rate' => $i->vat_rate?->value,

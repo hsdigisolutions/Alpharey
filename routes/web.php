@@ -371,6 +371,8 @@ Route::middleware(['auth', 'active', 'two_factor', 'not_worker'])->group(functio
     Route::get('/invoices', [InvoiceController::class, 'index'])->name('invoices.index');
     Route::get('/invoices/export', [InvoiceController::class, 'export'])->name('invoices.export');
     Route::get('/invoices/project-costs', [InvoiceController::class, 'projectCosts'])->name('invoices.project-costs');
+    // Advisory billing-period overlap check (soft warning in the invoice form).
+    Route::get('/invoices/period-overlap', [InvoiceController::class, 'periodOverlap'])->name('invoices.period-overlap');
     Route::get('/invoices/{invoice}', [InvoiceController::class, 'show'])->name('invoices.show');
     Route::post('/invoices', [InvoiceController::class, 'store'])->name('invoices.store');
     Route::put('/invoices/{invoice}', [InvoiceController::class, 'update'])->name('invoices.update');

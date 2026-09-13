@@ -96,6 +96,7 @@ const editingId = ref(null);
 const blank = {
     type: 'sale', sub_type: 'final', client_id: '', vendor_id: '', project_id: '',
     invoice_date: null, due_date: null, billing_type: '', billing_period: '',
+    billing_period_start: null, billing_period_end: null,
     is_taxable: true, vat_rate: null, vat_custom_percent: null, discount_type: '', discount_value: 0, retention_percent: null,
     status: 'draft', payment_method: '', payment_date: null, notes: '',
     lines: [{ description: '', quantity: 1, unit_price: 0 }],
@@ -212,6 +213,42 @@ async function calcFromProject() {
     }
 }
 
+/* --- Billing period (record-keeping): month quick-pick + overlap warning --- */
+const billingMonth = ref('');
+function applyBillingMonth() {
+    if (!billingMonth.value) return;
+    const [y, m] = billingMonth.value.split('-').map(Number);
+    const last = new Date(y, m, 0).getDate(); // day 0 of next month = last of this
+    form.billing_period_start = `${billingMonth.value}-01`;
+    form.billing_period_end = `${billingMonth.value}-${String(last).padStart(2, '0')}`;
+}
+
+const periodOverlaps = ref([]);
+let overlapTimer = null;
+async function checkOverlap() {
+    periodOverlaps.value = [];
+    if (form.type !== 'sale' || !form.project_id || !form.billing_period_start || !form.billing_period_end) return;
+    const q = new URLSearchParams({
+        project_id: form.project_id,
+        start: form.billing_period_start,
+        end: form.billing_period_end,
+    });
+    if (editingId.value) q.append('exclude', editingId.value);
+    try {
+        const res = await fetch(`/invoices/period-overlap?${q.toString()}`, {
+            headers: { Accept: 'application/json' }, credentials: 'same-origin',
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        periodOverlaps.value = Array.isArray(data.overlaps) ? data.overlaps : [];
+    } catch { /* advisory only — never block the form on a failed check */ }
+}
+// Re-check (debounced) whenever the project or period changes.
+watch(() => [form.project_id, form.billing_period_start, form.billing_period_end, form.type], () => {
+    clearTimeout(overlapTimer);
+    overlapTimer = setTimeout(checkOverlap, 300);
+});
+
 function addLine() {
     form.lines.push({ description: '', quantity: 1, unit_price: 0 });
 }
@@ -261,6 +298,8 @@ function openEdit(row) {
                 due_date: e.due_date ?? null,
                 billing_type: e.billing_type ?? '',
                 billing_period: e.billing_period ?? '',
+                billing_period_start: e.billing_period_start ?? null,
+                billing_period_end: e.billing_period_end ?? null,
                 is_taxable: e.is_taxable ?? true,
                 vat_rate: e.vat_rate ?? null,
                 vat_custom_percent: e.vat_custom_percent ?? null,
@@ -340,11 +379,27 @@ function eur(n) {
     return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(Number(n ?? 0));
 }
 
+// A concise billing-period label: the structured range, else the legacy
+// free-text (imported invoices), else a dash.
+function fmtShort(iso) {
+    if (!iso) return '';
+    const [y, m, d] = iso.split('-').map(Number);
+    return new Date(y, m - 1, d).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
+}
+function periodLabel(r) {
+    if (r.billing_period_start && r.billing_period_end) {
+        const year = r.billing_period_end.split('-')[0];
+        return `${fmtShort(r.billing_period_start)} – ${fmtShort(r.billing_period_end)} ${year}`;
+    }
+    return r.billing_period || '—';
+}
+
 const columns = computed(() => [
     { key: 'number', labelKey: 'invoices.number' },
     { key: 'party', labelKey: props.tab === 'sale' ? 'invoices.client' : 'invoices.vendor' },
     { key: 'project', labelKey: 'invoices.project' },
     { key: 'invoice_date', labelKey: 'invoices.invoice_date' },
+    { key: 'billing_period', labelKey: 'invoices.billing_period_col' },
     { key: 'due_date', labelKey: 'invoices.due_date' },
     { key: 'vat', labelKey: 'invoices.vat', align: 'end' },
     { key: 'total', labelKey: 'invoices.total', align: 'end' },
@@ -422,6 +477,7 @@ const columns = computed(() => [
                 <td class="px-3 py-2.5 text-sm">{{ r.client ?? r.vendor ?? '—' }}</td>
                 <td class="px-3 py-2.5 text-sm text-ink-soft">{{ r.project ?? '—' }}</td>
                 <td class="tabular-nums px-3 py-2.5 text-sm">{{ r.invoice_date }}</td>
+                <td class="px-3 py-2.5 text-sm text-ink-soft">{{ periodLabel(r) }}</td>
                 <td class="tabular-nums px-3 py-2.5 text-sm text-ink-soft">{{ r.due_date ?? '—' }}</td>
                 <td class="tabular-nums px-3 py-2.5 text-end text-sm text-ink-soft">
                     <!-- blank VAT shows "—", never 0% (design-skill VAT rule) -->
@@ -505,6 +561,37 @@ const columns = computed(() => [
                     <FormField k="invoices.due_date" :error="form.errors.due_date">
                         <VDateInput v-model="form.due_date" />
                     </FormField>
+                </div>
+
+                <!-- Billing period: which period of work/cost this invoice bills
+                     for (record-keeping; distinct from invoice/due date). -->
+                <div class="rounded-lg border border-line bg-surface-sunken p-3 space-y-2">
+                    <div class="flex flex-wrap items-baseline gap-2">
+                        <Bilingual k="invoices.billing_period_section" class="text-[13px] font-semibold" />
+                        <span class="text-xs text-muted">{{ $t('invoices.billing_period_hint') }}</span>
+                    </div>
+                    <div class="grid gap-4 sm:grid-cols-3">
+                        <FormField k="invoices.billing_period_start" :error="form.errors.billing_period_start">
+                            <VDateInput v-model="form.billing_period_start" />
+                        </FormField>
+                        <FormField k="invoices.billing_period_end" :error="form.errors.billing_period_end">
+                            <VDateInput v-model="form.billing_period_end" />
+                        </FormField>
+                        <FormField k="invoices.billing_period_month">
+                            <input v-model="billingMonth" type="month" @change="applyBillingMonth"
+                                class="w-full rounded-md border border-line-strong bg-surface-sunken px-3 py-1.5 text-sm text-ink focus:border-accent focus:outline-none" />
+                        </FormField>
+                    </div>
+                    <div v-if="periodOverlaps.length"
+                        class="rounded-md border border-status-warn bg-status-warn-soft px-3 py-2 text-xs text-status-warn">
+                        <p class="font-medium">{{ $t('invoices.billing_period_overlap') }}</p>
+                        <ul class="mt-1 list-disc ps-4">
+                            <li v-for="(o, i) in periodOverlaps" :key="i">
+                                #{{ o.number }} · {{ o.start }} → {{ o.end }} · {{ eur(o.total) }} ({{ $t(`invoices.payment_${o.status}`) }})
+                            </li>
+                        </ul>
+                        <p class="mt-1">{{ $t('invoices.billing_period_overlap_ok') }}</p>
+                    </div>
                 </div>
 
                 <!-- Auto-calc from the selected project (sale invoices only) -->

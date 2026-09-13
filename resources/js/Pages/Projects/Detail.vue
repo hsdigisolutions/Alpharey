@@ -1030,7 +1030,7 @@ const noteStatus = { internal: 'neutral', client_call: 'info', client_email: 'ac
                         <Bilingual k="invoices.new" inline />
                     </VButton>
                 </div>
-                <VFinanceRows :rows="invoices" :can-view="canViewInvoices" empty-key="finance.no_invoices" />
+                <VFinanceRows :rows="invoices" :can-view="canViewInvoices" empty-key="finance.no_invoices" show-period />
             </div>
 
             <!-- Gastos — expenses booked against this project -->

@@ -41,6 +41,10 @@ class StoreInvoiceRequest extends FormRequest
             'due_date' => ['nullable', 'date', 'after_or_equal:invoice_date'],
             'billing_type' => ['nullable', 'string', 'max:30'],
             'billing_period' => ['nullable', 'string', 'max:40'],
+            // Structured billing period (the range of work/cost this invoice bills
+            // for) — both-or-neither, end on/after start. Record-keeping only.
+            'billing_period_start' => ['nullable', 'date', 'required_with:billing_period_end'],
+            'billing_period_end' => ['nullable', 'date', 'required_with:billing_period_start', 'after_or_equal:billing_period_start'],
 
             // VAT: the VatRate dropdown only, and blank is valid (No aplica).
             'is_taxable' => ['nullable', 'boolean'],
