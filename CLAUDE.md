@@ -4,6 +4,50 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Status: Phase 9 in progress — hardening (2026-08-01)
 
+### True labour cost — employer social-security tax + operational cost, 3-level visibility (2026-09-13, DONE, deployed to prod)
+
+**The corrected P&L cost model, confirmed by the client through several rounds.**
+Two distinct concepts, layered:
+
+- **Employer social-security tax — a REAL cost in labour, before profit.** A
+  per-employee FIXED euro amount (`employees.employer_tax_per_day`, NOT a
+  percentage, NOT derived) — the social-security the COMPANY pays the government
+  per worked DAY for employing that worker. Added to the wage to form the TRUE
+  labour cost: `labour = Σ wages + Σ (each worker's employer_tax_per_day × their
+  worked days)` (full amount per worked day, any day type). Own-attendance labour
+  ONLY — a subcontracted/outsourced crew is not our employee, so 0 there. Entered
+  on the employee Wage section AND in bulk on the Settings operational roster (a
+  €/day input per worker beside the include checkbox). **Plain decimal (NOT
+  encrypted)** — the P&L sums it in SQL (`SUM(employees.employer_tax_per_day)` over
+  worked rows via `employerTaxTotal()`); default 0 → byte-identical until amounts
+  are set. **NEVER touches worker pay (payroll has zero references) or client
+  billing/revenue.**
+- **Operational cost % — a PROFIT-only display deduction (Item 7).** Per-company
+  Setting `operational.cost_pct.{companyId}` (0 = off). **Option A (confirmed):**
+  overhead = op % × the TRUE labour cost of the NON-EXEMPT workers (their wages +
+  their employer tax). Shown as "Operational overhead" + "Profit after overhead"
+  on the Rentabilidad tab + Resumen card + Reports, ONLY when op % > 0. The
+  `operational_cost_exempt` flag excludes a worker from the OVERHEAD base only —
+  employer tax still applies to them (it is a real cost on everyone).
+
+**Where it's visible (3 levels):** (1) **Project** — Rentabilidad tab + Resumen
+card show the wages + employer-tax split of true labour cost + the overhead lines.
+(2) **Company-wide** — Reports → Profitability has True-labour / Employer-tax /
+Other-costs(company/client, from Item 4) / Operational-overhead columns + totals.
+(3) **Super Admin ALL companies** — with no single company selected, the same
+report renders a GROUP view (`ProfitabilityService::groupReport()`): one row per
+company + a grand total across the group.
+
+**Proven on prod (real data, rolled-back txns):** byte-identical money hash at
+employer_tax=0 (deploy disturbs nothing until amounts are set); isolated demos —
+#96 (€30/day×21): labour 14,294.98→19,964.98, profit 27,908→22,238, overhead
+1,429.50→1,996.50; #125 (€40×23): labour 19,809.54→32,289.54; #92 (€25×38): labour
+50,959.92→72,159.92. Revenue/client billing unchanged; Item 4 split unchanged;
+payroll gross/net byte-identical; group grand total = Σ per-company. **~1374 Pest
+tests.** ⚠️ Both are read LIVE (not frozen) — changing a worker's employer tax or
+the op % retroactively adjusts past P&L (a cost estimate, not payroll); the cache
+signature busts on employees/settings change.
+
 ### Client feature batch — Items 1–10 + Bonus + 3 investigations (2026-09-13, DONE, all deployed to prod)
 
 A large one-at-a-time batch of client-requested changes, each built →
