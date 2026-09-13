@@ -29,10 +29,16 @@ const props = defineProps({
     projects: { type: Array, required: true },
     statuses: { type: Array, required: true },
     total: { type: Number, default: 0 },
+    referralRows: { type: Array, default: () => [] },
+    referralTotal: { type: Number, default: 0 },
     can: { type: Object, required: true },
 });
 
 const page = usePage();
+
+// Two kinds of commission in one screen: invoice-based SALES commission (the
+// existing table) and worker-REFERRAL commission (Item 8, read-only).
+const tab = ref('sales');
 
 const filters = reactive({
     employee_id: props.filters.employee_id ?? '',
@@ -116,7 +122,7 @@ const columns = [
     <Head :title="$t('commissions.title')" />
     <AppLayout>
         <VPageHeader k="commissions.title">
-            <VButton v-if="can.edit" variant="secondary" icon="plus" @click="generate">
+            <VButton v-if="can.edit && tab === 'sales'" variant="secondary" icon="plus" @click="generate">
                 <Bilingual k="commissions.generate" inline />
             </VButton>
             <a v-if="can.export" :href="`/commissions/export?month=${month}`"
@@ -129,6 +135,16 @@ const columns = [
             </a>
         </VPageHeader>
 
+        <!-- Two commission kinds, clearly separated -->
+        <div class="mb-4 flex gap-1 border-b border-line">
+            <button type="button" class="border-b-2 px-4 py-2 text-sm font-medium"
+                :class="tab === 'sales' ? 'border-accent text-ink' : 'border-transparent text-ink-soft hover:text-ink'"
+                @click="tab = 'sales'">{{ $t('commissions.tab_sales') }}</button>
+            <button type="button" class="border-b-2 px-4 py-2 text-sm font-medium"
+                :class="tab === 'referral' ? 'border-accent text-ink' : 'border-transparent text-ink-soft hover:text-ink'"
+                @click="tab = 'referral'">{{ $t('commissions.tab_referral') }}</button>
+        </div>
+
         <div class="mb-4 flex flex-wrap items-center gap-3">
             <button type="button" class="rounded-md border border-line p-1.5 hover:bg-surface-hover" @click="changeMonth(-1)">
                 <AppIcon name="chevron-left" class="h-4 w-4" />
@@ -139,10 +155,43 @@ const columns = [
             </button>
             <span class="tabular-nums ms-auto text-sm">
                 <Bilingual k="commissions.total" inline class="text-ink-soft" />
-                <strong class="ms-2">{{ eur(total) }}</strong>
+                <strong class="ms-2">{{ eur(tab === 'sales' ? total : referralTotal) }}</strong>
             </span>
         </div>
 
+        <!-- REFERRAL commissions (Item 8) — read-only company-wide list -->
+        <div v-if="tab === 'referral'">
+            <p class="mb-3 text-xs text-muted">{{ $t('commissions.referral_hint') }}</p>
+            <div class="overflow-x-auto rounded-lg border border-line">
+                <table class="w-full text-sm">
+                    <thead class="bg-surface-sunken text-[11px] uppercase tracking-wide text-muted">
+                        <tr>
+                            <th class="px-3 py-2 text-start"><Bilingual k="commissions.ref_referrer" inline /></th>
+                            <th class="px-3 py-2 text-start"><Bilingual k="commissions.ref_worker" inline /></th>
+                            <th class="px-3 py-2 text-start"><Bilingual k="employees.referral_rate_type" inline /></th>
+                            <th class="px-3 py-2 text-end"><Bilingual k="employees.referral_amount" inline /></th>
+                            <th class="px-3 py-2 text-end"><Bilingual k="employees.referral_window_months" inline /></th>
+                            <th class="px-3 py-2 text-end"><Bilingual k="commissions.ref_accrued" inline /></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr v-for="(r, i) in referralRows" :key="i" class="border-t border-line">
+                            <td class="px-3 py-2">{{ r.referrer }}</td>
+                            <td class="px-3 py-2">{{ r.worker }} <span class="text-xs text-muted">· {{ r.code }}</span></td>
+                            <td class="px-3 py-2">{{ r.rate_type ? $t(`employees.referral_rate_${r.rate_type}`) : '—' }}</td>
+                            <td class="tabular-nums px-3 py-2 text-end">{{ eur(r.amount) }}</td>
+                            <td class="tabular-nums px-3 py-2 text-end">{{ r.window_months ?? '—' }}</td>
+                            <td class="tabular-nums px-3 py-2 text-end font-semibold">{{ eur(r.accrued) }}</td>
+                        </tr>
+                        <tr v-if="referralRows.length === 0">
+                            <td colspan="6" class="px-3 py-8 text-center text-sm text-muted">{{ $t('commissions.no_referrals') }}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <template v-else>
         <div class="grid grid-cols-2 gap-2 pb-3 lg:grid-cols-3">
             <VSelect v-model="filters.employee_id" @update:model-value="apply()">
                 <option value="">{{ $t('commissions.employee') }}</option>
@@ -198,6 +247,7 @@ const columns = [
                 <VEmptyState icon="commissions" message-key="commissions.no_rows" />
             </template>
         </VTable>
+        </template>
 
         <VModal :open="adjusting !== null" title-key="commissions.adjust" @close="adjustingId = null">
             <form v-if="adjusting" id="adjust-commission" class="space-y-4" @submit.prevent="submitAdjust">

@@ -1384,6 +1384,9 @@ class ProfitabilityService
             'profit' => $d['profit'],
             'margin' => $d['margin'],
             'health' => $d['health'],
+            // Item 7 (follow-up) — the additive operational overhead per project.
+            'operational_overhead' => (float) ($d['operational_overhead'] ?? 0),
+            'profit_after_overhead' => (float) ($d['profit_after_overhead'] ?? $d['profit']),
         ];
     }
 
@@ -1397,6 +1400,7 @@ class ProfitabilityService
     {
         $revenue = array_sum(array_map(fn (array $r): float => (float) $r['revenue'], $rows));
         $cost = array_sum(array_map(fn (array $r): float => (float) $r['cost'], $rows));
+        $overhead = array_sum(array_map(fn (array $r): float => (float) ($r['operational_overhead'] ?? 0), $rows));
         $profit = round($revenue - $cost, 2);
 
         return [
@@ -1404,6 +1408,9 @@ class ProfitabilityService
             'total_cost' => round($cost, 2),
             'total_profit' => $profit,
             'avg_margin' => $revenue > 0.0 ? round(($profit / $revenue) * 100, 1) : 0.0,
+            // Item 7 (follow-up) — company-wide operational overhead across the set.
+            'total_operational_overhead' => round((float) $overhead, 2),
+            'total_profit_after_overhead' => round($profit - (float) $overhead, 2),
         ];
     }
 

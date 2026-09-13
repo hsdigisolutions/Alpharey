@@ -233,6 +233,7 @@ const tableColumns = computed(() => (table.value ? Object.keys(table.value[0]) :
                                     <th class="px-3 py-2 text-end font-medium">{{ $t('profitability.col_expenses') }}</th>
                                     <th class="px-3 py-2 text-end font-medium">{{ $t('profitability.col_profit') }}</th>
                                     <th class="px-3 py-2 text-end font-medium">{{ $t('profitability.col_margin') }}</th>
+                                    <th class="px-3 py-2 text-end font-medium">{{ $t('profitability.col_overhead') }}</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -252,9 +253,10 @@ const tableColumns = computed(() => (table.value ? Object.keys(table.value[0]) :
                                     <td class="tabular-nums px-3 py-2 text-end font-medium" :class="marginClass(row)">
                                         {{ row.margin !== null ? `${row.margin.toLocaleString('es-ES')} %` : '—' }}
                                     </td>
+                                    <td class="tabular-nums px-3 py-2 text-end text-ink-soft">{{ Number(row.operational_overhead) > 0 ? eur(row.operational_overhead) : '—' }}</td>
                                 </tr>
                                 <tr v-if="!(report.rows ?? []).length">
-                                    <td colspan="8" class="px-3 py-6 text-center text-sm text-muted">{{ $t('profitability.no_data') }}</td>
+                                    <td colspan="9" class="px-3 py-6 text-center text-sm text-muted">{{ $t('profitability.no_data') }}</td>
                                 </tr>
                             </tbody>
                         </table>

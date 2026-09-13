@@ -400,8 +400,14 @@ const columns = computed(() => [
                     <option value="taxable">{{ $t('invoices.taxable_yes') }}</option>
                     <option value="non_taxable">{{ $t('invoices.taxable_no') }}</option>
                 </VSelect>
-                <VDateInput v-model="filters.from" @update:model-value="apply()" />
-                <VDateInput v-model="filters.to" @update:model-value="apply()" />
+                <label class="flex items-center gap-1.5 text-xs text-ink-soft">
+                    <span class="shrink-0">{{ $t('invoices.date_from') }}</span>
+                    <VDateInput v-model="filters.from" @update:model-value="apply()" />
+                </label>
+                <label class="flex items-center gap-1.5 text-xs text-ink-soft">
+                    <span class="shrink-0">{{ $t('invoices.date_to') }}</span>
+                    <VDateInput v-model="filters.to" @update:model-value="apply()" />
+                </label>
             </div>
         </div>
 

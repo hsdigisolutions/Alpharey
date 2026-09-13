@@ -10,6 +10,7 @@ use App\Models\Employee;
 use App\Models\Project;
 use App\Services\Audit\AuditLogger;
 use App\Services\Commissions\CommissionService;
+use App\Services\Payroll\PayrollService;
 use App\Support\CompanyBranding;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\RedirectResponse;
@@ -49,6 +50,8 @@ class CommissionController extends Controller
             ->map(fn (CommissionReportEntry $e): array => $this->row($e))
             ->values();
 
+        $referralRows = $this->referralRows($month);
+
         return Inertia::render('Commissions/Index', [
             'month' => $month,
             'entries' => $entries,
@@ -57,12 +60,71 @@ class CommissionController extends Controller
             'projects' => Project::query()->orderBy('name')->get(['id', 'name']),
             'statuses' => array_map(fn ($s) => $s->value, CommissionStatus::cases()),
             'total' => round((float) $entries->sum('amount'), 2),
+            // Item 8 (follow-up) — the second tab: worker-REFERRAL commissions for
+            // the month (a different concept from the sales commission above), so
+            // admin sees all commission activity in one screen, clearly separated.
+            'referralRows' => $referralRows,
+            'referralTotal' => round((float) collect($referralRows)->sum('accrued'), 2),
             'can' => [
                 'edit' => Gate::allows('commission_reports.edit'),
                 'approve' => Gate::allows('commission_reports.approve'),
                 'export' => Gate::allows('commission_reports.export'),
             ],
         ]);
+    }
+
+    /**
+     * Worker-referral commissions accruing this month across the acting company:
+     * one row per configured referral (referrer → referred worker) with the amount
+     * earned in $month. Read-only mirror of the payroll line; entry stays on the
+     * referred worker's form. Company-scoped via the Employee global scope.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function referralRows(string $month): array
+    {
+        // Every configured referral in the company (the referred workers).
+        $referred = Employee::query()
+            ->whereNotNull('referred_by_employee_id')
+            ->whereNotNull('referral_rate_type')
+            // Full referrer model (not a column subset) — referralAccrualByWorker
+            // reads the referrer's `active` flag, so it must be loaded.
+            ->with('referredBy')
+            ->orderBy('full_name')
+            ->get();
+
+        if ($referred->isEmpty()) {
+            return [];
+        }
+
+        // Accrual is computed per REFERRER (returns all their referred workers'
+        // amounts at once), so group and call once per referrer.
+        $payroll = app(PayrollService::class);
+        $companyId = (int) $this->contextCompanyId();
+        $accrualByReferrer = [];
+
+        return $referred->map(function (Employee $w) use ($payroll, $companyId, $month, &$accrualByReferrer): array {
+            $referrerId = (int) $w->referred_by_employee_id;
+            $referrer = $w->referredBy; // Employee|null (a soft-deleted referrer resolves to null)
+            if (! array_key_exists($referrerId, $accrualByReferrer)) {
+                $accrualByReferrer[$referrerId] = $referrer !== null
+                    ? $payroll->referralAccrualByWorker($referrer, $companyId, $month)
+                    : [];
+            }
+
+            return [
+                'referrer' => $referrer !== null ? $referrer->full_name : '—',
+                'referrer_id' => $referrerId,
+                'worker' => $w->full_name,
+                'worker_id' => $w->id,
+                'code' => (string) $w->employee_code,
+                'active' => $w->active,
+                'rate_type' => $w->referral_rate_type?->value,
+                'amount' => (float) $w->getAttribute('referral_amount'),
+                'window_months' => $w->referral_window_months,
+                'accrued' => (float) ($accrualByReferrer[$referrerId][$w->id] ?? 0),
+            ];
+        })->all();
     }
 
     public function generate(Request $request, CommissionService $service): RedirectResponse

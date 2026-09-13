@@ -1,6 +1,7 @@
 <?php
 
 use App\Enums\CommissionStatus;
+use App\Models\Attendance;
 use App\Models\Client;
 use App\Models\CommissionReportEntry;
 use App\Models\Company;
@@ -225,4 +226,33 @@ it('exports the month as a PDF', function (): void {
 
     $this->actingAs($this->admin)->get('/commissions/pdf?month='.$this->month)
         ->assertOk()->assertHeader('content-type', 'application/pdf');
+});
+
+// Item 8 (follow-up) — the Commissions screen's second tab lists worker-REFERRAL
+// commissions (a different concept from sales commission), company-wide.
+it('ships referral commissions to the Commissions screen referral tab', function (): void {
+    $this->travelTo('2026-05-05 09:00');
+    $referrer = Employee::factory()->forCompany($this->company)->create(['wage_type' => 'daily', 'daily_wage' => '100', 'active' => true]);
+    $referred = Employee::factory()->forCompany($this->company)->create([
+        'wage_type' => 'daily', 'daily_wage' => '100', 'active' => true,
+        'referred_by_employee_id' => $referrer->id,
+        'referral_rate_type' => 'per_day', 'referral_amount' => '5', 'referral_window_months' => 6,
+    ]);
+    // 3 worked days in May for the referred worker → referrer accrues 3 × €5 = €15.
+    foreach ([1, 2, 3] as $d) {
+        Attendance::factory()->create([
+            'company_id' => $this->company->id, 'employee_id' => $referred->id,
+            'date' => sprintf('2026-05-%02d', $d), 'status' => 'present',
+            'day_type' => 'hourly', 'hours_worked' => '8', 'total_amount' => '100',
+        ]);
+    }
+
+    $this->actingAs($this->admin)->get('/commissions?month=2026-05')->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->has('referralRows', 1)
+            ->where('referralRows.0.worker', $referred->full_name)
+            ->where('referralRows.0.referrer', $referrer->full_name)
+            ->where('referralRows.0.accrued', 15)
+            ->where('referralTotal', 15));
+    $this->travelBack();
 });
