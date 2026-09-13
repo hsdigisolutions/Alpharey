@@ -378,7 +378,7 @@ class ProfitabilityService
             ->when($from !== null, fn ($q) => $q->whereDate('date', '>=', $from))
             ->when($to !== null, fn ($q) => $q->whereDate('date', '<=', $to))
             ->with(['employee' => fn ($q) => $q->withoutGlobalScope(CompanyScope::class)
-                ->select('id', 'full_name', 'designation', 'designation_id', 'employer_tax_per_day')])
+                ->select('id', 'full_name', 'designation', 'designation_id', 'employer_tax_per_day', 'operational_cost_exempt')])
             ->orderBy('date')
             ->get();
 
@@ -571,8 +571,14 @@ class ProfitabilityService
             // Employer social-security tax for this worked day (own labour only) —
             // a separate true-cost component, kept apart from the wage.
             $rowTax = 0.0;
+            $ohContribution = 0.0;
             if (! $externalLabour && $r->employee !== null) {
                 $rowTax = (float) $r->employee->employer_tax_per_day;
+                // Overhead base: this worker's TRUE labour (wage + tax) counts only
+                // if they are NOT operational-cost-exempt.
+                if (! $r->employee->operational_cost_exempt) {
+                    $ohContribution = $cost + $rowTax;
+                }
             }
             // Consumed — leftovers (measured but no attendance row) are added below.
             if ($isPerMeter) {
@@ -582,11 +588,12 @@ class ProfitabilityService
                 unset($taskIncomeByDate[$date][$r->employee_id]);
             }
 
-            $byDate[$date] ??= ['hours' => 0.0, 'income' => 0.0, 'labour' => 0.0, 'employer_tax' => 0.0, 'workers' => []];
+            $byDate[$date] ??= ['hours' => 0.0, 'income' => 0.0, 'labour' => 0.0, 'employer_tax' => 0.0, 'oh_base' => 0.0, 'workers' => []];
             $byDate[$date]['hours'] += $hours;
             $byDate[$date]['income'] += $income;
             $byDate[$date]['labour'] += $cost;
             $byDate[$date]['employer_tax'] += $rowTax;
+            $byDate[$date]['oh_base'] += $ohContribution;
             // Task-based: what this worker produced today (their logged quantity),
             // with a unit only when all their production shares one unit.
             $wq = $isTaskBased ? ($taskWorkerQtyByDate[$date][$r->employee_id] ?? null) : null;
@@ -648,7 +655,13 @@ class ProfitabilityService
         // Assemble day rows (newest first) + accumulate month + total figures.
         $days = [];
         $months = [];
-        $tHours = $tIncome = $tLabour = $tExpenses = $tEmployerTax = 0.0;
+        $tHours = $tIncome = $tLabour = $tExpenses = $tEmployerTax = $tOverhead = 0.0;
+
+        // Operational overhead applies per day too (op % × that day's non-exempt
+        // true labour), so each day/month shows its own operational cost + final
+        // profit-after-overhead — the full picture at every level.
+        $opPct = $this->operationalCostPct($companyId);
+        $opActive = $opPct > 0 && ! $externalLabour;
 
         foreach ($byDate as $date => $d) {
             // Operational is always cost; client-billable only on invoice-billed
@@ -666,6 +679,11 @@ class ProfitabilityService
                 : $this->classify($income, $cost, $profit);
             $margin ??= 0.0;
 
+            // Per-day operational overhead + the final (after-overhead) profit/margin.
+            $dayOverhead = $opActive ? round(($d['oh_base'] ?? 0.0) * $opPct / 100, 2) : 0.0;
+            $dayProfitAfter = round($profit - $dayOverhead, 2);
+            $dayMarginAfter = $isInvoiceBilled ? null : ($income > 0 ? round($dayProfitAfter / $income * 100, 1) : 0.0);
+
             $dayRow = [
                 'date' => $date,
                 'workers_count' => count($d['workers']),
@@ -676,6 +694,9 @@ class ProfitabilityService
                 'expenses' => round($expenses, 2),
                 'profit' => $profit,
                 'margin' => $margin,
+                'operational_overhead' => $dayOverhead,
+                'profit_after_overhead' => $dayProfitAfter,
+                'margin_after' => $dayMarginAfter,
                 'health' => $health,
                 'workers' => $d['workers'],
             ];
@@ -711,13 +732,15 @@ class ProfitabilityService
             $tLabour += $d['labour'];
             $tEmployerTax += $employerTaxDay;
             $tExpenses += $expenses;
+            $tOverhead += $dayOverhead;
 
             $month = substr($date, 0, 7);
-            $months[$month] ??= ['income' => 0.0, 'labour' => 0.0, 'employer_tax' => 0.0, 'expenses' => 0.0, 'hours' => 0.0, 'days' => []];
+            $months[$month] ??= ['income' => 0.0, 'labour' => 0.0, 'employer_tax' => 0.0, 'expenses' => 0.0, 'overhead' => 0.0, 'hours' => 0.0, 'days' => []];
             $months[$month]['income'] += $d['income'];
             $months[$month]['labour'] += $d['labour'];
             $months[$month]['employer_tax'] += $employerTaxDay;
             $months[$month]['expenses'] += $expenses;
+            $months[$month]['overhead'] += $dayOverhead;
             $months[$month]['hours'] += $d['hours'];
             $months[$month]['days'][$date] = true;
         }
@@ -731,6 +754,8 @@ class ProfitabilityService
             $profit = round($income - $cost, 2);
             [$margin] = $isInvoiceBilled ? [null] : $this->classify($income, $cost, $profit);
             $margin ??= 0.0;
+            $monthOverhead = round($m['overhead'], 2);
+            $monthProfitAfter = round($profit - $monthOverhead, 2);
             $monthRows[] = [
                 'month' => $month,
                 'days_worked' => count($m['days']),
@@ -742,6 +767,9 @@ class ProfitabilityService
                 'cost' => $cost,
                 'profit' => $profit,
                 'margin' => $margin,
+                'operational_overhead' => $monthOverhead,
+                'profit_after_overhead' => $monthProfitAfter,
+                'margin_after' => $isInvoiceBilled ? null : ($income > 0 ? round($monthProfitAfter / $income * 100, 1) : 0.0),
             ];
         }
         usort($monthRows, fn (array $a, array $b): int => strcmp($b['month'], $a['month']));
@@ -755,16 +783,10 @@ class ProfitabilityService
         // Client-billable) + per-expense detail, for the daily-view display.
         $exp = $this->expensesByBearer($companyId, $from, $to, $project->id);
 
-        // Operational overhead (profit-only display line), matching forProject():
-        // op % × the TRUE labour cost of the NON-EXEMPT workers (their wages + their
-        // employer tax). Gated on op %>0 and OUR labour (never an externalised crew).
-        $opPct = $this->operationalCostPct($companyId);
-        $overhead = ($opPct > 0 && ! $externalLabour)
-            ? round((
-                $this->operationalBase($companyId, $from, $to, $project->id)
-                + $this->employerTaxTotal($companyId, $from, $to, $project->id, true)
-            ) * $opPct / 100, 2)
-            : 0.0;
+        // Item 4 expense sections already fetched above.
+        // Totals overhead = Σ of the per-day overheads so the daily table
+        // reconciles exactly (day rows sum to the total line). Profit-only.
+        $overhead = round($tOverhead, 2);
 
         return [
             'days' => $days,

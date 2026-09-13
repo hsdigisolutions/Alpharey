@@ -176,6 +176,12 @@ function removeContact(c) {
 // daily / monthly P&L (Feature 3)
 const pnlView = ref('daily');
 const expandedDay = ref(null);
+// Show the per-row operational-cost + final-profit columns only when the company
+// has an operational % set. Also the true labour cost (wages + employer tax).
+const hasOverhead = computed(() => Number(props.dailyPnl?.totals?.operational_cost_pct ?? 0) > 0);
+const trueLabour = (r) => (Number(r.labour) || 0) + (Number(r.employer_tax) || 0);
+const dailyCols = computed(() => (hasOverhead.value ? 10 : 8));
+const monthlyCols = computed(() => (hasOverhead.value ? 9 : 7));
 function toggleDay(date) { expandedDay.value = expandedDay.value === date ? null : date; }
 function hoursHM(h) {
     const hh = Math.floor(Math.max(0, Number(h) || 0));
@@ -787,24 +793,28 @@ const noteStatus = { internal: 'neutral', client_call: 'info', client_email: 'ac
                                     <th class="px-4 py-2 text-end"><Bilingual k="profitability.labour_cost" inline /></th>
                                     <th class="px-4 py-2 text-end"><Bilingual k="profitability.other_expenses" inline /></th>
                                     <th class="px-4 py-2 text-end"><Bilingual k="profitability.profit" inline /></th>
+                                    <th v-if="hasOverhead" class="px-4 py-2 text-end"><Bilingual k="profitability.col_overhead" inline /></th>
+                                    <th v-if="hasOverhead" class="px-4 py-2 text-end"><Bilingual k="profitability.col_profit_after" inline /></th>
                                     <th class="px-4 py-2 text-end"><Bilingual k="profitability.margin" inline /></th>
                                 </tr>
                             </thead>
                             <tbody>
                                 <template v-for="d in dailyPnl.days" :key="d.date">
-                                    <tr class="cursor-pointer border-b border-line" :class="rowTone(d.margin)" @click="toggleDay(d.date)">
+                                    <tr class="cursor-pointer border-b border-line" :class="rowTone(d.margin_after ?? d.margin)" @click="toggleDay(d.date)">
                                         <td class="px-4 py-2.5 font-medium">{{ d.date }}</td>
                                         <td class="tabular-nums px-4 py-2.5 text-end">{{ d.workers_count }}</td>
                                         <td class="tabular-nums px-4 py-2.5 text-end">{{ hoursHM(d.hours) }}</td>
                                         <td class="tabular-nums px-4 py-2.5 text-end">{{ eur(d.income) }}</td>
-                                        <td class="tabular-nums px-4 py-2.5 text-end">{{ eur(d.labour) }}</td>
+                                        <td class="tabular-nums px-4 py-2.5 text-end">{{ eur(trueLabour(d)) }}</td>
                                         <td class="tabular-nums px-4 py-2.5 text-end">{{ eur(d.expenses) }}</td>
-                                        <td class="tabular-nums px-4 py-2.5 text-end font-semibold">{{ eur(d.profit) }}</td>
-                                        <td class="tabular-nums px-4 py-2.5 text-end">{{ pct(d.margin) }}</td>
+                                        <td class="tabular-nums px-4 py-2.5 text-end">{{ eur(d.profit) }}</td>
+                                        <td v-if="hasOverhead" class="tabular-nums px-4 py-2.5 text-end text-ink-soft">{{ Number(d.operational_overhead) > 0 ? `− ${eur(d.operational_overhead)}` : '—' }}</td>
+                                        <td v-if="hasOverhead" class="tabular-nums px-4 py-2.5 text-end font-semibold">{{ eur(d.profit_after_overhead) }}</td>
+                                        <td class="tabular-nums px-4 py-2.5 text-end">{{ pct(d.margin_after ?? d.margin) }}</td>
                                     </tr>
                                     <!-- Task-based expand: production (per task) + effective rates + per-worker real cost -->
                                     <tr v-if="expandedDay === d.date && isTaskBased">
-                                        <td colspan="8" class="bg-surface-sunken/40 px-4 py-3">
+                                        <td :colspan="dailyCols" class="bg-surface-sunken/40 px-4 py-3">
                                             <p class="mb-1 text-[10px] uppercase tracking-wide text-muted">{{ $t('profitability.production') }}</p>
                                             <table class="w-full text-xs">
                                                 <tbody>
@@ -859,7 +869,7 @@ const noteStatus = { internal: 'neutral', client_call: 'info', client_email: 'ac
                                         </td>
                                     </tr>
                                     <tr v-else-if="expandedDay === d.date">
-                                        <td colspan="8" class="bg-surface-sunken/40 px-4 py-3">
+                                        <td :colspan="dailyCols" class="bg-surface-sunken/40 px-4 py-3">
                                             <table class="w-full text-xs">
                                                 <thead class="text-[10px] uppercase text-muted">
                                                     <tr>
@@ -889,36 +899,23 @@ const noteStatus = { internal: 'neutral', client_call: 'info', client_email: 'ac
                                         </td>
                                     </tr>
                                 </template>
-                                <tr v-if="dailyPnl.days.length === 0"><td colspan="8" class="px-4 py-6 text-center text-muted">{{ $t('profitability.no_data') }}</td></tr>
+                                <tr v-if="dailyPnl.days.length === 0"><td :colspan="dailyCols" class="px-4 py-6 text-center text-muted">{{ $t('profitability.no_data') }}</td></tr>
                                 <tr v-else class="border-t-2 border-line-strong font-semibold">
                                     <td class="px-4 py-2.5">{{ $t('profitability.total') }}</td>
                                     <td></td>
                                     <td class="tabular-nums px-4 py-2.5 text-end">{{ hoursHM(dailyPnl.totals.hours) }}</td>
                                     <td class="tabular-nums px-4 py-2.5 text-end">{{ eur(dailyPnl.totals.income) }}</td>
-                                    <td class="tabular-nums px-4 py-2.5 text-end">{{ eur(dailyPnl.totals.labour) }}</td>
+                                    <td class="tabular-nums px-4 py-2.5 text-end">{{ eur(trueLabour(dailyPnl.totals)) }}</td>
                                     <td class="tabular-nums px-4 py-2.5 text-end">{{ eur(dailyPnl.totals.expenses) }}</td>
                                     <td class="tabular-nums px-4 py-2.5 text-end">{{ eur(dailyPnl.totals.profit) }}</td>
+                                    <td v-if="hasOverhead" class="tabular-nums px-4 py-2.5 text-end text-ink-soft">− {{ eur(dailyPnl.totals.operational_overhead) }}</td>
+                                    <td v-if="hasOverhead" class="tabular-nums px-4 py-2.5 text-end" :class="dailyPnl.totals.profit_after_overhead >= 0 ? 'text-status-ok' : 'text-status-danger'">{{ eur(dailyPnl.totals.profit_after_overhead) }}</td>
                                     <td class="tabular-nums px-4 py-2.5 text-end">{{ pct(dailyPnl.totals.margin) }}</td>
                                 </tr>
-                                <!-- Employer tax component of the true labour cost (only when > 0). -->
+                                <!-- The true-labour column already includes employer tax; note the split. -->
                                 <tr v-if="dailyPnl.days.length > 0 && Number(dailyPnl.totals.employer_tax) > 0" class="text-xs text-muted">
-                                    <td class="px-4 py-1.5" colspan="4">{{ $t('profitability.employer_tax_note') }}</td>
-                                    <td class="tabular-nums px-4 py-1.5 text-end">+ {{ eur(dailyPnl.totals.employer_tax) }}</td>
-                                    <td colspan="3"></td>
+                                    <td class="px-4 py-1.5" :colspan="dailyCols">{{ $t('profitability.employer_tax_note') }}: {{ eur(dailyPnl.totals.employer_tax) }}</td>
                                 </tr>
-                                <!-- Item 7 — additive operational-overhead lines (only when op % > 0). -->
-                                <template v-if="dailyPnl.days.length > 0 && dailyPnl.totals.operational_cost_pct > 0">
-                                    <tr class="border-t border-line text-ink-soft">
-                                        <td class="px-4 py-2" colspan="6">{{ $t('profitability.operational_overhead') }} ({{ dailyPnl.totals.operational_cost_pct.toLocaleString('es-ES') }} %)</td>
-                                        <td class="tabular-nums px-4 py-2 text-end">− {{ eur(dailyPnl.totals.operational_overhead) }}</td>
-                                        <td></td>
-                                    </tr>
-                                    <tr class="font-semibold">
-                                        <td class="px-4 py-2" colspan="6">{{ $t('profitability.profit_after_overhead') }}</td>
-                                        <td class="tabular-nums px-4 py-2 text-end" :class="dailyPnl.totals.profit_after_overhead >= 0 ? 'text-status-ok' : 'text-status-danger'">{{ eur(dailyPnl.totals.profit_after_overhead) }}</td>
-                                        <td></td>
-                                    </tr>
-                                </template>
                             </tbody>
                         </table>
                     </div>
@@ -936,20 +933,24 @@ const noteStatus = { internal: 'neutral', client_call: 'info', client_email: 'ac
                                     <th class="px-4 py-2 text-end"><Bilingual k="profitability.labour_cost" inline /></th>
                                     <th class="px-4 py-2 text-end"><Bilingual k="profitability.other_expenses" inline /></th>
                                     <th class="px-4 py-2 text-end"><Bilingual k="profitability.profit" inline /></th>
+                                    <th v-if="hasOverhead" class="px-4 py-2 text-end"><Bilingual k="profitability.col_overhead" inline /></th>
+                                    <th v-if="hasOverhead" class="px-4 py-2 text-end"><Bilingual k="profitability.col_profit_after" inline /></th>
                                     <th class="px-4 py-2 text-end"><Bilingual k="profitability.margin" inline /></th>
                                 </tr>
                             </thead>
                             <tbody>
-                                <tr v-for="m in dailyPnl.months" :key="m.month" class="border-b border-line" :class="rowTone(m.margin)">
+                                <tr v-for="m in dailyPnl.months" :key="m.month" class="border-b border-line" :class="rowTone(m.margin_after ?? m.margin)">
                                     <td class="px-4 py-2.5 font-medium">{{ m.month }}</td>
                                     <td class="tabular-nums px-4 py-2.5 text-end">{{ m.days_worked }}</td>
                                     <td class="tabular-nums px-4 py-2.5 text-end">{{ eur(m.income) }}</td>
-                                    <td class="tabular-nums px-4 py-2.5 text-end">{{ eur(m.labour) }}</td>
+                                    <td class="tabular-nums px-4 py-2.5 text-end">{{ eur(trueLabour(m)) }}</td>
                                     <td class="tabular-nums px-4 py-2.5 text-end">{{ eur(m.expenses) }}</td>
-                                    <td class="tabular-nums px-4 py-2.5 text-end font-semibold">{{ eur(m.profit) }}</td>
-                                    <td class="tabular-nums px-4 py-2.5 text-end">{{ pct(m.margin) }}</td>
+                                    <td class="tabular-nums px-4 py-2.5 text-end">{{ eur(m.profit) }}</td>
+                                    <td v-if="hasOverhead" class="tabular-nums px-4 py-2.5 text-end text-ink-soft">{{ Number(m.operational_overhead) > 0 ? `− ${eur(m.operational_overhead)}` : '—' }}</td>
+                                    <td v-if="hasOverhead" class="tabular-nums px-4 py-2.5 text-end font-semibold">{{ eur(m.profit_after_overhead) }}</td>
+                                    <td class="tabular-nums px-4 py-2.5 text-end">{{ pct(m.margin_after ?? m.margin) }}</td>
                                 </tr>
-                                <tr v-if="dailyPnl.months.length === 0"><td colspan="7" class="px-4 py-6 text-center text-muted">{{ $t('profitability.no_data') }}</td></tr>
+                                <tr v-if="dailyPnl.months.length === 0"><td :colspan="monthlyCols" class="px-4 py-6 text-center text-muted">{{ $t('profitability.no_data') }}</td></tr>
                             </tbody>
                         </table>
                     </div>

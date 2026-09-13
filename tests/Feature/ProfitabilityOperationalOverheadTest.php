@@ -171,3 +171,28 @@ it('is byte-identical when employer tax is 0 (the default)', function (): void {
         ->and((float) $s['labour_cost'])->toBe(100.0)
         ->and((float) $s['profit'])->toBe(60.0);
 });
+
+// The Rentabilidad daily/monthly rows carry their OWN operational cost + final
+// profit-after-overhead (the full picture at every level), and reconcile to the
+// totals.
+it('shows per-day and per-month operational cost + final profit in the daily P&L', function (): void {
+    app(SettingsService::class)->set("operational.cost_pct.{$this->company->id}", 10);
+    $w = overheadWorker();
+    $w->update(['employer_tax_per_day' => '20']);
+    logFullDay($w, '2026-09-10');
+    logFullDay($w, '2026-09-11');
+
+    $pnl = app(ProfitabilityService::class)->dailyPnl($this->project->fresh());
+
+    // Each day: wages 100 + tax 20 = 120 true labour; income 160; profit 40;
+    // overhead 10% × 120 = 12; final profit 28.
+    $day = $pnl['days'][0];
+    expect((float) $day['operational_overhead'])->toBe(12.0)
+        ->and((float) $day['profit_after_overhead'])->toBe(28.0);
+
+    // The month + totals reconcile to the sum of the two days.
+    expect((float) $pnl['months'][0]['operational_overhead'])->toBe(24.0)
+        ->and((float) $pnl['months'][0]['profit_after_overhead'])->toBe(56.0)
+        ->and((float) $pnl['totals']['operational_overhead'])->toBe(24.0)
+        ->and((float) $pnl['totals']['profit_after_overhead'])->toBe(56.0);
+});
