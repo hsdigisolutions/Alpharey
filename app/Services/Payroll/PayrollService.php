@@ -560,9 +560,23 @@ class PayrollService
      */
     private function referralCommissionFor(Employee $referrer, int $companyId, string $month): float
     {
+        return round((float) array_sum($this->referralAccrualByWorker($referrer, $companyId, $month)), 2);
+    }
+
+    /**
+     * Item 8 — the referral commission accrued THIS month, keyed by referred
+     * worker id. The single accrual authority: the payslip line sums it, and the
+     * referrer-profile "Referrals" card reads it per worker. Only active referred
+     * workers with terms, within their window; empty when the referrer is
+     * inactive.
+     *
+     * @return array<int, float>
+     */
+    public function referralAccrualByWorker(Employee $referrer, int $companyId, string $month): array
+    {
         // The referrer must be active to keep earning (a left referrer stops).
         if (! $referrer->active) {
-            return 0.0;
+            return [];
         }
 
         $referred = Employee::query()->withoutGlobalScope(CompanyScope::class)
@@ -573,14 +587,14 @@ class PayrollService
             ->get();
 
         if ($referred->isEmpty()) {
-            return 0.0;
+            return [];
         }
 
         [$start] = $this->bounds($month);
         $monthStart = Carbon::parse($start);
         $break = app(AttendanceService::class)->breakDurationMinutes($companyId);
 
-        $total = 0.0;
+        $out = [];
         foreach ($referred as $worker) {
             $amount = (float) ($worker->getAttribute('referral_amount') ?? 0);
             $type = $worker->referral_rate_type;
@@ -601,17 +615,17 @@ class PayrollService
             $rows = $this->attendanceFor($worker->id, $month)
                 ->filter(fn (Attendance $r): bool => in_array($r->status->value, self::WORKED, true));
 
-            $total += match ($type) {
+            $out[(int) $worker->id] = round(match ($type) {
                 ReferralRateType::PerDay => $rows->count() * $amount,
                 ReferralRateType::PerHour => round((float) $rows->sum(
                     fn (Attendance $r): float => $r->displayHoursNet($break),
                 ), 2) * $amount,
                 ReferralRateType::PerMonth => $rows->isNotEmpty() ? $amount : 0.0,
                 ReferralRateType::OneTime => $this->isFirstWorkedMonth($worker->id, $month) ? $amount : 0.0,
-            };
+            }, 2);
         }
 
-        return round($total, 2);
+        return $out;
     }
 
     /**

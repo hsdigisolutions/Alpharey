@@ -30,6 +30,7 @@ use App\Services\Employees\EmployeeService;
 use App\Services\Employees\EmployeeTransferService;
 use App\Services\Employees\WageRateService;
 use App\Services\Inventory\PpeComplianceService;
+use App\Services\Payroll\PayrollService;
 use App\Services\Workers\WorkerConsentService;
 use App\Support\AttendanceAbsence;
 use App\Support\CompanyBranding;
@@ -169,6 +170,41 @@ class EmployeeController extends Controller
             ->get(['id', 'name'])
             ->map(fn (Department $d): array => ['id' => $d->id, 'name' => $d->name])
             ->all();
+    }
+
+    /**
+     * Item 8 — the workers THIS employee referred (read-only card on the
+     * referrer's profile), with this month's accrued commission. amount/accrued
+     * are money → null without the wage right. Entry stays on the referred
+     * worker's own form; this is a mirror view.
+     *
+     * @return list<array{id: int, name: string, code: string, active: bool, rate_type: ?string, amount: ?float, window_months: ?int, accrued: ?float}>
+     */
+    private function referralsGivenPayload(Employee $employee, bool $canSeeWages): array
+    {
+        $referred = $employee->referrals()->whereNotNull('referral_rate_type')
+            ->orderBy('full_name')->get();
+
+        if ($referred->isEmpty()) {
+            return [];
+        }
+
+        $accrual = $canSeeWages
+            ? app(PayrollService::class)->referralAccrualByWorker(
+                $employee, (int) $employee->company_id, now()->format('Y-m'),
+            )
+            : [];
+
+        return $referred->map(fn (Employee $w): array => [
+            'id' => $w->id,
+            'name' => $w->full_name,
+            'code' => (string) $w->employee_code,
+            'active' => $w->active,
+            'rate_type' => $w->referral_rate_type?->value,
+            'amount' => $canSeeWages ? (float) $w->getAttribute('referral_amount') : null,
+            'window_months' => $w->referral_window_months,
+            'accrued' => $canSeeWages ? (float) ($accrual[$w->id] ?? 0) : null,
+        ])->all();
     }
 
     /**
@@ -355,6 +391,10 @@ class EmployeeController extends Controller
             // PWA login; the history is the append-only audit trail.
             'consent' => $this->consentPayload($employee),
             'canSeeWages' => $canSeeWages,
+            // Item 8 — read-only "Referrals" card: the workers THIS employee
+            // referred + this month's accrued commission (amount/accrued
+            // wage-gated). Entry stays on the referred worker's own form.
+            'referralsGiven' => $this->referralsGivenPayload($employee, $canSeeWages),
             'designationOptions' => ProjectDesignationRateController::optionsFor(app(CurrentCompany::class)->id()),
             'departmentOptions' => $this->departmentOptions(),
             // Item 8 — "Referido por" dropdown source (this worker excluded — no

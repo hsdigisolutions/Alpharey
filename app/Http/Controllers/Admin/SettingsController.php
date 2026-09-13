@@ -71,6 +71,10 @@ class SettingsController extends Controller
             'operationalCostPct' => (float) $settings->get(
                 'operational.cost_pct.'.(app(CurrentCompany::class)->id() ?? 0), 0
             ),
+            // Item 7 (follow-up) — the acting company's active employees with their
+            // "included in operational cost" state, so the whole roster is managed
+            // in one place. included = NOT operational_cost_exempt.
+            'operationalEmployees' => $this->operationalEmployeesPayload(),
             // Company profile (name / CIF / address / logo) of the acting company
             // — feeds invoices + payslips. Null when no single company is selected.
             'companyProfile' => $this->companyProfilePayload(),
@@ -118,6 +122,29 @@ class SettingsController extends Controller
                 'name' => $d->name,
                 'active' => $d->active,
                 'employee_count' => (int) ($counts[$d->id] ?? 0),
+            ])->all();
+    }
+
+    /**
+     * Item 7 (follow-up) — the acting company's active employees with their
+     * operational-cost inclusion state (included = NOT exempt). Drives the
+     * bulk checklist on the Settings operational-cost card.
+     *
+     * @return list<array{id: int, name: string, code: string, included: bool}>
+     */
+    private function operationalEmployeesPayload(): array
+    {
+        if (app(CurrentCompany::class)->id() === null) {
+            return [];
+        }
+
+        return Employee::query()->active()->orderBy('full_name')
+            ->get(['id', 'full_name', 'employee_code', 'operational_cost_exempt'])
+            ->map(fn (Employee $e): array => [
+                'id' => $e->id,
+                'name' => $e->full_name,
+                'code' => (string) $e->employee_code,
+                'included' => ! $e->operational_cost_exempt,
             ])->all();
     }
 
@@ -315,9 +342,25 @@ class SettingsController extends Controller
 
         $validated = $request->validate([
             'cost_pct' => ['required', 'numeric', 'min:0', 'max:100'],
+            // The EXEMPT (unchecked) employee ids from the Settings roster.
+            'exempt_ids' => ['array'],
+            'exempt_ids.*' => ['integer'],
         ]);
 
         $settings->set("operational.cost_pct.{$companyId}", (float) $validated['cost_pct']);
+
+        // Apply the roster: flip operational_cost_exempt for the acting company's
+        // active employees. Foreign ids are intersected out (never a cross-company
+        // write); only rows that actually change are saved (audited per change).
+        $exempt = array_map('intval', $validated['exempt_ids'] ?? []);
+        Employee::query()->active()->get(['id', 'operational_cost_exempt', 'full_name'])
+            ->each(function (Employee $e) use ($exempt): void {
+                $should = in_array($e->id, $exempt, true);
+                if ($e->operational_cost_exempt !== $should) {
+                    $e->operational_cost_exempt = $should;
+                    $e->save();
+                }
+            });
 
         return back()->with('success', __('ui.settings.saved'));
     }

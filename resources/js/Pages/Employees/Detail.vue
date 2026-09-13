@@ -5,7 +5,7 @@
  * until Phases 4/6. Edit opens the shared modal (never a separate page).
  */
 import { computed, ref, watch } from 'vue';
-import { Head, router, useForm } from '@inertiajs/vue3';
+import { Head, Link, router, useForm } from '@inertiajs/vue3';
 import { t } from '@/translate';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import AppIcon from '@/Components/AppIcon.vue';
@@ -50,6 +50,7 @@ const props = defineProps({
     canSeeWages: { type: Boolean, default: false },
     consent: { type: Object, default: () => ({ has_app_access: false, accepted: false, active: null, history: [], current_version: '' }) },
     transferCompanies: { type: Array, default: () => [] },
+    referralsGiven: { type: Array, default: () => [] },
     can: { type: Object, required: true },
     // Read-only historical view: an old company looking at a worker who
     // transferred away. All write controls are already withheld via `can.*`;
@@ -394,6 +395,38 @@ function destroy() {
                         <VButton variant="danger" size="sm" icon="trash" @click="destroy">
                             <Bilingual k="employees.delete_title" inline />
                         </VButton>
+                    </div>
+                </VCard>
+
+                <!-- Item 8 — Referrals this worker made (read-only mirror; entry
+                     lives on the referred worker's own form). Money wage-gated. -->
+                <VCard v-if="referralsGiven.length" title-key="employees.section_referrals_given" class="lg:col-span-2">
+                    <p class="mb-3 text-xs text-muted">{{ $t('employees.referrals_given_hint') }}</p>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm">
+                            <thead class="bg-surface-sunken text-[11px] uppercase tracking-wide text-muted">
+                                <tr>
+                                    <th class="px-3 py-2 text-start"><Bilingual k="employees.ref_worker" inline /></th>
+                                    <th class="px-3 py-2 text-start"><Bilingual k="employees.referral_rate_type" inline /></th>
+                                    <th v-if="canSeeWages" class="px-3 py-2 text-end"><Bilingual k="employees.referral_amount" inline /></th>
+                                    <th class="px-3 py-2 text-end"><Bilingual k="employees.referral_window_months" inline /></th>
+                                    <th v-if="canSeeWages" class="px-3 py-2 text-end"><Bilingual k="employees.ref_accrued_month" inline /></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr v-for="r in referralsGiven" :key="r.id" class="border-b border-line">
+                                    <td class="px-3 py-2">
+                                        <Link :href="`/employees/${r.id}`" class="text-accent hover:underline">{{ r.name }}</Link>
+                                        <span class="text-xs text-muted"> · {{ r.code }}</span>
+                                        <VBadge v-if="!r.active" status="neutral" class="ms-2"><Bilingual k="employees.inactive" inline /></VBadge>
+                                    </td>
+                                    <td class="px-3 py-2">{{ r.rate_type ? $t(`employees.referral_rate_${r.rate_type}`) : '—' }}</td>
+                                    <td v-if="canSeeWages" class="tabular-nums px-3 py-2 text-end">{{ r.amount != null ? eur(r.amount) : '—' }}</td>
+                                    <td class="tabular-nums px-3 py-2 text-end">{{ r.window_months ?? '—' }}</td>
+                                    <td v-if="canSeeWages" class="tabular-nums px-3 py-2 text-end font-medium">{{ r.accrued != null ? eur(r.accrued) : '—' }}</td>
+                                </tr>
+                            </tbody>
+                        </table>
                     </div>
                 </VCard>
 

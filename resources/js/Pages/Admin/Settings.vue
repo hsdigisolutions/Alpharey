@@ -3,7 +3,7 @@
  * Screen 26 — Settings, Phase 1 sections: General + Email (SMTP).
  * SMTP is Super Admin-only; the stored password is never echoed back.
  */
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import { Head, router, useForm } from '@inertiajs/vue3';
 import { route } from 'ziggy-js';
 import AppLayout from '@/Layouts/AppLayout.vue';
@@ -30,6 +30,7 @@ const props = defineProps({
     offSiteAlertDistance: { type: Number, default: 2000 },
     breakDurationMinutes: { type: Number, default: 60 },
     operationalCostPct: { type: Number, default: 0 },
+    operationalEmployees: { type: Array, default: () => [] },
     consentVersion: { type: String, default: '' },
     companyProfile: { type: Object, default: null },
     workingDays: { type: Array, default: () => [1, 2, 3, 4, 5] },
@@ -104,9 +105,22 @@ function saveThresholds() {
     thresholdForm.put('/admin/settings/attendance', { preserveScroll: true });
 }
 
-/* --- Item 7: operational-cost % (drives the Project P&L overhead line) --- */
-const operationalForm = useForm({ cost_pct: props.operationalCostPct });
+/* --- Item 7: operational-cost % + employee roster --- */
+// Local editable roster; `included` = counts toward the overhead (NOT exempt).
+const opEmployees = ref((props.operationalEmployees ?? []).map((e) => ({ ...e })));
+const opSearch = ref('');
+const opFiltered = computed(() => {
+    const q = opSearch.value.trim().toLowerCase();
+    if (!q) return opEmployees.value;
+    return opEmployees.value.filter((e) => e.name.toLowerCase().includes(q) || (e.code || '').toLowerCase().includes(q));
+});
+const opIncludedCount = computed(() => opEmployees.value.filter((e) => e.included).length);
+function opSetAll(v) { opEmployees.value.forEach((e) => (e.included = v)); }
+
+const operationalForm = useForm({ cost_pct: props.operationalCostPct, exempt_ids: [] });
 function saveOperational() {
+    // Send the EXEMPT (unchecked) ids; the server flips the flags to match.
+    operationalForm.exempt_ids = opEmployees.value.filter((e) => !e.included).map((e) => e.id);
     operationalForm.put('/admin/settings/operational', { preserveScroll: true });
 }
 
@@ -392,7 +406,7 @@ function deletePolicy(p) {
             <!-- Item 7 — operational-cost % (drives the Project P&L overhead line) -->
             <VCard title-key="settings.operational_section" class="lg:col-span-2">
                 <p class="mb-4 text-sm text-ink-soft">{{ $t('settings.operational_hint') }}</p>
-                <form class="flex flex-wrap items-end gap-4" @submit.prevent="saveOperational">
+                <form class="space-y-4" @submit.prevent="saveOperational">
                     <label class="flex flex-col gap-1">
                         <span class="text-xs font-medium text-ink-soft">{{ $t('settings.operational_cost_pct') }}</span>
                         <input v-model="operationalForm.cost_pct" type="number" step="0.5" min="0" max="100"
@@ -400,6 +414,34 @@ function deletePolicy(p) {
                         <span class="text-xs text-muted">{{ $t('settings.operational_cost_pct_hint') }}</span>
                         <span v-if="operationalForm.errors.cost_pct" class="text-xs text-status-danger">{{ operationalForm.errors.cost_pct }}</span>
                     </label>
+
+                    <!-- Employee roster: checked = included in the overhead. -->
+                    <div v-if="opEmployees.length" class="rounded-lg border border-line">
+                        <div class="flex flex-wrap items-center justify-between gap-2 border-b border-line px-3 py-2">
+                            <span class="text-xs font-medium text-ink-soft">
+                                {{ $t('settings.operational_employees') }}
+                                <span class="text-muted">({{ opIncludedCount }}/{{ opEmployees.length }})</span>
+                            </span>
+                            <div class="flex items-center gap-3">
+                                <button type="button" class="text-xs text-accent hover:underline" @click="opSetAll(true)">{{ $t('settings.select_all') }}</button>
+                                <button type="button" class="text-xs text-accent hover:underline" @click="opSetAll(false)">{{ $t('settings.select_none') }}</button>
+                            </div>
+                        </div>
+                        <div class="px-3 py-2">
+                            <input v-model="opSearch" type="search" :placeholder="$t('settings.operational_employees_search')"
+                                class="mb-2 w-full rounded-md border border-line-strong bg-surface-sunken px-3 py-1.5 text-sm text-ink placeholder:text-muted focus:border-accent focus:outline-none" />
+                            <div class="max-h-64 space-y-1 overflow-y-auto">
+                                <label v-for="e in opFiltered" :key="e.id"
+                                    class="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 hover:bg-surface-hover">
+                                    <input v-model="e.included" type="checkbox" class="rounded border-line-strong text-accent focus:ring-accent" />
+                                    <span class="text-sm text-ink">{{ e.name }}</span>
+                                    <span class="text-xs text-muted">{{ e.code }}</span>
+                                </label>
+                                <p v-if="!opFiltered.length" class="px-2 py-3 text-center text-xs text-muted">{{ $t('common.search_no_results') }}</p>
+                            </div>
+                        </div>
+                    </div>
+
                     <VButton type="submit" :loading="operationalForm.processing"><Bilingual k="common.save" inline /></VButton>
                 </form>
             </VCard>

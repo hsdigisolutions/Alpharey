@@ -1,6 +1,8 @@
 <?php
 
 use App\Models\Company;
+use App\Models\Employee;
+use App\Models\Scopes\CompanyScope;
 use App\Models\User;
 use App\Services\Attendance\AttendanceService;
 use App\Services\Settings\SettingsService;
@@ -144,4 +146,44 @@ it('sends a test email from the super admin', function (): void {
     $this->actingAs($this->superAdmin)->post('/admin/settings/mail/test', [
         'to' => 'prueba@alpharey.com',
     ])->assertRedirect()->assertSessionHas('success');
+});
+
+// Item 7 (follow-up) — the operational-cost employee roster is managed in bulk
+// from the Settings page (checked = included; unchecked = exempt).
+it('ships the operational-cost employee roster to the settings page', function (): void {
+    Employee::factory()->forCompany($this->company)->create(['operational_cost_exempt' => false]);
+    Employee::factory()->forCompany($this->company)->create(['operational_cost_exempt' => true]);
+
+    $this->actingAs($this->companyAdmin)->get('/admin/settings')
+        ->assertInertia(fn (Assert $page) => $page->has('operationalEmployees', 2));
+});
+
+it('flips operational-cost exemptions from the settings roster', function (): void {
+    $a = Employee::factory()->forCompany($this->company)->create(['operational_cost_exempt' => false]);
+    $b = Employee::factory()->forCompany($this->company)->create(['operational_cost_exempt' => false]);
+
+    // Mark A exempt (unchecked).
+    $this->actingAs($this->companyAdmin)->put('/admin/settings/operational', [
+        'cost_pct' => 12, 'exempt_ids' => [$a->id],
+    ])->assertRedirect();
+    expect($a->fresh()->operational_cost_exempt)->toBeTrue()
+        ->and($b->fresh()->operational_cost_exempt)->toBeFalse();
+
+    // Re-include A (none exempt).
+    $this->actingAs($this->companyAdmin)->put('/admin/settings/operational', [
+        'cost_pct' => 12, 'exempt_ids' => [],
+    ])->assertRedirect();
+    expect($a->fresh()->operational_cost_exempt)->toBeFalse();
+});
+
+it('never writes an exemption to another company employee', function (): void {
+    $other = Company::factory()->create();
+    $foreign = Employee::factory()->forCompany($other)->create(['operational_cost_exempt' => false]);
+
+    $this->actingAs($this->companyAdmin)->put('/admin/settings/operational', [
+        'cost_pct' => 10, 'exempt_ids' => [$foreign->id],
+    ])->assertRedirect();
+
+    $fresh = Employee::withoutGlobalScope(CompanyScope::class)->find($foreign->id);
+    expect($fresh->operational_cost_exempt)->toBeFalse();
 });

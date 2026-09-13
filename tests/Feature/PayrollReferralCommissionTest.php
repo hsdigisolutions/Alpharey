@@ -6,6 +6,7 @@ use App\Models\Employee;
 use App\Models\Payroll;
 use App\Models\User;
 use App\Services\Payroll\PayrollService;
+use Inertia\Testing\AssertableInertia as Assert;
 
 // Item 8 (2026-09-13) — worker referral commission. The REFERRER earns a
 // commission from the REFERRED worker's attendance, folded into the referrer's
@@ -204,4 +205,24 @@ it('requires an amount when a referral rate type is set', function (): void {
         'referred_by_employee_id' => $referrer->id,
         'referral_rate_type' => 'per_day', // no amount
     ])->assertSessionHasErrors('referral_amount');
+});
+
+// Item 8 (follow-up) — the referrer's own profile shows a read-only "Referrals"
+// card: who they referred + this month's accrued commission. Entry stays on the
+// referred worker; this is a mirror view.
+it('shows the referrals + this-month accrued on the referrer profile', function (): void {
+    $month = now()->format('Y-m');
+    $referrer = refWorker();
+    $referred = refWorker([
+        'referred_by_employee_id' => $referrer->id,
+        'referral_rate_type' => 'per_day', 'referral_amount' => '5', 'referral_window_months' => 6,
+        'joining_date' => now()->startOfMonth()->toDateString(),
+    ]);
+    workDays($referred, 3, $month);
+
+    $this->get("/employees/{$referrer->id}")->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->has('referralsGiven', 1)
+            ->where('referralsGiven.0.id', $referred->id)
+            ->where('referralsGiven.0.accrued', 15));
 });
