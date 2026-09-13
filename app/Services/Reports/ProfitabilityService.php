@@ -240,6 +240,10 @@ class ProfitabilityService
         // pay no employer tax on them. Both 0 for those branches.
         $labourWages = 0.0;
         $employerTax = 0.0;
+        // Overhead inputs (employer tax + non-exempt overhead base) — computed once
+        // in the own-labour branch below; stays null for an externalised crew, which
+        // never carries own employer tax or operational overhead.
+        $overheadInputs = null;
 
         if ($hasSubcontractor) {
             $budgeted = $subs->filter(fn (Subcontractor $s) => $s->agreed_budget !== null);
@@ -266,9 +270,12 @@ class ProfitabilityService
             $labourCost = (float) ($project->outsource_cost ?? 0.0);
             $cost = round($labourCost + $expenses, 2);
         } else {
-            // TRUE labour cost = wages + employer tax (all own workers).
+            // TRUE labour cost = wages + employer tax (all own workers). One combined
+            // aggregate supplies the employer tax AND the overhead base in a single
+            // pass instead of scanning the same worked rows three more times.
+            $overheadInputs = $this->overheadInputs($project->company_id, $from, $to, $project->id);
             $labourWages = round($labourFromAttendance, 2);
-            $employerTax = round($this->employerTaxTotal($project->company_id, $from, $to, $project->id), 2);
+            $employerTax = round($overheadInputs['employer_tax'], 2);
             $labourCost = round($labourFromAttendance + $employerTax, 2);
             $cost = round($labourCost + $expenses, 2);
         }
@@ -281,11 +288,8 @@ class ProfitabilityService
         // workers = op % × (their wages + their employer tax). Own-attendance
         // labour only; shown only when op % > 0.
         $opPct = $this->operationalCostPct($project->company_id);
-        $overhead = ($opPct > 0 && ! $hasSubcontractor && ! $outsourced)
-            ? round((
-                $this->operationalBase($project->company_id, $from, $to, $project->id)
-                + $this->employerTaxTotal($project->company_id, $from, $to, $project->id, true)
-            ) * $opPct / 100, 2)
+        $overhead = ($opPct > 0 && $overheadInputs !== null)
+            ? round(($overheadInputs['operational_base'] + $overheadInputs['employer_tax_nonexempt']) * $opPct / 100, 2)
             : 0.0;
 
         [$margin, $health] = $this->classify($revenue, $cost, $profit);
@@ -983,64 +987,54 @@ class ProfitabilityService
     }
 
     /**
-     * The labour the overhead % applies to: Σ frozen day totals of the project's
-     * NON-EXEMPT workers over the range (the same worked rows the P&L costs). A
-     * soft-deleted worker still counts — their labour was still a real cost.
-     */
-    private function operationalBase(int $companyId, ?string $from, ?string $to, int $projectId): float
-    {
-        return (float) Attendance::query()->withoutGlobalScope(CompanyScope::class)
-            ->join('employees', 'employees.id', '=', 'attendance.employee_id')
-            ->where('attendance.company_id', $companyId)
-            ->where('attendance.project_id', $projectId)
-            ->whereIn('attendance.status', self::WORKED_STATUSES)
-            ->where('employees.operational_cost_exempt', false)
-            ->when($from !== null, fn ($q) => $q->whereDate('attendance.date', '>=', $from))
-            ->when($to !== null, fn ($q) => $q->whereDate('attendance.date', '<=', $to))
-            ->sum('attendance.total_amount');
-    }
-
-    /**
-     * Employer social-security tax = Σ over the project's WORKED attendance rows of
-     * each worker's fixed `employer_tax_per_day` (a real per-day company cost; full
-     * amount per worked day regardless of day type). Added to labour cost for the
-     * TRUE cost of employing the crew. `$nonExemptOnly` narrows it to the workers
-     * the operational overhead applies to (the exempt flag is about overhead, not
-     * this tax — the tax is a genuine cost on ALL workers). Read live (default 0 →
-     * no effect until amounts are set).
+     * ONE-pass aggregate of forProject()'s overhead/tax inputs over the project's
+     * WORKED attendance rows, replacing three separate scans of the same rows:
+     *  - `employer_tax`            = Σ each worker's fixed `employer_tax_per_day`
+     *    (the real per-day cost of EMPLOYING the crew; full amount per worked day).
+     *  - `employer_tax_nonexempt` = the same, restricted to NON-exempt workers
+     *    (the overhead base's tax half).
+     *  - `operational_base`       = Σ frozen day totals of the NON-exempt workers
+     *    (the overhead base's wage half).
      *
-     * DEPLOYED-IN workers are excluded: employer tax is a cost of EMPLOYING the
-     * worker, borne by their HOME company. A deployment logs the worker's days under
-     * the HOST company, but the host only reimburses wages (the deployment
-     * cross-charge, no tax) — so a day covered by a deployment INTO this project must
-     * not add employer tax to the host's P&L. This is scoped to actual deployment
-     * windows (not the worker's current company_id) so a TRANSFERRED worker — who was
-     * genuinely employed by this company on those dates — keeps their historical tax.
+     * The two TAX columns exclude DEPLOYED-IN days: employer tax is borne by the
+     * worker's HOME company, and the host only reimburses wages (the deployment
+     * cross-charge, no tax) — matched by actual deployment windows (company + date),
+     * NOT the worker's current company_id, so a TRANSFERRED worker keeps their
+     * historical tax. The operational BASE deliberately keeps deployed wages (the
+     * host bears them via the cross-charge), so the exclusion is per-column, not a
+     * row filter. Soft-deleted workers still count — their labour was a real cost.
+     *
+     * @return array{employer_tax: float, employer_tax_nonexempt: float, operational_base: float}
      */
-    private function employerTaxTotal(int $companyId, ?string $from, ?string $to, int $projectId, bool $nonExemptOnly = false): float
+    private function overheadInputs(int $companyId, ?string $from, ?string $to, int $projectId): array
     {
-        return (float) Attendance::query()->withoutGlobalScope(CompanyScope::class)
+        // Correlated "this day is NOT a deployment into this company" flag, portable
+        // across MySQL (prod) and SQLite (tests).
+        $notDeployed = '(NOT EXISTS (SELECT 1 FROM employee_deployments d '
+            .'WHERE d.employee_id = attendance.employee_id AND d.host_company_id = ? '
+            .'AND d.deployment_start <= attendance.date '
+            .'AND (d.deployment_end IS NULL OR d.deployment_end >= attendance.date)))';
+
+        $row = Attendance::query()->withoutGlobalScope(CompanyScope::class)
             ->join('employees', 'employees.id', '=', 'attendance.employee_id')
             ->where('attendance.company_id', $companyId)
             ->where('attendance.project_id', $projectId)
             ->whereIn('attendance.status', self::WORKED_STATUSES)
-            ->whereNotExists(function ($q) use ($companyId): void {
-                // Any deployment INTO this company covering the day — matched by
-                // company + date, NOT project: a worker deployed here is employed by
-                // their home company for EVERY host project they touch during the
-                // window, so their tax is excluded from all of them, not just the
-                // deployment's named project.
-                $q->selectRaw('1')->from('employee_deployments as d')
-                    ->whereColumn('d.employee_id', 'attendance.employee_id')
-                    ->where('d.host_company_id', $companyId)
-                    ->whereColumn('d.deployment_start', '<=', 'attendance.date')
-                    ->where(fn ($w) => $w->whereNull('d.deployment_end')
-                        ->orWhereColumn('d.deployment_end', '>=', 'attendance.date'));
-            })
-            ->when($nonExemptOnly, fn ($q) => $q->where('employees.operational_cost_exempt', false))
             ->when($from !== null, fn ($q) => $q->whereDate('attendance.date', '>=', $from))
             ->when($to !== null, fn ($q) => $q->whereDate('attendance.date', '<=', $to))
-            ->sum('employees.employer_tax_per_day');
+            ->selectRaw(
+                'COALESCE(SUM(CASE WHEN '.$notDeployed.' THEN employees.employer_tax_per_day ELSE 0 END), 0) AS employer_tax, '
+                .'COALESCE(SUM(CASE WHEN '.$notDeployed.' AND employees.operational_cost_exempt = 0 THEN employees.employer_tax_per_day ELSE 0 END), 0) AS employer_tax_nonexempt, '
+                .'COALESCE(SUM(CASE WHEN employees.operational_cost_exempt = 0 THEN attendance.total_amount ELSE 0 END), 0) AS operational_base',
+                [$companyId, $companyId],
+            )
+            ->first();
+
+        return [
+            'employer_tax' => (float) ($row?->getAttribute('employer_tax') ?? 0),
+            'employer_tax_nonexempt' => (float) ($row?->getAttribute('employer_tax_nonexempt') ?? 0),
+            'operational_base' => (float) ($row?->getAttribute('operational_base') ?? 0),
+        ];
     }
 
     /**

@@ -6,7 +6,9 @@ use App\Models\Attendance;
 use App\Models\Company;
 use App\Models\Document;
 use App\Models\Employee;
+use App\Models\Project;
 use App\Models\User;
+use App\Services\Settings\SettingsService;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
@@ -85,21 +87,44 @@ it('renders the attendance grid with a bounded query count', function (): void {
 });
 
 it('builds the dashboard with a bounded query count', function (): void {
-    Employee::factory()->count(25)->create(['company_id' => $this->company->id]);
+    $employees = Employee::factory()->count(25)->create(['company_id' => $this->company->id]);
+
+    // Seed a few projects, each with attendance from several workers, so the
+    // per-project profitability path (DashboardService → ProfitabilityService::
+    // companyRows → forProject per project) is actually EXERCISED — an empty
+    // project list would leave that loop untested and blind to a per-project N+1.
+    // Operational % is on so the overhead aggregates (operationalBase +
+    // employerTaxTotal) run too. The budget must stay FLAT as attendance/worker
+    // volume grows within these projects — forProject aggregates in SQL, never
+    // per row — so more attendance below must not raise the count.
+    app(SettingsService::class)->set("operational.cost_pct.{$this->company->id}", 10);
+    foreach (range(1, 3) as $i) {
+        $project = Project::factory()->forCompany($this->company)->create([
+            'billing_type' => 'hourly', 'client_hour_rate' => '20',
+        ]);
+        foreach ($employees->take(5) as $offset => $emp) {
+            Attendance::factory()->create([
+                'company_id' => $this->company->id, 'employee_id' => $emp->id,
+                'project_id' => $project->id, 'date' => sprintf('2026-09-%02d', $i * 5 + $offset),
+                'status' => 'present', 'total_amount' => '100',
+            ]);
+        }
+    }
 
     // Prime nothing — measure a cold (uncached) dashboard build.
     Cache::flush();
 
     $count = countQueries(fn () => $this->actingAs($this->admin)->get('/dashboard')->assertOk());
 
-    // ~8 KPIs + 3 charts + 2 panels: a fixed set of aggregate queries, none
-    // per-employee. The P&L cache signature adds a small CONSTANT set of
-    // MAX(updated_at) reads (measurements, invoices, task_progress +
-    // production_tasks for task-based billing, and now the operational-cost %
-    // setting + employees MAX for the Item 7 overhead line) so approving
-    // production, marking an invoice paid, logging task work, or changing the
-    // operational % / an exempt flag refreshes the widget at once.
-    expect($count)->toBeLessThan(46);
+    // ~8 KPIs + 3 charts + 2 panels + the per-project P&L (3 projects): a fixed
+    // set of aggregate queries, none per-employee or per-attendance-row. The P&L
+    // cache signature adds a small CONSTANT set of MAX(updated_at) reads
+    // (measurements, invoices, task_progress + production_tasks for task-based
+    // billing, and the operational-cost % setting + employees MAX for the Item 7
+    // overhead line). forProject folds the labour/tax/overhead reads into a single
+    // aggregate per project (~63 total here), so a per-project query re-added to it
+    // would push 3 projects × +1 over this bound; a per-row one blows it outright.
+    expect($count)->toBeLessThan(66);
 });
 
 it('serves the dashboard from cache on the second hit', function (): void {
