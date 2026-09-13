@@ -239,6 +239,8 @@ Route::middleware(['auth', 'active', 'two_factor', 'not_worker'])->group(functio
     Route::put('/employees/{employee}', [EmployeeController::class, 'update'])->name('employees.update');
     Route::delete('/employees/{employee}', [EmployeeController::class, 'destroy'])->name('employees.destroy');
     Route::post('/employees/{employee}/transfer', [EmployeeController::class, 'transfer'])->name('employees.transfer');
+    // Item 9 — clear the post-transfer "documents pending re-upload" reminder.
+    Route::patch('/employees/{employee}/documents-reuploaded', [EmployeeController::class, 'markDocumentsReuploaded'])->name('employees.documents-reuploaded');
     Route::post('/employees/{employee}/wage-rates', [WageRateController::class, 'store'])->name('employees.wage-rates.store');
     Route::delete('/employees/{employee}/wage-rates/{wageRate}', [WageRateController::class, 'destroy'])->name('employees.wage-rates.destroy');
     Route::post('/employees/{employee}/notes', [EmployeeNoteController::class, 'store'])->name('employees.notes.store');

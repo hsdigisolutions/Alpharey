@@ -874,6 +874,24 @@ class EmployeeController extends Controller
     }
 
     /**
+     * Item 9 — clear the "documents pending re-upload" flag a transfer sets.
+     * The transfer raises it as a reminder; nothing cleared it, so the banner
+     * stayed forever. The admin dismisses it once the new company's paperwork is
+     * uploaded. Tenant-scoped route binding → a cross-company id 404s.
+     */
+    public function markDocumentsReuploaded(Request $request, Employee $employee): RedirectResponse
+    {
+        Gate::authorize('employees.edit');
+
+        if ($employee->documents_pending_reupload) {
+            $employee->documents_pending_reupload = false;
+            $employee->save();
+        }
+
+        return back()->with('success', __('ui.employees.docs_reuploaded_done'));
+    }
+
+    /**
      * Bulk activate/deactivate — the Phase 2 bulk actions.
      */
     public function bulkActive(Request $request): RedirectResponse

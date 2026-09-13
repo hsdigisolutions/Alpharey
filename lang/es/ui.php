@@ -554,6 +554,8 @@ return [
         'transfer_what_payroll' => 'Nóminas: permanecen en la empresa anterior',
         'transfer_what_equipment' => 'Equipamiento: bloqueado si hay entregas pendientes',
         'transfer_docs_banner' => 'Los documentos deben volver a subirse para la nueva empresa',
+        'docs_reuploaded' => 'Documentos actualizados',
+        'docs_reuploaded_done' => 'Aviso de documentos descartado / Document reminder dismissed',
         'team_leader' => 'Jefe de equipo',
         'joining_date' => 'Fecha de alta',
         'leaving_date' => 'Fecha de baja',

@@ -210,3 +210,33 @@ it('denies transfer for a non-admin user', function (): void {
         'to_company_id' => $this->companyB->id, 'transfer_date' => '2026-08-17',
     ])->assertForbidden();
 });
+
+// Item 9 — the transfer sets documents_pending_reupload, but nothing cleared it,
+// so the "re-upload documents" banner stayed forever. The admin can now dismiss
+// it once the new company's paperwork is uploaded.
+it('clears the documents-pending-reupload reminder after a transfer', function (): void {
+    $this->actingAs($this->sa)->post("/employees/{$this->employee->id}/transfer", [
+        'to_company_id' => $this->companyB->id, 'transfer_date' => '2026-08-17',
+    ])->assertRedirect();
+
+    expect($this->employee->fresh()->documents_pending_reupload)->toBeTrue();
+
+    $this->actingAs($this->sa)
+        ->patch("/employees/{$this->employee->id}/documents-reuploaded")
+        ->assertRedirect();
+
+    expect($this->employee->fresh()->documents_pending_reupload)->toBeFalse();
+});
+
+it('404s when clearing the reminder on another company employee', function (): void {
+    $adminA = User::factory()->companyAdmin()->forCompany($this->companyA)->create();
+    $foreign = Employee::factory()->forCompany($this->companyB)->create();
+    $foreign->documents_pending_reupload = true;
+    $foreign->save();
+
+    $this->actingAs($adminA)
+        ->patch("/employees/{$foreign->id}/documents-reuploaded")
+        ->assertNotFound();
+
+    expect($foreign->fresh()->documents_pending_reupload)->toBeTrue();
+});

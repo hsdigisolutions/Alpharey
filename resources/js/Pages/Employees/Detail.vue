@@ -79,6 +79,11 @@ function resetConsent() {
     router.post(`/employees/${props.employee.id}/consent/reset`, {}, { preserveScroll: true });
 }
 
+// Item 9 — clear the post-transfer "documents pending re-upload" reminder.
+function markDocsReuploaded() {
+    router.patch(`/employees/${props.employee.id}/documents-reuploaded`, {}, { preserveScroll: true });
+}
+
 const tab = ref('info');
 const showEdit = ref(false);
 
@@ -349,14 +354,20 @@ function destroy() {
             <span>{{ $t('employees.transferred_readonly_banner', { company: transferBanner.transferred_to, date: transferBanner.on ?? '—' }) }}</span>
         </div>
 
-        <!-- Feature 4 — transferred-in notice: documents must be re-uploaded -->
+        <!-- Feature 4 — transferred-in notice: documents must be re-uploaded.
+             Item 9 — dismiss it once the new company's paperwork is uploaded. -->
         <div v-if="!readOnly && employee.documents_pending_reupload"
-            class="mt-4 flex items-start gap-2 rounded-lg border border-status-warn/40 bg-status-warn-soft px-4 py-3 text-sm text-status-warn">
-            <AppIcon name="alert" class="mt-0.5 h-4 w-4 shrink-0" />
-            <span>
-                <Bilingual k="employees.transfer_docs_banner" />
-                <span v-if="employee.previous_company"> ({{ employee.previous_company }})</span>
+            class="mt-4 flex items-start justify-between gap-3 rounded-lg border border-status-warn/40 bg-status-warn-soft px-4 py-3 text-sm text-status-warn">
+            <span class="flex items-start gap-2">
+                <AppIcon name="alert" class="mt-0.5 h-4 w-4 shrink-0" />
+                <span>
+                    <Bilingual k="employees.transfer_docs_banner" />
+                    <span v-if="employee.previous_company"> ({{ employee.previous_company }})</span>
+                </span>
             </span>
+            <VButton v-if="can.edit" variant="secondary" size="sm" class="shrink-0" @click="markDocsReuploaded">
+                <Bilingual k="employees.docs_reuploaded" inline />
+            </VButton>
         </div>
 
         <VTabs v-model="tab" :tabs="tabs" />

@@ -552,6 +552,8 @@ return [
         'transfer_what_payroll' => 'Payroll: stays with the old company',
         'transfer_what_equipment' => 'Equipment: blocked if there are outstanding issues',
         'transfer_docs_banner' => 'Documents need to be re-uploaded for the new company',
+        'docs_reuploaded' => 'Documents updated',
+        'docs_reuploaded_done' => 'Document reminder dismissed',
         'team_leader' => 'Team leader',
         'joining_date' => 'Joining date',
         'leaving_date' => 'Leaving date',
