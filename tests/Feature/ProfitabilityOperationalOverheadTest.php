@@ -234,6 +234,13 @@ it('excludes a deployed-in worker employer tax from the host project P&L', funct
         // The deployed worker's WAGES still count as host cost (own 100 + deployed
         // 100), so true labour = 200 wages + 30 own tax = 230.
         ->and((float) $s['labour_cost'])->toBe(230.0);
+
+    // The daily view must AGREE with the summary — it excludes the deployed worker's
+    // tax too (wages 200, employer tax 30 own-only, cost 230).
+    $pnl = app(ProfitabilityService::class)->dailyPnl($this->project->fresh());
+    expect((float) $pnl['totals']['labour'])->toBe(200.0)
+        ->and((float) $pnl['totals']['employer_tax'])->toBe(30.0)
+        ->and((float) $pnl['totals']['cost'])->toBe(230.0);
 });
 
 it('keeps a foreign-company worker employer tax when there is NO deployment (transfer artifact)', function (): void {

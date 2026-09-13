@@ -382,6 +382,19 @@ class ProfitabilityService
             ->orderBy('date')
             ->get();
 
+        // Deployment windows INTO this company (one query), so the per-row loop can
+        // exclude a deployed-in worker's employer tax in memory — matching
+        // employerTaxTotal(). A deployed worker is employed by their home company;
+        // the host reimburses wages only, so no host employer tax on their days.
+        $deployWindows = [];
+        foreach (DB::table('employee_deployments')->where('host_company_id', $companyId)
+            ->get(['employee_id', 'deployment_start', 'deployment_end']) as $d) {
+            $deployWindows[(int) $d->employee_id][] = [
+                substr((string) $d->deployment_start, 0, 10),
+                $d->deployment_end !== null ? substr((string) $d->deployment_end, 0, 10) : null,
+            ];
+        }
+
         // Item 4 — split the per-day expenses by who bears them. OPERATIONAL
         // (company/employee/unbillable/null bearer) is always our cost; CLIENT-
         // billable is a reimbursed pass-through, in the day cost only when the
@@ -573,9 +586,12 @@ class ProfitabilityService
             $rowTax = 0.0;
             $ohContribution = 0.0;
             if (! $externalLabour && $r->employee !== null) {
-                $rowTax = (float) $r->employee->employer_tax_per_day;
+                // A deployed-in worker (employed by their home company) carries no
+                // host employer tax — the host reimburses wages only.
+                $rowTax = $this->rowIsDeployed($deployWindows, $r) ? 0.0 : (float) $r->employee->employer_tax_per_day;
                 // Overhead base: this worker's TRUE labour (wage + tax) counts only
-                // if they are NOT operational-cost-exempt.
+                // if they are NOT operational-cost-exempt. Deployed wages stay in the
+                // base (the host bears them via the cross-charge); only the tax drops.
                 if (! $r->employee->operational_cost_exempt) {
                     $ohContribution = $cost + $rowTax;
                 }
@@ -1025,6 +1041,25 @@ class ProfitabilityService
             ->when($from !== null, fn ($q) => $q->whereDate('attendance.date', '>=', $from))
             ->when($to !== null, fn ($q) => $q->whereDate('attendance.date', '<=', $to))
             ->sum('employees.employer_tax_per_day');
+    }
+
+    /**
+     * The dailyPnl() in-memory counterpart of employerTaxTotal()'s deployment
+     * exclusion: is this worked row covered by a deployment INTO the host company
+     * (a deployed-in worker's day)? Windows are preloaded once, keyed by employee.
+     *
+     * @param  array<int, list<array{0: string, 1: string|null}>>  $windows
+     */
+    private function rowIsDeployed(array $windows, Attendance $r): bool
+    {
+        $date = substr((string) $r->date, 0, 10);
+        foreach ($windows[(int) $r->employee_id] ?? [] as [$start, $end]) {
+            if ($date >= $start && ($end === null || $date <= $end)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
