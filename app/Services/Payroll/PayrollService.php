@@ -8,6 +8,7 @@ use App\Enums\BillingMethod;
 use App\Enums\DayType;
 use App\Enums\DeploymentStatus;
 use App\Enums\PayrollStatus;
+use App\Enums\ReferralRateType;
 use App\Enums\WageType;
 use App\Enums\WorkerExpenseStatus;
 use App\Models\Advance;
@@ -21,6 +22,7 @@ use App\Models\Scopes\CompanyScope;
 use App\Models\VehicleFine;
 use App\Models\VehicleFuelRecord;
 use App\Models\WorkerExpense;
+use App\Services\Attendance\AttendanceService;
 use App\Services\Employees\WageRateService;
 use App\Support\PeriodLock;
 use Illuminate\Support\Carbon;
@@ -175,8 +177,12 @@ class PayrollService
             + $this->fuelReimbursementsFor($employee->id, $companyId, $month);
         $projectExpenses = $this->projectExpensesFor($employee->id, $month);
 
+        // Item 8 — referral commission the REFERRER earns from the workers they
+        // referred (own accrual, never the referred worker's pay). Additive.
+        $referralCommission = $this->referralCommissionFor($employee, $companyId, $month);
+
         $gross = $baseSalary + $daysAmount + $hoursAmount + $overtimePay
-            + $perMeterAmount + $reimbursements + $projectExpenses;
+            + $perMeterAmount + $reimbursements + $projectExpenses + $referralCommission;
 
         $advances = $this->advanceDeductionsFor($employee->id, $month);
         $fineDeductions = $this->vehicleFinesFor($employee->id, $month);
@@ -216,6 +222,7 @@ class PayrollService
         $payroll->overtime_pay = (string) round($overtimePay, 2);
         $payroll->reimbursements = (string) round($reimbursements, 2);
         $payroll->project_expenses = (string) round($projectExpenses, 2);
+        $payroll->referral_commission = (string) round($referralCommission, 2);
         $payroll->gross_pay = (string) round($gross, 2);
         $payroll->advance_deductions = (string) round($advances, 2);
         $payroll->fine_deductions = (string) round($fineDeductions, 2);
@@ -532,6 +539,98 @@ class PayrollService
             ->where('approved', true)
             ->whereBetween('date', [$start, $end])
             ->sum('total'), 2);
+    }
+
+    /**
+     * Item 8 — the referral commission this employee (the REFERRER) earns this
+     * month from the workers they referred. Additive to their own gross; it never
+     * touches the referred worker's pay.
+     *
+     * Rules (client-confirmed): accrues only while BOTH parties are active, and
+     * only within the referred worker's capped window (referral_window_months
+     * from their joining date). Per rate type, from the referred worker's own
+     * attendance that month:
+     *   per_day   → worked days × amount
+     *   per_hour  → net worked hours × amount (displayHoursNet, the "hours
+     *               worked" authority — this is a derived bonus, not the referred
+     *               worker's wage, so it may use the display helper)
+     *   per_month → a flat amount for any month with ≥1 worked day
+     *   one_time  → the amount once, in the FIRST month the referred worker
+     *               records real worked attendance (no-show safe)
+     */
+    private function referralCommissionFor(Employee $referrer, int $companyId, string $month): float
+    {
+        // The referrer must be active to keep earning (a left referrer stops).
+        if (! $referrer->active) {
+            return 0.0;
+        }
+
+        $referred = Employee::query()->withoutGlobalScope(CompanyScope::class)
+            ->where('referred_by_employee_id', $referrer->id)
+            ->where('active', true)
+            ->whereNotNull('referral_rate_type')
+            ->whereNotNull('referral_amount')
+            ->get();
+
+        if ($referred->isEmpty()) {
+            return 0.0;
+        }
+
+        [$start] = $this->bounds($month);
+        $monthStart = Carbon::parse($start);
+        $break = app(AttendanceService::class)->breakDurationMinutes($companyId);
+
+        $total = 0.0;
+        foreach ($referred as $worker) {
+            $amount = (float) ($worker->getAttribute('referral_amount') ?? 0);
+            $type = $worker->referral_rate_type;
+            if ($amount <= 0 || $type === null) {
+                continue;
+            }
+
+            // Capped window: earn only within [joining, joining + N months).
+            $joining = $worker->joining_date;
+            $window = $worker->referral_window_months;
+            if ($joining !== null && $window !== null) {
+                $windowEnd = $joining->copy()->addMonthsNoOverflow($window);
+                if ($monthStart->gte($windowEnd)) {
+                    continue; // window has expired
+                }
+            }
+
+            $rows = $this->attendanceFor($worker->id, $month)
+                ->filter(fn (Attendance $r): bool => in_array($r->status->value, self::WORKED, true));
+
+            $total += match ($type) {
+                ReferralRateType::PerDay => $rows->count() * $amount,
+                ReferralRateType::PerHour => round((float) $rows->sum(
+                    fn (Attendance $r): float => $r->displayHoursNet($break),
+                ), 2) * $amount,
+                ReferralRateType::PerMonth => $rows->isNotEmpty() ? $amount : 0.0,
+                ReferralRateType::OneTime => $this->isFirstWorkedMonth($worker->id, $month) ? $amount : 0.0,
+            };
+        }
+
+        return round($total, 2);
+    }
+
+    /**
+     * Is $month the FIRST calendar month in which the worker recorded any worked
+     * attendance? Drives the one-time referral payout — so a hire who never turns
+     * up never triggers it, and it fires exactly once.
+     */
+    private function isFirstWorkedMonth(int $employeeId, string $month): bool
+    {
+        $firstWorked = Attendance::query()->withoutGlobalScopes()
+            ->where('employee_id', $employeeId)
+            ->whereIn('status', self::WORKED)
+            ->min('date');
+
+        if ($firstWorked === null) {
+            return false;
+        }
+
+        return Carbon::parse($firstWorked)->format('Y-m') === $month;
     }
 
     /**

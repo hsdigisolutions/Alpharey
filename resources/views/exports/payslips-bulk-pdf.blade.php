@@ -107,6 +107,9 @@
             @endif
             <tr><td>Reembolsos</td><td class="amount">{{ $eur($payroll->reimbursements) }}</td></tr>
             <tr><td>Gastos de obra del trabajador</td><td class="amount">{{ $eur($payroll->project_expenses) }}</td></tr>
+            @if ((float) $payroll->referral_commission > 0)
+            <tr><td>Comisión por recomendación</td><td class="amount">{{ $eur($payroll->referral_commission) }}</td></tr>
+            @endif
             <tr>
                 <td>Horas extra <span class="muted">({{ (float) $payroll->overtime_hours }} h)</span></td>
                 <td class="amount">{{ $eur($payroll->overtime_pay) }}</td>

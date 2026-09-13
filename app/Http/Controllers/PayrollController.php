@@ -490,6 +490,7 @@ class PayrollController extends Controller
             'overtime_pay' => $money('overtime_pay'),
             'reimbursements' => $money('reimbursements'),
             'project_expenses' => $money('project_expenses'),
+            'referral_commission' => $money('referral_commission'),
             'gross_pay' => $money('gross_pay'),
             'advance_deductions' => $money('advance_deductions'),
             'fine_deductions' => $money('fine_deductions'),

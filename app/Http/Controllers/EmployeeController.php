@@ -146,6 +146,8 @@ class EmployeeController extends Controller
             ),
             // The department catalogue for the create/edit form's dropdown.
             'departmentOptions' => $departmentOptions,
+            // Item 8 — active workers for the "Referido por" dropdown (create form).
+            'referrerOptions' => $this->referrerOptions(),
             'can' => [
                 'create' => Gate::allows('employees.create'),
                 'edit' => Gate::allows('employees.edit'),
@@ -167,6 +169,25 @@ class EmployeeController extends Controller
             ->get(['id', 'name'])
             ->map(fn (Department $d): array => ['id' => $d->id, 'name' => $d->name])
             ->all();
+    }
+
+    /**
+     * Item 8 — active employees for the "Referido por" dropdown (a worker cannot
+     * refer themselves, so the edited employee is excluded). Tenant-scoped.
+     *
+     * @return list<array{id: int, name: string, code: string}>
+     */
+    private function referrerOptions(?int $excludeId = null): array
+    {
+        return Employee::query()->active()
+            ->when($excludeId !== null, fn ($q) => $q->where('id', '!=', $excludeId))
+            ->orderBy('full_name')
+            ->get(['id', 'full_name', 'employee_code'])
+            ->map(fn (Employee $e): array => [
+                'id' => $e->id,
+                'name' => $e->full_name,
+                'code' => $e->employee_code,
+            ])->all();
     }
 
     /**
@@ -247,8 +268,12 @@ class EmployeeController extends Controller
                 'department', 'department_id', 'designation', 'designation_id', 'team_leader_id', 'active', 'is_contracted',
                 'default_check_in', 'default_check_out', 'commission_percent',
                 'has_driving_license', 'has_company_vehicle', 'can_use_vehicles', 'works_at_height',
-                'operational_cost_exempt', 'notes',
+                'operational_cost_exempt', 'referred_by_employee_id', 'referral_window_months', 'notes',
             ]), [
+                'referral_rate_type' => $employee->referral_rate_type?->value,
+                'referred_by' => $employee->referredBy?->full_name,
+                // The referral rate is a pay figure → wage-gated like the wages.
+                'referral_amount' => $canSeeWages ? $employee->getAttribute('referral_amount') : null,
                 'joining_date' => $employee->joining_date?->toDateString(),
                 'leaving_date' => $employee->leaving_date?->toDateString(),
                 'company' => $employee->company?->name,
@@ -332,6 +357,9 @@ class EmployeeController extends Controller
             'canSeeWages' => $canSeeWages,
             'designationOptions' => ProjectDesignationRateController::optionsFor(app(CurrentCompany::class)->id()),
             'departmentOptions' => $this->departmentOptions(),
+            // Item 8 — "Referido por" dropdown source (this worker excluded — no
+            // self-referral).
+            'referrerOptions' => $this->referrerOptions($employee->id),
             // Feature 4 — companies this employee could be transferred to (admins
             // only). Never from the read-only historical view.
             'transferCompanies' => $readOnly ? [] : $this->transferCompanies($employee),

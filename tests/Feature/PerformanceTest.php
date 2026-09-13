@@ -57,10 +57,10 @@ it('lists employees with a bounded query count regardless of row count', functio
 
     // A page is 25 rows; with the documents relation eager-loaded this is a
     // handful of queries (+1 constant for the designation catalogue, +1 for the
-    // single summary-stats aggregate, +1 for the active-deployment badge map —
-    // all page-level constants, never per-row). Without eager loading it would
-    // be 25+.
-    expect($count)->toBeLessThan(18);
+    // single summary-stats aggregate, +1 for the active-deployment badge map,
+    // +1 for the Item 8 "Referido por" referrer dropdown list — all page-level
+    // constants, never per-row). Without eager loading it would be 25+.
+    expect($count)->toBeLessThan(19);
 });
 
 it('renders the attendance grid with a bounded query count', function (): void {

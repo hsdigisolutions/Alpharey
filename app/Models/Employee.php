@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\PaymentMethod;
+use App\Enums\ReferralRateType;
 use App\Enums\WageType;
 use App\Models\Concerns\Auditable;
 use App\Models\Concerns\BelongsToCompany;
@@ -36,6 +37,10 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $active_since
  * @property bool $can_use_vehicles
  * @property bool $operational_cost_exempt
+ * @property int|null $referred_by_employee_id
+ * @property ReferralRateType|null $referral_rate_type
+ * @property numeric-string|null $referral_amount
+ * @property int|null $referral_window_months
  * @property WageType|null $wage_type
  * @property PaymentMethod|null $payment_method
  * @property Carbon|null $joining_date
@@ -70,7 +75,9 @@ class Employee extends Model
         'daily_wage', 'per_meter_rate', 'commission_percent', 'payment_method',
         'overtime_policy_id', 'supervisor_overtime_policy_id', 'iban',
         'bank_name', 'has_driving_license', 'has_company_vehicle',
-        'can_use_vehicles', 'works_at_height', 'operational_cost_exempt', 'notes',
+        'can_use_vehicles', 'works_at_height', 'operational_cost_exempt',
+        'referred_by_employee_id', 'referral_rate_type', 'referral_amount', 'referral_window_months',
+        'notes',
     ];
 
     /**
@@ -111,6 +118,9 @@ class Employee extends Model
             'works_at_height' => 'boolean',
             'operational_cost_exempt' => 'boolean',
             'commission_percent' => 'decimal:2',
+            'referral_rate_type' => ReferralRateType::class,
+            'referral_amount' => 'decimal:2',
+            'referral_window_months' => 'integer',
         ];
     }
 
@@ -248,6 +258,26 @@ class Employee extends Model
     public function teamLeader(): BelongsTo
     {
         return $this->belongsTo(self::class, 'team_leader_id');
+    }
+
+    /**
+     * The worker who referred THIS worker (Item 8). Null unless referred.
+     *
+     * @return BelongsTo<Employee, $this>
+     */
+    public function referredBy(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'referred_by_employee_id');
+    }
+
+    /**
+     * The workers THIS worker referred — the source of their referral commission.
+     *
+     * @return HasMany<Employee, $this>
+     */
+    public function referrals(): HasMany
+    {
+        return $this->hasMany(self::class, 'referred_by_employee_id');
     }
 
     /**

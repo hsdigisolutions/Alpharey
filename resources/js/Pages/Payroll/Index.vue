@@ -461,6 +461,10 @@ const columns = [
                         <dt><Bilingual k="payroll.project_expenses" inline /></dt>
                         <dd>{{ eur(breakdown.project_expenses) }}</dd>
                     </div>
+                    <div v-if="Number(breakdown.referral_commission) > 0" class="flex justify-between gap-4">
+                        <dt><Bilingual k="payroll.referral_commission" inline /></dt>
+                        <dd>{{ eur(breakdown.referral_commission) }}</dd>
+                    </div>
                     <div class="flex justify-between gap-4">
                         <dt><Bilingual k="payroll.overtime_pay" inline /> <span class="text-muted">({{ hoursHM(breakdown.overtime_hours) }})</span></dt>
                         <dd>{{ eur(breakdown.overtime_pay) }}</dd>

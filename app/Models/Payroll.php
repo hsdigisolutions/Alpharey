@@ -51,7 +51,7 @@ class Payroll extends Model
      */
     public array $auditExclude = [
         'wage_rate', 'base_salary', 'days_amount', 'hours_amount', 'overtime_pay',
-        'reimbursements', 'project_expenses', 'gross_pay', 'advance_deductions',
+        'reimbursements', 'project_expenses', 'referral_commission', 'gross_pay', 'advance_deductions',
         'fine_deductions', 'expense_deductions', 'other_deductions', 'manual_additions', 'net_amount',
         'rate_periods', 'day_type_summary',
     ];
@@ -60,7 +60,7 @@ class Payroll extends Model
     protected $fillable = [
         'employee_id', 'month', 'attendance_days', 'attendance_hours', 'overtime_hours',
         'wage_type', 'wage_rate', 'base_salary', 'days_amount', 'hours_amount', 'rate_periods',
-        'day_type_summary', 'overtime_pay', 'reimbursements', 'project_expenses', 'gross_pay',
+        'day_type_summary', 'overtime_pay', 'reimbursements', 'project_expenses', 'referral_commission', 'gross_pay',
         'advance_deductions', 'fine_deductions', 'expense_deductions', 'other_deductions', 'manual_additions',
         'net_amount', 'status', 'payment_method', 'paid_at', 'notes', 'deployment_notes',
     ];
@@ -68,7 +68,7 @@ class Payroll extends Model
     /** @var list<string> */
     protected $hidden = [
         'wage_rate', 'base_salary', 'days_amount', 'hours_amount', 'overtime_pay',
-        'reimbursements', 'project_expenses', 'gross_pay', 'advance_deductions',
+        'reimbursements', 'project_expenses', 'referral_commission', 'gross_pay', 'advance_deductions',
         'fine_deductions', 'expense_deductions', 'other_deductions', 'manual_additions', 'net_amount',
         'rate_periods', 'day_type_summary',
     ];
@@ -96,6 +96,7 @@ class Payroll extends Model
             'overtime_pay' => 'encrypted',
             'reimbursements' => 'encrypted',
             'project_expenses' => 'encrypted',
+            'referral_commission' => 'encrypted',
             'gross_pay' => 'encrypted',
             'advance_deductions' => 'encrypted',
             'fine_deductions' => 'encrypted',
@@ -141,7 +142,7 @@ class Payroll extends Model
      */
     private const ENCRYPTED_MONEY = [
         'wage_rate', 'base_salary', 'days_amount', 'hours_amount', 'overtime_pay',
-        'reimbursements', 'project_expenses', 'gross_pay', 'advance_deductions',
+        'reimbursements', 'project_expenses', 'referral_commission', 'gross_pay', 'advance_deductions',
         'fine_deductions', 'expense_deductions', 'other_deductions',
         'manual_additions', 'net_amount',
     ];

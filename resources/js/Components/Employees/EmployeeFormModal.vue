@@ -31,6 +31,9 @@ const emit = defineEmits(['close']);
 const designationOptions = computed(() => usePage().props.designationOptions ?? []);
 // Department catalogue (company Settings) — the dropdown source.
 const departmentOptions = computed(() => usePage().props.departmentOptions ?? []);
+// Item 8 — active workers for the "Referido por" dropdown.
+const referrerOptions = computed(() => usePage().props.referrerOptions ?? []);
+const referralRateTypes = ['per_day', 'per_hour', 'per_month', 'one_time'];
 // Keep the display string in sync with the picked type (grid/list show it).
 function onDesignationChange() {
     const picked = designationOptions.value.find((d) => String(d.id) === String(form.designation_id));
@@ -45,7 +48,9 @@ const blank = {
     wage_type: '', wage_rate: null, base_salary: null, daily_wage: null, per_meter_rate: null,
     commission_percent: null, payment_method: '', iban: '', bank_name: '',
     has_driving_license: false, has_company_vehicle: false, can_use_vehicles: false, works_at_height: false,
-    operational_cost_exempt: false, notes: '',
+    operational_cost_exempt: false,
+    referred_by_employee_id: '', referral_rate_type: '', referral_amount: null, referral_window_months: 6,
+    notes: '',
 };
 
 const form = useForm({ ...blank });
@@ -53,7 +58,7 @@ const form = useForm({ ...blank });
 // Never write PII / pay figures to plaintext localStorage.
 const draft = useFormDraft(form, {
     key: () => `employee:${props.employee?.id ?? 'new'}`,
-    exclude: ['nif', 'iban', 'bank_name', 'wage_rate', 'base_salary', 'daily_wage', 'per_meter_rate', 'commission_percent'],
+    exclude: ['nif', 'iban', 'bank_name', 'wage_rate', 'base_salary', 'daily_wage', 'per_meter_rate', 'commission_percent', 'referral_amount'],
 });
 
 watch(() => props.open, (open) => {
@@ -194,6 +199,32 @@ const showBank = computed(() => !form.payment_method || form.payment_method === 
                                 {{ $t(`employees.pm_${method}`) }}
                             </option>
                         </VSelect>
+                    </FormField>
+                </div>
+            </section>
+
+            <!-- Referral commission (Item 8) — a pay term, so wage-gated -->
+            <section v-if="canSeeWages">
+                <Bilingual k="employees.section_referral" class="mb-3 text-[15px] font-semibold" />
+                <p class="mb-3 text-xs text-muted">{{ $t('employees.referral_hint') }}</p>
+                <div class="grid gap-4 sm:grid-cols-2">
+                    <FormField k="employees.referred_by" :error="form.errors.referred_by_employee_id">
+                        <VSelect v-model="form.referred_by_employee_id">
+                            <option value="">—</option>
+                            <option v-for="r in referrerOptions" :key="r.id" :value="r.id">{{ r.name }} · {{ r.code }}</option>
+                        </VSelect>
+                    </FormField>
+                    <FormField k="employees.referral_rate_type" :error="form.errors.referral_rate_type">
+                        <VSelect v-model="form.referral_rate_type">
+                            <option value="">—</option>
+                            <option v-for="t in referralRateTypes" :key="t" :value="t">{{ $t(`employees.referral_rate_${t}`) }}</option>
+                        </VSelect>
+                    </FormField>
+                    <FormField k="employees.referral_amount" :error="form.errors.referral_amount">
+                        <VCurrencyInput v-model="form.referral_amount" />
+                    </FormField>
+                    <FormField k="employees.referral_window_months" :error="form.errors.referral_window_months">
+                        <VInput v-model="form.referral_window_months" type="number" step="1" min="1" max="120" />
                     </FormField>
                 </div>
             </section>

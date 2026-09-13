@@ -3,7 +3,9 @@
 namespace App\Http\Requests\Employees;
 
 use App\Enums\PaymentMethod;
+use App\Enums\ReferralRateType;
 use App\Enums\WageType;
+use App\Rules\OwnCompanyEmployee;
 use App\Support\CurrentCompany;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\Gate;
@@ -54,6 +56,16 @@ class StoreEmployeeRequest extends FormRequest
             // The trade type (Feature 1); drives project designation rates.
             'designation_id' => ['nullable', 'integer', 'exists:designations,id'],
             'team_leader_id' => ['nullable', 'integer', Rule::exists('employees', 'id')],
+            // Item 8 — the worker who referred this one (own company, never self);
+            // rate_type + amount travel together; window is the capped earning
+            // period in months (from this worker's joining date).
+            'referred_by_employee_id' => [
+                'nullable', 'integer', new OwnCompanyEmployee,
+                Rule::notIn(array_filter([$employee?->id])),
+            ],
+            'referral_rate_type' => ['nullable', 'required_with:referral_amount', Rule::enum(ReferralRateType::class)],
+            'referral_amount' => ['nullable', 'required_with:referral_rate_type', 'numeric', 'gt:0', 'max:99999'],
+            'referral_window_months' => ['nullable', 'integer', 'min:1', 'max:120'],
             'joining_date' => ['nullable', 'date'],
             'leaving_date' => ['nullable', 'date', 'after_or_equal:joining_date'],
             'active' => ['boolean'],
