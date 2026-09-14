@@ -4,6 +4,51 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Status: Phase 9 in progress — hardening (2026-08-01)
 
+### Attendance GPS distance — LIVE, per-record-project authority (2026-09-14, DONE, deployed to prod)
+
+**The bug (client-reported, Shahzaib Ali #419):** the admin attendance record showed
+TWO distances — ~15 m (correct, on-site) and 745.8 km ("off site"). **Root cause:
+`attendance.distance_from_project` is a snapshot FROZEN at check-in against the
+project selected THEN, and it is never recomputed when the row's `project_id` is
+later changed.** Shahzaib is deployed to #147 Mungia (Bilbao); the PWA auto-picked
+that lone deployment project at check-in, so the distance was computed as 745.8 km
+(he was actually in Málaga). An admin then MOVED each row to the correct project
+#104 (Málaga) — but the frozen distance (to #147) was left, so it read 745.8 km on a
+#104 record whose true distance is ~13 m. Same class also hit rows whose project got
+its coordinates SET/corrected after check-in (e.g. #104's coords were first set on
+09-10). Proven by the attendance audit: every row created→project 147, then
+147→104, distance never recomputed. The stored 745,777 m matched #147 Mungia's
+coords to the exact metre.
+
+**⚠️ The structural rule (do NOT reintroduce a frozen-column read for display):**
+the DISPLAYED/REPORTED distance is now ALWAYS computed LIVE and can never reflect a
+moved-away or stale-coordinate project. `Attendance::liveDistanceMeters()` is the
+SINGLE AUTHORITY — `Geo::haversine(check-in fix, the row's OWN CURRENT project's
+CURRENT coords)`, resolved by the row's own `project_id`, **`CompanyScope` dropped**
+(a DEPLOYED worker's row lives under the host company, so a scoped `project` relation
+resolves to null when the viewer's active company differs — that null was the second
+trap), and it mirrors the check-in accuracy guard (`check_in_accuracy` >
+`WorkerAttendanceService::LOCATION_ACCURACY_LIMIT` 1000 m → null "not verified", so a
+coarse fix never fabricates a distance). Every display reads it: the attendance grid
+dot + `distanceBand()`, the edit modal, and Today's Report — their `project`
+eager-loads now DROP CompanyScope so cross-company projects resolve (no N+1).
+
+**The stored `distance_from_project` column is kept SELF-HEALING** (for exports / any
+non-display reader) via `Attendance::syncStoredDistance()`: recomputed when a row's
+`project_id` changes (in `AttendanceService::update`, reloading the NEW project),
+and by a `Project::booted()` `saved` observer that reprices every one of a project's
+attendance rows when its `latitude`/`longitude` change. The **check-in off-site ALERT
+is UNCHANGED** (point-in-time, against the project selected then) — only the
+displayed/reported distance became live. Backfill command `attendance:resync-distances`
+(`--dry-run`) recomputes the stored column for every GPS row.
+
+**Prod:** backfilled 42 stale rows; Shahzaib's four #104 rows 745,7xx m → 7.59–26.24 m
+(on-site); an independent full sweep of ALL 63 GPS attendance rows shows `stored ==
+live` for every one (0 mismatches). Tests: `WorkerLocationVerificationTest` +3
+regression guards — the key one ("follows the row current project after a move — never
+the old moved-away project") IS the exact bug class, so reverting to a frozen-column
+read fails the suite. Five gates green (1385 pass / 1 skipped).
+
 ### True labour cost — employer social-security tax + operational cost, 3-level visibility (2026-09-13, DONE, deployed to prod)
 
 **Audit fix F1 (2026-09-13, DONE, deployed) — deployed-in worker employer tax
