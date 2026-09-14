@@ -9,6 +9,7 @@ use App\Models\Project;
 use App\Models\ProjectEmployeeRate;
 use App\Models\User;
 use App\Notifications\SystemNotification;
+use App\Services\Attendance\AttendanceService;
 use App\Services\Settings\SettingsService;
 use App\Services\Workers\WorkerAccountService;
 use Illuminate\Support\Facades\Notification;
@@ -366,4 +367,69 @@ it('does not auto-assign a project just beyond its geofence_radius', function ()
 
     $row = Attendance::withoutGlobalScopes()->where('employee_id', $this->employee->id)->firstOrFail();
     expect($row->project_id)->toBeNull();
+});
+
+// ── Distance-integrity regression guards (Shahzaib Ali wrong/stale-project bug) ──
+// The displayed/reported distance must ALWAYS be the live distance between the
+// worker's fix and the row's CURRENT project + coordinates — never frozen against
+// a moved-away project or a since-corrected coordinate.
+
+/** A present attendance row with a check-in fix, frozen against a given project. */
+function fixRow(Company $company, Employee $employee, Project $project, float $lat, float $lng, ?string $frozenDistance = null): Attendance
+{
+    $att = Attendance::factory()->create([
+        'company_id' => $company->id, 'employee_id' => $employee->id, 'project_id' => $project->id,
+        'date' => '2026-08-10', 'status' => 'present',
+    ]);
+    // The GPS fix + distance are server-set (not fillable) — write them directly.
+    $att->check_in_lat = (string) $lat;
+    $att->check_in_lng = (string) $lng;
+    $att->check_in_accuracy = '15';
+    $att->distance_from_project = $frozenDistance;
+    $att->save();
+
+    return $att->fresh();
+}
+
+it('follows the row current project after a move — never the old (moved-away) project [Shahzaib Ali class]', function (): void {
+    // Worker is physically AT the near project (Madrid). The FAR project is Bilbao.
+    $near = assignedProject($this->company, $this->employee, $this->siteLat, $this->siteLng, 500);
+    $far = unassignedProject($this->company, 43.2600, -2.9300, 500);
+
+    // Frozen against the FAR project (as the PWA did with the deployment project),
+    // storing a ~400 km distance while the fix is actually at the near site.
+    $att = fixRow($this->company, $this->employee, $far, $this->siteLat, $this->siteLng, '400000');
+    $att->load('project');
+    expect($att->liveDistanceMeters())->toBeGreaterThan(300000.0);        // live vs FAR = huge
+
+    // Admin corrects the row to the NEAR project.
+    app(AttendanceService::class)->update($att, ['project_id' => $near->id]);
+
+    $fresh = Attendance::withoutGlobalScopes()->findOrFail($att->id)->load('project');
+    expect($fresh->liveDistanceMeters())->toBeLessThan(5.0)               // live now vs NEAR ≈ 0
+        ->and((float) $fresh->distance_from_project)->toBeLessThan(5.0);  // stored mirror re-anchored too
+});
+
+it('displays the LIVE distance, never a stale/wrong stored column value', function (): void {
+    $near = assignedProject($this->company, $this->employee, $this->siteLat, $this->siteLng, 500);
+    // Deliberately corrupt the frozen column with a huge stale value; the fix is on-site.
+    fixRow($this->company, $this->employee, $near, $this->siteLat, $this->siteLng, '745000');
+
+    $admin = User::factory()->companyAdmin()->forCompany($this->company)->create();
+    $this->actingAs($admin)->get('/attendance?month=2026-08')
+        ->assertInertia(fn (Assert $page) => $page
+            ->where("grid.{$this->employee->id}.10.distance_band", 'on_site')         // live band, not off_site
+            ->where("grid.{$this->employee->id}.10.distance", fn ($d) => (float) $d < 5.0)); // live ≈ 0, not 745000
+});
+
+it('reprices stored attendance distances when the project coordinates change', function (): void {
+    $project = assignedProject($this->company, $this->employee, $this->siteLat, $this->siteLng, 500);
+    $att = fixRow($this->company, $this->employee, $project, $this->siteLat, $this->siteLng);
+    $att->syncStoredDistance();
+    expect((float) $att->fresh()->distance_from_project)->toBeLessThan(5.0);
+
+    // Correcting the site's coordinates to a far location reprices every fix row.
+    $project->update(['latitude' => 43.2600, 'longitude' => -2.9300]);
+
+    expect((float) $att->fresh()->distance_from_project)->toBeGreaterThan(300000.0);
 });

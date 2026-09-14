@@ -190,6 +190,17 @@ class AttendanceService
                 $this->applySnapshots($attendance, $employee);
             }
 
+            // Moving the row to a different project re-anchors the GPS distance:
+            // recompute the stored `distance_from_project` against the NEW project's
+            // CURRENT coordinates so the persisted mirror never reflects the old
+            // project (the Shahzaib Ali class of bug). Reload the relation first so
+            // liveDistanceMeters() reads the new project, not the cached old one.
+            if ($attendance->isDirty('project_id')) {
+                $attendance->unsetRelation('project');
+                $distance = $attendance->liveDistanceMeters();
+                $attendance->distance_from_project = $distance === null ? null : (string) $distance;
+            }
+
             $this->recompute($attendance);
             $attendance->save();
 

@@ -11,6 +11,8 @@ use App\Models\Concerns\Auditable;
 use App\Models\Concerns\BelongsToCompany;
 use App\Models\Scopes\CompanyScope;
 use App\Services\Attendance\AttendanceService;
+use App\Services\Workers\WorkerAttendanceService;
+use App\Support\Geo;
 use Database\Factories\AttendanceFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -149,6 +151,77 @@ class Attendance extends Model
     public function project(): BelongsTo
     {
         return $this->belongsTo(Project::class);
+    }
+
+    /**
+     * The distance (metres) between the worker's check-in GPS fix and THIS row's
+     * CURRENT project's CURRENT coordinates — the SINGLE AUTHORITY for every
+     * distance DISPLAY. Computed live off the row's own `project_id` and the
+     * project's live lat/lng, so a moved project_id or a corrected project
+     * coordinate is always reflected and a stale / wrong-project distance is
+     * structurally impossible. Null when there is no trustworthy fix or the
+     * project has no coordinates ("not verified").
+     *
+     * This is DISTINCT from the stored `distance_from_project` snapshot, which is
+     * the check-in-time value the point-in-time off-site alert used; that column
+     * is kept in sync via syncStoredDistance() but display never depends on it.
+     */
+    public function liveDistanceMeters(): ?float
+    {
+        if ($this->check_in_lat === null || $this->check_in_lng === null || $this->project_id === null) {
+            return null;
+        }
+
+        // Mirror the check-in guard: a coarse fix (±tens of km, e.g. an IP-based
+        // location) cannot anchor a real distance — stays "not verified" (null),
+        // exactly as WorkerAttendanceService does when it writes the snapshot.
+        if ($this->check_in_accuracy !== null
+            && (float) $this->check_in_accuracy > WorkerAttendanceService::LOCATION_ACCURACY_LIMIT) {
+            return null;
+        }
+
+        // The row's CURRENT project, resolved by its own id — NEVER a cached/other
+        // project. CompanyScope is dropped: attendance can be cross-company (a
+        // DEPLOYED worker's row lives under the host company), so a scoped relation
+        // would resolve to null when the viewer's active company differs. Use the
+        // eager-loaded relation only when it actually loaded a project; otherwise
+        // fetch it scope-dropped (correct even if a caller forgot to drop the scope).
+        $project = ($this->relationLoaded('project') && $this->project !== null)
+            ? $this->project
+            : Project::withoutGlobalScope(CompanyScope::class)->find($this->project_id);
+
+        if ($project === null || $project->latitude === null || $project->longitude === null) {
+            return null;
+        }
+
+        return round(Geo::haversine(
+            (float) $this->check_in_lat,
+            (float) $this->check_in_lng,
+            (float) $project->latitude,
+            (float) $project->longitude,
+        ), 2);
+    }
+
+    /**
+     * Recompute + persist the stored `distance_from_project` mirror from the live
+     * value. Called whenever the row's `project_id` changes (admin move) or the
+     * project's coordinates change (Project observer), and by the resync backfill
+     * — so the persisted column can never drift from the truth either. Returns
+     * true when it actually changed the stored value.
+     */
+    public function syncStoredDistance(): bool
+    {
+        $live = $this->liveDistanceMeters();
+        $new = $live === null ? null : (string) $live;
+
+        if ((string) ($this->distance_from_project ?? '') === (string) ($new ?? '')) {
+            return false;
+        }
+
+        $this->distance_from_project = $new;
+        $this->save();
+
+        return true;
     }
 
     /**

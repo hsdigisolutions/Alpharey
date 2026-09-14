@@ -15,6 +15,7 @@ use App\Models\EmployeeDeployment;
 use App\Models\Payroll;
 use App\Models\Project;
 use App\Models\ProjectEmployeeRate;
+use App\Models\Scopes\CompanyScope;
 use App\Services\Attendance\AttendanceService;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
@@ -200,7 +201,8 @@ class TodayService
 
         return Attendance::query()
             ->whereBetween('date', [$from, $to])
-            ->with(['employee:id,full_name', 'project:id,name'])
+            ->with(['employee:id,full_name', 'project' => fn ($q) => $q->withoutGlobalScope(CompanyScope::class)
+                ->select('id', 'name', 'latitude', 'longitude')])
             ->orderByDesc('date')->orderBy('employee_id')
             ->get()
             ->map(fn (Attendance $a): array => [
@@ -221,8 +223,9 @@ class TodayService
                 'worked' => in_array($a->status->value, self::WORKED, true),
                 'still_working' => in_array($a->status->value, self::WORKED, true) && $a->isOpenShift(),
                 'status' => $a->status->value,
-                // GPS distance from the project site (metres), when captured.
-                'distance' => $a->distance_from_project !== null ? (float) $a->distance_from_project : null,
+                // GPS distance from the project site (metres) — LIVE against the
+                // row's current project + coords, never the frozen column.
+                'distance' => $a->liveDistanceMeters(),
             ])
             ->values()
             ->all();

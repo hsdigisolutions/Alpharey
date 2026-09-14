@@ -9,6 +9,7 @@ use App\Enums\ProjectStatus;
 use App\Enums\VatRate;
 use App\Models\Concerns\Auditable;
 use App\Models\Concerns\BelongsToCompany;
+use App\Models\Scopes\CompanyScope;
 use Database\Factories\ProjectFactory;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -55,6 +56,31 @@ class Project extends Model
     use HasFactory;
 
     public string $auditModule = 'projects';
+
+    /**
+     * When a project's coordinates change, the stored GPS distance on every one of
+     * its attendance rows is now against the OLD location — reprice each against
+     * the NEW coordinates so the persisted `distance_from_project` mirror can never
+     * go stale (display already reads a live value; this keeps the column honest
+     * too). Scope dropped: a project's attendance can span the host + home company.
+     */
+    protected static function booted(): void
+    {
+        static::saved(function (self $project): void {
+            if (! $project->wasChanged('latitude') && ! $project->wasChanged('longitude')) {
+                return;
+            }
+
+            Attendance::query()->withoutGlobalScope(CompanyScope::class)
+                ->where('project_id', $project->id)
+                ->whereNotNull('check_in_lat')->whereNotNull('check_in_lng')
+                ->get()
+                ->each(function (Attendance $attendance) use ($project): void {
+                    $attendance->setRelation('project', $project); // fresh coords
+                    $attendance->syncStoredDistance();
+                });
+        });
+    }
 
     /** @var list<string> */
     protected $fillable = [
